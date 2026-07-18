@@ -1,0 +1,420 @@
+version: "0.1.1"
+semantic_model:
+  - name: chinook_music_store
+    description: >
+      Semantic model for the Chinook SQLite sample database: a digital music
+      store with catalog, customers, employees, invoices, and playlists.
+    ai_context:
+      instructions: >
+        Read this model before writing SQL. Use the exact physical table and
+        column names in each source/expression. Invoice.Total is the canonical
+        invoice revenue; InvoiceLine.UnitPrice * InvoiceLine.Quantity is the
+        canonical line-level revenue. Join only through declared relationships.
+        SQLite dates are stored as timestamp-like text. Unless the user asks for
+        more rows, return five rows. Never infer sales from playlist membership.
+      examples:
+        - Which five artists generated the most revenue?
+        - How many customers are in each country?
+        - What are monthly sales totals?
+    datasets:
+      - name: artists
+        source: Artist
+        primary_key: [artist_id]
+        description: Music artists represented in the catalog.
+        ai_context:
+          synonyms: [artist, performer, band, musician]
+        fields:
+          - name: artist_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: ArtistId}]}
+            description: Artist identifier.
+          - name: name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Name}]}
+            description: Artist or band name.
+            ai_context: {synonyms: [artist name, performer name]}
+
+      - name: albums
+        source: Album
+        primary_key: [album_id]
+        description: Albums released by catalog artists.
+        ai_context:
+          synonyms: [album, release, record]
+        fields:
+          - name: album_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: AlbumId}]}
+            description: Album identifier.
+          - name: title
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Title}]}
+            description: Album title.
+            ai_context: {synonyms: [album name, release title]}
+          - name: artist_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: ArtistId}]}
+            description: Artist that released the album.
+
+      - name: employees
+        source: Employee
+        primary_key: [employee_id]
+        description: Chinook staff, including customer support representatives.
+        ai_context:
+          synonyms: [employee, staff, support representative, sales agent]
+        fields:
+          - name: employee_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: EmployeeId}]}
+            description: Employee identifier.
+          - name: last_name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: LastName}]}
+            description: Employee family name.
+          - name: first_name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: FirstName}]}
+            description: Employee given name.
+          - name: title
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Title}]}
+            description: Employee job title.
+          - name: reports_to
+            expression: {dialects: [{dialect: ANSI_SQL, expression: ReportsTo}]}
+            description: Identifier of the employee's manager.
+          - name: birth_date
+            expression: {dialects: [{dialect: ANSI_SQL, expression: BirthDate}]}
+            dimension: {is_time: true}
+            description: Employee birth date.
+          - name: hire_date
+            expression: {dialects: [{dialect: ANSI_SQL, expression: HireDate}]}
+            dimension: {is_time: true}
+            description: Date the employee was hired.
+          - name: address
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Address}]}
+            description: Street address.
+          - name: city
+            expression: {dialects: [{dialect: ANSI_SQL, expression: City}]}
+            description: City.
+          - name: state
+            expression: {dialects: [{dialect: ANSI_SQL, expression: State}]}
+            description: State, province, or region.
+          - name: country
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Country}]}
+            description: Country.
+          - name: postal_code
+            expression: {dialects: [{dialect: ANSI_SQL, expression: PostalCode}]}
+            description: Postal code.
+          - name: phone
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Phone}]}
+            description: Telephone number.
+          - name: fax
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Fax}]}
+            description: Fax number.
+          - name: email
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Email}]}
+            description: Email address.
+
+      - name: customers
+        source: Customer
+        primary_key: [customer_id]
+        description: Customers who can place invoices in the music store.
+        ai_context:
+          synonyms: [customer, client, buyer, account]
+        fields:
+          - name: customer_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: CustomerId}]}
+            description: Customer identifier.
+          - name: first_name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: FirstName}]}
+            description: Customer given name.
+          - name: last_name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: LastName}]}
+            description: Customer family name.
+          - name: company
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Company}]}
+            description: Customer company, when supplied.
+          - name: address
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Address}]}
+            description: Street address.
+          - name: city
+            expression: {dialects: [{dialect: ANSI_SQL, expression: City}]}
+            description: City.
+          - name: state
+            expression: {dialects: [{dialect: ANSI_SQL, expression: State}]}
+            description: State, province, or region.
+          - name: country
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Country}]}
+            description: Country.
+            ai_context: {synonyms: [market, nation]}
+          - name: postal_code
+            expression: {dialects: [{dialect: ANSI_SQL, expression: PostalCode}]}
+            description: Postal code.
+          - name: phone
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Phone}]}
+            description: Telephone number.
+          - name: fax
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Fax}]}
+            description: Fax number.
+          - name: email
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Email}]}
+            description: Email address.
+          - name: support_rep_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: SupportRepId}]}
+            description: Employee assigned as the support representative.
+
+      - name: genres
+        source: Genre
+        primary_key: [genre_id]
+        description: Track genre classifications.
+        ai_context:
+          synonyms: [genre, category, style]
+        fields:
+          - name: genre_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: GenreId}]}
+            description: Genre identifier.
+          - name: name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Name}]}
+            description: Genre name.
+
+      - name: invoices
+        source: Invoice
+        primary_key: [invoice_id]
+        description: Customer purchase headers and their billed totals.
+        ai_context:
+          synonyms: [invoice, order, purchase, sale, transaction]
+          instructions: >
+            Use Total for canonical invoice-level revenue. Do not sum Total after
+            joining to invoice lines unless invoices are first deduplicated.
+        fields:
+          - name: invoice_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: InvoiceId}]}
+            description: Invoice identifier.
+          - name: customer_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: CustomerId}]}
+            description: Customer billed by the invoice.
+          - name: invoice_date
+            expression: {dialects: [{dialect: ANSI_SQL, expression: InvoiceDate}]}
+            dimension: {is_time: true}
+            description: Invoice timestamp.
+            ai_context: {synonyms: [order date, purchase date, sales date]}
+          - name: billing_address
+            expression: {dialects: [{dialect: ANSI_SQL, expression: BillingAddress}]}
+            description: Billing street address.
+          - name: billing_city
+            expression: {dialects: [{dialect: ANSI_SQL, expression: BillingCity}]}
+            description: Billing city.
+          - name: billing_state
+            expression: {dialects: [{dialect: ANSI_SQL, expression: BillingState}]}
+            description: Billing state, province, or region.
+          - name: billing_country
+            expression: {dialects: [{dialect: ANSI_SQL, expression: BillingCountry}]}
+            description: Billing country at the time of purchase.
+            ai_context: {synonyms: [sales country, market]}
+          - name: billing_postal_code
+            expression: {dialects: [{dialect: ANSI_SQL, expression: BillingPostalCode}]}
+            description: Billing postal code.
+          - name: total
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Total}]}
+            description: Total invoice value in the sample database currency.
+            ai_context: {synonyms: [revenue, sales, invoice amount]}
+
+      - name: media_types
+        source: MediaType
+        primary_key: [media_type_id]
+        description: Audio or video encoding/product format for tracks.
+        ai_context:
+          synonyms: [media type, format, encoding]
+        fields:
+          - name: media_type_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: MediaTypeId}]}
+            description: Media type identifier.
+          - name: name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Name}]}
+            description: Media type name.
+
+      - name: tracks
+        source: Track
+        primary_key: [track_id]
+        description: Sellable catalog tracks, including songs and video episodes.
+        ai_context:
+          synonyms: [track, song, recording, episode]
+        fields:
+          - name: track_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: TrackId}]}
+            description: Track identifier.
+          - name: name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Name}]}
+            description: Track name.
+            ai_context: {synonyms: [track title, song name]}
+          - name: album_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: AlbumId}]}
+            description: Album containing the track, when supplied.
+          - name: media_type_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: MediaTypeId}]}
+            description: Track media format.
+          - name: genre_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: GenreId}]}
+            description: Track genre, when supplied.
+          - name: composer
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Composer}]}
+            description: Credited composer text.
+          - name: milliseconds
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Milliseconds}]}
+            description: Track duration in milliseconds.
+            ai_context: {synonyms: [duration, length, runtime]}
+          - name: bytes
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Bytes}]}
+            description: Track file size in bytes.
+          - name: unit_price
+            expression: {dialects: [{dialect: ANSI_SQL, expression: UnitPrice}]}
+            description: Current catalog unit price.
+            ai_context: {synonyms: [price, list price]}
+
+      - name: invoice_lines
+        source: InvoiceLine
+        primary_key: [invoice_line_id]
+        description: Purchased track line items belonging to invoices.
+        ai_context:
+          synonyms: [invoice line, order line, purchase item, sales line]
+          instructions: >
+            Line revenue is UnitPrice multiplied by Quantity. This UnitPrice is
+            the historical sale price and is preferable to Track.UnitPrice for
+            sales analysis.
+        fields:
+          - name: invoice_line_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: InvoiceLineId}]}
+            description: Invoice line identifier.
+          - name: invoice_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: InvoiceId}]}
+            description: Parent invoice.
+          - name: track_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: TrackId}]}
+            description: Purchased track.
+          - name: unit_price
+            expression: {dialects: [{dialect: ANSI_SQL, expression: UnitPrice}]}
+            description: Unit price charged on this invoice line.
+          - name: quantity
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Quantity}]}
+            description: Number of units purchased.
+
+      - name: playlists
+        source: Playlist
+        primary_key: [playlist_id]
+        description: Named collections of tracks.
+        ai_context:
+          synonyms: [playlist, collection]
+        fields:
+          - name: playlist_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: PlaylistId}]}
+            description: Playlist identifier.
+          - name: name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: Name}]}
+            description: Playlist name.
+
+      - name: playlist_tracks
+        source: PlaylistTrack
+        primary_key: [playlist_id, track_id]
+        description: Many-to-many membership between playlists and tracks.
+        ai_context:
+          synonyms: [playlist membership, playlist item]
+          instructions: Playlist membership is not evidence of a sale.
+        fields:
+          - name: playlist_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: PlaylistId}]}
+            description: Playlist identifier.
+          - name: track_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: TrackId}]}
+            description: Track identifier.
+
+    relationships:
+      - name: albums_to_artists
+        from: albums
+        to: artists
+        from_columns: [artist_id]
+        to_columns: [artist_id]
+      - name: employees_to_managers
+        from: employees
+        to: employees
+        from_columns: [reports_to]
+        to_columns: [employee_id]
+        ai_context: {instructions: ReportsTo is nullable for top-level managers.}
+      - name: customers_to_support_reps
+        from: customers
+        to: employees
+        from_columns: [support_rep_id]
+        to_columns: [employee_id]
+      - name: invoices_to_customers
+        from: invoices
+        to: customers
+        from_columns: [customer_id]
+        to_columns: [customer_id]
+      - name: tracks_to_albums
+        from: tracks
+        to: albums
+        from_columns: [album_id]
+        to_columns: [album_id]
+      - name: tracks_to_media_types
+        from: tracks
+        to: media_types
+        from_columns: [media_type_id]
+        to_columns: [media_type_id]
+      - name: tracks_to_genres
+        from: tracks
+        to: genres
+        from_columns: [genre_id]
+        to_columns: [genre_id]
+      - name: invoice_lines_to_invoices
+        from: invoice_lines
+        to: invoices
+        from_columns: [invoice_id]
+        to_columns: [invoice_id]
+      - name: invoice_lines_to_tracks
+        from: invoice_lines
+        to: tracks
+        from_columns: [track_id]
+        to_columns: [track_id]
+      - name: playlist_tracks_to_playlists
+        from: playlist_tracks
+        to: playlists
+        from_columns: [playlist_id]
+        to_columns: [playlist_id]
+      - name: playlist_tracks_to_tracks
+        from: playlist_tracks
+        to: tracks
+        from_columns: [track_id]
+        to_columns: [track_id]
+
+    metrics:
+      - name: total_revenue
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(invoices.Total)
+        description: Canonical revenue summed once per invoice.
+        ai_context: {synonyms: [revenue, total sales, gross sales]}
+      - name: line_revenue
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(invoice_lines.UnitPrice * invoice_lines.Quantity)
+        description: Revenue calculated from individual invoice lines.
+        ai_context: {synonyms: [item revenue, track sales]}
+      - name: units_sold
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(invoice_lines.Quantity)
+        description: Total track units purchased.
+        ai_context: {synonyms: [quantity sold, volume]}
+      - name: invoice_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT invoices.InvoiceId)
+        description: Number of distinct invoices.
+        ai_context: {synonyms: [order count, purchase count]}
+      - name: customer_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT customers.CustomerId)
+        description: Number of distinct customers.
+        ai_context: {synonyms: [customers, client count]}
+      - name: track_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT tracks.TrackId)
+        description: Number of distinct catalog tracks.
+        ai_context: {synonyms: [songs, catalog size]}
