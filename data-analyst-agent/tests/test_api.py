@@ -85,6 +85,7 @@ def test_api_approval_rejection_reapproval_and_rehydration(
 ) -> None:
     database = tmp_path / "chinook.db"
     database.touch()
+    final_stream = FakeStream()
     fake = FakeAgent(
         [
             FakeStream(approval_sql="SELECT Name FROM Artist LIMIT 5"),
@@ -93,14 +94,7 @@ def test_api_approval_rejection_reapproval_and_rehydration(
                     "SELECT Name FROM Artist ORDER BY Name LIMIT 5"
                 )
             ),
-            FakeStream(
-                answer=FinalAnswer(
-                    answer="Five artists were returned.",
-                    sql="SELECT Name FROM Artist ORDER BY Name LIMIT 5",
-                    assumptions=["Artist names use catalog spelling."],
-                    interpretation="The rows are alphabetically ordered.",
-                )
-            ),
+            final_stream,
         ]
     )
     services = Services(
@@ -110,6 +104,22 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     client = TestClient(create_app(services))
 
     thread_id = client.post("/api/conversations").json()["thread_id"]
+    executed_sql = "SELECT Name FROM Artist ORDER BY Name LIMIT 5"
+    saved = services.results.save(
+        thread_id=thread_id,
+        executed_sql=executed_sql,
+        columns=["Name"],
+        rows=[{"Name": "AC/DC"}],
+        truncated=False,
+        elapsed_ms=1.0,
+    )
+    final_stream.answer = FinalAnswer(
+        answer="Five artists were returned.",
+        sql="SELECT stale_model_sql",
+        result_id=saved.result_id,
+        assumptions=["Artist names use catalog spelling."],
+        interpretation="The rows are alphabetically ordered.",
+    )
     created = client.post(
         f"/api/conversations/{thread_id}/messages",
         json={"message": "List five artists"},
@@ -142,6 +152,10 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     second = client.get(f"/api/runs/{run_id}").json()
     assert second["status"] == "approval_required"
     assert "ORDER BY Name" in second["approval"]["query"]
+    assert any(
+        event["label"] == "Applying feedback and revising SQL"
+        for event in second["events"]
+    )
 
     approved = client.post(
         f"/api/runs/{run_id}/decisions",
@@ -157,6 +171,7 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     assert conversation["active_run_id"] is None
     assert len(conversation["turns"]) == 1
     assert conversation["turns"][0]["answer"]["answer"].startswith("Five")
+    assert conversation["turns"][0]["answer"]["sql"] == executed_sql
 
 
 def test_concurrent_run_is_rejected(tmp_path: Path) -> None:

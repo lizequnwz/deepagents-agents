@@ -49,6 +49,7 @@ class Services:
                     agent=graph,
                     conversations=self.conversations,
                     runs=self.runs,
+                    results=self.results,
                 )
             return self._manager
 

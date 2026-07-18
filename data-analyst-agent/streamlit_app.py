@@ -39,6 +39,7 @@ def initialize_session_state() -> None:
     st.session_state.setdefault("active_run_id", None)
     st.session_state.setdefault("last_run_error", None)
     st.session_state.setdefault("conversation_notice", None)
+    st.session_state.setdefault("review_notice", None)
 
 
 def clear_conversation_state() -> None:
@@ -49,6 +50,8 @@ def clear_conversation_state() -> None:
         "event_labels_",
         "sql_review_",
         "rejection_feedback_",
+        "review_feedback_",
+        "review_phase_",
         "starter_question_",
     )
     for key in list(st.session_state):
@@ -56,6 +59,7 @@ def clear_conversation_state() -> None:
             del st.session_state[key]
     st.session_state["active_run_id"] = None
     st.session_state["last_run_error"] = None
+    st.session_state["review_notice"] = None
 
 
 def create_conversation(client: AgentAPIClient) -> str:
@@ -89,6 +93,8 @@ def clear_completed_run(run_id: str) -> None:
     st.session_state["active_run_id"] = None
     st.session_state.pop(f"event_cursor_{run_id}", None)
     st.session_state.pop(f"event_labels_{run_id}", None)
+    st.session_state.pop(f"review_feedback_{run_id}", None)
+    st.session_state.pop(f"review_phase_{run_id}", None)
 
 
 def poll_run(
@@ -103,9 +109,17 @@ def poll_run(
     run = initial_run if cursor == 0 else client.get_run(
         run_id, after_event_id=cursor
     )
+    review_phase = st.session_state.get(f"review_phase_{run_id}")
+    initial_status = (
+        "Feedback sent—revising SQL…"
+        if review_phase == "revising"
+        else "Executing reviewed SQL…"
+        if review_phase == "executing"
+        else "Agent is working…"
+    )
 
     with st.status(
-        "Agent is working…",
+        initial_status,
         expanded=True,
         state="running",
     ) as status_panel:
@@ -124,11 +138,20 @@ def poll_run(
             state = run["status"]
 
             if state == "approval_required":
+                revised = review_phase == "revising"
                 status_panel.update(
-                    label="SQL is ready for review",
+                    label=(
+                        "Revised SQL is ready for review"
+                        if revised
+                        else "SQL is ready for review"
+                    ),
                     state="complete",
                     expanded=False,
                 )
+                if revised:
+                    st.session_state[
+                        f"review_phase_{run_id}"
+                    ] = "revision_ready"
                 return run
             if state == "completed":
                 status_panel.update(
@@ -190,8 +213,18 @@ if st.session_state.get("conversation_notice"):
         icon=":material/info:",
     )
 
-for completed_turn in conversation["turns"]:
-    render_turn(client, completed_turn)
+if st.session_state.get("review_notice"):
+    st.toast(
+        st.session_state.pop("review_notice"),
+        icon=":material/info:",
+    )
+
+for turn_index, completed_turn in enumerate(conversation["turns"]):
+    render_turn(
+        client,
+        completed_turn,
+        turn_key=f"{thread_id}_{turn_index}",
+    )
 
 if st.session_state.get("last_run_error"):
     st.error(
@@ -215,16 +248,48 @@ if active_run_id:
         active_run = None
 
     if active_run and active_run["status"] == "approval_required":
-        decision = render_approval(active_run)
+        revision_feedback = (
+            st.session_state.get(f"review_feedback_{active_run_id}")
+            if st.session_state.get(f"review_phase_{active_run_id}")
+            == "revision_ready"
+            else None
+        )
+        decision = render_approval(
+            active_run,
+            revision_feedback=revision_feedback,
+        )
         if decision:
+            is_rejection = decision["action"] == "reject"
+            spinner_text = (
+                "Sending feedback to the analyst…"
+                if is_rejection
+                else "Submitting the reviewed SQL…"
+            )
+            status_text = (
+                "Feedback sent—revising SQL."
+                if is_rejection
+                else "Executing reviewed SQL."
+            )
             try:
-                with st.spinner("Submitting your review…"):
+                with st.spinner(spinner_text):
                     client.submit_decision(active_run_id, decision)
                 st.session_state["active_run_id"] = active_run_id
-                st.toast(
-                    "Review submitted.",
-                    icon=":material/check_circle:",
-                )
+                st.session_state["review_notice"] = status_text
+                if is_rejection:
+                    st.session_state[
+                        f"review_feedback_{active_run_id}"
+                    ] = decision["feedback"]
+                    st.session_state[
+                        f"review_phase_{active_run_id}"
+                    ] = "revising"
+                else:
+                    st.session_state.pop(
+                        f"review_feedback_{active_run_id}",
+                        None,
+                    )
+                    st.session_state[
+                        f"review_phase_{active_run_id}"
+                    ] = "executing"
                 st.rerun()
             except APIError as exc:
                 st.error(str(exc), icon=":material/error:")

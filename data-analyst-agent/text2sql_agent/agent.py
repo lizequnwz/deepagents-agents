@@ -14,7 +14,7 @@ from deepagents import (
     register_harness_profile,
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
-from langchain.agents.structured_output import ProviderStrategy
+from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.utilities import SQLDatabase
 from langchain_openai import ChatOpenAI
@@ -41,6 +41,11 @@ an existing result. Do not invent database facts or execute SQL yourself.
 Return a FinalAnswer with a direct answer, the exact executed SQL and result ID
 when present, material assumptions, and a concise interpretation. Do not expose
 private chain of thought, tool payloads, or more than ten database rows.
+
+Human review inside the SQL subagent may change the requested limit, filters,
+grouping, or other scope. In that case, the reviewed execution and the
+subagent's structured result are authoritative. Describe what actually ran and
+what it returned; do not repeat stale scope from the original user message.
 """
 
 SQL_SUBAGENT_PROMPT = """\
@@ -59,13 +64,24 @@ column must use the field expression's exact physical value. For example, use
 
 Write exactly one read-only SQLite SELECT/CTE/set query and check it before
 calling execute_sql. The execute_sql call pauses for human approval and may be
-edited or rejected. On rejection, use the feedback to revise and submit a new
-execute_sql call. Default ranked or list results to five rows unless the user
-requests another size. Never use the toolkit's direct query tool.
+edited or rejected. Rejection is never a terminal outcome: apply the feedback,
+revise and check the SQL, call execute_sql again, and wait for another review.
+Default ranked or list results to five rows unless the user requests another
+size. Never use the toolkit's direct query tool.
 
-Return SQLAnalysisResult. Keep assumptions and interpretation concise. The
-answer must be based on the executed result, and sql must be the exact executed
-SQL from QueryResult. Never expose private reasoning or more than ten rows.
+Return SQLAnalysisResult only after execute_sql succeeds. Its sql, result_id,
+and row_count must come from that QueryResult, and sql must be the exact
+executed_sql value. Do not return a rejection, proposed query, or missing result
+as a completed analysis. If human feedback changed the requested scope, reflect
+that revised scope in the answer and interpretation. Keep assumptions and
+interpretation concise. Never expose private reasoning or more than ten rows.
+"""
+
+SQL_OUTPUT_RETRY_MESSAGE = """\
+A SQL analysis can finish only after execute_sql succeeds. If a query was
+rejected, apply the human feedback, revise and check the SQL, call execute_sql
+again, and wait for review. Return SQLAnalysisResult only with sql, result_id,
+and row_count copied from the successful QueryResult.
 """
 
 
@@ -199,7 +215,13 @@ def build_agent(
                 "allowed_decisions": ["approve", "edit", "reject"]
             }
         },
-        "response_format": ProviderStrategy(SQLAnalysisResult, strict=True),
+        "response_format": ToolStrategy(
+            SQLAnalysisResult,
+            handle_errors=SQL_OUTPUT_RETRY_MESSAGE,
+            tool_message_content=(
+                "SQL analysis completed from a reviewed execution."
+            ),
+        ),
     }
 
     return create_deep_agent(

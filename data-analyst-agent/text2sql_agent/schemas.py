@@ -26,10 +26,12 @@ class QueryResult(StrictModel):
 
 
 class SQLAnalysisResult(StrictModel):
+    """Successful SQL analysis backed by a reviewed, saved execution."""
+
     answer: str
-    sql: str | None = None
-    result_id: str | None = None
-    row_count: int | None = Field(default=None, ge=0, le=500)
+    sql: str
+    result_id: str
+    row_count: int = Field(ge=0, le=500)
     assumptions: list[str] = Field(default_factory=list)
     interpretation: str = ""
 

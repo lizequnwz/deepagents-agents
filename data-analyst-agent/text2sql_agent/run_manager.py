@@ -12,9 +12,15 @@ from text2sql_agent.schemas import (
     Decision,
     FinalAnswer,
     RunStatus,
+    SQLAnalysisResult,
 )
 from text2sql_agent.sql_tools import AgentContext, validate_readonly_sql
-from text2sql_agent.stores import ConversationStore, RunStore
+from text2sql_agent.stores import (
+    ConversationStore,
+    ResultStore,
+    RunStore,
+    StoreNotFound,
+)
 
 
 def decisions_to_command(
@@ -119,6 +125,50 @@ def _extract_approval(interrupts: list[Any]) -> ApprovalRequest:
     raise RuntimeError("The run interrupted without a reviewable SQL action.")
 
 
+def _current_sql_analysis(output: dict[str, Any]) -> SQLAnalysisResult | None:
+    """Find the reviewed SQL subagent result from the current user turn."""
+
+    messages = output.get("messages")
+    if not isinstance(messages, list):
+        return None
+
+    for message in reversed(messages):
+        message_type = getattr(message, "type", None)
+        if message_type is None and isinstance(message, dict):
+            message_type = message.get("type") or message.get("role")
+        if message_type in {"human", "user"}:
+            return None
+
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, dict):
+            content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        try:
+            return SQLAnalysisResult.model_validate_json(content)
+        except ValueError:
+            continue
+    return None
+
+
+def _apply_sql_analysis(
+    answer: FinalAnswer,
+    output: dict[str, Any],
+) -> FinalAnswer:
+    """Prefer the current reviewed SQL result over coordinator paraphrasing."""
+
+    analysis = _current_sql_analysis(output)
+    if analysis is None or analysis.result_id != answer.result_id:
+        return answer
+    return FinalAnswer(
+        answer=analysis.answer,
+        sql=analysis.sql,
+        result_id=analysis.result_id,
+        assumptions=analysis.assumptions,
+        interpretation=analysis.interpretation,
+    )
+
+
 class RunManager:
     def __init__(
         self,
@@ -126,10 +176,34 @@ class RunManager:
         agent: Any,
         conversations: ConversationStore,
         runs: RunStore,
+        results: ResultStore,
     ) -> None:
         self.agent = agent
         self.conversations = conversations
         self.runs = runs
+        self.results = results
+
+    def _validate_answer_provenance(
+        self,
+        answer: FinalAnswer,
+        thread_id: str,
+    ) -> FinalAnswer:
+        """Require executable answers to reference this conversation's result."""
+
+        if answer.result_id is None:
+            if answer.sql is not None:
+                raise RuntimeError(
+                    "Agent returned SQL without an executed result."
+                )
+            return answer
+
+        try:
+            result = self.results.get(answer.result_id, thread_id)
+        except StoreNotFound as exc:
+            raise RuntimeError(
+                "Agent returned an unknown or out-of-conversation result."
+            ) from exc
+        return answer.model_copy(update={"sql": result.executed_sql})
 
     async def start(self, run_id: str) -> None:
         snapshot = self.runs.get(run_id)
@@ -144,7 +218,22 @@ class RunManager:
 
     async def resume(self, run_id: str, command: Command) -> None:
         self.runs.resume(run_id)
-        self.runs.add_event(run_id, "resume", "Applying the review decision")
+        decisions = (
+            command.resume.get("decisions", [])
+            if isinstance(command.resume, dict)
+            else []
+        )
+        decision_type = (
+            decisions[0].get("type")
+            if decisions and isinstance(decisions[0], dict)
+            else None
+        )
+        label = (
+            "Applying feedback and revising SQL"
+            if decision_type == "reject"
+            else "Executing reviewed SQL"
+        )
+        self.runs.add_event(run_id, "resume", label)
         await self._drive(run_id, command)
 
     async def _drive(self, run_id: str, agent_input: Any) -> None:
@@ -215,6 +304,8 @@ class RunManager:
                 if isinstance(answer_value, FinalAnswer)
                 else FinalAnswer.model_validate(answer_value)
             )
+            answer = _apply_sql_analysis(answer, output)
+            answer = self._validate_answer_provenance(answer, thread_id)
             self.runs.add_event(run_id, "answer", "Preparing the final answer")
             self.runs.complete(run_id, answer)
             completed = self.runs.get(run_id)

@@ -46,6 +46,21 @@ def rows_to_csv(columns: list[str], rows: list[dict[str, Any]]) -> str:
     return output.getvalue()
 
 
+def sql_review_decision(
+    generated_sql: str,
+    reviewed_sql: str,
+) -> dict[str, Any]:
+    """Translate the authoritative editor contents to the existing API shape."""
+
+    if reviewed_sql == generated_sql:
+        return {"action": "approve"}
+    return {"action": "edit", "edited_sql": reviewed_sql}
+
+
+def _reset_sql_editor(editor_key: str, generated_sql: str) -> None:
+    st.session_state[editor_key] = generated_sql
+
+
 def render_page_header() -> None:
     st.caption(":material/query_stats: CONVERSATIONAL ANALYTICS")
     st.title("Ask questions about Chinook")
@@ -138,6 +153,8 @@ def render_empty_state(thread_id: str) -> str | None:
 def _render_result(
     client: AgentAPIClient,
     result_id: str,
+    *,
+    widget_key: str,
 ) -> None:
     try:
         result = client.get_result(result_id)
@@ -184,7 +201,7 @@ def _render_result(
             icon=":material/download:",
             on_click="ignore",
             width="content",
-            key=f"download_{result_id}",
+            key=f"download_{result_id}_{widget_key}",
         )
     else:
         st.info(
@@ -193,7 +210,12 @@ def _render_result(
         )
 
 
-def render_turn(client: AgentAPIClient, turn: dict[str, Any]) -> None:
+def render_turn(
+    client: AgentAPIClient,
+    turn: dict[str, Any],
+    *,
+    turn_key: str,
+) -> None:
     with st.chat_message("user"):
         st.markdown(turn["user_message"])
 
@@ -214,7 +236,11 @@ def render_turn(client: AgentAPIClient, turn: dict[str, Any]) -> None:
                     st.markdown(interpretation)
 
         if answer.get("result_id"):
-            _render_result(client, answer["result_id"])
+            _render_result(
+                client,
+                answer["result_id"],
+                widget_key=turn_key,
+            )
 
         if answer.get("sql"):
             with st.expander(
@@ -242,11 +268,17 @@ def render_pending_user_message(question: str) -> None:
         st.markdown(question)
 
 
-def render_approval(run: dict[str, Any]) -> dict[str, Any] | None:
+def render_approval(
+    run: dict[str, Any],
+    *,
+    revision_feedback: str | None = None,
+) -> dict[str, Any] | None:
     approval = run["approval"]
     query = approval["query"]
-    cycle_key = hashlib.sha256(query.encode("utf-8")).hexdigest()[:10]
+    cycle_source = f"{run['next_event_id']}\0{query}"
+    cycle_key = hashlib.sha256(cycle_source.encode("utf-8")).hexdigest()[:10]
     editor_key = f"sql_review_{run['run_id']}_{cycle_key}"
+    st.session_state.setdefault(editor_key, query)
 
     with st.container(border=True):
         st.subheader(
@@ -257,75 +289,90 @@ def render_approval(run: dict[str, Any]) -> dict[str, Any] | None:
             "Nothing has been executed yet.",
             icon=":material/security:",
         )
+        if revision_feedback:
+            st.success(
+                "Revised SQL is ready for another review.",
+                icon=":material/check_circle:",
+            )
+            st.caption(f"Your feedback: {revision_feedback}")
         st.caption(
             "Compare the joins, filters, metric definitions, sorting, and row "
-            "limit with your question before choosing an action."
+            "limit with your question. The SQL visible in the editor is the "
+            "SQL that will run."
         )
-        edited_sql = st.text_area(
-            "Generated SQL",
-            value=query,
-            height=240,
-            key=editor_key,
-            help=(
-                "Review the query carefully. The backend parses and validates "
-                "the exact approved or edited SQL before execution."
-            ),
-        )
-        changed = edited_sql != query
-        st.caption(
-            "Read-only SQLite · one statement · 10-second timeout · "
-            "500-row result cap"
-        )
-
-        with st.container(
-            horizontal=True,
-            vertical_alignment="center",
-            gap="xsmall",
+        with st.form(
+            f"sql_run_form_{run['run_id']}_{cycle_key}",
+            border=False,
+            enter_to_submit=False,
         ):
-            approve = st.button(
-                "Approve and run",
+            reviewed_sql = st.text_area(
+                "SQL to execute",
+                height=240,
+                key=editor_key,
+                help=(
+                    "Review or edit the query. This exact text is parsed and "
+                    "validated by the backend before execution."
+                ),
+            )
+            st.caption(
+                "Read-only SQLite · one statement · 10-second timeout · "
+                "500-row result cap"
+            )
+            run_sql = st.form_submit_button(
+                "Run this SQL",
                 icon=":material/play_arrow:",
                 type="primary",
-                key=f"approve_{run['run_id']}_{cycle_key}",
+                key=f"run_sql_{run['run_id']}_{cycle_key}",
             )
-            edit = st.button(
-                "Run edited SQL",
-                icon=":material/edit:",
-                disabled=not changed,
-                help=(
-                    "Change the SQL above to enable this action."
-                    if not changed
-                    else "Execute the edited query after backend validation."
-                ),
-                key=f"edit_{run['run_id']}_{cycle_key}",
-            )
+        st.button(
+            "Reset to generated SQL",
+            icon=":material/restart_alt:",
+            type="tertiary",
+            key=f"reset_sql_{run['run_id']}_{cycle_key}",
+            on_click=_reset_sql_editor,
+            args=(editor_key, query),
+        )
 
-        if approve:
-            return {"action": "approve"}
-        if edit:
-            return {"action": "edit", "edited_sql": edited_sql}
+        if run_sql:
+            return sql_review_decision(query, reviewed_sql)
 
         with st.expander(
             "Reject and request changes",
             icon=":material/replay:",
             expanded=False,
         ):
-            feedback = st.text_area(
-                "Feedback for the analyst",
-                placeholder=(
-                    "Explain what should change, such as the metric, "
-                    "filter, grouping, or sort order."
-                ),
-                height=100,
-                key=f"rejection_feedback_{run['run_id']}_{cycle_key}",
+            st.caption(
+                "The analyst will propose revised SQL. You will review it "
+                "again before anything is executed."
             )
-            reject = st.button(
-                "Reject and replan",
-                icon=":material/undo:",
-                disabled=not feedback.strip(),
-                key=f"reject_{run['run_id']}_{cycle_key}",
-            )
+            with st.form(
+                f"sql_reject_form_{run['run_id']}_{cycle_key}",
+                border=False,
+                enter_to_submit=False,
+            ):
+                feedback = st.text_area(
+                    "Feedback for the analyst",
+                    placeholder=(
+                        "Explain what should change, such as the metric, "
+                        "filter, grouping, or sort order."
+                    ),
+                    height=100,
+                    key=(
+                        f"rejection_feedback_{run['run_id']}_{cycle_key}"
+                    ),
+                )
+                reject = st.form_submit_button(
+                    "Send feedback and revise",
+                    icon=":material/replay:",
+                    key=f"reject_{run['run_id']}_{cycle_key}",
+                )
             if reject:
+                if not feedback.strip():
+                    st.error(
+                        "Add feedback describing how the SQL should change.",
+                        icon=":material/error:",
+                    )
+                    return None
                 return {
                     "action": "reject",
                     "feedback": feedback.strip(),
