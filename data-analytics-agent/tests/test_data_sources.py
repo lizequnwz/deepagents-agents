@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+import pytest
+
+from data_analytics_agent.agents.visualization.agent import (
+    build_visualization_subagent,
+)
+from data_analytics_agent.api import Services
+from data_analytics_agent.config import Settings
+from data_analytics_agent.coordinator import (
+    _coordinator_prompt,
+    _final_answer_response_format,
+)
+from data_analytics_agent.stores import ResultStore
+
+
+def test_registry_resolves_source_semantic_target_and_limits(
+    test_settings: Settings,
+) -> None:
+    catalog = test_settings.load_catalog()
+
+    assert catalog.default_source_id == "test"
+    assert set(catalog.sources) == {"test", "test_alt"}
+    source = catalog.get("test")
+    assert source.semantic_model_path.is_file()
+    assert source.semantic_virtual_path == "/project/semantic/test.osi.yaml"
+    assert source.backend_type == "sqlite"
+    assert source.dialect == "sqlite"
+    assert source.target["path"] == "db/test.sqlite"
+    assert source.limits.max_result_rows == 500
+
+
+def test_clear_semantic_schema_mismatch_blocks_source(
+    test_settings: Settings,
+) -> None:
+    semantic_path = (
+        test_settings.project_root / "semantic" / "test.osi.yaml"
+    )
+    semantic_path.write_text(
+        semantic_path.read_text(encoding="utf-8").replace(
+            "expression: Name",
+            "expression: MissingColumn",
+        ),
+        encoding="utf-8",
+    )
+
+    summaries = Services(settings=test_settings).source_summaries()
+
+    assert all(not summary.ready for summary in summaries)
+    assert all(
+        any("MissingColumn" in error for error in summary.errors)
+        for summary in summaries
+    )
+
+
+def test_missing_osi_file_blocks_source(test_settings: Settings) -> None:
+    (
+        test_settings.project_root / "semantic" / "test.osi.yaml"
+    ).unlink()
+
+    summaries = Services(settings=test_settings).source_summaries()
+
+    assert all(not summary.ready for summary in summaries)
+    assert all(
+        any("not found" in error for error in summary.errors)
+        for summary in summaries
+    )
+
+
+def test_visualization_feature_flag_is_global_and_defaults_enabled(
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert test_settings.enable_data_visualization is True
+
+    monkeypatch.setenv("ENABLE_DATA_VISUALIZATION", "false")
+    disabled = Settings(
+        project_root=test_settings.project_root,
+        data_sources_config_path=test_settings.data_sources_config_path,
+    )
+    source = disabled.load_catalog().get("test")
+
+    assert disabled.enable_data_visualization is False
+    prompt = _coordinator_prompt(source, visualization_enabled=False)
+    assert "visualization is disabled" in prompt.lower()
+    assert "do not simulate one" in prompt.lower()
+
+    enabled_prompt = _coordinator_prompt(
+        source,
+        visualization_enabled=True,
+    )
+    assert "only when the user explicitly asks" in enabled_prompt.lower()
+    assert "exactly one validated chartspec" in enabled_prompt.lower()
+
+
+def test_visualization_subagent_reuses_the_configured_model(
+    test_settings: Settings,
+) -> None:
+    model = object()
+    source = test_settings.load_catalog().get("test")
+
+    subagent = build_visualization_subagent(
+        source=source,
+        result_store=ResultStore(),
+        model=model,
+        permissions=[],
+    )
+
+    assert subagent["model"] is model
+    assert subagent["name"] == "data-visualization"
+    assert "interrupt_on" not in subagent
+
+
+def test_sparse_chart_contract_does_not_request_openai_strict_schema() -> None:
+    response_format = _final_answer_response_format().to_model_kwargs()[
+        "response_format"
+    ]["json_schema"]
+    chart_schema = response_format["schema"]["$defs"]["ChartSpec"]
+
+    assert "strict" not in response_format
+    assert "x" in chart_schema["properties"]
+    assert "x" not in chart_schema["required"]

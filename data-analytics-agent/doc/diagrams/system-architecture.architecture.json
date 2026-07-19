@@ -1,0 +1,294 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Data Analytics Agent Architecture",
+    "subtitle": "Human-reviewed SQL and explicit, automatically validated visualization",
+    "output": "system-architecture.html",
+    "animation": "none",
+    "viewBox": [1360, 900]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "Analyst",
+      "sublabel": "question or chart request",
+      "pos": [40, 340],
+      "size": [120, 64]
+    },
+    {
+      "id": "streamlit",
+      "type": "frontend",
+      "label": "Streamlit",
+      "sublabel": "chat + SQL review + Plotly",
+      "pos": [210, 340],
+      "size": [130, 64]
+    },
+    {
+      "id": "fastapi",
+      "type": "backend",
+      "label": "FastAPI",
+      "sublabel": "source-bound lifecycle",
+      "pos": [390, 340],
+      "size": [130, 64]
+    },
+    {
+      "id": "coordinator",
+      "type": "backend",
+      "label": "Coordinator",
+      "sublabel": "capability routing",
+      "pos": [570, 340],
+      "size": [130, 64]
+    },
+    {
+      "id": "sql_agent",
+      "type": "backend",
+      "label": "Text-to-SQL",
+      "sublabel": "isolated specialist",
+      "pos": [750, 340],
+      "size": [130, 64]
+    },
+    {
+      "id": "semantic",
+      "type": "database",
+      "label": "Selected OSI",
+      "sublabel": "semantic model 0.1.1",
+      "pos": [750, 140],
+      "size": [130, 64],
+      "tag": "required"
+    },
+    {
+      "id": "sql_review",
+      "type": "security",
+      "label": "SQL Review",
+      "sublabel": "approve / edit / reject",
+      "pos": [930, 185],
+      "size": [140, 64],
+      "tag": "before execution"
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "SQLBackend",
+      "sublabel": "generic execution contract",
+      "pos": [930, 340],
+      "size": [140, 64]
+    },
+    {
+      "id": "stores",
+      "type": "database",
+      "label": "Process Stores",
+      "sublabel": "threads + runs + results",
+      "pos": [1120, 140],
+      "size": [150, 64],
+      "tag": "POC memory"
+    },
+    {
+      "id": "sqlite",
+      "type": "database",
+      "label": "SQLiteBackend",
+      "sublabel": "local read-only files",
+      "pos": [1120, 340],
+      "size": [150, 64]
+    },
+    {
+      "id": "visualization",
+      "type": "backend",
+      "label": "Visualization",
+      "sublabel": "one constrained ChartSpec",
+      "pos": [750, 540],
+      "size": [140, 64],
+      "tag": "feature-flagged"
+    },
+    {
+      "id": "renderer",
+      "type": "frontend",
+      "label": "Plotly Renderer",
+      "sublabel": "trusted deterministic code",
+      "pos": [1120, 540],
+      "size": [150, 64]
+    },
+    {
+      "id": "snowflake",
+      "type": "cloud",
+      "label": "Snowflake Adapter",
+      "sublabel": "future cloud backend",
+      "pos": [1120, 690],
+      "size": [150, 64],
+      "tag": "conceptual"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Source-bound agent runtime",
+      "wraps": [
+        "coordinator",
+        "sql_agent",
+        "semantic",
+        "sql_review",
+        "backend",
+        "visualization"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Reviewed SQL and validated chart boundary",
+      "wraps": [
+        "sql_review",
+        "backend",
+        "sqlite",
+        "visualization",
+        "renderer"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "user",
+      "to": "streamlit",
+      "variant": "emphasis"
+    },
+    {
+      "from": "streamlit",
+      "to": "fastapi",
+      "label": "HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "from": "fastapi",
+      "to": "coordinator",
+      "label": "source context",
+      "variant": "emphasis",
+      "labelAt": [545, 418]
+    },
+    {
+      "from": "coordinator",
+      "to": "sql_agent",
+      "label": "data task",
+      "variant": "emphasis"
+    },
+    {
+      "from": "sql_agent",
+      "to": "semantic",
+      "label": "read first",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "route": "orthogonal-v",
+      "labelDx": 45
+    },
+    {
+      "from": "sql_agent",
+      "to": "sql_review",
+      "label": "proposed SQL",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left",
+      "route": "orthogonal-h",
+      "labelAt": [905, 276]
+    },
+    {
+      "from": "sql_review",
+      "to": "backend",
+      "label": "reviewed SQL",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "orthogonal-v",
+      "labelDx": 48
+    },
+    {
+      "from": "backend",
+      "to": "sqlite",
+      "variant": "emphasis"
+    },
+    {
+      "from": "backend",
+      "to": "stores",
+      "label": "SavedResult",
+      "fromSide": "top",
+      "toSide": "left",
+      "route": "orthogonal-h",
+      "labelAt": [1100, 265]
+    },
+    {
+      "from": "backend",
+      "to": "snowflake",
+      "label": "future",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "route": "orthogonal-h",
+      "labelAt": [1085, 670]
+    },
+    {
+      "from": "coordinator",
+      "to": "visualization",
+      "label": "explicit chart task",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "route": "orthogonal-h",
+      "labelAt": [690, 515]
+    },
+    {
+      "from": "stores",
+      "to": "visualization",
+      "label": "scoped result",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [[1310, 172], [1310, 640], [820, 640]],
+      "labelSegment": 1,
+      "labelDx": 48
+    },
+    {
+      "from": "stores",
+      "to": "renderer",
+      "label": "full capped rows",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "top",
+      "via": [[1090, 172], [1090, 500], [1195, 500]],
+      "labelAt": [1040, 470]
+    },
+    {
+      "from": "visualization",
+      "to": "renderer",
+      "label": "validated ChartSpec",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [910, 618]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Source isolation",
+      "items": [
+        "A conversation is permanently bound to one registered source",
+        "The source fixes OSI, dialect, limits, backend target, and result scope"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Reviewed SQL, constrained charts",
+      "items": [
+        "Every SQL execution pauses before database access",
+        "Explicit chart requests auto-run only a validated declarative spec",
+        "Result provenance cannot change and arbitrary Python never executes"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Plug-and-play visualization",
+      "items": [
+        "Explicit requests route one saved result to the optional specialist",
+        "One generic ChartSpec covers common charts without arbitrary Python",
+        "Disabling the feature leaves text-to-SQL behavior unchanged"
+      ]
+    }
+  ]
+}
