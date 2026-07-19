@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -11,7 +12,10 @@ from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
     VisualizationResult,
 )
-from data_analytics_agent.agents.visualization.tools import create_chart_result
+from data_analytics_agent.agents.visualization.tools import (
+    create_chart_result,
+    create_create_chart_tool,
+)
 from data_analytics_agent.agents.visualization.validation import (
     presentation_rows,
     validate_chart_spec,
@@ -336,6 +340,37 @@ def test_create_chart_returns_success_message_and_exact_spec() -> None:
     assert result.answer == (
         "Chart generated successfully: bar chart 'Amount by category'."
     )
+
+
+def test_create_chart_completes_visualization_directly() -> None:
+    results = ResultStore()
+    saved = results.save(
+        thread_id="thread-1",
+        source_id="source-1",
+        executed_sql="SELECT category, amount FROM metrics",
+        columns=["category", "amount"],
+        rows=[{"category": "A", "amount": 1}],
+        truncated=False,
+        elapsed_ms=1,
+    )
+    tool = create_create_chart_tool(results, source_id="source-1")
+    runtime = SimpleNamespace(
+        state={
+            "thread_id": "thread-1",
+            "run_id": "run-1",
+            "source_id": "source-1",
+        },
+        tool_call_id="chart-call",
+    )
+
+    command = tool.func(
+        _bar_spec(result_id=saved.result_id),
+        runtime,
+    )
+
+    assert tool.return_direct is True
+    assert command.update["structured_response"].chart.result_id == saved.result_id
+    assert command.update["messages"][0].tool_call_id == "chart-call"
 
 
 def test_chart_progress_shows_safe_partial_arguments() -> None:

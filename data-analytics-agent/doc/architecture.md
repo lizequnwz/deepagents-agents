@@ -90,7 +90,8 @@ compatibility import for Deep Agents tooling.
 
 1. Streamlit creates or rehydrates a source-bound conversation.
 2. FastAPI creates a run and rejects concurrent runs for the same thread.
-3. `RunManager` invokes the source-specific coordinator with `AgentContext`.
+3. `RunManager` invokes the source-specific coordinator with typed run-scope
+   state containing the conversation, run, and source IDs.
 4. The coordinator delegates database work.
 5. The specialist reads OSI context, validates SQL, and calls `execute_sql`.
 6. HITL pauses before the tool runs.
@@ -102,17 +103,19 @@ compatibility import for Deep Agents tooling.
 12. Streamlit retrieves and displays the full capped artifact.
 13. On an explicit chart request, the visualization specialist inspects one
     saved result and proposes one `ChartSpec`.
-14. `create_chart` validates and generates the constrained spec automatically.
+14. `create_chart` validates the constrained spec and completes the
+    visualization subagent directly, without a second model packaging step.
 15. Progress shows the chart type and a bounded subset of safe mappings.
 16. The visualization success result returns to the coordinator.
 17. `RunManager` preserves the exact generated spec and canonical success
     message with result provenance.
 18. Streamlit reconstructs Plotly and exposes the underlying table/CSV.
 
-LangGraph checkpoints are isolated by `run_id`, while tool context retains the
-conversation `thread_id` for artifact scoping. `RunManager.start` reconstructs
-completed human/assistant turns for each new run, including the chart success
-message and exact spec.
+LangGraph checkpoints are isolated by `run_id`. Typed graph state retains the
+conversation `thread_id`, `run_id`, and `source_id` for artifact scoping and is
+inherited by inline subagents. `RunManager.start` reconstructs completed
+human/assistant turns for each new run, including the chart success message and
+exact spec.
 
 See [Safety and HITL](safety-and-hitl.md) for the detailed sequence.
 

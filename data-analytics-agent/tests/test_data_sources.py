@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from data_analytics_agent.agents.text_to_sql.agent import _sql_subagent_prompt
 from data_analytics_agent.agents.visualization.agent import (
+    _visualization_prompt,
     build_visualization_subagent,
 )
 from data_analytics_agent.api import Services
@@ -91,6 +93,25 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
     )
     assert "only when the user explicitly asks" in enabled_prompt.lower()
     assert "exactly one validated chartspec" in enabled_prompt.lower()
+    normalized_enabled_prompt = " ".join(enabled_prompt.lower().split())
+    assert "must not truncate a time series" in normalized_enabled_prompt
+
+    sql_prompt = _sql_subagent_prompt(source)
+    normalized_sql_prompt = " ".join(sql_prompt.lower().split())
+    assert (
+        "five-row list default does not apply to a time series"
+        in normalized_sql_prompt
+    )
+    assert "blind top-level limit" in normalized_sql_prompt
+
+    visualization_prompt = _visualization_prompt(source)
+    normalized_visualization_prompt = " ".join(
+        visualization_prompt.lower().split()
+    )
+    assert (
+        "ordered categorical or temporal x axis"
+        in normalized_visualization_prompt
+    )
 
 
 def test_visualization_subagent_reuses_the_configured_model(

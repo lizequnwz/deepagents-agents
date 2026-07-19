@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from deepagents.graph import DeepAgentState
 from langchain.tools import ToolRuntime, tool
 from sqlglot import exp
 
@@ -25,6 +26,28 @@ class AgentContext:
     thread_id: str
     run_id: str
     source_id: str
+
+
+class AnalyticsAgentState(DeepAgentState):
+    """Run scope shared by the coordinator and its inline subagents."""
+
+    thread_id: str
+    run_id: str
+    source_id: str
+
+
+def _runtime_context(runtime: ToolRuntime) -> AgentContext:
+    """Read run scope from graph state inherited by inline subagents."""
+
+    state = runtime.state
+    try:
+        return AgentContext(
+            thread_id=str(state["thread_id"]),
+            run_id=str(state["run_id"]),
+            source_id=str(state["source_id"]),
+        )
+    except KeyError as exc:
+        raise RuntimeError("The agent run scope is unavailable.") from exc
 
 
 def validate_readonly_sql(
@@ -121,7 +144,8 @@ def create_execute_sql_tool(
         small sample and an opaque result ID are returned to the model.
         """
 
-        if runtime.context.source_id != source.source_id:
+        context = _runtime_context(runtime)
+        if context.source_id != source.source_id:
             raise ValueError(
                 "The conversation source does not match this SQL backend."
             )
@@ -129,7 +153,7 @@ def create_execute_sql_tool(
             backend=backend,
             source=source,
             query=query,
-            thread_id=runtime.context.thread_id,
+            thread_id=context.thread_id,
             result_store=result_store,
         )
         return result.model_dump(mode="json")
@@ -152,11 +176,12 @@ def create_get_saved_result_tool(
     ) -> dict[str, Any]:
         """Read a small page from a prior result in this source conversation."""
 
+        context = _runtime_context(runtime)
         safe_limit = min(max(limit, 1), model_sample_rows)
         try:
             page = result_store.page(
                 result_id,
-                runtime.context.thread_id,
+                context.thread_id,
                 source_id=source_id,
                 offset=offset,
                 limit=safe_limit,

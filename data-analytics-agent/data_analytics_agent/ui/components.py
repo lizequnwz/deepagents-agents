@@ -104,7 +104,7 @@ def render_sidebar(
     """Render app-level metadata and return whether New conversation was used."""
 
     with st.sidebar:
-        st.caption(":material/database: DEEP AGENT POC")
+        st.caption(":material/database: DEEP DATA ANALYTICS AGENT")
         st.title("Data Analytics Agent")
         st.caption(
             "Human-reviewed SQL and optional constrained charts with semantic "

@@ -9,7 +9,6 @@ from typing import Any
 from langgraph.types import Command
 
 from data_analytics_agent.agents.text_to_sql.tools import (
-    AgentContext,
     validate_readonly_sql,
 )
 from data_analytics_agent.agents.visualization.schemas import (
@@ -396,7 +395,12 @@ class RunManager:
         )
         await self._drive(
             run_id,
-            {"messages": messages},
+            {
+                "messages": messages,
+                "thread_id": snapshot.thread_id,
+                "run_id": run_id,
+                "source_id": snapshot.source_id,
+            },
         )
 
     async def resume(
@@ -446,16 +450,10 @@ class RunManager:
         # explicitly in start(), so a directly completed chart cannot leave a
         # stale nested interrupt for the next user turn.
         config = {"configurable": {"thread_id": run_id}}
-        context = AgentContext(
-            thread_id=thread_id,
-            run_id=run_id,
-            source_id=source_id,
-        )
         try:
             stream = await graph.astream_events(
                 agent_input,
                 config=config,
-                context=context,
                 version="v3",
             )
             seen_labels: set[str] = set()

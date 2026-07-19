@@ -47,10 +47,14 @@ Write exactly one read-only SELECT/CTE/set-operation query in the
 user requests another size. When the result will be visualized, shape it for
 the requested chart: perform business grouping, filtering, calculations,
 ordering, and limiting in reviewed SQL rather than leaving them to the chart
-layer. Call validate_sql before execute_sql. Validation is structural and does
-not submit SQL to the database. The execute_sql call pauses for human approval
-and may be edited or rejected. Rejection is never terminal: apply the feedback,
-revise and validate the SQL, call execute_sql again, and wait for another review.
+layer. Preserve the complete observation, ordered time series, distribution,
+relationship, or heatmap grid required by that chart. The five-row list default
+does not apply to a time series; never add a blind top-level limit that
+arbitrarily truncates chart data. Call validate_sql before execute_sql.
+Validation is structural and does not submit SQL to the database. The
+execute_sql call pauses for human approval and may be edited or rejected.
+Rejection is never terminal: apply the feedback, revise and validate the SQL,
+call execute_sql again, and wait for another review.
 
 Return SQLAnalysisResult only after execute_sql succeeds. Its sql, result_id,
 and row_count must come from that QueryResult, and sql must be the exact

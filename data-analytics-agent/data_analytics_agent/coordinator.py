@@ -21,7 +21,7 @@ from data_analytics_agent.agents.text_to_sql.agent import (
     build_text_to_sql_subagent,
 )
 from data_analytics_agent.agents.text_to_sql.tools import (
-    AgentContext,
+    AnalyticsAgentState,
     create_get_saved_result_tool,
 )
 from data_analytics_agent.backends import SQLBackend
@@ -43,7 +43,10 @@ Use the `data-visualization` subagent only when the user explicitly asks to
 visualize, chart, plot, graph, or map data. It consumes one saved result and
 returns exactly one validated ChartSpec. If the current result is not
 chart-ready, first delegate to `text-to-sql` for a new reviewed result, then
-delegate that result ID to `data-visualization`. For chart-only follow-ups,
+delegate that result ID to `data-visualization`. Tell the SQL specialist the
+requested chart type and the complete observation, series, distribution, or
+grid shape it must preserve. A generic list limit must not truncate a time
+series or discard rows required by the requested chart. For chart-only follow-ups,
 reuse the referenced saved result when it already has the required shape.
 Never invent, rewrite, or silently alter the generated chart specification.
 """
@@ -190,6 +193,6 @@ def build_agent(
         backend=_project_backend(settings.project_root),
         permissions=permissions,
         response_format=_final_answer_response_format(),
-        context_schema=AgentContext,
+        state_schema=AnalyticsAgentState,
         checkpointer=checkpointer or InMemorySaver(),
     )

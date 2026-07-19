@@ -35,6 +35,9 @@ def test_agent_graph_builds_without_network(
         backend=SQLiteBackend(database),
     )
     assert graph.name == "data-analytics-agent"
+    assert graph.context_schema is None
+    state_properties = graph.get_input_jsonschema()["properties"]
+    assert {"thread_id", "run_id", "source_id"} <= set(state_properties)
     assert {"model", "tools"} <= set(graph.nodes)
 
 

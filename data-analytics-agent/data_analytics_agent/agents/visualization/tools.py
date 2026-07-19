@@ -5,8 +5,11 @@ from __future__ import annotations
 from numbers import Real
 from typing import Any
 
+from langchain_core.messages import ToolMessage
 from langchain.tools import ToolRuntime, tool
+from langgraph.types import Command
 
+from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
 from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
     VisualizationResult,
@@ -37,9 +40,10 @@ def _get_result(
     source_id: str,
 ):
     try:
+        context = _runtime_context(runtime)
         return result_store.get(
             result_id,
-            runtime.context.thread_id,
+            context.thread_id,
             source_id=source_id,
         )
     except StoreNotFound as exc:
@@ -139,12 +143,12 @@ def create_create_chart_tool(
     *,
     source_id: str,
 ):
-    @tool
+    @tool(return_direct=True)
     def create_chart(
         spec: ChartSpec,
         runtime: ToolRuntime,
-    ) -> dict[str, Any]:
-        """Generate one validated spec for deterministic chart rendering."""
+    ) -> Command:
+        """Generate one validated chart spec and finish the visualization."""
 
         result = _get_result(
             result_store,
@@ -152,6 +156,19 @@ def create_create_chart_tool(
             runtime,
             source_id=source_id,
         )
-        return create_chart_result(spec, result).model_dump(mode="json")
+        visualization = create_chart_result(spec, result)
+        if not runtime.tool_call_id:
+            raise RuntimeError("The chart tool call ID is unavailable.")
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content=visualization.model_dump_json(),
+                        tool_call_id=runtime.tool_call_id,
+                    )
+                ],
+                "structured_response": visualization,
+            }
+        )
 
     return create_chart
