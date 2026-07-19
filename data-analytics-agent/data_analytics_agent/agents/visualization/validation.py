@@ -48,30 +48,6 @@ def chart_columns(spec: ChartSpec) -> set[str]:
     return {value for value in values if value is not None}
 
 
-def _numeric_columns_for_chart(spec: ChartSpec) -> list[str]:
-    """Return columns whose encoding role requires numeric chart data."""
-
-    columns: list[str | None] = []
-    if spec.chart_type in {
-        ChartType.BAR,
-        ChartType.LINE,
-        ChartType.AREA,
-        ChartType.PIE,
-        ChartType.BOX,
-    }:
-        columns.extend(spec.y)
-    elif spec.chart_type is ChartType.SCATTER:
-        columns.extend([spec.x, *spec.y, spec.size])
-    elif spec.chart_type is ChartType.HISTOGRAM:
-        columns.append(spec.x)
-    elif spec.chart_type is ChartType.HEATMAP:
-        columns.append(spec.value)
-    elif spec.chart_type is ChartType.MAP:
-        columns.extend([spec.value, spec.latitude, spec.longitude])
-
-    return list(dict.fromkeys(column for column in columns if column))
-
-
 def _sort_key(value: Any) -> tuple[int, int, Any]:
     if value is None:
         return (1, 0, "")
@@ -139,7 +115,16 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     if not rows:
         raise ValueError("The reviewed presentation operations removed all rows.")
 
-    for column in _numeric_columns_for_chart(spec):
+    numeric_columns = list(spec.y)
+    if spec.size:
+        numeric_columns.append(spec.size)
+    if spec.value:
+        numeric_columns.append(spec.value)
+    if spec.latitude:
+        numeric_columns.append(spec.latitude)
+    if spec.longitude:
+        numeric_columns.append(spec.longitude)
+    for column in numeric_columns:
         if not _has_numeric_value(rows, column):
             raise ValueError(
                 f"Chart column {column!r} has no usable numeric values."
@@ -147,6 +132,12 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     if spec.size and not _has_nonnegative_numeric_value(rows, spec.size):
         raise ValueError("A size column requires nonnegative numeric values.")
 
+    if (
+        spec.chart_type is ChartType.HISTOGRAM
+        and spec.x
+        and not _has_numeric_value(rows, spec.x)
+    ):
+        raise ValueError("A histogram requires a numeric x column.")
     if (
         spec.chart_type is ChartType.PIE
         and not _has_nonnegative_numeric_value(rows, spec.y[0])

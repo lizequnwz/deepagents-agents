@@ -39,40 +39,17 @@ labels or a curated palette. Histograms may bin one numeric column, and box
 plots may compute their chart-native quartiles and whiskers. No other
 aggregation, joins, formulas, pivots, or statistical transforms are allowed.
 
-Honor the user's explicitly requested chart type when the saved result can
-support it. Otherwise choose the simplest chart that answers the question.
-Use these encoding roles:
-- bar: categorical or temporal x, with one or more numeric y measures;
-- line or area: ordered categorical or temporal x, with numeric y measures;
-- scatter: numeric x and numeric y, with optional nonnegative numeric size;
-- pie: unique categorical x and one nonnegative numeric y;
-- histogram: one numeric x containing row-level observations;
-- box: optional categorical x and numeric y containing observations, not
-  precomputed quartiles;
-- heatmap: categorical or temporal x and y dimensions, plus one numeric value;
-  each populated x/y cell must be unique and the two-dimensional grid must be
-  preserved;
-- map: a supported geographic location role and optional numeric value, or
-  numeric latitude and longitude for coordinate markers.
-
-Use no more than five y series. Keep categorical charts readable. Prefer clear
-business titles and axis or legend labels derived from the actual columns.
-For horizontal bars, keep x as the category and y as the numeric measure; set
-orientation rather than swapping their semantic roles. Do not use color, size,
-or multiple series decoratively when they do not add meaning. ZIP and US
+Choose among bar, line, area, scatter, pie, histogram, box, heatmap, and map.
+Use no more than five y series. Keep categorical charts readable. ZIP and US
 city/state maps use centroid markers; US-state and ISO-country choropleths use
 built-in geometry; coordinate maps require latitude and longitude. Never
 request a ZIP-boundary choropleth.
 
 Construct a strict ChartSpec whose result_id is the assigned result. Call
-validate_chart before create_chart. If validation fails, inspect the error,
-correct only the chart mappings or permitted presentation settings, and
-validate again. Never fabricate data, bypass validation, or reinterpret a
-categorical dimension as a numeric measure. The create_chart call runs
-automatically after validating the constrained specification. After
-create_chart succeeds, return VisualizationResult with the exact chart and
-success message returned by the tool. The coordinator owns the final user
-response.
+validate_chart before create_chart. The create_chart call runs automatically
+after validating the constrained specification. After create_chart succeeds,
+return VisualizationResult with the exact chart and success message returned
+by the tool. The coordinator owns the final user response.
 """
 
 

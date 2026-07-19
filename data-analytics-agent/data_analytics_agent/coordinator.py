@@ -43,10 +43,7 @@ Use the `data-visualization` subagent only when the user explicitly asks to
 visualize, chart, plot, graph, or map data. It consumes one saved result and
 returns exactly one validated ChartSpec. If the current result is not
 chart-ready, first delegate to `text-to-sql` for a new reviewed result, then
-delegate that result ID to `data-visualization`. Tell the SQL specialist the
-requested chart type and the observation, series, or grid shape it must
-preserve. Generic list limits must not discard the rows needed for a complete
-series, distribution, relationship, or heatmap grid. For chart-only follow-ups,
+delegate that result ID to `data-visualization`. For chart-only follow-ups,
 reuse the referenced saved result when it already has the required shape.
 Never invent, rewrite, or silently alter the generated chart specification.
 """

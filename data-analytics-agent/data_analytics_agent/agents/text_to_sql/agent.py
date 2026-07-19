@@ -43,31 +43,14 @@ Every SQL table must use the dataset's exact `source` value, and every SQL
 column must use the chosen dialect expression's exact physical value.
 
 Write exactly one read-only SELECT/CTE/set-operation query in the
-{source.dialect} dialect. Default ordinary ranked or list results to five rows
-unless the user requests another size. Chart semantics override that generic
-row limit. When the result will be visualized, shape chart-ready data in
-reviewed SQL: perform business grouping, filtering, calculations, and business
-ordering there rather than leaving them to the chart layer. Preserve the rows
-the requested chart needs:
-- bar and pie results should contain the intended category-level measures;
-- line and area results should retain the complete ordered series in scope;
-- scatter, histogram, and box results should retain the numeric observations
-  needed to show the distribution or relationship;
-- heatmap results should contain one row per populated x/y cell, with both
-  dimensions and a numeric value.
-
-Never apply a blind top-level LIMIT to heatmap cells or truncate a time series
-merely because five rows is the normal list default. A heatmap may contain at
-most 500 populated cells. If a chart needs reduction, select meaningful
-dimension members in a CTE first (for example, the top genres by total sales),
-then retain all cells for those selected members across the requested second
-dimension. Return explicit, stable column names suited to the chart roles.
-
-Call validate_sql before execute_sql. Validation is structural and does not
-submit SQL to the database. The execute_sql call pauses for human approval and
-may be edited or rejected. Rejection is never terminal: apply the feedback,
-revise and validate the SQL, call execute_sql again, and wait for another
-review.
+{source.dialect} dialect. Default ranked or list results to five rows unless the
+user requests another size. When the result will be visualized, shape it for
+the requested chart: perform business grouping, filtering, calculations,
+ordering, and limiting in reviewed SQL rather than leaving them to the chart
+layer. Call validate_sql before execute_sql. Validation is structural and does
+not submit SQL to the database. The execute_sql call pauses for human approval
+and may be edited or rejected. Rejection is never terminal: apply the feedback,
+revise and validate the SQL, call execute_sql again, and wait for another review.
 
 Return SQLAnalysisResult only after execute_sql succeeds. Its sql, result_id,
 and row_count must come from that QueryResult, and sql must be the exact

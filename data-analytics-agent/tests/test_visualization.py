@@ -118,7 +118,7 @@ def test_chart_validation_enforces_columns_numeric_data_and_limits() -> None:
                 result_id="result-1",
                 chart_type="scatter",
                 title="Invalid size",
-                x="amount",
+                x="category",
                 y=["amount"],
                 size="size",
             ),

@@ -35,7 +35,7 @@ class Palette(StrEnum):
 
 
 class ChartSpec(VisualizationModel):
-    """One validated, declarative chart over one saved result."""
+    """One reviewed, declarative chart over one saved result."""
 
     result_id: str = Field(min_length=1)
     chart_type: ChartType
