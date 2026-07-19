@@ -107,7 +107,7 @@ def create_validate_chart_tool(
         spec: ChartSpec,
         runtime: ToolRuntime,
     ) -> dict[str, Any]:
-        """Validate a chart specification without rendering a chart."""
+        """Check a chart spec; return diagnostics without finishing the task."""
 
         result = _get_result(
             result_store,
@@ -120,7 +120,6 @@ def create_validate_chart_tool(
         except ValueError as exc:
             return {
                 "valid": False,
-                "outcome": VisualizationOutcome.NEEDS_SQL_RESHAPE,
                 "result_id": result.result_id,
                 "message": str(exc),
             }

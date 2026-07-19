@@ -92,24 +92,21 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
         visualization_enabled=True,
     )
     assert "only when the user explicitly asks" in enabled_prompt.lower()
-    assert "terminal visualization outcome" in enabled_prompt.lower()
-    normalized_enabled_prompt = " ".join(enabled_prompt.lower().split())
-    assert "exactly one recovery cycle" in normalized_enabled_prompt
+    assert "follow the coordinator policy in agents.md" in (
+        " ".join(enabled_prompt.lower().split())
+    )
 
     sql_prompt = _sql_subagent_prompt(source)
     normalized_sql_prompt = " ".join(sql_prompt.lower().split())
-    assert "do not add limit unless the user explicitly requests" in (
+    assert "do not add `limit` unless the user explicitly requests" in (
         normalized_sql_prompt
     )
     assert "do not imply a row count" in normalized_sql_prompt
 
     visualization_prompt = _visualization_prompt(source)
-    normalized_visualization_prompt = " ".join(
-        visualization_prompt.lower().split()
-    )
-    assert (
-        "line/area: temporal, numeric, or ordered-categorical x"
-        in normalized_visualization_prompt
+    assert "read the `chart-design` skill" in visualization_prompt.lower()
+    assert "`create_chart` and `finish_visualization` are terminal" in (
+        visualization_prompt.lower()
     )
 
 
@@ -128,6 +125,9 @@ def test_visualization_subagent_reuses_the_configured_model(
 
     assert subagent["model"] is model
     assert subagent["name"] == "data-visualization"
+    assert subagent["skills"] == [
+        "/project/skills/data-visualization/"
+    ]
     assert "interrupt_on" not in subagent
 
 

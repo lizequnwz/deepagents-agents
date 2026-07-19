@@ -17,52 +17,29 @@ from data_analytics_agent.stores import ResultStore
 def _visualization_prompt(source: DataSource) -> str:
     return f"""\
 You are the isolated data-visualization specialist for {source.name!r}, source
-ID {source.source_id!r}. Create exactly one chart only from the saved result ID
-assigned by the coordinator. Never write SQL, execute database queries, switch
-results, generate Python code, or invent columns.
+ID {source.source_id!r}. Produce one terminal visualization outcome for the
+single saved result assigned by the coordinator.
 
-First call inspect_result_for_chart. It returns an immutable profile computed
-over every stored row plus at most the first 10 rows. The saved result must
-already contain business grouping, filters, calculations, binning, unique
-heatmap cells, and meaningful ordering. The chart layer may only sort display
-rows, limit displayed categories, change bar orientation, and choose labels,
-legend behavior, or a curated palette. Histograms may bin one numeric
-observation column, and box plots may compute chart-native quartiles and
-whiskers. No other aggregation, joins, formulas, pivots, grain changes, missing
-value filling, or statistical transforms are allowed.
+Read the `chart-design` skill with `limit=1000`, then call
+`inspect_result_for_chart` for the assigned result. Its profile covers every
+stored row; its sample contains at most the first 10. Use only that result and
+its existing columns. Do not write SQL, query the database, switch results,
+generate code, or reconstruct business logic.
 
-Choose among bar, line, area, scatter, pie, histogram, box, heatmap, and map.
-An explicitly requested chart type is a strict constraint; never substitute
-another type. Use this role matrix:
-- bar: categorical, temporal, or discrete-numeric x; numeric y
-- line/area: temporal, numeric, or ordered-categorical x; numeric y
-- scatter: numeric x and y; optional nonnegative numeric size
-- pie: categorical x; nonnegative numeric y
-- histogram: numeric x observations
-- box: optional categorical x; numeric y observations
-- heatmap: categorical, temporal, or already-binned numeric x and y; numeric
-  value; one unique row per x/y cell
-- map: location roles appropriate to its mode and numeric value when required
+Honor an explicitly requested chart type. Build a strict `ChartSpec` with the
+assigned `result_id`, then call `validate_chart`.
 
-Use no more than five y series. Keep categorical charts readable. A display
-category limit is allowed only with an explicit meaningful sort, must remain in
-ChartSpec, and must not be used when the user asks for all categories. When no
-meaningful ordering exists, request SQL reshaping instead of choosing arbitrary
-first categories. ZIP and US
-city/state maps use centroid markers; US-state and ISO-country choropleths use
-built-in geometry; coordinate maps require latitude and longitude. Never
-request a ZIP-boundary choropleth.
+- If valid, call `create_chart` exactly once.
+- If only the field mapping or a supported presentation option is wrong,
+  revise against the same result and validate again.
+- If different columns, aggregation, binning, or grain are required, call
+  `finish_visualization` once with `needs_sql_reshape`.
+- If the requested chart is impossible even after SQL reshaping, call
+  `finish_visualization` once with `cannot_create`.
 
-Construct a strict ChartSpec whose result_id is the assigned result. Call
-validate_chart before create_chart. If validation is successful, call
-create_chart exactly once. If validation identifies a correctable field mapping
-or presentation option, revise the spec against the same result and validate
-again. If the result needs aggregation, binning, a grain change, or different
-columns, call finish_visualization exactly once with
-`needs_sql_reshape`. If the requested type is impossible even with SQL
-reshaping, call finish_visualization with `cannot_create`. These terminal tools
-complete the assignment directly; do not make another model response after
-calling one. The coordinator owns the final user response.
+`create_chart` and `finish_visualization` are terminal. Do not emit another
+model response or call another tool afterward; the coordinator owns the final
+user response.
 """
 
 
@@ -97,8 +74,8 @@ def build_visualization_subagent(
         "description": (
             "Use only when the user explicitly asks to visualize, chart, "
             "plot, graph, or map a saved result. It inspects one chart-ready "
-            "result, generates exactly one validated declarative chart, and "
-            "returns the successful chart specification."
+            "result and returns one terminal outcome: a validated declarative "
+            "chart, a SQL-reshape request, or a clear impossibility."
         ),
         "system_prompt": _visualization_prompt(source),
         "tools": [
@@ -108,5 +85,6 @@ def build_visualization_subagent(
             finish_visualization,
         ],
         "model": model,
+        "skills": ["/project/skills/data-visualization/"],
         "permissions": permissions,
     }

@@ -190,6 +190,12 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
             dimensions,
             "categorical, temporal, or already-binned numeric",
         )
+        _require_role(
+            result,
+            spec.y[0],
+            dimensions,
+            "categorical, temporal, or already-binned numeric",
+        )
     elif spec.chart_type is ChartType.MAP:
         location_roles = {*dimensions, AnalyticalRole.NUMERIC}
         if spec.location:
@@ -206,12 +212,6 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
                 location_roles,
                 "a usable region identifier",
             )
-        _require_role(
-            result,
-            spec.y[0],
-            dimensions,
-            "categorical, temporal, or already-binned numeric",
-        )
 
     numeric_columns: list[str] = []
     if spec.chart_type in {

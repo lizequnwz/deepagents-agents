@@ -57,6 +57,10 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
   there is no chart approval interrupt.
 - Chart outcomes: `chart_created`, `needs_sql_reshape`, or `cannot_create`.
   The coordinator permits at most one reviewed SQL-reshape recovery cycle.
+- Agent skills: `skills/text-to-sql/` contains `schema-exploration` and
+  `query-writing`; `skills/data-visualization/` contains `chart-design`. Each
+  specialist loads only its own namespace. System prompts retain only runtime
+  goals, hard boundaries, tool stages, and terminal contracts.
 - Chart progress: exposes chart type and a bounded subset of mappings while
   omitting the result ID and full tool payload.
 - Output: one chart per request.
@@ -183,6 +187,12 @@ Also execute the tutorial with live calls disabled, validate/render/check the
 affected Archify diagram, validate both configured sources, and run
 `git diff --check`.
 
+The 2026-07-19 prompt/skill refresh was checked with all three skill validators,
+Python compilation, targeted visualization/profiling/nested-HITL tests
+plus prompt/source checks (`33 passed`), direct SQL/viz skill-discovery
+inspection, and manual heatmap/map role validation. The full regression suite
+was intentionally not rerun for that refresh.
+
 ## Prioritized next work
 
 ### 1. Live visualization flow
@@ -217,6 +227,9 @@ timeout/cancellation, and preserve unchanged agent/API/UI contracts.
 
 Keep the current POC tolerant and simple until real usage justifies these:
 
+- add a small prompt-evaluation suite for routing, skill loading, human-edited
+  scope, terminal chart behavior, and one-cycle SQL reshaping before tightening
+  prompts further;
 - add strict full-column validation/coercion policies with configurable
   thresholds for mixed values, invalid dates, nulls, infinities, and
   nonnegative measures;

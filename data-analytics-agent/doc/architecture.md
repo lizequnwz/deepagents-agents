@@ -75,7 +75,8 @@ thread/source provenance.
   `ENABLE_DATA_VISUALIZATION=true`;
 - no default general-purpose subagent;
 - source-specific prompts and tools;
-- explicit query-writing and schema-exploration skills;
+- agent-scoped `skills/text-to-sql/` and `skills/data-visualization/`
+  namespaces, each exposed only to its matching specialist;
 - filesystem read access only to `AGENTS.md`, `semantic/**`, and `skills/**`;
 - provider/tool structured-output contracts;
 - a source-specific in-memory LangGraph checkpointer.
