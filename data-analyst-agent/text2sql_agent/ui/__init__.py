@@ -1,1 +1,1 @@
-"""Streamlit UI helpers for the Chinook analyst POC."""
+"""Streamlit UI helpers for the Data Analytics Agent."""

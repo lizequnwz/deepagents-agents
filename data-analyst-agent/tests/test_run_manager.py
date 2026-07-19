@@ -14,7 +14,7 @@ from text2sql_agent.stores import ConversationStore, ResultStore, RunStore
 
 def _manager(results: ResultStore) -> RunManager:
     return RunManager(
-        agent=None,
+        agent=object(),
         conversations=ConversationStore(),
         runs=RunStore(),
         results=results,
@@ -25,6 +25,7 @@ def test_stored_executed_sql_overrides_stale_model_sql() -> None:
     results = ResultStore()
     saved = results.save(
         thread_id="thread-a",
+        source_id="source-a",
         executed_sql="SELECT Name FROM Artist ORDER BY Name",
         columns=["Name"],
         rows=[{"Name": "AC/DC"}],
@@ -40,6 +41,7 @@ def test_stored_executed_sql_overrides_stale_model_sql() -> None:
     canonical = _manager(results)._validate_answer_provenance(
         answer,
         "thread-a",
+        "source-a",
     )
 
     assert canonical.sql == saved.executed_sql
@@ -50,6 +52,7 @@ def test_unknown_or_cross_conversation_result_fails_safely() -> None:
     results = ResultStore()
     saved = results.save(
         thread_id="thread-a",
+        source_id="source-a",
         executed_sql="SELECT 1",
         columns=["1"],
         rows=[{"1": 1}],
@@ -66,7 +69,21 @@ def test_unknown_or_cross_conversation_result_fails_safely() -> None:
         RuntimeError,
         match="unknown or out-of-conversation result",
     ):
-        _manager(results)._validate_answer_provenance(answer, "thread-b")
+        _manager(results)._validate_answer_provenance(
+            answer,
+            "thread-b",
+            "source-a",
+        )
+
+    with pytest.raises(
+        RuntimeError,
+        match="unknown or out-of-conversation result",
+    ):
+        _manager(results)._validate_answer_provenance(
+            answer,
+            "thread-a",
+            "source-b",
+        )
 
 
 def test_sql_without_result_id_is_not_presented_as_executed() -> None:
@@ -82,6 +99,7 @@ def test_sql_without_result_id_is_not_presented_as_executed() -> None:
         _manager(ResultStore())._validate_answer_provenance(
             answer,
             "thread-a",
+            "source-a",
         )
 
 
@@ -91,6 +109,7 @@ def test_no_query_answer_may_omit_sql_and_result_id() -> None:
     validated = _manager(ResultStore())._validate_answer_provenance(
         answer,
         "thread-a",
+        "source-a",
     )
 
     assert validated == answer

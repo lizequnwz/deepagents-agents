@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from text2sql_agent.agent import build_agent
+from text2sql_agent.backends import SQLiteBackend
 from text2sql_agent.config import Settings
 from text2sql_agent.stores import ResultStore
 
@@ -21,9 +23,18 @@ def test_agent_graph_builds_without_network(
     )
     connection.close()
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    settings = Settings(database_path=database)
-    graph = build_agent(settings, ResultStore())
-    assert graph.name == "chinook-data-analyst"
+    settings = Settings()
+    source = replace(
+        settings.load_catalog().get("chinook"),
+        target={"path": str(database)},
+    )
+    graph = build_agent(
+        settings,
+        ResultStore(),
+        source=source,
+        backend=SQLiteBackend(database),
+    )
+    assert graph.name == "data-analytics-agent"
     assert {"model", "tools"} <= set(graph.nodes)
 
 
@@ -33,5 +44,18 @@ def test_live_agent_builds() -> None:
         pytest.skip("Set RUN_LIVE_SMOKE=1 to enable the live smoke test.")
     settings = Settings()
     if settings.readiness_errors():
-        pytest.skip("OPENAI_API_KEY and Chinook database are required.")
-    assert build_agent(settings, ResultStore()) is not None
+        pytest.skip("OPENAI_API_KEY and a source registry are required.")
+    source = settings.load_catalog().get(
+        settings.load_catalog().default_source_id
+    )
+    assert (
+        build_agent(
+            settings,
+            ResultStore(),
+            source=source,
+            backend=SQLiteBackend(
+                settings.project_root / str(source.target["path"])
+            ),
+        )
+        is not None
+    )

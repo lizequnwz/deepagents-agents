@@ -36,6 +36,7 @@ class ResultStore:
         self,
         *,
         thread_id: str,
+        source_id: str,
         executed_sql: str,
         columns: list[str],
         rows: list[dict[str, Any]],
@@ -45,6 +46,7 @@ class ResultStore:
         result = SavedResult(
             result_id=str(uuid4()),
             thread_id=thread_id,
+            source_id=source_id,
             executed_sql=executed_sql,
             columns=columns,
             rows=rows,
@@ -57,10 +59,20 @@ class ResultStore:
             self._items[result.result_id] = result
         return result
 
-    def get(self, result_id: str, thread_id: str) -> SavedResult:
+    def get(
+        self,
+        result_id: str,
+        thread_id: str,
+        *,
+        source_id: str | None = None,
+    ) -> SavedResult:
         with self._lock:
             result = self._items.get(result_id)
-        if result is None or result.thread_id != thread_id:
+        if (
+            result is None
+            or result.thread_id != thread_id
+            or (source_id is not None and result.source_id != source_id)
+        ):
             raise StoreNotFound(result_id)
         return result
 
@@ -78,14 +90,16 @@ class ResultStore:
         result_id: str,
         thread_id: str,
         *,
+        source_id: str | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> ResultPage:
-        result = self.get(result_id, thread_id)
-        bounded_limit = min(max(limit, 1), 500)
+        result = self.get(result_id, thread_id, source_id=source_id)
+        bounded_limit = min(max(limit, 1), 10_000)
         bounded_offset = max(offset, 0)
         return ResultPage(
             result_id=result.result_id,
+            source_id=result.source_id,
             executed_sql=result.executed_sql,
             columns=result.columns,
             rows=result.rows[bounded_offset : bounded_offset + bounded_limit],
@@ -111,6 +125,7 @@ class ResultStore:
 @dataclass
 class _Conversation:
     thread_id: str
+    source_id: str
     turns: list[ChatTurn] = field(default_factory=list)
     active_run_id: str | None = None
 
@@ -120,10 +135,13 @@ class ConversationStore:
         self._items: dict[str, _Conversation] = {}
         self._lock = RLock()
 
-    def create(self) -> str:
+    def create(self, source_id: str) -> str:
         thread_id = str(uuid4())
         with self._lock:
-            self._items[thread_id] = _Conversation(thread_id=thread_id)
+            self._items[thread_id] = _Conversation(
+                thread_id=thread_id,
+                source_id=source_id,
+            )
         return thread_id
 
     def exists(self, thread_id: str) -> bool:
@@ -137,6 +155,7 @@ class ConversationStore:
                 raise StoreNotFound(thread_id)
             return ConversationResponse(
                 thread_id=item.thread_id,
+                source_id=item.source_id,
                 turns=list(item.turns),
                 active_run_id=item.active_run_id,
             )
@@ -171,6 +190,7 @@ class ConversationStore:
 class _Run:
     run_id: str
     thread_id: str
+    source_id: str
     question: str
     status: RunStatus = RunStatus.QUEUED
     events: list[ActivityEvent] = field(default_factory=list)
@@ -184,11 +204,14 @@ class RunStore:
         self._items: dict[str, _Run] = {}
         self._lock = RLock()
 
-    def create(self, thread_id: str, question: str) -> str:
+    def create(self, thread_id: str, source_id: str, question: str) -> str:
         run_id = str(uuid4())
         with self._lock:
             self._items[run_id] = _Run(
-                run_id=run_id, thread_id=thread_id, question=question
+                run_id=run_id,
+                thread_id=thread_id,
+                source_id=source_id,
+                question=question,
             )
         return run_id
 
@@ -205,6 +228,7 @@ class RunStore:
             return RunResponse(
                 run_id=item.run_id,
                 thread_id=item.thread_id,
+                source_id=item.source_id,
                 question=item.question,
                 status=item.status,
                 events=events,

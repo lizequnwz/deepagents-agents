@@ -1,234 +1,256 @@
-# Chinook Deep-Agent Text-to-SQL POC
+# Data Analytics Agent
 
-A localhost proof of concept for conversational analytics with a FastAPI
-backend and Streamlit UI. A Deep Agent coordinator delegates database work to
-one isolated `text-to-sql` subagent. Every generated query pauses at LangChain's
-built-in human-in-the-loop middleware, where the user can approve it, edit it,
-or reject it with feedback.
+A local proof of concept for source-aware conversational analytics with a
+FastAPI backend and Streamlit UI. A Deep Agent coordinator delegates database
+work to one isolated text-to-SQL subagent. Every generated query pauses for
+human approval before a source-bound backend executes the exact reviewed SQL.
 
-The POC uses OpenAI `gpt-5.4-mini`, Chinook SQLite, in-memory LangGraph
-checkpoints, provider-native structured output, and an Apache Ossie/OSI `0.1.1`
-semantic model.
+The included registry exposes two local SQLite sources:
 
-## What is implemented
+- **Chinook music store** — catalog, customers, invoices, and playlists
+- **Financial services** — accounts, clients, transactions, cards, and loans
 
-- OSI-first grounding for all 11 Chinook tables, fields, keys, relationships,
-  synonyms, AI instructions, and six canonical metrics
-- Deep Agent coordinator plus one synchronous `text-to-sql` subagent invoked
-  through the built-in `task` tool
-- explicit query-writing and schema-exploration skills on the custom subagent
-- provider-native strict `SQLAnalysisResult` and `FinalAnswer` schemas
-- built-in LangChain approve/edit/reject HITL with `InMemorySaver`
-- exact edited-SQL validation before LangGraph resume
-- SQLGlot SQLite parsing and one-query/read-only enforcement
-- SQLite URI read-only mode, authorizer protection, execution deadline, and
-  a 500-row result cap
-- full capped results in a thread-scoped artifact store, with at most ten rows
-  shown to either model
-- non-token-streaming background runs with cursor-based activity polling
-- Streamlit conversation rehydration, collapsed run activity, editable SQL,
-  complete result tables, and repeated approval cycles
-
-## Learn the agent step by step
-
-[`agent_internals_tutorial.ipynb`](agent_internals_tutorial.ipynb) is an
-executable student lab covering the architecture, OSI grounding, prompts,
-memory, skills, structured schemas, SQL safety, result artifacts, agent
-construction, HITL pause/resume, sanitized events, and API lifecycle.
-
-Install the notebook dependencies and launch JupyterLab:
-
-```bash
-uv sync --group dev
-uv run --group dev jupyter lab agent_internals_tutorial.ipynb
-```
-
-The notebook builds the real application agent without making a model request.
-Its OpenAI/HITL exercise is controlled by an explicit `RUN_LIVE_AGENT` switch
-and is off by default.
+Each conversation is permanently bound to one registered data source and its
+required Apache Ossie/OSI `0.1.1` semantic model.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI["Streamlit chat UI"] --> API["FastAPI conversation/run API"]
-    API --> C["Deep Agent coordinator"]
-    C -->|"task"| S["text-to-sql subagent"]
-    S --> O["OSI semantic model"]
-    S -. fallback .-> M["schema + query checker tools"]
-    S --> H{"HITL SQL review"}
-    H -->|"approve / edit"| X["guarded execute_sql"]
-    H -->|"reject + feedback"| S
-    X --> DB[("Chinook SQLite · read only")]
-    X --> R["thread-scoped result artifact"]
-    R -->|"≤10 rows"| S
-    R -->|"≤500 rows"| UI
+    UI["Streamlit · source selector + chat"] --> API["FastAPI"]
+    API --> C["Source-bound conversation"]
+    C --> A["Data Analytics Agent"]
+    A --> S["text-to-SQL subagent"]
+    S --> O["Selected OSI model"]
+    S -. fallback .-> M["Generic metadata tools"]
+    S --> V["Dialect-aware read-only validator"]
+    V --> H{"Human SQL review"}
+    H -->|approve / edit| X["Generic execute_sql tool"]
+    H -->|reject + feedback| S
+    X --> B["SQLBackend protocol"]
+    B --> Q["SQLiteBackend now"]
+    B -. future .-> F["Snowflake adapter"]
+    Q --> R["Thread + source-scoped result artifact"]
+    R --> UI
 ```
+
+The coordinator, API, result store, HITL workflow, and UI do not import
+SQLite. Backend-specific connection, introspection, validation, timeout, and
+safety behavior live behind `SQLBackend`.
+
+## Data-source registry
+
+[`data_sources.yaml`](data_sources.yaml) is the trusted catalog that pairs each
+semantic model with an execution backend and target:
+
+```yaml
+version: 1
+default_source: chinook
+
+backends:
+  local_sqlite:
+    type: sqlite
+
+sources:
+  chinook:
+    name: Chinook music store
+    backend: local_sqlite
+    semantic_model: semantic/chinook.osi.yaml
+    dialect: sqlite
+    target:
+      path: db/chinook/chinook.db
+```
+
+A source can also define its description, starter questions, and optional
+execution-limit overrides. Registry changes require an API restart. A source is
+not selectable unless:
+
+- its backend type and execution target are usable;
+- its OSI file exists and is structurally valid; and
+- simple OSI table and column references match the live database.
+
+Errors and warnings are returned by `GET /api/data-sources` and shown in the
+Streamlit sidebar. One broken source does not disable healthy sources.
 
 ## Quick start
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), and an OpenAI
 API key.
 
-From this directory:
-
 ```bash
-curl -L -o chinook.db \
-  https://github.com/lerocha/chinook-database/raw/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite
-
 uv sync
 cp .env.example .env
 ```
 
-Edit `.env` and set `OPENAI_API_KEY`. `chinook.db` and `.env` are gitignored.
-The API returns an actionable `not_ready` health response if either is missing.
+Set `OPENAI_API_KEY` in `.env`. Database locations are configured in
+`data_sources.yaml`, not environment variables.
 
-Start both services with the foreground launcher:
+If the Chinook database is missing:
+
+```bash
+mkdir -p db/chinook
+curl -L -o db/chinook/chinook.db \
+  https://github.com/lerocha/chinook-database/raw/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite
+```
+
+The supplied Financial source expects:
+
+```text
+db/financial/financial.sqlite
+```
+
+Start FastAPI and Streamlit together:
 
 ```bash
 ./scripts/start.sh
 ```
 
-The launcher checks the environment and database, starts FastAPI, waits for its
-health endpoint, starts Streamlit, and stops both services when you press
-Ctrl+C. Open `http://127.0.0.1:8501`.
+Open `http://127.0.0.1:8501`. Select a ready source in the sidebar, ask a
+business question, review the generated SQL, and approve, edit, or reject it.
+Changing the source starts a new conversation. The previous conversation
+remains available through its existing URL.
 
-To run the processes separately for debugging, start the API in terminal one:
-
-```bash
-uv run uvicorn text2sql_agent.api:app \
-  --host 127.0.0.1 --port 8000
-```
-
-Then start Streamlit in terminal two:
+To run each process separately:
 
 ```bash
+uv run uvicorn text2sql_agent.api:app --host 127.0.0.1 --port 8000
 uv run streamlit run streamlit_app.py
 ```
 
-The UI calls `API_BASE_URL=http://127.0.0.1:8000`. Its local copyable
-conversation links use `APP_BASE_URL=http://127.0.0.1:8501`.
+## Adding another SQLite source
 
-## Example workflow
+1. Place the database wherever the API process can read it.
+2. Create a curated OSI file under `semantic/`.
+3. Add a source entry using `backend: local_sqlite`, `dialect: sqlite`, the OSI
+   path, and `target.path`.
+4. Restart the API and inspect source readiness in the sidebar.
 
-1. Ask: “Which five artists generated the most line-item revenue?”
-2. Watch the sanitized status panel show context loading, semantic-model
-   inspection, SQL checking, and subagent lifecycle.
-3. Inspect the generated SQL.
-4. Approve it, change it and select **Execute edited SQL**, or reject it with
-   feedback.
-5. Inspect the answer, exact executed SQL, result table, assumptions, and
-   interpretation, or download the complete capped result as CSV.
-6. Refresh the browser: the `thread_id` URL parameter restores completed turns.
-7. Ask a follow-up that refers to the prior result.
+No Python change is required for additional SQLite databases.
 
-Other useful prompts:
+## Backend contract
 
-- “How many customers are in each country?”
-- “Show monthly invoice revenue and explain any assumptions.”
-- “Which support representatives manage the highest-revenue customers?”
-- “What is the relationship between playlists, tracks, and sales?”
+[`text2sql_agent/backends/base.py`](text2sql_agent/backends/base.py) defines the
+dependency-injected `SQLBackend` protocol:
 
-Simple ranked/list questions default to five rows. SQL execution stores at most
-500 rows and reports whether the original result was truncated.
+- `readiness_errors()`
+- `validate_sql(query)`
+- `execute(query, timeout_seconds, max_rows)`
+- `list_tables()`
+- `get_table_schema(table_names)`
+
+Execution returns normalized columns, row dictionaries, elapsed time, and
+truncation state. An adapter may internally consume a cursor, DataFrame, or
+provider-native result, but the rest of the application receives the same
+contract.
+
+### Future Snowflake integration
+
+Snowflake is intentionally not a dependency of this POC. A future adapter can
+wrap an existing injected client:
+
+```python
+class SnowflakeBackend:
+    backend_type = "snowflake"
+    dialect = "snowflake"
+
+    def __init__(self, client):
+        self.client = client
+
+    def validate_sql(self, query: str) -> None:
+        validate_readonly_sql(query, dialect=self.dialect)
+
+    def execute(self, query: str, *, timeout_seconds: float, max_rows: int):
+        native_result = self.client.execute(query)
+        return normalize_snowflake_result(native_result, max_rows=max_rows)
+```
+
+The complete adapter also implements readiness and metadata methods. Register
+its constructor in `backends/factory.py`, define a Snowflake backend/profile in
+`data_sources.yaml`, and keep credentials in environment variables or secrets.
+Multiple Snowflake sources can reuse one connection profile while selecting
+different OSI models and database/schema contexts.
+
+## SQL safety
+
+Safety is layered:
+
+- SQLGlot parses the selected dialect and permits exactly one
+  `SELECT`/CTE/set-operation query.
+- DML, DDL, procedures, administrative/session commands, metadata commands,
+  and multiple statements are rejected.
+- Validation does not submit the proposed query to the database.
+- Every query requires approve/edit/reject human review.
+- Edited SQL is validated again.
+- The backend executes the exact reviewed SQL.
+- SQLite additionally uses a read-only URI, authorizer, progress deadline, and
+  capped fetch.
+- Results are scoped to both conversation and source; only a small configured
+  sample enters model context.
+
+Global defaults are controlled by:
+
+```text
+SQL_TIMEOUT_SECONDS=10
+SQL_MAX_RESULT_ROWS=500
+MODEL_SAMPLE_ROWS=10
+```
+
+Per-source overrides belong in `data_sources.yaml`.
 
 ## API lifecycle
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /health` | Model/database readiness without exposing secrets |
-| `POST /api/conversations` | Create an in-memory conversation |
-| `GET /api/conversations/{thread_id}` | Rehydrate completed turns and active run |
-| `POST /api/conversations/{thread_id}/messages` | Queue one run; concurrent same-thread runs return `409` |
-| `GET /api/runs/{run_id}?after_event_id=N` | Poll state and only newer activity events |
+| `GET /health` | Global model/registry readiness |
+| `GET /api/data-sources` | Source metadata, examples, limits, errors, and warnings |
+| `POST /api/conversations` | Create a conversation for `source_id` |
+| `GET /api/conversations/{thread_id}` | Rehydrate turns, active run, and bound source |
+| `POST /api/conversations/{thread_id}/messages` | Queue one source-bound run |
+| `GET /api/runs/{run_id}` | Poll status and incremental activity |
 | `POST /api/runs/{run_id}/decisions` | Approve, edit, or reject interrupted SQL |
-| `GET /api/results/{result_id}?offset=0&limit=100` | Page through the saved result |
+| `GET /api/results/{result_id}` | Page through a saved normalized result |
 
 Run states are `queued`, `running`, `approval_required`, `completed`, and
-`failed`. A decision resumes the same checkpointed thread using LangGraph's
-`Command(resume={"decisions": [...]})` contract.
-
-## Deep Agent practices demonstrated
-
-### Context engineering
-
-Keep stable identity and operating rules in `AGENTS.md`, put specialized
-workflows in progressively disclosed skills, and keep the database contract in
-a machine-readable semantic artifact. This gives each context item one clear
-job and avoids repeatedly rediscovering schema through SQL.
-
-### OSI-first grounding
-
-`semantic/chinook.osi.yaml` is read before SQL is written. It contains logical
-dataset names, exact physical names, join paths, revenue definitions, synonyms,
-and ambiguity warnings. Live table/schema tools remain available only as drift
-or missing-detail fallbacks.
-
-### Subagent isolation
-
-The coordinator owns conversation continuity and final communication. The
-custom SQL subagent owns schema interpretation, planning, SQL construction,
-review, and result interpretation. Custom Deep Agent subagents do not inherit
-coordinator skills automatically, so both skills are assigned explicitly. The
-auto-added general-purpose subagent is disabled.
-
-### HITL and checkpointing
-
-Only `execute_sql` is interrupted. The approval surface shows the action that
-would occur, and edits replace the action arguments through LangChain
-middleware instead of bypassing the agent. `InMemorySaver` and a stable
-`thread_id` let rejection/replanning and repeated interrupts resume correctly.
-
-### Structured output and result artifacts
-
-Provider-native schemas make both the SQL analyst and coordinator return
-validated fields. Full rows do not enter the conversation checkpoint: they are
-stored under an opaque `result_id`; models receive only ten sample rows. The
-artifact can still be paged by the UI or safely revisited in a follow-up.
-
-### SQL defense in depth
-
-Safety does not depend on the prompt. SQLGlot must parse exactly one SQLite
-query expression; the connection uses `mode=ro`; an SQLite authorizer denies
-mutation and administrative opcodes; a progress handler enforces a deadline;
-and retrieval stops after 501 rows to return 500 with an accurate truncation
-flag. The reviewed SQL is executed exactly—no hidden `LIMIT` rewrite.
-
-### Sanitized observability
-
-Deep Agents `astream_events(version="v3")` is consumed internally, but the API
-publishes only stable activity labels. Prompts, hidden reasoning, tool inputs,
-and raw query results are never emitted as activity events. LangSmith can be
-enabled separately for developer traces.
+`failed`.
 
 ## Project structure
 
 ```text
 data-analyst-agent/
 ├── AGENTS.md
-├── semantic/chinook.osi.yaml
+├── data_sources.yaml
+├── db/
+│   ├── chinook/chinook.db
+│   └── financial/
+│       ├── financial.sqlite
+│       └── database_description/*.csv
+├── semantic/
+│   ├── chinook.osi.yaml
+│   └── financial.osi.yaml
 ├── skills/
-│   ├── query-writing/SKILL.md
-│   └── schema-exploration/SKILL.md
 ├── text2sql_agent/
+│   ├── backends/
+│   │   ├── base.py
+│   │   ├── factory.py
+│   │   ├── sqlite.py
+│   │   └── validation.py
 │   ├── agent.py
 │   ├── api.py
 │   ├── config.py
-│   ├── run_manager.py
-│   ├── schemas.py
+│   ├── data_sources.py
+│   ├── semantic.py
 │   ├── sql_tools.py
-│   ├── stores.py
-│   └── ui/
-│       ├── api_client.py
-│       └── components.py
+│   └── ...
 ├── streamlit_app.py
-├── .streamlit/config.toml
-├── scripts/start.sh
-├── agent_internals_tutorial.ipynb
-├── tests/
-├── pyproject.toml
-└── uv.lock
+└── tests/
 ```
+
+## Learn the agent
+
+[`agent_internals_tutorial.ipynb`](agent_internals_tutorial.ipynb) is an
+executable lab covering the registry, source binding, OSI grounding, generic
+backend contract, HITL flow, result provenance, API lifecycle, and Streamlit
+selection behavior.
 
 ## Tests
 
@@ -236,35 +258,13 @@ data-analyst-agent/
 uv run pytest
 ```
 
-The default suite covers OSI references, SQL parsing and guards, read-only
-execution, timeout/cap behavior, result isolation and pagination, HITL resume
-shapes, repeated interrupts, API states, concurrent-run rejection, and
-conversation rehydration.
-
-The opt-in live build smoke test requires the normal `.env` and database:
-
-```bash
-RUN_LIVE_SMOKE=1 uv run pytest -m live
-```
+The suite covers both OSI models, registry/readiness behavior, backend contract
+injection, SQLite safeguards, source isolation, exact edited-SQL validation,
+repeated HITL interrupts, API rehydration, and UI helpers.
 
 ## Limitations
 
-This is deliberately a local, single-user POC. There is no authentication,
-multi-user authorization, production persistence, deployment configuration, or
-chart builder. Restarting FastAPI clears conversations, checkpoints, run
-events, and saved results. Result IDs are opaque but the result HTTP endpoint is
-not an authorization boundary. CLI compatibility is not an acceptance goal.
-
-## References
-
-- [Deep Agents overview](https://docs.langchain.com/oss/python/deepagents/overview)
-- [Deep Agents subagents](https://docs.langchain.com/oss/python/deepagents/subagents)
-- [Deep Agents event streaming](https://docs.langchain.com/oss/python/deepagents/event-streaming)
-- [LangChain human-in-the-loop middleware](https://docs.langchain.com/oss/python/langchain/human-in-the-loop)
-- [LangChain structured output](https://docs.langchain.com/oss/python/langchain/structured-output)
-- [Datawhale Deep Agents in Action: task planning](https://datawhalechina.github.io/deepagents-in-action/chapters/ch04-task-planning/)
-- [Datawhale Deep Agents in Action: skills](https://datawhalechina.github.io/deepagents-in-action/chapters/ch07-skills/)
-- [Datawhale Deep Agents in Action: human in the loop](https://datawhalechina.github.io/deepagents-in-action/chapters/ch09-human-in-the-loop/)
-- [Apache Ossie core semantic-model specification](https://github.com/apache/ossie/blob/main/core-spec/spec.md)
-- [OpenAI GPT-5.4 mini model](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
-- [Chinook database](https://github.com/lerocha/chinook-database)
+This remains a local, single-user POC. Conversations, checkpoints, events, and
+results are process-local. There is no authentication, persistent store,
+automatic OSI generation, production authorization boundary, chart builder, or
+included Snowflake/PostgreSQL adapter.

@@ -55,8 +55,15 @@ class AgentAPIClient:
     def health(self) -> dict[str, Any]:
         return self.request("GET", "/health", timeout=5)
 
-    def create_conversation(self) -> str:
-        response = self.request("POST", "/api/conversations")
+    def get_data_sources(self) -> dict[str, Any]:
+        return self.request("GET", "/api/data-sources", timeout=5)
+
+    def create_conversation(self, source_id: str) -> str:
+        response = self.request(
+            "POST",
+            "/api/conversations",
+            json={"source_id": source_id},
+        )
         return str(response["thread_id"])
 
     def get_conversation(self, thread_id: str) -> dict[str, Any]:
@@ -90,5 +97,5 @@ class AgentAPIClient:
     def get_result(self, result_id: str) -> dict[str, Any]:
         return self.request(
             "GET",
-            f"/api/results/{result_id}?offset=0&limit=500",
+            f"/api/results/{result_id}?offset=0&limit=10000",
         )

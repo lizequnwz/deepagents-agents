@@ -12,17 +12,22 @@ import streamlit as st
 
 from text2sql_agent.ui.api_client import APIError, AgentAPIClient
 
-EXAMPLE_QUESTIONS = {
-    ":material/leaderboard: Top artists by revenue": (
-        "Which five artists generated the most line-item revenue?"
-    ),
-    ":material/public: Customers by country": (
-        "How many customers are in each country? Show the top five."
-    ),
-    ":material/calendar_month: Monthly sales": (
-        "Show monthly invoice revenue and explain any assumptions."
-    ),
-}
+FALLBACK_EXAMPLES = [
+    {
+        "label": "Summarize the available data",
+        "question": (
+            "What business entities and measures are available in this "
+            "data source?"
+        ),
+    },
+    {
+        "label": "Count records by category",
+        "question": (
+            "Choose an important categorical field and show record counts "
+            "for its top five values."
+        ),
+    },
+]
 
 
 def conversation_url(app_base_url: str, thread_id: str) -> str:
@@ -61,12 +66,19 @@ def _reset_sql_editor(editor_key: str, generated_sql: str) -> None:
     st.session_state[editor_key] = generated_sql
 
 
-def render_page_header() -> None:
+def render_page_header(source: dict[str, Any] | None = None) -> None:
     st.caption(":material/query_stats: CONVERSATIONAL ANALYTICS")
-    st.title("Ask questions about Chinook")
+    source_name = source["name"] if source else "your data"
+    source_anchor = (
+        f"ask-questions-about-{source['source_id']}" if source else False
+    )
+    st.title(
+        f"Ask questions about {source_name}",
+        anchor=source_anchor,
+    )
     st.caption(
-        "The analyst grounds itself in the OSI semantic model, prepares one "
-        "read-only query, and waits for your approval before execution."
+        "Semantic-grounded, human-reviewed analytics. The agent prepares one "
+        "read-only query and waits for your approval before execution."
     )
 
 
@@ -76,16 +88,49 @@ def render_sidebar(
     app_base_url: str,
     health: dict[str, Any] | None,
     health_error: str | None,
+    data_sources: dict[str, Any],
+    source_switch_disabled: bool,
 ) -> bool:
     """Render app-level metadata and return whether New conversation was used."""
 
     with st.sidebar:
         st.caption(":material/database: DEEP AGENT POC")
-        st.title("Chinook Analyst")
+        st.title("Data Analytics Agent")
         st.caption(
             "Human-reviewed SQL with semantic grounding and local in-memory "
             "conversation state."
         )
+        ready_sources = [
+            source for source in data_sources["sources"] if source["ready"]
+        ]
+        ready_by_id = {
+            source["source_id"]: source for source in ready_sources
+        }
+        st.selectbox(
+            "Data source",
+            options=list(ready_by_id),
+            format_func=lambda source_id: ready_by_id[source_id]["name"],
+            key="source_selector",
+            disabled=source_switch_disabled,
+            help=(
+                "A conversation is permanently bound to one source. Changing "
+                "this selection starts a new conversation."
+            ),
+        )
+        selected_source = ready_by_id[st.session_state["source_selector"]]
+        st.caption(selected_source["description"])
+        st.badge(
+            f"{selected_source['backend_type']} · "
+            f"{selected_source['dialect']}",
+            icon=":material/storage:",
+            color="blue",
+        )
+        if source_switch_disabled:
+            st.caption(
+                "The data source cannot change while a run or SQL review is "
+                "active."
+            )
+
         new_conversation = st.button(
             "New conversation",
             icon=":material/add_comment:",
@@ -105,6 +150,29 @@ def render_sidebar(
             st.warning("API setup incomplete", icon=":material/warning:")
             for error in health.get("errors", []):
                 st.caption(error)
+
+        unavailable = [
+            source for source in data_sources["sources"] if not source["ready"]
+        ]
+        if unavailable:
+            with st.expander(
+                f"Unavailable sources ({len(unavailable)})",
+                icon=":material/warning:",
+                expanded=False,
+            ):
+                for source in unavailable:
+                    st.markdown(f"**{source['name']}**")
+                    for error in source.get("errors", []):
+                        st.caption(error)
+        source_warnings = selected_source.get("warnings") or []
+        if source_warnings:
+            with st.expander(
+                "Source warnings",
+                icon=":material/info:",
+                expanded=False,
+            ):
+                for warning in source_warnings:
+                    st.caption(warning)
 
         st.caption(f"Conversation · `{thread_id[:8]}`")
         with st.expander(
@@ -130,7 +198,15 @@ def render_sidebar(
         return new_conversation
 
 
-def render_empty_state(thread_id: str) -> str | None:
+def render_empty_state(
+    thread_id: str,
+    source: dict[str, Any],
+) -> str | None:
+    examples = source.get("examples") or FALLBACK_EXAMPLES
+    question_by_label = {
+        f":material/lightbulb: {item['label']}": item["question"]
+        for item in examples
+    }
     with st.container(border=True):
         st.subheader(
             "Start with a business question",
@@ -142,12 +218,12 @@ def render_empty_state(thread_id: str) -> str | None:
         )
         selection = st.pills(
             "Example questions",
-            options=list(EXAMPLE_QUESTIONS),
+            options=list(question_by_label),
             key=f"starter_question_{thread_id}",
             label_visibility="collapsed",
             width="stretch",
         )
-    return EXAMPLE_QUESTIONS.get(selection) if selection else None
+    return question_by_label.get(selection) if selection else None
 
 
 def _render_result(
@@ -155,6 +231,7 @@ def _render_result(
     result_id: str,
     *,
     widget_key: str,
+    source_id: str,
 ) -> None:
     try:
         result = client.get_result(result_id)
@@ -181,7 +258,7 @@ def _render_result(
         )
         if result["truncated"]:
             st.badge(
-                "Capped at 500",
+                "Result capped",
                 icon=":material/content_cut:",
                 color="orange",
             )
@@ -196,7 +273,7 @@ def _render_result(
         st.download_button(
             "Download CSV",
             data=rows_to_csv(result["columns"], result["rows"]),
-            file_name=f"chinook-result-{result_id[:8]}.csv",
+            file_name=f"{source_id}-result-{result_id[:8]}.csv",
             mime="text/csv",
             icon=":material/download:",
             on_click="ignore",
@@ -215,6 +292,7 @@ def render_turn(
     turn: dict[str, Any],
     *,
     turn_key: str,
+    source_id: str,
 ) -> None:
     with st.chat_message("user"):
         st.markdown(turn["user_message"])
@@ -240,6 +318,7 @@ def render_turn(
                 client,
                 answer["result_id"],
                 widget_key=turn_key,
+                source_id=source_id,
             )
 
         if answer.get("sql"):
@@ -315,8 +394,9 @@ def render_approval(
                 ),
             )
             st.caption(
-                "Read-only SQLite · one statement · 10-second timeout · "
-                "500-row result cap"
+                f"Read-only {approval['dialect']} · one statement · "
+                f"{approval['timeout_seconds']:g}-second timeout · "
+                f"{approval['max_result_rows']}-row result cap"
             )
             run_sql = st.form_submit_button(
                 "Run this SQL",

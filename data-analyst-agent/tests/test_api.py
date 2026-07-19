@@ -81,10 +81,8 @@ class FakeAgent:
 
 
 def test_api_approval_rejection_reapproval_and_rehydration(
-    tmp_path: Path,
+    test_settings: Settings,
 ) -> None:
-    database = tmp_path / "chinook.db"
-    database.touch()
     final_stream = FakeStream()
     fake = FakeAgent(
         [
@@ -98,15 +96,24 @@ def test_api_approval_rejection_reapproval_and_rehydration(
         ]
     )
     services = Services(
-        settings=Settings(database_path=database),
+        settings=test_settings,
         agent=fake,
     )
     client = TestClient(create_app(services))
 
-    thread_id = client.post("/api/conversations").json()["thread_id"]
+    sources = client.get("/api/data-sources").json()
+    assert sources["default_source_id"] == "test"
+    assert all(source["ready"] for source in sources["sources"])
+    created_conversation = client.post(
+        "/api/conversations",
+        json={"source_id": "test"},
+    ).json()
+    thread_id = created_conversation["thread_id"]
+    assert created_conversation["source_id"] == "test"
     executed_sql = "SELECT Name FROM Artist ORDER BY Name LIMIT 5"
     saved = services.results.save(
         thread_id=thread_id,
+        source_id="test",
         executed_sql=executed_sql,
         columns=["Name"],
         rows=[{"Name": "AC/DC"}],
@@ -168,20 +175,19 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     conversation = client.get(
         f"/api/conversations/{thread_id}"
     ).json()
+    assert conversation["source_id"] == "test"
     assert conversation["active_run_id"] is None
     assert len(conversation["turns"]) == 1
     assert conversation["turns"][0]["answer"]["answer"].startswith("Five")
     assert conversation["turns"][0]["answer"]["sql"] == executed_sql
 
 
-def test_concurrent_run_is_rejected(tmp_path: Path) -> None:
-    database = tmp_path / "chinook.db"
-    database.touch()
+def test_concurrent_run_is_rejected(test_settings: Settings) -> None:
     fake = FakeAgent(
         [FakeStream(approval_sql="SELECT 1")]
     )
     services = Services(
-        settings=Settings(database_path=database),
+        settings=test_settings,
         agent=fake,
     )
     client = TestClient(create_app(services))
@@ -196,3 +202,37 @@ def test_concurrent_run_is_rejected(tmp_path: Path) -> None:
         json={"message": "Two"},
     )
     assert second.status_code == 409
+
+
+def test_conversations_are_permanently_bound_to_selected_source(
+    test_settings: Settings,
+) -> None:
+    services = Services(settings=test_settings, agent=FakeAgent([]))
+    client = TestClient(create_app(services))
+
+    first = client.post(
+        "/api/conversations",
+        json={"source_id": "test"},
+    )
+    second = client.post(
+        "/api/conversations",
+        json={"source_id": "test_alt"},
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["thread_id"] != second.json()["thread_id"]
+    assert first.json()["source_id"] == "test"
+    assert second.json()["source_id"] == "test_alt"
+    assert (
+        client.get(
+            f"/api/conversations/{first.json()['thread_id']}"
+        ).json()["source_id"]
+        == "test"
+    )
+
+    unknown = client.post(
+        "/api/conversations",
+        json={"source_id": "missing"},
+    )
+    assert unknown.status_code == 422

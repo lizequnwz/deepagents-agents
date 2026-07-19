@@ -1,1 +1,1 @@
-"""Chinook text-to-SQL Deep Agent POC."""
+"""Source-aware, human-reviewed Data Analytics Agent."""

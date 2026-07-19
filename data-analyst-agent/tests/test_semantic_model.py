@@ -7,6 +7,9 @@ import yaml
 SEMANTIC_PATH = (
     Path(__file__).resolve().parents[1] / "semantic" / "chinook.osi.yaml"
 )
+FINANCIAL_SEMANTIC_PATH = (
+    Path(__file__).resolve().parents[1] / "semantic" / "financial.osi.yaml"
+)
 
 EXPECTED_SOURCES = {
     "Artist": {"ArtistId", "Name"},
@@ -78,6 +81,60 @@ EXPECTED_SOURCES = {
     "PlaylistTrack": {"PlaylistId", "TrackId"},
 }
 
+EXPECTED_FINANCIAL_SOURCES = {
+    "account": {"account_id", "district_id", "frequency", "date"},
+    "card": {"card_id", "disp_id", "type", "issued"},
+    "client": {"client_id", "gender", "birth_date", "district_id"},
+    "disp": {"disp_id", "client_id", "account_id", "type"},
+    "district": {
+        "district_id",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A14",
+        "A15",
+        "A16",
+    },
+    "loan": {
+        "loan_id",
+        "account_id",
+        "date",
+        "amount",
+        "duration",
+        "payments",
+        "status",
+    },
+    "order": {
+        "order_id",
+        "account_id",
+        "bank_to",
+        "account_to",
+        "amount",
+        "k_symbol",
+    },
+    "trans": {
+        "trans_id",
+        "account_id",
+        "date",
+        "type",
+        "operation",
+        "amount",
+        "balance",
+        "k_symbol",
+        "bank",
+        "account",
+    },
+}
+
 
 def test_osi_model_covers_complete_chinook_schema() -> None:
     document = yaml.safe_load(SEMANTIC_PATH.read_text())
@@ -129,3 +186,44 @@ def test_osi_model_covers_complete_chinook_schema() -> None:
         "customer_count",
         "track_count",
     }
+
+
+def test_financial_osi_model_covers_complete_schema_and_business_context() -> None:
+    document = yaml.safe_load(FINANCIAL_SEMANTIC_PATH.read_text())
+    assert document["version"] == "0.1.1"
+    model = document["semantic_model"][0]
+    datasets = {dataset["name"]: dataset for dataset in model["datasets"]}
+    assert {dataset["source"] for dataset in datasets.values()} == set(
+        EXPECTED_FINANCIAL_SOURCES
+    )
+
+    for dataset in datasets.values():
+        physical_fields = {
+            field["expression"]["dialects"][0]["expression"]
+            for field in dataset["fields"]
+        }
+        assert physical_fields == EXPECTED_FINANCIAL_SOURCES[
+            dataset["source"]
+        ]
+        assert all(field["description"] for field in dataset["fields"])
+        assert all(
+            field["expression"]["dialects"][0]["dialect"] == "ANSI_SQL"
+            for field in dataset["fields"]
+        )
+
+    assert len(model["relationships"]) == 8
+    assert {metric["name"] for metric in model["metrics"]} == {
+        "account_count",
+        "client_count",
+        "transaction_count",
+        "transaction_volume",
+        "transaction_inflow",
+        "transaction_outflow",
+        "net_cash_flow",
+        "loan_count",
+        "total_approved_loan_amount",
+    }
+    instructions = model["ai_context"]["instructions"]
+    assert "currency" in instructions
+    assert "PRIJEM" in instructions
+    assert "VYDAJ" in instructions

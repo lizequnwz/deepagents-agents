@@ -1,4 +1,4 @@
-"""Streamlit chat UI for the local Chinook Deep Agent API."""
+"""Streamlit chat UI for the local Data Analytics Agent API."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ APP_BASE_URL = os.getenv(
 ).rstrip("/")
 
 st.set_page_config(
-    page_title="Chinook Analyst",
+    page_title="Data Analytics Agent",
     page_icon=":material/query_stats:",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -40,6 +40,8 @@ def initialize_session_state() -> None:
     st.session_state.setdefault("last_run_error", None)
     st.session_state.setdefault("conversation_notice", None)
     st.session_state.setdefault("review_notice", None)
+    st.session_state.setdefault("source_selector", None)
+    st.session_state.setdefault("current_thread_id", None)
 
 
 def clear_conversation_state() -> None:
@@ -62,20 +64,54 @@ def clear_conversation_state() -> None:
     st.session_state["review_notice"] = None
 
 
-def create_conversation(client: AgentAPIClient) -> str:
-    thread_id = client.create_conversation()
+def create_conversation(
+    client: AgentAPIClient,
+    source_id: str,
+    *,
+    sync_source_selector: bool = True,
+) -> str:
+    thread_id = client.create_conversation(source_id)
     clear_conversation_state()
     st.query_params["thread_id"] = thread_id
+    st.session_state["current_thread_id"] = thread_id
+    if sync_source_selector:
+        st.session_state["source_selector"] = source_id
     return thread_id
 
 
 def get_or_create_conversation(
     client: AgentAPIClient,
+    *,
+    default_source_id: str,
+    ready_source_ids: set[str],
 ) -> tuple[str, dict[str, Any]]:
     thread_id = st.query_params.get("thread_id")
     if thread_id:
         try:
-            return str(thread_id), client.get_conversation(str(thread_id))
+            thread_id = str(thread_id)
+            conversation = client.get_conversation(thread_id)
+            if st.session_state.get("current_thread_id") != thread_id:
+                st.session_state["current_thread_id"] = thread_id
+                st.session_state["source_selector"] = conversation["source_id"]
+            elif (
+                st.session_state.get("source_selector")
+                and st.session_state["source_selector"]
+                != conversation["source_id"]
+            ):
+                switched_source = st.session_state["source_selector"]
+                new_thread_id = create_conversation(
+                    client,
+                    switched_source,
+                )
+                st.session_state["conversation_notice"] = (
+                    "The data source changed, so a new conversation was "
+                    "started."
+                )
+                return (
+                    new_thread_id,
+                    client.get_conversation(new_thread_id),
+                )
+            return thread_id, conversation
         except APIError as exc:
             if exc.status_code != 404:
                 raise
@@ -85,7 +121,10 @@ def get_or_create_conversation(
                 "A new conversation was started."
             )
 
-    thread_id = create_conversation(client)
+    selected_source = st.session_state.get("source_selector")
+    if selected_source not in ready_source_ids:
+        selected_source = default_source_id
+    thread_id = create_conversation(client, selected_source)
     return thread_id, client.get_conversation(thread_id)
 
 
@@ -183,7 +222,7 @@ except APIError as exc:
     health_error = str(exc)
 
 try:
-    thread_id, conversation = get_or_create_conversation(client)
+    data_sources = client.get_data_sources()
 except APIError as exc:
     render_page_header()
     st.error(str(exc), icon=":material/cloud_off:")
@@ -193,19 +232,67 @@ except APIError as exc:
     )
     st.stop()
 
+sources_by_id = {
+    source["source_id"]: source for source in data_sources["sources"]
+}
+ready_source_ids = {
+    source_id
+    for source_id, source in sources_by_id.items()
+    if source["ready"]
+}
+if not ready_source_ids:
+    render_page_header()
+    st.error(
+        "No configured data source is ready.",
+        icon=":material/database_off:",
+    )
+    for source in data_sources["sources"]:
+        for error in source.get("errors", []):
+            st.caption(f"{source['name']}: {error}")
+    st.stop()
+
+default_source_id = data_sources["default_source_id"]
+if default_source_id not in ready_source_ids:
+    default_source_id = next(iter(ready_source_ids))
+
+try:
+    thread_id, conversation = get_or_create_conversation(
+        client,
+        default_source_id=default_source_id,
+        ready_source_ids=ready_source_ids,
+    )
+except APIError as exc:
+    render_page_header()
+    st.error(str(exc), icon=":material/cloud_off:")
+    st.stop()
+
+source = sources_by_id[conversation["source_id"]]
+active_run_id = (
+    conversation.get("active_run_id")
+    or st.session_state.get("active_run_id")
+)
+
 if render_sidebar(
     thread_id=thread_id,
     app_base_url=APP_BASE_URL,
     health=health,
     health_error=health_error,
+    data_sources=data_sources,
+    source_switch_disabled=bool(active_run_id),
 ):
     try:
-        create_conversation(client)
+        # The selector widget already exists on this run. Its value is already
+        # the conversation's source, so do not mutate the widget-backed key.
+        create_conversation(
+            client,
+            conversation["source_id"],
+            sync_source_selector=False,
+        )
         st.rerun()
     except APIError as exc:
         st.sidebar.error(str(exc), icon=":material/error:")
 
-render_page_header()
+render_page_header(source)
 
 if st.session_state.get("conversation_notice"):
     st.toast(
@@ -224,6 +311,7 @@ for turn_index, completed_turn in enumerate(conversation["turns"]):
         client,
         completed_turn,
         turn_key=f"{thread_id}_{turn_index}",
+        source_id=conversation["source_id"],
     )
 
 if st.session_state.get("last_run_error"):
@@ -231,11 +319,6 @@ if st.session_state.get("last_run_error"):
         st.session_state["last_run_error"],
         icon=":material/error:",
     )
-
-active_run_id = (
-    conversation.get("active_run_id")
-    or st.session_state.get("active_run_id")
-)
 
 if active_run_id:
     st.session_state["active_run_id"] = active_run_id
@@ -306,10 +389,10 @@ if active_run_id:
 if not active_run_id:
     starter_question = None
     if not conversation["turns"]:
-        starter_question = render_empty_state(thread_id)
+        starter_question = render_empty_state(thread_id, source)
 
     typed_question = st.chat_input(
-        "Ask about customers, music, sales, employees, or playlists",
+        f"Ask a business question about {source['name']}",
         submit_mode="disable",
     )
     question = starter_question or typed_question

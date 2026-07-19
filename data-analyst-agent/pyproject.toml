@@ -1,16 +1,14 @@
 [project]
 name = "text2sql-deepagent"
-version = "0.2.0"
-description = "A human-reviewed text-to-SQL Deep Agent for the Chinook SQLite database"
+version = "0.3.0"
+description = "A source-aware, human-reviewed text-to-SQL Data Analytics Agent"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "deepagents>=0.6.12",
     "langchain>=1.3.12,<2.0.0",
-    "langchain-community>=0.4.2",
     "langchain-openai>=1.1.11",
     "langgraph>=1.2.6",
-    "sqlalchemy>=2.0.51",
     "python-dotenv>=1.2.2",
     "fastapi>=0.116.0",
     "uvicorn[standard]>=0.35.0",
@@ -46,5 +44,5 @@ ban-relative-imports = "all"
 addopts = "-q"
 asyncio_mode = "auto"
 markers = [
-    "live: requires OPENAI_API_KEY and the Chinook database",
+    "live: requires OPENAI_API_KEY and at least one ready data source",
 ]

@@ -1,0 +1,43 @@
+version: 1
+default_source: chinook
+
+backends:
+  local_sqlite:
+    type: sqlite
+
+sources:
+  chinook:
+    name: Chinook music store
+    description: >
+      Digital music-store catalog, customers, employees, invoices, and
+      playlists.
+    backend: local_sqlite
+    semantic_model: semantic/chinook.osi.yaml
+    dialect: sqlite
+    target:
+      path: db/chinook/chinook.db
+    examples:
+      - label: Top artists by revenue
+        question: Which five artists generated the most line-item revenue?
+      - label: Customers by country
+        question: How many customers are in each country? Show the top five.
+      - label: Monthly sales
+        question: Show monthly invoice revenue and explain any assumptions.
+
+  financial:
+    name: Financial services
+    description: >
+      Accounts, clients, transactions, standing orders, cards, and loans from
+      a retail-banking dataset.
+    backend: local_sqlite
+    semantic_model: semantic/financial.osi.yaml
+    dialect: sqlite
+    target:
+      path: db/financial/financial.sqlite
+    examples:
+      - label: Largest loan portfolios
+        question: Which five districts have the largest total approved loan amount?
+      - label: Monthly cash flow
+        question: Show monthly transaction inflows and outflows for 1998.
+      - label: Loan repayment status
+        question: How many loans are in each repayment status?

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from langgraph.types import Command
@@ -14,6 +15,7 @@ from text2sql_agent.schemas import (
     RunStatus,
     SQLAnalysisResult,
 )
+from text2sql_agent.data_sources import DataSource
 from text2sql_agent.sql_tools import AgentContext, validate_readonly_sql
 from text2sql_agent.stores import (
     ConversationStore,
@@ -35,12 +37,12 @@ def decisions_to_command(
         raise ValueError(f"Decision {decision.action!r} is not allowed.")
 
     if decision.action == "approve":
-        validate_readonly_sql(approval.query)
+        validate_readonly_sql(approval.query, approval.dialect)
         translated = {"type": "approve"}
     elif decision.action == "edit":
         if not decision.edited_sql:
             raise ValueError("edited_sql is required for an edit decision.")
-        validate_readonly_sql(decision.edited_sql)
+        validate_readonly_sql(decision.edited_sql, approval.dialect)
         translated = {
             "type": "edit",
             "edited_action": {
@@ -76,11 +78,11 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str] | Non
         return ("search", "Searching semantic context")
     if tool_name == "write_todos":
         return ("planning", "Planning the analysis")
-    if tool_name == "sql_db_list_tables":
+    if tool_name == "list_tables":
         return ("schema", "Checking live table names as fallback")
-    if tool_name == "sql_db_schema":
+    if tool_name == "get_table_schema":
         return ("schema", "Checking live table schema as fallback")
-    if tool_name == "sql_db_query_checker":
+    if tool_name == "validate_sql":
         return ("sql_check", "Checking generated SQL")
     if tool_name == "execute_sql":
         return ("execution", "Executing approved SQL")
@@ -89,7 +91,11 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str] | Non
     return None
 
 
-def _extract_approval(interrupts: list[Any]) -> ApprovalRequest:
+def _extract_approval(
+    interrupts: list[Any],
+    *,
+    source: DataSource | None = None,
+) -> ApprovalRequest:
     for interrupt in interrupts:
         value = getattr(interrupt, "value", interrupt)
         if not isinstance(value, dict):
@@ -117,6 +123,14 @@ def _extract_approval(interrupts: list[Any]) -> ApprovalRequest:
                 action_name=name,
                 query=query,
                 allowed_decisions=allowed,
+                source_id=source.source_id if source else "",
+                dialect=source.dialect if source else "sqlite",
+                timeout_seconds=(
+                    source.limits.timeout_seconds if source else 10
+                ),
+                max_result_rows=(
+                    source.limits.max_result_rows if source else 500
+                ),
                 description=(
                     "Review the generated SQL before it is executed. "
                     "The database has not been queried yet."
@@ -173,12 +187,18 @@ class RunManager:
     def __init__(
         self,
         *,
-        agent: Any,
+        agent: Any | None = None,
+        agent_resolver: Callable[[str], Any] | None = None,
+        source_resolver: Callable[[str], DataSource] | None = None,
         conversations: ConversationStore,
         runs: RunStore,
         results: ResultStore,
     ) -> None:
+        if agent is None and agent_resolver is None:
+            raise ValueError("An agent or agent_resolver is required.")
         self.agent = agent
+        self.agent_resolver = agent_resolver
+        self.source_resolver = source_resolver
         self.conversations = conversations
         self.runs = runs
         self.results = results
@@ -187,6 +207,7 @@ class RunManager:
         self,
         answer: FinalAnswer,
         thread_id: str,
+        source_id: str,
     ) -> FinalAnswer:
         """Require executable answers to reference this conversation's result."""
 
@@ -198,7 +219,11 @@ class RunManager:
             return answer
 
         try:
-            result = self.results.get(answer.result_id, thread_id)
+            result = self.results.get(
+                answer.result_id,
+                thread_id,
+                source_id=source_id,
+            )
         except StoreNotFound as exc:
             raise RuntimeError(
                 "Agent returned an unknown or out-of-conversation result."
@@ -239,6 +264,15 @@ class RunManager:
     async def _drive(self, run_id: str, agent_input: Any) -> None:
         snapshot = self.runs.get(run_id)
         thread_id = snapshot.thread_id
+        source_id = snapshot.source_id
+        source = (
+            self.source_resolver(source_id) if self.source_resolver else None
+        )
+        graph = (
+            self.agent_resolver(source_id)
+            if self.agent_resolver is not None
+            else self.agent
+        )
         self.runs.set_status(run_id, RunStatus.RUNNING)
         if not snapshot.events:
             self.runs.add_event(
@@ -249,9 +283,13 @@ class RunManager:
             )
 
         config = {"configurable": {"thread_id": thread_id}}
-        context = AgentContext(thread_id=thread_id, run_id=run_id)
+        context = AgentContext(
+            thread_id=thread_id,
+            run_id=run_id,
+            source_id=source_id,
+        )
         try:
-            stream = await self.agent.astream_events(
+            stream = await graph.astream_events(
                 agent_input,
                 config=config,
                 context=context,
@@ -288,7 +326,10 @@ class RunManager:
 
             interrupted = await stream.interrupted()
             if interrupted:
-                approval = _extract_approval(await stream.interrupts())
+                approval = _extract_approval(
+                    await stream.interrupts(),
+                    source=source,
+                )
                 self.runs.add_event(
                     run_id, "approval", "SQL approval required"
                 )
@@ -305,7 +346,11 @@ class RunManager:
                 else FinalAnswer.model_validate(answer_value)
             )
             answer = _apply_sql_analysis(answer, output)
-            answer = self._validate_answer_provenance(answer, thread_id)
+            answer = self._validate_answer_provenance(
+                answer,
+                thread_id,
+                source_id,
+            )
             self.runs.add_event(run_id, "answer", "Preparing the final answer")
             self.runs.complete(run_id, answer)
             completed = self.runs.get(run_id)

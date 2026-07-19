@@ -63,7 +63,12 @@ render_approval(
     {
         "run_id": "run-1",
         "next_event_id": 8,
-        "approval": {"query": "SELECT 1 LIMIT 10"},
+        "approval": {
+            "query": "SELECT 1 LIMIT 10",
+            "dialect": "sqlite",
+            "timeout_seconds": 10,
+            "max_result_rows": 500,
+        },
     },
     revision_feedback="Let's make it top 10.",
 )
@@ -108,8 +113,8 @@ turn = {
     },
     "activities": [],
 }
-render_turn(Client(), turn, turn_key="turn-1")
-render_turn(Client(), turn, turn_key="turn-2")
+render_turn(Client(), turn, turn_key="turn-1", source_id="test")
+render_turn(Client(), turn, turn_key="turn-2", source_id="test")
 """
     ).run()
 

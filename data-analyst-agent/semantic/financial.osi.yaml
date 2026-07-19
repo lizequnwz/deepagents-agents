@@ -1,0 +1,416 @@
+version: "0.1.1"
+semantic_model:
+  - name: financial_services
+    description: >
+      Retail-banking semantic model covering clients, accounts, account
+      permissions, cards, transactions, standing orders, loans, and districts.
+    ai_context:
+      instructions: >
+        Read this model before writing SQL. Use exact physical table and column
+        names from source/expression and join only through declared
+        relationships. Monetary columns do not have a reliably documented
+        currency, so describe values as being in the database's monetary unit
+        unless the user explicitly supplies a currency. Date columns are stored
+        as ISO-formatted dates. Transaction amounts are non-negative magnitudes:
+        PRIJEM is an inflow; VYDAJ and VYBER are outflows. The physical table
+        named order is a reserved SQL word and must be identifier-quoted.
+        Unless the user asks for more rows, return five rows.
+      examples:
+        - Which districts have the largest approved loan portfolios?
+        - What were monthly transaction inflows and outflows in 1998?
+        - How many loans are in each repayment status?
+
+    datasets:
+      - name: districts
+        source: district
+        primary_key: [district_id]
+        description: >
+          Geographic and socioeconomic attributes for account branches and
+          client residences.
+        ai_context:
+          synonyms: [district, branch district, location, region]
+          instructions: >
+            A4 through A7 are stored as text even though they describe counts.
+            Cast them only when needed. A9 is undocumented and should not be
+            used unless the user explicitly requests it.
+        fields:
+          - name: district_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: district_id}]}
+            description: District identifier.
+          - name: district_name
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A2}]}
+            description: District name.
+            ai_context: {synonyms: [location name]}
+          - name: region
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A3}]}
+            description: Region containing the district.
+          - name: inhabitants
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A4}]}
+            description: Number of inhabitants, stored as text.
+            ai_context: {synonyms: [population]}
+          - name: municipalities_under_500
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A5}]}
+            description: Count of municipalities with fewer than 500 inhabitants, stored as text.
+          - name: municipalities_500_to_1999
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A6}]}
+            description: Count of municipalities with 500 through 1,999 inhabitants, stored as text.
+          - name: municipalities_2000_to_9999
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A7}]}
+            description: Count of municipalities with 2,000 through 9,999 inhabitants, stored as text.
+          - name: municipalities_10000_plus
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A8}]}
+            description: Count of municipalities with at least 10,000 inhabitants.
+          - name: undocumented_attribute
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A9}]}
+            description: Undocumented district attribute marked as not useful in the supplied dictionary.
+          - name: urban_inhabitant_ratio
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A10}]}
+            description: Ratio or percentage of inhabitants living in urban areas.
+          - name: average_salary
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A11}]}
+            description: Average salary in the database's monetary unit.
+          - name: unemployment_rate_1995
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A12}]}
+            description: Unemployment rate for 1995, when reported.
+          - name: unemployment_rate_1996
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A13}]}
+            description: Unemployment rate for 1996.
+          - name: entrepreneurs_per_1000
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A14}]}
+            description: Number of entrepreneurs per 1,000 inhabitants.
+          - name: crimes_1995
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A15}]}
+            description: Number of reported crimes in 1995, when reported.
+          - name: crimes_1996
+            expression: {dialects: [{dialect: ANSI_SQL, expression: A16}]}
+            description: Number of reported crimes in 1996.
+
+      - name: accounts
+        source: account
+        primary_key: [account_id]
+        description: Customer accounts maintained by a branch district.
+        ai_context:
+          synonyms: [account, bank account]
+          instructions: >
+            frequency is the statement-issuance frequency: POPLATEK MESICNE is
+            monthly, POPLATEK TYDNE is weekly, and POPLATEK PO OBRATU is after
+            each transaction.
+        fields:
+          - name: account_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: account_id}]}
+            description: Account identifier.
+          - name: district_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: district_id}]}
+            description: District of the branch maintaining the account.
+          - name: statement_frequency
+            expression: {dialects: [{dialect: ANSI_SQL, expression: frequency}]}
+            description: Encoded statement-issuance frequency.
+            ai_context: {synonyms: [frequency, issuance frequency]}
+          - name: opened_date
+            expression: {dialects: [{dialect: ANSI_SQL, expression: date}]}
+            dimension: {is_time: true}
+            description: Date the account was opened.
+            ai_context: {synonyms: [creation date, account date]}
+
+      - name: clients
+        source: client
+        primary_key: [client_id]
+        description: Individual banking clients and their home districts.
+        ai_context:
+          synonyms: [client, customer, person]
+          instructions: "gender uses F for female and M for male."
+        fields:
+          - name: client_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: client_id}]}
+            description: Client identifier.
+          - name: gender
+            expression: {dialects: [{dialect: ANSI_SQL, expression: gender}]}
+            description: Encoded gender, with F for female and M for male.
+          - name: birth_date
+            expression: {dialects: [{dialect: ANSI_SQL, expression: birth_date}]}
+            dimension: {is_time: true}
+            description: Client birth date.
+          - name: district_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: district_id}]}
+            description: Client residence district.
+
+      - name: dispositions
+        source: disp
+        primary_key: [disposition_id]
+        description: >
+          A client's permission or relationship to an account, connecting
+          clients to accounts.
+        ai_context:
+          synonyms: [disposition, account permission, account relationship]
+          instructions: >
+            OWNER identifies the account owner. DISPONENT identifies another
+            authorized user. Only owners should be treated as account owners
+            when counting ownership.
+        fields:
+          - name: disposition_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: disp_id}]}
+            description: Disposition identifier.
+          - name: client_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: client_id}]}
+            description: Client holding this account relationship.
+          - name: account_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: account_id}]}
+            description: Account covered by this relationship.
+          - name: disposition_type
+            expression: {dialects: [{dialect: ANSI_SQL, expression: type}]}
+            description: Relationship type, such as OWNER or DISPONENT.
+            ai_context: {synonyms: [permission type, owner status]}
+
+      - name: cards
+        source: card
+        primary_key: [card_id]
+        description: Payment cards issued to account dispositions.
+        ai_context:
+          synonyms: [card, payment card, bank card]
+          instructions: >
+            type is the card tier: junior, classic, or gold. A card belongs to
+            a disposition, not directly to an account or client.
+        fields:
+          - name: card_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: card_id}]}
+            description: Card identifier.
+          - name: disposition_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: disp_id}]}
+            description: Disposition to which the card was issued.
+          - name: card_type
+            expression: {dialects: [{dialect: ANSI_SQL, expression: type}]}
+            description: "Card tier: junior, classic, or gold."
+            ai_context: {synonyms: [card tier, card class]}
+          - name: issued_date
+            expression: {dialects: [{dialect: ANSI_SQL, expression: issued}]}
+            dimension: {is_time: true}
+            description: Date the card was issued.
+
+      - name: loans
+        source: loan
+        primary_key: [loan_id]
+        description: Loans approved for accounts, including repayment status.
+        ai_context:
+          synonyms: [loan, credit contract, borrowing]
+          instructions: >
+            A means a completed contract with no problems; B means a completed
+            contract that was not repaid; C means an active contract in good
+            standing so far; D means an active contract with the client in
+            debt. amount and payments use an unspecified monetary unit.
+        fields:
+          - name: loan_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: loan_id}]}
+            description: Loan identifier.
+          - name: account_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: account_id}]}
+            description: Account receiving the loan.
+          - name: approved_date
+            expression: {dialects: [{dialect: ANSI_SQL, expression: date}]}
+            dimension: {is_time: true}
+            description: Date the loan was approved.
+            ai_context: {synonyms: [loan date]}
+          - name: approved_amount
+            expression: {dialects: [{dialect: ANSI_SQL, expression: amount}]}
+            description: Approved principal in the database's monetary unit.
+            ai_context: {synonyms: [loan amount, principal]}
+          - name: duration_months
+            expression: {dialects: [{dialect: ANSI_SQL, expression: duration}]}
+            description: Contract duration in months.
+            ai_context: {synonyms: [term, loan duration]}
+          - name: monthly_payment
+            expression: {dialects: [{dialect: ANSI_SQL, expression: payments}]}
+            description: Scheduled monthly payment in the database's monetary unit.
+          - name: repayment_status
+            expression: {dialects: [{dialect: ANSI_SQL, expression: status}]}
+            description: Encoded contract repayment status A, B, C, or D.
+            ai_context: {synonyms: [loan status, contract status]}
+
+      - name: standing_orders
+        source: order
+        primary_key: [order_id]
+        description: Recurring payment orders debited from accounts.
+        ai_context:
+          synonyms: [standing order, recurring payment, scheduled payment]
+          instructions: >
+            The physical table is named order and must be quoted as an
+            identifier. k_symbol values include POJISTNE for insurance, SIPO
+            for household payments, LEASING for leasing, and UVER for loan
+            payments.
+        fields:
+          - name: order_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: order_id}]}
+            description: Standing-order identifier.
+          - name: account_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: account_id}]}
+            description: Account debited by the standing order.
+          - name: recipient_bank
+            expression: {dialects: [{dialect: ANSI_SQL, expression: bank_to}]}
+            description: Recipient bank code.
+          - name: recipient_account
+            expression: {dialects: [{dialect: ANSI_SQL, expression: account_to}]}
+            description: Recipient account number.
+          - name: amount
+            expression: {dialects: [{dialect: ANSI_SQL, expression: amount}]}
+            description: Recurring debit amount in the database's monetary unit.
+          - name: payment_purpose
+            expression: {dialects: [{dialect: ANSI_SQL, expression: k_symbol}]}
+            description: Encoded purpose of the recurring payment.
+            ai_context: {synonyms: [k symbol, payment category]}
+
+      - name: transactions
+        source: trans
+        primary_key: [transaction_id]
+        description: Account credits and debits with post-transaction balances.
+        ai_context:
+          synonyms: [transaction, account movement, credit, debit]
+          instructions: >
+            amount is a non-negative magnitude. PRIJEM is an inflow; VYDAJ and
+            VYBER are outflows. operation values include VYBER KARTOU for card
+            withdrawal, VKLAD for cash deposit, PREVOD Z UCTU for collection
+            from another bank, VYBER for cash withdrawal, and PREVOD NA UCET
+            for remittance to another bank. k_symbol values include POJISTNE
+            (insurance), SLUZBY (statement fee), UROK (interest credit),
+            SANKC. UROK (penalty interest), SIPO (household), DUCHOD (pension),
+            and UVER (loan payment).
+        fields:
+          - name: transaction_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: trans_id}]}
+            description: Transaction identifier.
+          - name: account_id
+            expression: {dialects: [{dialect: ANSI_SQL, expression: account_id}]}
+            description: Account affected by the transaction.
+          - name: transaction_date
+            expression: {dialects: [{dialect: ANSI_SQL, expression: date}]}
+            dimension: {is_time: true}
+            description: Transaction date.
+          - name: transaction_type
+            expression: {dialects: [{dialect: ANSI_SQL, expression: type}]}
+            description: Encoded inflow or outflow type.
+            ai_context: {synonyms: [credit or debit, direction]}
+          - name: operation
+            expression: {dialects: [{dialect: ANSI_SQL, expression: operation}]}
+            description: Encoded transaction method, when supplied.
+            ai_context: {synonyms: [transaction mode, method]}
+          - name: amount
+            expression: {dialects: [{dialect: ANSI_SQL, expression: amount}]}
+            description: Non-negative transaction magnitude in the database's monetary unit.
+          - name: balance
+            expression: {dialects: [{dialect: ANSI_SQL, expression: balance}]}
+            description: Account balance immediately after the transaction.
+            ai_context: {synonyms: [post-transaction balance]}
+          - name: transaction_purpose
+            expression: {dialects: [{dialect: ANSI_SQL, expression: k_symbol}]}
+            description: Encoded transaction purpose, when supplied.
+            ai_context: {synonyms: [k symbol, transaction category]}
+          - name: partner_bank
+            expression: {dialects: [{dialect: ANSI_SQL, expression: bank}]}
+            description: Counterparty bank code, when supplied.
+          - name: partner_account
+            expression: {dialects: [{dialect: ANSI_SQL, expression: account}]}
+            description: Counterparty account number, when supplied.
+
+    relationships:
+      - name: accounts_to_districts
+        from: accounts
+        to: districts
+        from_columns: [district_id]
+        to_columns: [district_id]
+      - name: clients_to_districts
+        from: clients
+        to: districts
+        from_columns: [district_id]
+        to_columns: [district_id]
+      - name: dispositions_to_clients
+        from: dispositions
+        to: clients
+        from_columns: [client_id]
+        to_columns: [client_id]
+      - name: dispositions_to_accounts
+        from: dispositions
+        to: accounts
+        from_columns: [account_id]
+        to_columns: [account_id]
+      - name: cards_to_dispositions
+        from: cards
+        to: dispositions
+        from_columns: [disposition_id]
+        to_columns: [disposition_id]
+      - name: loans_to_accounts
+        from: loans
+        to: accounts
+        from_columns: [account_id]
+        to_columns: [account_id]
+      - name: standing_orders_to_accounts
+        from: standing_orders
+        to: accounts
+        from_columns: [account_id]
+        to_columns: [account_id]
+      - name: transactions_to_accounts
+        from: transactions
+        to: accounts
+        from_columns: [account_id]
+        to_columns: [account_id]
+
+    metrics:
+      - name: account_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT accounts.account_id)
+        description: Number of distinct accounts.
+        ai_context: {synonyms: [accounts, number of accounts]}
+      - name: client_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT clients.client_id)
+        description: Number of distinct clients.
+        ai_context: {synonyms: [customers, number of clients]}
+      - name: transaction_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT transactions.trans_id)
+        description: Number of distinct transactions.
+      - name: transaction_volume
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(transactions.amount)
+        description: Sum of non-negative transaction magnitudes.
+        ai_context:
+          instructions: This is gross activity, not signed net cash flow.
+      - name: transaction_inflow
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN transactions.type = 'PRIJEM' THEN transactions.amount ELSE 0 END)
+        description: Total incoming transaction amount.
+        ai_context: {synonyms: [credits, deposits, cash inflow]}
+      - name: transaction_outflow
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN transactions.type IN ('VYDAJ', 'VYBER') THEN transactions.amount ELSE 0 END)
+        description: Total outgoing transaction amount.
+        ai_context: {synonyms: [debits, withdrawals, cash outflow]}
+      - name: net_cash_flow
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN transactions.type = 'PRIJEM' THEN transactions.amount WHEN transactions.type IN ('VYDAJ', 'VYBER') THEN -transactions.amount ELSE 0 END)
+        description: Incoming amounts less outgoing amounts.
+        ai_context: {synonyms: [net flow, net transaction amount]}
+      - name: loan_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT loans.loan_id)
+        description: Number of distinct loans.
+      - name: total_approved_loan_amount
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(loans.amount)
+        description: Total approved loan principal in the database's monetary unit.
+        ai_context: {synonyms: [loan portfolio, approved principal]}

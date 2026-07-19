@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from text2sql_agent.backends import SQLiteBackend
+from text2sql_agent.config import Settings
+from text2sql_agent.data_sources import DataSource, ExecutionLimits
 from text2sql_agent.sql_tools import (
     MAX_RESULT_ROWS,
     SQLValidationError,
@@ -26,6 +30,21 @@ def database(tmp_path: Path) -> Path:
     connection.commit()
     connection.close()
     return path
+
+
+def _source(
+    *,
+    timeout_seconds: float = 2,
+) -> DataSource:
+    base = Settings().load_catalog().get("chinook")
+    return replace(
+        base,
+        limits=ExecutionLimits(
+            timeout_seconds=timeout_seconds,
+            max_result_rows=MAX_RESULT_ROWS,
+            model_sample_rows=10,
+        ),
+    )
 
 
 @pytest.mark.parametrize(
@@ -65,27 +84,31 @@ def test_exact_sql_cap_truncation_and_model_sample(database: Path) -> None:
     store = ResultStore()
     query = "SELECT value FROM numbers ORDER BY value"
     result = execute_query(
-        database_path=database,
+        backend=SQLiteBackend(database),
+        source=_source(),
         query=query,
         thread_id="thread-a",
         result_store=store,
-        timeout_seconds=2,
     )
     assert result.executed_sql == query
     assert result.row_count == MAX_RESULT_ROWS
     assert result.truncated is True
     assert len(result.sample_rows) == 10
-    assert store.get(result.result_id, "thread-a").rows[-1]["value"] == 499
+    assert store.get(
+        result.result_id,
+        "thread-a",
+        source_id="chinook",
+    ).rows[-1]["value"] == 499
 
 
 def test_readonly_database_remains_unchanged(database: Path) -> None:
     store = ResultStore()
     execute_query(
-        database_path=database,
+        backend=SQLiteBackend(database),
+        source=_source(),
         query="SELECT COUNT(*) AS count FROM numbers",
         thread_id="thread-a",
         result_store=store,
-        timeout_seconds=2,
     )
     connection = sqlite3.connect(database)
     count = connection.execute("SELECT COUNT(*) FROM numbers").fetchone()[0]
@@ -96,7 +119,8 @@ def test_readonly_database_remains_unchanged(database: Path) -> None:
 def test_execution_timeout(database: Path) -> None:
     with pytest.raises(TimeoutError):
         execute_query(
-            database_path=database,
+            backend=SQLiteBackend(database),
+            source=_source(timeout_seconds=0.000001),
             query=(
                 "WITH RECURSIVE counter(x) AS ("
                 "SELECT 1 UNION ALL SELECT x + 1 FROM counter WHERE x < 10000000"
@@ -104,5 +128,4 @@ def test_execution_timeout(database: Path) -> None:
             ),
             thread_id="thread-a",
             result_store=ResultStore(),
-            timeout_seconds=0.000001,
         )

@@ -27,7 +27,7 @@ cleanup() {
 
   if [[ "${status}" -eq 0 ]]; then
     echo
-    echo "Chinook Analyst stopped."
+    echo "Data Analytics Agent stopped."
   fi
   exit "${status}"
 }
@@ -84,7 +84,7 @@ echo "Preparing the locked Python environment…"
 uv sync --locked
 
 if ! uv run python -c \
-  'from text2sql_agent.config import Settings; errors = Settings().readiness_errors(); print("\n".join(f"  - {error}" for error in errors)); raise SystemExit(1 if errors else 0)'
+  'from text2sql_agent.api import Services; services = Services(); errors = services.settings.readiness_errors(); summaries = services.source_summaries() if not errors else []; errors += ([] if any(item.ready for item in summaries) else ["No configured data source is ready."]); print("\n".join(f"  - {error}" for error in errors)); raise SystemExit(1 if errors else 0)'
 then
   echo "Startup checks failed. Resolve the items above and try again." >&2
   exit 1
@@ -121,7 +121,7 @@ wait_for_service \
   "${STREAMLIT_PID}"
 
 echo
-echo "Chinook Analyst is ready:"
+echo "Data Analytics Agent is ready:"
 echo "  App: ${APP_BASE_URL}"
 echo "  API: ${API_BASE_URL}"
 echo
