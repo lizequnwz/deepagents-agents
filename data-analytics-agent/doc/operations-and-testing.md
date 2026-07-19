@@ -23,7 +23,7 @@ Application defaults:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `OPENAI_MODEL` | `gpt-5.4-mini` | Agent model |
+| `OPENAI_MODEL` | `gpt-5.4-nano` | Agent model |
 | `DATA_SOURCES_CONFIG` | `data_sources.yaml` | Trusted registry path |
 | `API_BASE_URL` | `http://127.0.0.1:8000` | Streamlit API target |
 | `APP_BASE_URL` | `http://127.0.0.1:8501` | Conversation-link base |

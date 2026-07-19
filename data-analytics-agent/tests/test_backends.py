@@ -81,6 +81,7 @@ def test_execute_query_accepts_dependency_injected_backend(
         query=query,
         thread_id="thread-1",
         result_store=store,
+        originating_question="Show all values",
     )
 
     assert backend.executed == [query]
@@ -93,3 +94,5 @@ def test_execute_query_accepts_dependency_injected_backend(
     )
     assert saved.source_id == "test"
     assert saved.rows[: source.limits.model_sample_rows] == result.sample_rows
+    assert result.profile == saved.profile
+    assert saved.originating_question == "Show all values"

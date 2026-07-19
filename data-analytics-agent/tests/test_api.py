@@ -336,6 +336,7 @@ def test_api_chart_generation_is_automatic_and_completes_conversation(
     assert fake.inputs[0]["thread_id"] == thread_id
     assert fake.inputs[0]["run_id"] == run_id
     assert fake.inputs[0]["source_id"] == "test"
+    assert fake.inputs[0]["question"] == "Chart the saved artists"
     assert fake.configs[0]["configurable"]["thread_id"] == run_id
     completed = client.get(f"/api/runs/{run_id}").json()
     assert completed["status"] == "completed"

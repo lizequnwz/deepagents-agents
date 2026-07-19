@@ -443,7 +443,28 @@ def build_chart(
     """Build one Plotly figure from a previously validated ChartSpec."""
 
     warnings: list[str] = []
-    frame = pd.DataFrame(presentation_rows(rows, spec))
+    presented_rows = presentation_rows(rows, spec)
+    category_column = (
+        spec.location if spec.chart_type is ChartType.MAP else spec.x
+    )
+    if spec.category_limit is not None and category_column is not None:
+        all_categories = {
+            (type(row.get(category_column)), str(row.get(category_column)))
+            for row in rows
+            if row.get(category_column) is not None
+        }
+        displayed_categories = {
+            (type(row.get(category_column)), str(row.get(category_column)))
+            for row in presented_rows
+            if row.get(category_column) is not None
+        }
+        if len(displayed_categories) < len(all_categories):
+            warnings.append(
+                f"Displaying {len(displayed_categories)} of "
+                f"{len(all_categories)} categories, ordered by "
+                f"{spec.sort_by} {spec.sort_direction}."
+            )
+    frame = pd.DataFrame(presented_rows)
     if frame.empty:
         raise ValueError("No rows remain for chart rendering.")
 

@@ -7,6 +7,7 @@ from data_analytics_agent.ui.components import (
     rows_to_csv,
     sql_review_decision,
 )
+from data_analytics_agent.ui.api_client import AgentAPIClient
 
 
 def test_conversation_url_replaces_existing_thread_and_preserves_query() -> None:
@@ -52,6 +53,36 @@ def test_any_exact_editor_change_submits_edited_sql() -> None:
         "action": "edit",
         "edited_sql": reviewed,
     }
+
+
+def test_api_client_fetches_every_result_page() -> None:
+    class Client(AgentAPIClient):
+        paths: list[str] = []
+
+        def request(self, method, path, **kwargs):
+            del method, kwargs
+            self.paths.append(path)
+            offset = int(path.split("offset=", 1)[1].split("&", 1)[0])
+            all_rows = [{"value": value} for value in range(5)]
+            return {
+                "result_id": "result-1",
+                "source_id": "test",
+                "executed_sql": "SELECT value FROM numbers",
+                "columns": ["value"],
+                "rows": all_rows[offset : offset + 2],
+                "profile": {"scope": "stored_rows"},
+                "row_count": 5,
+                "truncated": False,
+                "elapsed_ms": 1,
+                "offset": offset,
+                "limit": 2,
+            }
+
+    client = Client("http://example.test")
+    result = client.get_result("result-1", page_size=2)
+
+    assert result["rows"] == [{"value": value} for value in range(5)]
+    assert len(client.paths) == 3
 def test_revised_sql_review_has_persistent_context() -> None:
     app = AppTest.from_string(
         """

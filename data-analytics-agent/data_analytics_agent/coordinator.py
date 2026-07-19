@@ -22,7 +22,8 @@ from data_analytics_agent.agents.text_to_sql.agent import (
 )
 from data_analytics_agent.agents.text_to_sql.tools import (
     AnalyticsAgentState,
-    create_get_saved_result_tool,
+    create_inspect_conversation_result_tool,
+    create_list_conversation_results_tool,
 )
 from data_analytics_agent.backends import SQLBackend
 from data_analytics_agent.config import Settings
@@ -41,14 +42,19 @@ def _coordinator_prompt(
 
 Use the `data-visualization` subagent only when the user explicitly asks to
 visualize, chart, plot, graph, or map data. It consumes one saved result and
-returns exactly one validated ChartSpec. If the current result is not
-chart-ready, first delegate to `text-to-sql` for a new reviewed result, then
-delegate that result ID to `data-visualization`. Tell the SQL specialist the
-requested chart type and the complete observation, series, distribution, or
-grid shape it must preserve. A generic list limit must not truncate a time
-series or discard rows required by the requested chart. For chart-only follow-ups,
-reuse the referenced saved result when it already has the required shape.
-Never invent, rewrite, or silently alter the generated chart specification.
+returns one explicit terminal visualization outcome. Pass the original user
+question, explicit chart type, required result shape, and explicit user row
+limit—or state that no row limit was requested—in each task assignment. Honor
+an explicit chart type as a strict constraint; never silently substitute a
+different chart type.
+
+If visualization returns `needs_sql_reshape`, allow exactly one recovery cycle:
+delegate to `text-to-sql` for a new reviewed chart-ready result, then delegate
+that new result to `data-visualization`. Never attempt a second reshape cycle.
+If the second result is still incompatible, explain why the requested chart
+cannot be created. For chart-only follow-ups, reuse the referenced saved result
+when it already has the required shape. Never invent, rewrite, or silently
+alter a generated chart specification.
 """
         if visualization_enabled
         else """\
@@ -61,15 +67,20 @@ requests a chart, say that visualization is unavailable; do not simulate one.
 You coordinate a conversational data analyst for the selected data source
 {source.name!r} (source ID {source.source_id!r}). Delegate every request that
 needs database facts or SQL to the `text-to-sql` subagent using the task tool.
-You may use get_saved_result for follow-ups about an existing result. Do not
-invent database facts, switch data sources, or execute SQL yourself.
+The SQL specialist's result includes a deterministic full-result profile and
+the first at most 10 rows; use that bounded context when composing the answer.
+Use list_conversation_results and inspect_conversation_result to resolve
+references to prior results. "That" means the latest matching result and
+"previous" means the immediately prior result; ask when metadata leaves the
+reference ambiguous. Never paginate model access beyond the first 10 rows.
+Do not invent database facts, switch data sources, or execute SQL yourself.
 {visualization}
 
 Return a FinalAnswer with a direct answer, the exact executed SQL and result ID
 when present, the exact generated chart when present, material assumptions, and
 a concise interpretation. Do not expose private chain of thought, tool
 payloads, or more than
-{source.limits.model_sample_rows} database rows.
+10 database rows.
 
 Human review inside the SQL subagent may change the requested limit, filters,
 grouping, or other scope. In that case, the reviewed execution and the
@@ -129,7 +140,11 @@ def build_agent(
     )
     chat_model = model or ChatOpenAI(model=settings.model)
 
-    get_saved_result = create_get_saved_result_tool(
+    list_results = create_list_conversation_results_tool(
+        result_store,
+        source_id=source.source_id,
+    )
+    inspect_result = create_inspect_conversation_result_tool(
         result_store,
         source_id=source.source_id,
         model_sample_rows=source.limits.model_sample_rows,
@@ -183,7 +198,7 @@ def build_agent(
     return create_deep_agent(
         name="data-analytics-agent",
         model=chat_model,
-        tools=[get_saved_result],
+        tools=[list_results, inspect_result],
         system_prompt=_coordinator_prompt(
             source,
             visualization_enabled=settings.enable_data_visualization,

@@ -23,7 +23,7 @@ class ExampleQuestionConfig(RegistryModel):
 class ExecutionLimitOverrides(RegistryModel):
     timeout_seconds: float | None = Field(default=None, gt=0)
     max_result_rows: int | None = Field(default=None, ge=1, le=10_000)
-    model_sample_rows: int | None = Field(default=None, ge=1, le=100)
+    model_sample_rows: int | None = Field(default=None, ge=1, le=10)
 
 
 class BackendDefinition(RegistryModel):
@@ -181,6 +181,11 @@ def load_data_source_catalog(
             raise ValueError(
                 f"Source {source_id!r} has model_sample_rows greater than "
                 "max_result_rows."
+            )
+        if limits.model_sample_rows > 10:
+            raise ValueError(
+                f"Source {source_id!r} has model_sample_rows greater than "
+                "the hard 10-row model boundary."
             )
 
         resolved_sources[source_id] = DataSource(

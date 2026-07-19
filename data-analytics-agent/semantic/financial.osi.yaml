@@ -14,7 +14,7 @@ semantic_model:
         as ISO-formatted dates. Transaction amounts are non-negative magnitudes:
         PRIJEM is an inflow; VYDAJ and VYBER are outflows. The physical table
         named order is a reserved SQL word and must be identifier-quoted.
-        Unless the user asks for more rows, return five rows.
+        Do not impose a row limit unless the user explicitly requests one.
       examples:
         - Which districts have the largest approved loan portfolios?
         - What were monthly transaction inflows and outflows in 1998?

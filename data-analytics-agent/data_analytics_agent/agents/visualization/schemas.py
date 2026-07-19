@@ -34,6 +34,12 @@ class Palette(StrEnum):
     RED_BLUE = "red_blue"
 
 
+class VisualizationOutcome(StrEnum):
+    CHART_CREATED = "chart_created"
+    NEEDS_SQL_RESHAPE = "needs_sql_reshape"
+    CANNOT_CREATE = "cannot_create"
+
+
 class ChartSpec(VisualizationModel):
     """One reviewed, declarative chart over one saved result."""
 
@@ -106,6 +112,10 @@ class ChartSpec(VisualizationModel):
         ):
             raise ValueError(
                 "category_limit is not supported for histograms."
+            )
+        if self.category_limit is not None and self.sort_by is None:
+            raise ValueError(
+                "category_limit requires an explicit meaningful sort_by."
             )
 
         if chart_type in {
@@ -222,7 +232,30 @@ class ChartSpec(VisualizationModel):
 
 
 class VisualizationResult(VisualizationModel):
-    """Successful result from a validated create_chart tool call."""
+    """Terminal outcome from one visualization assignment."""
 
+    outcome: VisualizationOutcome = VisualizationOutcome.CHART_CREATED
+    result_id: str | None = None
     answer: str
-    chart: ChartSpec
+    chart: ChartSpec | None = None
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> VisualizationResult:
+        if self.outcome is VisualizationOutcome.CHART_CREATED:
+            if self.chart is None:
+                raise ValueError("chart_created requires a chart.")
+            if self.result_id is None:
+                self.result_id = self.chart.result_id
+            elif self.result_id != self.chart.result_id:
+                raise ValueError(
+                    "Visualization result ID must match the chart result ID."
+                )
+        elif self.chart is not None:
+            raise ValueError(
+                f"{self.outcome.value} must not include a chart."
+            )
+        elif self.result_id is None:
+            raise ValueError(
+                f"{self.outcome.value} requires a result_id."
+            )
+        return self

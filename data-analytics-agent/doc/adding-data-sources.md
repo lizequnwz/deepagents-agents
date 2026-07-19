@@ -105,14 +105,14 @@ sources:
     limits:
       timeout_seconds: 15
       max_result_rows: 1000
-      model_sample_rows: 20
+      model_sample_rows: 10
 ```
 
 Limit constraints:
 
 - `timeout_seconds` must be greater than zero;
 - `max_result_rows` is 1–10,000;
-- `model_sample_rows` is 1–100 and cannot exceed the result cap.
+- `model_sample_rows` is 1–10 and cannot exceed the result cap.
 
 Omitted limits inherit validated global defaults.
 
@@ -215,7 +215,7 @@ backend is intentionally unavailable. See the conceptual
 - Copying credentials into `options` or `target`.
 - Assuming CSV dictionary files are loaded by the agent.
 - Forgetting to restart the API after configuration changes.
-- Adding `model_sample_rows` larger than `max_result_rows`.
+- Adding `model_sample_rows` larger than 10 or `max_result_rows`.
 - Declaring `snowflake` before implementing the adapter.
 
 ## Verification checklist

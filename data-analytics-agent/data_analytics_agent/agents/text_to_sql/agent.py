@@ -8,7 +8,6 @@ from langchain.agents.structured_output import ToolStrategy
 
 from data_analytics_agent.agents.text_to_sql.tools import (
     create_execute_sql_tool,
-    create_get_saved_result_tool,
     create_get_table_schema_tool,
     create_list_tables_tool,
     create_validate_sql_tool,
@@ -22,7 +21,8 @@ SQL_OUTPUT_RETRY_MESSAGE = """\
 A SQL analysis can finish only after execute_sql succeeds. If a query was
 rejected, apply the human feedback, revise and validate the SQL, call execute_sql
 again, and wait for review. Return SQLAnalysisResult only with sql, result_id,
-and row_count copied from the successful QueryResult.
+columns, sample_rows, profile, row_count, and truncated copied from the
+successful QueryResult.
 """
 
 
@@ -43,26 +43,27 @@ Every SQL table must use the dataset's exact `source` value, and every SQL
 column must use the chosen dialect expression's exact physical value.
 
 Write exactly one read-only SELECT/CTE/set-operation query in the
-{source.dialect} dialect. Default ranked or list results to five rows unless the
-user requests another size. When the result will be visualized, shape it for
-the requested chart: perform business grouping, filtering, calculations,
-ordering, and limiting in reviewed SQL rather than leaving them to the chart
-layer. Preserve the complete observation, ordered time series, distribution,
-relationship, or heatmap grid required by that chart. The five-row list default
-does not apply to a time series; never add a blind top-level limit that
-arbitrarily truncates chart data. Call validate_sql before execute_sql.
+{source.dialect} dialect. Do not add LIMIT unless the user explicitly requests
+a row count. Words such as "top", "bottom", "highest", or "lowest" require
+deterministic ordering but do not imply a row count by themselves. When the
+result will be visualized, shape it for the requested chart: perform business
+grouping, filtering, calculations, ordering, binning, and limiting requested
+by the user in reviewed SQL rather than leaving them to the chart layer.
+Preserve the complete observation, ordered time series, distribution,
+relationship, or unique heatmap grid required by that chart. Call validate_sql
+before execute_sql.
 Validation is structural and does not submit SQL to the database. The
 execute_sql call pauses for human approval and may be edited or rejected.
 Rejection is never terminal: apply the feedback, revise and validate the SQL,
 call execute_sql again, and wait for another review.
 
 Return SQLAnalysisResult only after execute_sql succeeds. Its sql, result_id,
-and row_count must come from that QueryResult, and sql must be the exact
-executed_sql value. Do not return a rejection, proposed query, or missing result
-as a completed analysis. If human feedback changed the requested scope, reflect
-that revised scope in the answer and interpretation. Keep assumptions and
-interpretation concise. Never expose private reasoning or more than
-{source.limits.model_sample_rows} rows.
+columns, sample_rows, profile, row_count, and truncated must come from that
+QueryResult, and sql must be the exact executed_sql value. Do not return a
+rejection, proposed query, or missing result as a completed analysis. If human
+feedback changed the requested scope, reflect that revised scope in the answer
+and interpretation. Keep assumptions and interpretation concise. Never expose
+private reasoning or more than 10 rows.
 """
 
 
@@ -77,11 +78,6 @@ def build_text_to_sql_subagent(
     """Build the source-bound, human-reviewed SQL specialist."""
 
     execute_sql = create_execute_sql_tool(source, backend, result_store)
-    get_saved_result = create_get_saved_result_tool(
-        result_store,
-        source_id=source.source_id,
-        model_sample_rows=source.limits.model_sample_rows,
-    )
     fallback_tools = [
         create_list_tables_tool(backend),
         create_get_table_schema_tool(backend),
@@ -96,7 +92,7 @@ def build_text_to_sql_subagent(
             "review, executes, and interprets results."
         ),
         "system_prompt": _sql_subagent_prompt(source),
-        "tools": [*fallback_tools, execute_sql, get_saved_result],
+        "tools": [*fallback_tools, execute_sql],
         "model": model,
         "skills": [
             "/project/skills/query-writing/",

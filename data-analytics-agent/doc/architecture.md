@@ -96,24 +96,30 @@ compatibility import for Deep Agents tooling.
 5. The specialist reads OSI context, validates SQL, and calls `execute_sql`.
 6. HITL pauses before the tool runs.
 7. Approve/edit resumes execution; reject returns feedback to the specialist.
-8. The backend returns normalized capped rows.
-9. `ResultStore` saves the artifact with thread and source provenance.
-10. The model sees a small sample and result ID.
+8. The backend fetches `cap + 1`, returns at most the configured cap, and uses
+   the extra row only to detect truncation.
+9. `ResultStore` saves the rows and an eager immutable full-artifact profile
+   with thread/source provenance.
+10. The SQL specialist and coordinator see the profile plus at most the first
+    10 rows and the result ID.
 11. `RunManager` verifies final-answer provenance and records the turn.
 12. Streamlit retrieves and displays the full capped artifact.
-13. On an explicit chart request, the visualization specialist inspects one
-    saved result and proposes one `ChartSpec`.
+13. On an explicit chart request, the visualization specialist inspects the
+    same profile plus at most 10 rows and proposes one `ChartSpec`.
 14. `create_chart` validates the constrained spec and completes the
     visualization subagent directly, without a second model packaging step.
 15. Progress shows the chart type and a bounded subset of safe mappings.
-16. The visualization success result returns to the coordinator.
+16. A terminal `chart_created`, `needs_sql_reshape`, or `cannot_create` result
+    returns to the coordinator. A reshape outcome permits one reviewed SQL
+    recovery cycle.
 17. `RunManager` preserves the exact generated spec and canonical success
     message with result provenance.
 18. Streamlit reconstructs Plotly and exposes the underlying table/CSV.
 
 LangGraph checkpoints are isolated by `run_id`. Typed graph state retains the
-conversation `thread_id`, `run_id`, and `source_id` for artifact scoping and is
-inherited by inline subagents. `RunManager.start` reconstructs completed
+conversation `thread_id`, `run_id`, `source_id`, and current question for
+artifact scoping and is inherited by inline subagents. `RunManager.start`
+reconstructs completed
 human/assistant turns for each new run, including the chart success message and
 exact spec.
 
@@ -175,7 +181,8 @@ Recommended rules:
 - One conversation cannot span or join sources.
 - Semantic context is selected before agent construction.
 - Backend-native safety remains inside the backend.
-- Application results remain outside model context except for a bounded sample.
+- Application rows remain outside model context except for at most `head(10)`;
+  immutable full-result profiles are safe bounded metadata.
 - Structured output is validated at specialist and coordinator boundaries.
 - A backend or specialist must not require Streamlit-specific logic.
 

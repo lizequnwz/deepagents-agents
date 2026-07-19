@@ -92,24 +92,23 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
         visualization_enabled=True,
     )
     assert "only when the user explicitly asks" in enabled_prompt.lower()
-    assert "exactly one validated chartspec" in enabled_prompt.lower()
+    assert "terminal visualization outcome" in enabled_prompt.lower()
     normalized_enabled_prompt = " ".join(enabled_prompt.lower().split())
-    assert "must not truncate a time series" in normalized_enabled_prompt
+    assert "exactly one recovery cycle" in normalized_enabled_prompt
 
     sql_prompt = _sql_subagent_prompt(source)
     normalized_sql_prompt = " ".join(sql_prompt.lower().split())
-    assert (
-        "five-row list default does not apply to a time series"
-        in normalized_sql_prompt
+    assert "do not add limit unless the user explicitly requests" in (
+        normalized_sql_prompt
     )
-    assert "blind top-level limit" in normalized_sql_prompt
+    assert "do not imply a row count" in normalized_sql_prompt
 
     visualization_prompt = _visualization_prompt(source)
     normalized_visualization_prompt = " ".join(
         visualization_prompt.lower().split()
     )
     assert (
-        "ordered categorical or temporal x axis"
+        "line/area: temporal, numeric, or ordered-categorical x"
         in normalized_visualization_prompt
     )
 

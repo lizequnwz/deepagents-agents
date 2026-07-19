@@ -15,6 +15,65 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PhysicalKind(StrEnum):
+    EMPTY = "empty"
+    BOOLEAN = "boolean"
+    INTEGER = "integer"
+    NUMBER = "number"
+    TEXT = "text"
+    MIXED = "mixed"
+
+
+class AnalyticalRole(StrEnum):
+    CATEGORICAL = "categorical"
+    TEMPORAL = "temporal"
+    NUMERIC = "numeric"
+    DISCRETE_NUMERIC = "discrete_numeric"
+    UNKNOWN = "unknown"
+
+
+class TemporalKind(StrEnum):
+    DATE = "date"
+    DATETIME = "datetime"
+    MONTH = "month"
+    QUARTER = "quarter"
+    YEAR = "year"
+
+
+class RoleCandidate(StrictModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    role: AnalyticalRole
+    confidence: float = Field(ge=0, le=1)
+
+
+class ColumnProfile(StrictModel):
+    """Immutable, deterministic profile of one stored-result column."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: str
+    physical_kind: PhysicalKind
+    role_candidates: tuple[RoleCandidate, ...]
+    temporal_kind: TemporalKind | None = None
+    null_count: int = Field(ge=0)
+    non_null_count: int = Field(ge=0)
+    distinct_count: int = Field(ge=0)
+    minimum: Any | None = None
+    maximum: Any | None = None
+    representative_values: tuple[Any, ...] = ()
+
+
+class ResultProfile(StrictModel):
+    """Profile over every row retained by the configured retrieval cap."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    scope: Literal["stored_rows"] = "stored_rows"
+    row_count: int = Field(ge=0, le=10_000)
+    columns: tuple[ColumnProfile, ...]
+
+
 class QueryResult(StrictModel):
     """Small model-facing SQL result; full rows live in ResultStore."""
 
@@ -22,6 +81,7 @@ class QueryResult(StrictModel):
     executed_sql: str
     columns: list[str]
     sample_rows: list[dict[str, Any]]
+    profile: ResultProfile
     row_count: int = Field(ge=0, le=10_000)
     truncated: bool
     elapsed_ms: float = Field(ge=0)
@@ -33,7 +93,11 @@ class SQLAnalysisResult(StrictModel):
     answer: str
     sql: str
     result_id: str
+    columns: list[str]
+    sample_rows: list[dict[str, Any]]
+    profile: ResultProfile
     row_count: int = Field(ge=0, le=10_000)
+    truncated: bool
     assumptions: list[str] = Field(default_factory=list)
     interpretation: str = ""
 
@@ -52,8 +116,11 @@ class SavedResult(StrictModel):
     thread_id: str
     source_id: str
     executed_sql: str
+    originating_question: str
+    short_label: str
     columns: list[str]
     rows: list[dict[str, Any]]
+    profile: ResultProfile
     row_count: int
     truncated: bool
     elapsed_ms: float
@@ -66,6 +133,7 @@ class ResultPage(StrictModel):
     executed_sql: str
     columns: list[str]
     rows: list[dict[str, Any]]
+    profile: ResultProfile
     row_count: int
     truncated: bool
     elapsed_ms: float

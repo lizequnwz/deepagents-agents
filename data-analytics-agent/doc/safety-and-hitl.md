@@ -93,17 +93,17 @@ warehouse authorization.
 The visualization specialist can read only a saved result from the current
 thread and source. It cannot run SQL or arbitrary generated code.
 
-1. `inspect_result_for_chart` exposes columns, inferred kinds, row count, and a
-   bounded sample.
+1. `inspect_result_for_chart` exposes the immutable full-result profile, row
+   count, truncation state, and at most the first 10 rows.
 2. `validate_chart` checks the strict `ChartSpec` against the full capped
    result without rendering.
 3. `create_chart` revalidates the spec against the saved result and returns the
    exact `ChartSpec` plus a canonical success message.
 4. Progress events expose the chart type and a bounded subset of mappings, but
    omit the result ID and full tool payload.
-5. The visualization result is returned to the coordinator, which preserves
-   the exact spec and canonical success message in the completed conversation
-   turn.
+5. Visualization terminates with `chart_created`, `needs_sql_reshape`, or
+   `cannot_create`. The coordinator permits at most one reviewed SQL-reshape
+   recovery cycle.
 6. Streamlit renders deterministic trusted Plotly code from that spec and the
    saved rows.
 
@@ -120,11 +120,13 @@ application artifact and returns only:
 - result ID;
 - executed SQL;
 - columns;
-- configured sample rows;
+- at most the first 10 rows;
+- immutable profile metadata computed across all stored rows;
 - row count, truncation, and elapsed time.
 
 [`stores.py`](../data_analytics_agent/stores.py) associates every result with
-`thread_id` and `source_id`. The model-facing saved-result tool requires both.
+`thread_id` and `source_id`. Model-facing discovery tools require both and
+cannot paginate beyond `head(10)`.
 `RunManager` rejects a final result ID outside the current conversation/source
 and replaces model-paraphrased SQL with the saved executed SQL.
 

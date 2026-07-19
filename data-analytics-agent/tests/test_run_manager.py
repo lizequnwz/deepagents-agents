@@ -8,6 +8,7 @@ from data_analytics_agent.run_manager import (
     _apply_sql_analysis,
     _current_sql_analysis,
 )
+from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.schemas import FinalAnswer, SQLAnalysisResult
 from data_analytics_agent.stores import ConversationStore, ResultStore, RunStore
 
@@ -116,11 +117,16 @@ def test_no_query_answer_may_omit_sql_and_result_id() -> None:
 
 
 def test_current_sql_subagent_result_overrides_stale_coordinator_narrative() -> None:
+    rows = [{"Name": "AC/DC"}]
     analysis = SQLAnalysisResult(
         answer="The reviewed query returned the top 10 artists.",
         sql="SELECT Name FROM Artist LIMIT 10",
         result_id="result-10",
+        columns=["Name"],
+        sample_rows=rows,
+        profile=profile_result(["Name"], rows),
         row_count=10,
+        truncated=False,
         interpretation="Ten artists were returned.",
     )
     output = {
@@ -148,11 +154,16 @@ def test_current_sql_subagent_result_overrides_stale_coordinator_narrative() -> 
 
 
 def test_previous_turn_sql_analysis_is_not_reused_for_a_followup() -> None:
+    rows = [{"value": 1}]
     previous = SQLAnalysisResult(
         answer="Previous answer.",
         sql="SELECT 1",
         result_id="old-result",
+        columns=["value"],
+        sample_rows=rows,
+        profile=profile_result(["value"], rows),
         row_count=1,
+        truncated=False,
     )
     output = {
         "messages": [

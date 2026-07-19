@@ -24,6 +24,26 @@ REVISED_SQL = (
     "SELECT Country, COUNT(*) AS customer_count "
     "FROM Customer GROUP BY Country ORDER BY customer_count DESC LIMIT 5"
 )
+PROFILE = {
+    "scope": "stored_rows",
+    "row_count": 1,
+    "columns": [
+        {
+            "name": "Name",
+            "physical_kind": "text",
+            "role_candidates": [
+                {"role": "categorical", "confidence": 1.0}
+            ],
+            "temporal_kind": None,
+            "null_count": 0,
+            "non_null_count": 1,
+            "distinct_count": 1,
+            "minimum": "AC/DC",
+            "maximum": "AC/DC",
+            "representative_values": ["AC/DC"],
+        }
+    ],
+}
 
 
 @pytest.fixture(autouse=True)
@@ -141,7 +161,11 @@ class ScriptedChatModel(BaseChatModel):
                             "answer": "The reviewed query executed.",
                             "sql": executed_sql,
                             "result_id": "result-1",
+                            "columns": ["Name"],
+                            "sample_rows": [{"Name": "AC/DC"}],
+                            "profile": PROFILE,
                             "row_count": 1,
+                            "truncated": False,
                             "assumptions": [],
                             "interpretation": "One result was returned.",
                         },
@@ -175,7 +199,11 @@ def _build_graph(state: ScriptState):
         return {
             "result_id": "result-1",
             "executed_sql": query,
+            "columns": ["Name"],
+            "sample_rows": [{"Name": "AC/DC"}],
+            "profile": PROFILE,
             "row_count": 1,
+            "truncated": False,
         }
 
     sql_subagent = {

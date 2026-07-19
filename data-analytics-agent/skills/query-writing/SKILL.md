@@ -22,7 +22,9 @@ description: Write safe dialect-aware SELECT queries and submit them for human-r
 - Exactly one read-only query: SELECT, WITH/CTE, or a set operation.
 - No DML, DDL, stored procedures, administrative or session commands,
   metadata commands, transactions, or multiple statements.
-- Default list/ranking output to `LIMIT 5` unless the user specifies otherwise.
+- Do not add `LIMIT` unless the user explicitly requests a row count. Ranking
+  words such as "top" or "highest" require deterministic ordering but do not
+  imply a hidden count.
 - Aggregations that naturally return one row do not need a limit.
 - Never use `SELECT *`.
 - Follow source-specific metric definitions and ambiguity warnings in OSI.

@@ -10,7 +10,11 @@ from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
     ChartType,
 )
-from data_analytics_agent.schemas import SavedResult
+from data_analytics_agent.schemas import (
+    AnalyticalRole,
+    ColumnProfile,
+    SavedResult,
+)
 
 
 def _is_number(value: Any) -> bool:
@@ -28,6 +32,36 @@ def _has_nonnegative_numeric_value(
         _is_number(row.get(column)) and row[column] >= 0
         for row in rows
     )
+
+
+def _column_profile(result: SavedResult, column: str) -> ColumnProfile:
+    for profile in result.profile.columns:
+        if profile.name == column:
+            return profile
+    raise ValueError(f"Column {column!r} has no stored profile.")
+
+
+def _supports_role(
+    result: SavedResult,
+    column: str,
+    roles: set[AnalyticalRole],
+) -> bool:
+    return any(
+        candidate.role in roles and candidate.confidence > 0
+        for candidate in _column_profile(result, column).role_candidates
+    )
+
+
+def _require_role(
+    result: SavedResult,
+    column: str,
+    roles: set[AnalyticalRole],
+    description: str,
+) -> None:
+    if not _supports_role(result, column, roles):
+        raise ValueError(
+            f"Chart column {column!r} must be {description}."
+        )
 
 
 def chart_columns(spec: ChartSpec) -> set[str]:
@@ -115,7 +149,82 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     if not rows:
         raise ValueError("The reviewed presentation operations removed all rows.")
 
-    numeric_columns = list(spec.y)
+    dimensions = {
+        AnalyticalRole.CATEGORICAL,
+        AnalyticalRole.TEMPORAL,
+        AnalyticalRole.DISCRETE_NUMERIC,
+    }
+    categorical = {AnalyticalRole.CATEGORICAL}
+    numeric = {AnalyticalRole.NUMERIC}
+    ordered = {*dimensions, AnalyticalRole.NUMERIC}
+
+    if spec.chart_type is ChartType.BAR:
+        assert spec.x is not None
+        _require_role(
+            result,
+            spec.x,
+            dimensions,
+            "categorical, temporal, or discrete numeric",
+        )
+    elif spec.chart_type is ChartType.PIE:
+        assert spec.x is not None
+        _require_role(result, spec.x, categorical, "categorical")
+    elif spec.chart_type in {ChartType.LINE, ChartType.AREA}:
+        assert spec.x is not None
+        _require_role(
+            result,
+            spec.x,
+            ordered,
+            "temporal, numeric, or an ordered categorical dimension",
+        )
+    elif spec.chart_type is ChartType.SCATTER:
+        assert spec.x is not None
+        _require_role(result, spec.x, numeric, "numeric")
+    elif spec.chart_type is ChartType.BOX and spec.x:
+        _require_role(result, spec.x, categorical, "categorical")
+    elif spec.chart_type is ChartType.HEATMAP:
+        assert spec.x is not None
+        _require_role(
+            result,
+            spec.x,
+            dimensions,
+            "categorical, temporal, or already-binned numeric",
+        )
+    elif spec.chart_type is ChartType.MAP:
+        location_roles = {*dimensions, AnalyticalRole.NUMERIC}
+        if spec.location:
+            _require_role(
+                result,
+                spec.location,
+                location_roles,
+                "a usable location identifier",
+            )
+        if spec.region:
+            _require_role(
+                result,
+                spec.region,
+                location_roles,
+                "a usable region identifier",
+            )
+        _require_role(
+            result,
+            spec.y[0],
+            dimensions,
+            "categorical, temporal, or already-binned numeric",
+        )
+
+    numeric_columns: list[str] = []
+    if spec.chart_type in {
+        ChartType.BAR,
+        ChartType.LINE,
+        ChartType.AREA,
+        ChartType.SCATTER,
+        ChartType.PIE,
+        ChartType.BOX,
+    }:
+        numeric_columns.extend(spec.y)
+    if spec.chart_type is ChartType.HISTOGRAM and spec.x:
+        numeric_columns.append(spec.x)
     if spec.size:
         numeric_columns.append(spec.size)
     if spec.value:
@@ -125,6 +234,7 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     if spec.longitude:
         numeric_columns.append(spec.longitude)
     for column in numeric_columns:
+        _require_role(result, column, numeric, "numeric")
         if not _has_numeric_value(rows, column):
             raise ValueError(
                 f"Chart column {column!r} has no usable numeric values."
@@ -132,12 +242,6 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     if spec.size and not _has_nonnegative_numeric_value(rows, spec.size):
         raise ValueError("A size column requires nonnegative numeric values.")
 
-    if (
-        spec.chart_type is ChartType.HISTOGRAM
-        and spec.x
-        and not _has_numeric_value(rows, spec.x)
-    ):
-        raise ValueError("A histogram requires a numeric x column.")
     if (
         spec.chart_type is ChartType.PIE
         and not _has_nonnegative_numeric_value(rows, spec.y[0])

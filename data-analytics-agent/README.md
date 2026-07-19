@@ -10,8 +10,9 @@ source-bound backend executes the exact reviewed SQL.
 
 When—and only when—the user explicitly requests a chart, the coordinator can
 delegate one saved, chart-ready result to an optional visualization specialist.
-That specialist validates one constrained Plotly `ChartSpec`, generates it
-automatically, and returns a success result to the coordinator.
+That specialist receives an immutable full-result profile plus at most 10 rows,
+validates one constrained Plotly `ChartSpec`, and returns an explicit terminal
+outcome to the coordinator.
 
 Included local sources:
 
@@ -42,7 +43,9 @@ model.
 - One automatically executed, constrained chart tool
 - Bar, line, area, scatter, pie/donut, histogram, box, heatmap, and map charts
 - Deterministic Plotly rendering with saved-result reconstruction
-- Full capped results stored outside model context
+- Full capped results and eager column profiles stored outside model context
+- At most `head(10)` rows visible to the coordinator and specialists
+- No generated SQL limit unless the user explicitly requests one
 - Streamlit result tables, CSV downloads, warnings, and source diagnostics
 - Clear extension seams for Snowflake and future specialist agents
 
@@ -150,7 +153,8 @@ See [Backend development](doc/backend-development.md) and the
 - The backend executes the exact reviewed SQL.
 - SQLite uses read-only mode, an authorizer, deadline, and capped fetch.
 - Results carry both source and conversation provenance.
-- Only a configured row sample enters model context.
+- Only the full-result profile and at most the first 10 rows enter model
+  context.
 
 Read [SQL safety and human review](doc/safety-and-hitl.md) before changing
 validation, approval, execution, or result access.

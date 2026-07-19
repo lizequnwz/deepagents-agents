@@ -13,6 +13,7 @@ from data_analytics_agent.agents.text_to_sql.tools import (
 )
 from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
+    VisualizationOutcome,
     VisualizationResult,
 )
 from data_analytics_agent.agents.visualization.tools import (
@@ -36,6 +37,8 @@ from data_analytics_agent.stores import (
     RunStore,
     StoreNotFound,
 )
+
+RESHAPE_ACTIVITY_LABEL = "Chart data needs SQL reshaping"
 
 
 def _single_decision(
@@ -160,14 +163,21 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str] | Non
         return ("sql_check", "Checking generated SQL")
     if tool_name == "execute_sql":
         return ("execution", "Executing approved SQL")
-    if tool_name == "get_saved_result":
-        return ("result", "Reading a saved result")
+    if tool_name == "list_conversation_results":
+        return ("result", "Listing saved conversation results")
+    if tool_name == "inspect_conversation_result":
+        return ("result", "Inspecting a saved conversation result")
     if tool_name == "inspect_result_for_chart":
         return ("chart_data", "Inspecting chart-ready result data")
     if tool_name == "validate_chart":
         return ("chart_check", "Checking the chart specification")
     if tool_name == "create_chart":
         return _chart_activity(tool_input)
+    if tool_name == "finish_visualization":
+        outcome = str(data.get("outcome") or "")
+        if outcome == "needs_sql_reshape":
+            return ("chart", RESHAPE_ACTIVITY_LABEL)
+        return ("chart", "Requested chart cannot be created")
     return None
 
 
@@ -303,6 +313,15 @@ def _apply_visualization(
     visualization = _current_visualization(output)
     if visualization is None:
         return answer
+    if visualization.outcome is not VisualizationOutcome.CHART_CREATED:
+        return answer.model_copy(
+            update={
+                "answer": visualization.answer,
+                "result_id": visualization.result_id or answer.result_id,
+                "chart": None,
+            }
+        )
+    assert visualization.chart is not None
     if (
         answer.result_id is not None
         and answer.result_id != visualization.chart.result_id
@@ -400,6 +419,7 @@ class RunManager:
                 "thread_id": snapshot.thread_id,
                 "run_id": run_id,
                 "source_id": snapshot.source_id,
+                "question": snapshot.question,
             },
         )
 
@@ -504,6 +524,15 @@ class RunManager:
 
             interrupted = await stream.interrupted()
             if interrupted:
+                reshape_requests = sum(
+                    event.label == RESHAPE_ACTIVITY_LABEL
+                    for event in self.runs.get(run_id).events
+                )
+                if reshape_requests > 1:
+                    raise RuntimeError(
+                        "The requested chart remained incompatible after the "
+                        "single allowed SQL-reshape recovery cycle."
+                    )
                 approval = _extract_approval(
                     await stream.interrupts(),
                     source=source,

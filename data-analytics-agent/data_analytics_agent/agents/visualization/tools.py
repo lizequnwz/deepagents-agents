@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from numbers import Real
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.messages import ToolMessage
 from langchain.tools import ToolRuntime, tool
@@ -12,6 +11,7 @@ from langgraph.types import Command
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
 from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
+    VisualizationOutcome,
     VisualizationResult,
 )
 from data_analytics_agent.agents.visualization.validation import (
@@ -19,17 +19,6 @@ from data_analytics_agent.agents.visualization.validation import (
 )
 from data_analytics_agent.schemas import SavedResult
 from data_analytics_agent.stores import ResultStore, StoreNotFound
-
-
-def _column_kind(rows: list[dict[str, Any]], column: str) -> str:
-    values = [row.get(column) for row in rows if row.get(column) is not None]
-    if not values:
-        return "empty"
-    if all(isinstance(value, Real) and not isinstance(value, bool) for value in values):
-        return "number"
-    if all(isinstance(value, bool) for value in values):
-        return "boolean"
-    return "text"
 
 
 def _get_result(
@@ -69,6 +58,8 @@ def create_chart_result(
 
     validate_chart_spec(spec, result)
     return VisualizationResult(
+        outcome=VisualizationOutcome.CHART_CREATED,
+        result_id=spec.result_id,
         answer=chart_success_message(spec),
         chart=spec,
     )
@@ -97,10 +88,7 @@ def create_inspect_result_for_chart_tool(
         return {
             "result_id": result.result_id,
             "columns": result.columns,
-            "column_kinds": {
-                column: _column_kind(sample, column)
-                for column in result.columns
-            },
+            "profile": result.profile.model_dump(mode="json"),
             "row_count": result.row_count,
             "sample_rows": sample,
             "truncated": result.truncated,
@@ -127,9 +115,18 @@ def create_validate_chart_tool(
             runtime,
             source_id=source_id,
         )
-        validate_chart_spec(spec, result)
+        try:
+            validate_chart_spec(spec, result)
+        except ValueError as exc:
+            return {
+                "valid": False,
+                "outcome": VisualizationOutcome.NEEDS_SQL_RESHAPE,
+                "result_id": result.result_id,
+                "message": str(exc),
+            }
         return {
             "valid": True,
+            "outcome": VisualizationOutcome.CHART_CREATED,
             "result_id": result.result_id,
             "chart_type": spec.chart_type,
             "message": "The chart specification is valid and chart-ready.",
@@ -172,3 +169,45 @@ def create_create_chart_tool(
         )
 
     return create_chart
+
+
+def create_finish_visualization_tool(
+    result_store: ResultStore,
+    *,
+    source_id: str,
+):
+    @tool(return_direct=True)
+    def finish_visualization(
+        result_id: str,
+        outcome: Literal["needs_sql_reshape", "cannot_create"],
+        message: str,
+        runtime: ToolRuntime,
+    ) -> Command:
+        """Finish without a chart when reshaping is needed or impossible."""
+
+        _get_result(
+            result_store,
+            result_id,
+            runtime,
+            source_id=source_id,
+        )
+        visualization = VisualizationResult(
+            outcome=VisualizationOutcome(outcome),
+            result_id=result_id,
+            answer=message,
+        )
+        if not runtime.tool_call_id:
+            raise RuntimeError("The visualization tool call ID is unavailable.")
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content=visualization.model_dump_json(),
+                        tool_call_id=runtime.tool_call_id,
+                    )
+                ],
+                "structured_response": visualization,
+            }
+        )
+
+    return finish_visualization

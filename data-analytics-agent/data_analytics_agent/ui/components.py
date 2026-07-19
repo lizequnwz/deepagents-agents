@@ -279,6 +279,12 @@ def _render_result(
                 icon=":material/content_cut:",
                 color="orange",
             )
+            st.warning(
+                f"Showing and charting the first {result['row_count']} stored "
+                "rows because the configured retrieval cap was reached. "
+                "The complete database result may contain additional rows.",
+                icon=":material/content_cut:",
+            )
 
     def render_table() -> None:
         if not result["rows"]:

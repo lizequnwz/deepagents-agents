@@ -42,7 +42,7 @@ class Settings:
 
     project_root: Path = PROJECT_ROOT
     model: str = field(
-        default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
+        default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-5.4-nano")
     )
     data_sources_config_path: Path = field(
         default_factory=_data_sources_config_path
@@ -91,10 +91,10 @@ class Settings:
             errors.append(
                 "SQL_MAX_RESULT_ROWS must be between 1 and 10000."
             )
-        if not 1 <= self.model_sample_rows <= self.max_result_rows:
+        if not 1 <= self.model_sample_rows <= min(self.max_result_rows, 10):
             errors.append(
-                "MODEL_SAMPLE_ROWS must be between 1 and "
-                "SQL_MAX_RESULT_ROWS."
+                "MODEL_SAMPLE_ROWS must be between 1 and the smaller of 10 "
+                "and SQL_MAX_RESULT_ROWS."
             )
         try:
             self.load_catalog()

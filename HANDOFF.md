@@ -13,10 +13,11 @@ Each conversation is bound to one registered source and its required OSI
 routes database work to an isolated text-to-SQL specialist. Every SQL execution
 requires approve/edit/reject review.
 
-The coordinator now also has an optional visualization specialist. It is used
-only when the user explicitly requests a chart, consumes one chart-ready saved
-result, validates exactly one strict `ChartSpec`, and generates it automatically
-before trusted application code renders Plotly.
+The coordinator also has an optional visualization specialist. It is used only
+when the user explicitly requests a chart, consumes one chart-ready saved
+result through a full-result profile plus `head(10)`, validates exactly one
+strict `ChartSpec`, and terminates explicitly before trusted application code
+renders Plotly.
 
 This remains a local, single-user, process-memory POC. It is not production
 ready.
@@ -43,6 +44,9 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
 - Model: existing configured model reused by both specialists.
 - Source isolation: immutable per conversation and enforced below the UI.
 - SQL: one reviewed read-only query; exact edited SQL executes.
+- SQL limits: generated SQL has no default `LIMIT`; a limit appears only when
+  the user explicitly requests a row count. The backend retrieval cap remains
+  independent and configurable.
 - Visualization activation: explicit chart/plot/graph/visualize/map request
   only.
 - Visualization removal: global `ENABLE_DATA_VISUALIZATION` flag, default
@@ -51,6 +55,8 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
   never arbitrary generated Python or custom Plotly code.
 - Chart execution: automatic after strict schema and result-scoped validation;
   there is no chart approval interrupt.
+- Chart outcomes: `chart_created`, `needs_sql_reshape`, or `cannot_create`.
+  The coordinator permits at most one reviewed SQL-reshape recovery cycle.
 - Chart progress: exposes chart type and a bounded subset of mappings while
   omitting the result ID and full tool payload.
 - Output: one chart per request.
@@ -61,8 +67,15 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
   heatmap, and map.
 - Maps: coordinates, US ZIP/city-state centroid markers, US state
   choropleths, and ISO-country choropleths. ZIP polygons are out of scope.
-- Results: capped application artifacts; only a bounded sample enters model
-  context.
+- Results: capped process-local application artifacts. `ResultStore` retains
+  every stored row and an eager immutable full-result profile; the coordinator
+  and both specialists receive at most `head(10)` plus that profile.
+- Result discovery: `list_conversation_results` returns provenance and profile
+  metadata without rows; `inspect_conversation_result` returns the same
+  metadata plus `head(10)`. Agents cannot paginate through additional rows.
+- UI retrieval: Streamlit automatically fetches every API page up to the
+  retrieval cap and uses all stored rows for the table, CSV, and deterministic
+  renderer. Capped results are labeled as truncated.
 - Chart persistence: generated `ChartSpec` and canonical success message are
   stored in the completed turn; Plotly is reconstructed from its saved result,
   with no separate chart store.
@@ -79,12 +92,12 @@ Streamlit
         -> OSI + SQL validation
         -> execute_sql HITL
         -> source-bound SQLBackend
-        -> scoped SavedResult
+        -> scoped SavedResult rows + immutable profile
      -> visualization specialist (explicit request + feature enabled)
-        -> inspect scoped SavedResult
+        -> inspect profile + head(10)
         -> validate strict ChartSpec
-        -> automatic create_chart
-        -> success result returned to coordinator
+        -> automatic create_chart or explicit failure outcome
+        -> terminal result returned to coordinator
   -> provenance-checked FinalAnswer
   -> deterministic Plotly + underlying table/CSV
 ```
@@ -116,8 +129,8 @@ Do not weaken these invariants:
 8. Final charts are validated against that same saved result.
 9. LangGraph checkpoints are isolated per run; conversation history, including
    chart success results, is explicitly reconstructed for the next turn.
-10. Full result rows remain outside model messages except for a configured
-   sample.
+10. Full result rows remain outside model messages except for at most the first
+    10; deterministic tools may validate/render against all stored rows.
 
 The chart renderer is trusted deterministic code. The model supplies only a
 constrained, validated specification—not executable Python. Incompatible chart
@@ -125,8 +138,9 @@ points are not coerced from strings: line/area preserve null gaps; other chart
 types exclude invalid points with visible warnings and fail when none remain.
 
 Readability limits are enforced: pie/donut 12 slices, bar/box 30 categories,
-heatmap 500 cells, and other charts use the existing 500-row result cap. There
-is no silent truncation.
+heatmap 500 cells, and other charts use the configured result cap. A display
+category limit requires explicit meaningful sorting and emits “Displaying X of
+N.” Retrieval-cap truncation is also disclosed.
 
 ## Running locally
 
@@ -152,7 +166,7 @@ Endpoints:
 Last verified on 2026-07-19:
 
 ```text
-72 passed, 1 skipped
+81 passed, 1 skipped
 ```
 
 The skip is the opt-in live OpenAI smoke test. Python compilation also passes.
@@ -199,6 +213,30 @@ timeout/cancellation, and preserve unchanged agent/API/UI contracts.
 - cancellation, retries, rate limits, and concurrency policy;
 - retention, deletion, backup, tenant isolation, and least privilege.
 
+### 4. Deferred visualization and orchestration hardening
+
+Keep the current POC tolerant and simple until real usage justifies these:
+
+- add strict full-column validation/coercion policies with configurable
+  thresholds for mixed values, invalid dates, nulls, infinities, and
+  nonnegative measures;
+- add explicit data-cleaning policies instead of only excluding incompatible
+  points with visible warnings;
+- replace generic DeepAgents `task` assignments with typed SQL and
+  visualization dispatch inputs after the orchestration contract stabilizes;
+- enforce the one-reshape limit in deterministic graph state rather than
+  coordinator instructions;
+- add a separate `density_heatmap` type for automatic two-dimensional numeric
+  binning/counting; keep standard heatmap binning and aggregation in SQL;
+- persist chart-validation diagnostics as structured error codes for richer UI
+  guidance and telemetry;
+- move `ResultStore` and checkpoints to durable, shared storage with retention,
+  expiry, authorization, and multi-worker consistency;
+- add deterministic summary tools for follow-ups that need facts beyond
+  `head(10)` without exposing model-side row pagination;
+- profile source-native types where adapters can supply them, while retaining
+  deterministic value-based fallback and confidence reporting.
+
 ## Known limitations
 
 - API restart clears conversations, runs, checkpoints, and results.
@@ -207,5 +245,7 @@ timeout/cancellation, and preserve unchanged agent/API/UI contracts.
 - No Snowflake adapter exists.
 - Chart generation is deliberately one-chart, declarative, and non-extensible
   at runtime.
+- Mixed-value chart validation is intentionally tolerant for the POC; invalid
+  points can be excluded with visible warnings.
 - ZIP/city maps depend on generic centroid lookup, not boundary geometry.
 - OSI generation remains manual.

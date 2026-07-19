@@ -94,8 +94,33 @@ class AgentAPIClient:
             json={"decisions": [decision]},
         )
 
-    def get_result(self, result_id: str) -> dict[str, Any]:
-        return self.request(
-            "GET",
-            f"/api/results/{result_id}?offset=0&limit=10000",
-        )
+    def get_result(
+        self,
+        result_id: str,
+        *,
+        page_size: int = 1_000,
+    ) -> dict[str, Any]:
+        """Fetch every stored result page up to the backend retrieval cap."""
+
+        bounded_page_size = min(max(page_size, 1), 10_000)
+        offset = 0
+        combined: dict[str, Any] | None = None
+        rows: list[dict[str, Any]] = []
+        while True:
+            page = self.request(
+                "GET",
+                f"/api/results/{result_id}?offset={offset}"
+                f"&limit={bounded_page_size}",
+            )
+            if combined is None:
+                combined = dict(page)
+            page_rows = list(page.get("rows") or [])
+            rows.extend(page_rows)
+            offset += len(page_rows)
+            if not page_rows or offset >= int(page["row_count"]):
+                break
+        assert combined is not None
+        combined["rows"] = rows
+        combined["offset"] = 0
+        combined["limit"] = len(rows)
+        return combined

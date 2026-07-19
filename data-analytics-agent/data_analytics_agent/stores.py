@@ -8,6 +8,7 @@ from threading import RLock
 from typing import Any
 from uuid import uuid4
 
+from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.schemas import (
     ActivityEvent,
     ApprovalRequest,
@@ -42,14 +43,23 @@ class ResultStore:
         rows: list[dict[str, Any]],
         truncated: bool,
         elapsed_ms: float,
+        originating_question: str = "",
     ) -> SavedResult:
+        clean_question = " ".join(originating_question.split())
         result = SavedResult(
             result_id=str(uuid4()),
             thread_id=thread_id,
             source_id=source_id,
             executed_sql=executed_sql,
+            originating_question=clean_question,
+            short_label=(
+                clean_question[:77] + "…"
+                if len(clean_question) > 78
+                else clean_question or "SQL result"
+            ),
             columns=columns,
             rows=rows,
+            profile=profile_result(columns, rows),
             row_count=len(rows),
             truncated=truncated,
             elapsed_ms=elapsed_ms,
@@ -58,6 +68,23 @@ class ResultStore:
         with self._lock:
             self._items[result.result_id] = result
         return result
+
+    def list_for_conversation(
+        self,
+        thread_id: str,
+        *,
+        source_id: str,
+    ) -> list[SavedResult]:
+        """List scoped artifacts in creation order without exposing rows."""
+
+        with self._lock:
+            results = [
+                result
+                for result in self._items.values()
+                if result.thread_id == thread_id
+                and result.source_id == source_id
+            ]
+        return sorted(results, key=lambda result: result.created_at)
 
     def get(
         self,
@@ -103,6 +130,7 @@ class ResultStore:
             executed_sql=result.executed_sql,
             columns=result.columns,
             rows=result.rows[bounded_offset : bounded_offset + bounded_limit],
+            profile=result.profile,
             row_count=result.row_count,
             truncated=result.truncated,
             elapsed_ms=result.elapsed_ms,

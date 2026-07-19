@@ -73,8 +73,9 @@ Show monthly transaction inflows and outflows for 1998. Use transaction date,
 explain how direction is interpreted, and sort chronologically.
 ```
 
-The agent defaults simple rankings and lists to five rows unless the user asks
-for another size. It should state material assumptions rather than silently
+The agent does not add a SQL `LIMIT` unless the user explicitly requests a row
+count. Ranking words such as “top” establish ordering but do not establish a
+hidden count. It should state material assumptions rather than silently
 guessing.
 
 To request a chart, say so explicitly:
@@ -127,9 +128,12 @@ A completed turn can contain:
 - exact executed SQL;
 - sanitized activity history.
 
-The full capped result is stored outside model context. The model receives only
-the configured sample and an opaque result ID. This keeps large data artifacts
-out of the prompt/checkpoint while allowing the UI to retrieve the table.
+The full capped result and its eager immutable column profile are stored outside
+model context. The SQL specialist, coordinator, and visualization specialist
+receive the profile and at most `head(10)` rows. They cannot paginate through
+the remaining rows. Streamlit retrieves every stored page for the table and CSV.
+When the retrieval cap is reached, the UI states that the table, profile, and
+chart describe only the stored prefix of the database result.
 
 ## Generate a chart
 
@@ -144,6 +148,13 @@ Generated specs support bar, line, area,
 scatter, pie/donut, histogram, box, heatmap, and simple maps. Business
 aggregation remains in reviewed SQL; only presentation sorting/category limits,
 histogram bins, and box-plot quartiles happen in the chart layer.
+
+An explicit chart type is a strict constraint. If the saved result has the
+wrong grain or encodings, visualization returns `needs_sql_reshape`; the
+coordinator may make one reviewed SQL recovery attempt. A second incompatibility
+or an impossible request returns `cannot_create` instead of leaving the run
+open. Category limits require an explicit meaningful sort and produce a visible
+“Displaying X of N” warning.
 
 After the visualization result returns to the coordinator, the completed
 assistant turn includes a chart-success message and the exact spec. Streamlit

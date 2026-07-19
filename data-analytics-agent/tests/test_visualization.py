@@ -10,11 +10,13 @@ from data_analytics_agent.agents.visualization.geocoding import GeoPoint
 from data_analytics_agent.agents.visualization.renderer import build_chart
 from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
+    VisualizationOutcome,
     VisualizationResult,
 )
 from data_analytics_agent.agents.visualization.tools import (
     create_chart_result,
     create_create_chart_tool,
+    create_finish_visualization_tool,
 )
 from data_analytics_agent.agents.visualization.validation import (
     presentation_rows,
@@ -26,6 +28,7 @@ from data_analytics_agent.run_manager import (
     _apply_visualization,
     _chart_activity,
 )
+from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.schemas import (
     FinalAnswer,
     SQLAnalysisResult,
@@ -52,8 +55,11 @@ def _saved_result(
         thread_id="thread-1",
         source_id="source-1",
         executed_sql="SELECT category, amount FROM metrics",
+        originating_question="Show metrics",
+        short_label="Show metrics",
         columns=list(data[0]),
         rows=data,
+        profile=profile_result(list(data[0]), data),
         row_count=len(data),
         truncated=False,
         elapsed_ms=1.0,
@@ -111,10 +117,17 @@ def test_chart_validation_enforces_columns_numeric_data_and_limits() -> None:
     )
     with pytest.raises(ValueError, match="at most 30"):
         validate_chart_spec(_bar_spec(), many)
-    validate_chart_spec(_bar_spec(category_limit=30), many)
+    validate_chart_spec(
+        _bar_spec(
+            category_limit=30,
+            sort_by="amount",
+            sort_direction="descending",
+        ),
+        many,
+    )
 
     size_result = _saved_result(
-        rows=[{"category": "A", "amount": 1, "size": -1}]
+        rows=[{"x": 2, "amount": 1, "size": -1}]
     )
     with pytest.raises(ValueError, match="nonnegative"):
         validate_chart_spec(
@@ -122,7 +135,7 @@ def test_chart_validation_enforces_columns_numeric_data_and_limits() -> None:
                 result_id="result-1",
                 chart_type="scatter",
                 title="Invalid size",
-                x="category",
+                x="x",
                 y=["amount"],
                 size="size",
             ),
@@ -151,6 +164,11 @@ def test_presentation_operations_are_reviewed_sort_and_category_limit() -> None:
         {"category": "A", "amount": 3},
         {"category": "B", "amount": 2},
     ]
+    rendered = build_chart(spec, result.rows)
+    assert any(
+        "Displaying 2 of 3 categories" in warning
+        for warning in rendered.warnings
+    )
 
 
 def test_renderer_builds_chart_and_reports_excluded_invalid_values() -> None:
@@ -166,6 +184,42 @@ def test_renderer_builds_chart_and_reports_excluded_invalid_values() -> None:
     assert len(rendered.figure.data) == 1
     assert any("incompatible" in warning for warning in rendered.warnings)
     assert any("missing bar point" in warning for warning in rendered.warnings)
+
+
+def test_heatmap_accepts_two_dimensions_and_one_numeric_value() -> None:
+    result = _saved_result(
+        rows=[
+            {"month_start": "2025-01-01", "genre": "Rock", "sales": 10},
+            {"month_start": "2025-01-01", "genre": "Jazz", "sales": 8},
+            {"month_start": "2025-02-01", "genre": "Rock", "sales": 12},
+            {"month_start": "2025-02-01", "genre": "Jazz", "sales": 9},
+        ]
+    )
+    spec = ChartSpec(
+        result_id=result.result_id,
+        chart_type="heatmap",
+        title="Monthly sales by genre",
+        x="month_start",
+        y=["genre"],
+        value="sales",
+    )
+
+    validate_chart_spec(spec, result)
+    assert build_chart(spec, result.rows).figure.data
+
+
+def test_scatter_rejects_a_categorical_x_role() -> None:
+    result = _saved_result()
+    spec = ChartSpec(
+        result_id=result.result_id,
+        chart_type="scatter",
+        title="Invalid scatter",
+        x="category",
+        y=["amount"],
+    )
+
+    with pytest.raises(ValueError, match="'category' must be numeric"):
+        validate_chart_spec(spec, result)
 
 
 @pytest.mark.parametrize(
@@ -331,6 +385,35 @@ def test_exact_visualization_subagent_result_overrides_coordinator_chart() -> No
     )
 
 
+def test_terminal_visualization_failure_clears_stale_chart() -> None:
+    outcome = VisualizationResult(
+        outcome="cannot_create",
+        result_id="result-1",
+        answer="The requested map requires location columns.",
+    )
+    output = {
+        "messages": [
+            HumanMessage(content="Map it"),
+            ToolMessage(
+                content=outcome.model_dump_json(),
+                tool_call_id="viz-task",
+            ),
+        ]
+    }
+
+    authoritative = _apply_visualization(
+        FinalAnswer(
+            answer="Working.",
+            result_id="result-1",
+            chart=_bar_spec(),
+        ),
+        output,
+    )
+
+    assert authoritative.answer == outcome.answer
+    assert authoritative.chart is None
+
+
 def test_create_chart_returns_success_message_and_exact_spec() -> None:
     spec = _bar_spec()
 
@@ -373,10 +456,47 @@ def test_create_chart_completes_visualization_directly() -> None:
     assert command.update["messages"][0].tool_call_id == "chart-call"
 
 
+def test_visualization_can_finish_with_a_structured_reshape_outcome() -> None:
+    results = ResultStore()
+    saved = results.save(
+        thread_id="thread-1",
+        source_id="source-1",
+        executed_sql="SELECT category, amount FROM metrics",
+        columns=["category", "amount"],
+        rows=[{"category": "A", "amount": 1}],
+        truncated=False,
+        elapsed_ms=1,
+    )
+    tool = create_finish_visualization_tool(
+        results, source_id="source-1"
+    )
+    runtime = SimpleNamespace(
+        state={
+            "thread_id": "thread-1",
+            "run_id": "run-1",
+            "source_id": "source-1",
+        },
+        tool_call_id="finish-call",
+    )
+
+    command = tool.func(
+        saved.result_id,
+        "needs_sql_reshape",
+        "Aggregate duplicate heatmap cells in SQL.",
+        runtime,
+    )
+    outcome = command.update["structured_response"]
+
+    assert outcome.outcome is VisualizationOutcome.NEEDS_SQL_RESHAPE
+    assert outcome.chart is None
+    assert command.update["messages"][0].tool_call_id == "finish-call"
+
+
 def test_chart_progress_shows_safe_partial_arguments() -> None:
     spec = _bar_spec(
         orientation="horizontal",
         category_limit=10,
+        sort_by="amount",
     )
 
     kind, label = _chart_activity(
@@ -392,11 +512,16 @@ def test_chart_progress_shows_safe_partial_arguments() -> None:
 
 def test_chart_request_preserves_coordinator_answer_with_exact_sql_result() -> None:
     approved = _bar_spec()
+    saved = _saved_result()
     sql_result = SQLAnalysisResult(
         answer="The query returned grouped rows.",
         sql="SELECT category, SUM(amount) AS amount FROM metrics GROUP BY 1",
         result_id=approved.result_id,
+        columns=saved.columns,
+        sample_rows=saved.rows,
+        profile=saved.profile,
         row_count=2,
+        truncated=False,
     )
     visualization = VisualizationResult(answer="Approved.", chart=approved)
     output = {

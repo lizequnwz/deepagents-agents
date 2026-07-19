@@ -11,7 +11,8 @@ semantic_model:
         invoice revenue; InvoiceLine.UnitPrice * InvoiceLine.Quantity is the
         canonical line-level revenue. Join only through declared relationships.
         SQLite dates are stored as timestamp-like text. Unless the user asks for
-        more rows, return five rows. Never infer sales from playlist membership.
+        more rows, do not impose a hidden limit. Never infer sales from playlist
+        membership.
       examples:
         - Which five artists generated the most revenue?
         - How many customers are in each country?
