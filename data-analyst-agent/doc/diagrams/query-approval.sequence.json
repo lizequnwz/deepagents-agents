@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Query Execution and Approval Sequence",
+    "subtitle": "One source-bound turn with rejection, revision, reviewed execution, and result provenance",
+    "output": "query-approval.html",
+    "animation": "none",
+    "viewBox": [920, 1000]
+  },
+  "participants": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "User",
+      "sublabel": "business reviewer"
+    },
+    {
+      "id": "ui",
+      "type": "frontend",
+      "label": "Streamlit",
+      "sublabel": "chat + SQL editor"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "FastAPI",
+      "sublabel": "run lifecycle"
+    },
+    {
+      "id": "coordinator",
+      "type": "backend",
+      "label": "Coordinator",
+      "sublabel": "source-bound agent"
+    },
+    {
+      "id": "analyst",
+      "type": "backend",
+      "label": "SQL Analyst",
+      "sublabel": "OSI-grounded"
+    },
+    {
+      "id": "review",
+      "type": "security",
+      "label": "HITL Review",
+      "sublabel": "approve/edit/reject"
+    },
+    {
+      "id": "backend",
+      "type": "database",
+      "label": "SQLBackend",
+      "sublabel": "validated execution"
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "Result Store",
+      "sublabel": "source + thread scoped"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 330,
+      "label": "Intake + planning"
+    },
+    {
+      "from": 342,
+      "to": 520,
+      "label": "Human review loop"
+    },
+    {
+      "from": 532,
+      "to": 742,
+      "label": "Reviewed execution"
+    },
+    {
+      "from": 754,
+      "to": 850,
+      "label": "Answer + presentation"
+    }
+  ],
+  "messages": [
+    {
+      "from": "user",
+      "to": "ui",
+      "y": 180,
+      "label": "ask business question",
+      "variant": "default"
+    },
+    {
+      "from": "ui",
+      "to": "api",
+      "y": 220,
+      "label": "POST source-bound message",
+      "variant": "emphasis"
+    },
+    {
+      "from": "api",
+      "to": "coordinator",
+      "y": 260,
+      "label": "start run with source context",
+      "variant": "emphasis"
+    },
+    {
+      "from": "coordinator",
+      "to": "analyst",
+      "y": 300,
+      "label": "delegate database question",
+      "variant": "emphasis",
+      "note": "The analyst reads the selected OSI model before writing SQL."
+    },
+    {
+      "from": "analyst",
+      "to": "review",
+      "y": 360,
+      "label": "propose validated SQL",
+      "variant": "security"
+    },
+    {
+      "from": "review",
+      "to": "analyst",
+      "y": 405,
+      "label": "reject with feedback",
+      "variant": "return"
+    },
+    {
+      "from": "analyst",
+      "to": "review",
+      "y": 450,
+      "label": "submit revised SQL",
+      "variant": "security"
+    },
+    {
+      "from": "review",
+      "to": "analyst",
+      "y": 495,
+      "label": "approve or edit exact SQL",
+      "variant": "security"
+    },
+    {
+      "from": "analyst",
+      "to": "backend",
+      "y": 555,
+      "label": "execute reviewed SQL",
+      "variant": "emphasis"
+    },
+    {
+      "from": "backend",
+      "to": "analyst",
+      "y": 600,
+      "label": "normalized capped rows",
+      "variant": "return"
+    },
+    {
+      "from": "analyst",
+      "to": "store",
+      "y": 645,
+      "label": "save full capped artifact",
+      "variant": "default"
+    },
+    {
+      "from": "store",
+      "to": "analyst",
+      "y": 685,
+      "label": "result ID + small sample",
+      "variant": "return"
+    },
+    {
+      "from": "analyst",
+      "to": "coordinator",
+      "y": 730,
+      "label": "structured SQL analysis",
+      "variant": "return"
+    },
+    {
+      "from": "coordinator",
+      "to": "api",
+      "y": 775,
+      "label": "provenance-checked answer",
+      "variant": "return"
+    },
+    {
+      "from": "api",
+      "to": "ui",
+      "y": 815,
+      "label": "completed turn + result ID",
+      "variant": "return"
+    },
+    {
+      "from": "ui",
+      "to": "user",
+      "y": 855,
+      "label": "answer, table, SQL, CSV",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "ui",
+      "from": 210,
+      "to": 862,
+      "type": "frontend"
+    },
+    {
+      "participant": "api",
+      "from": 215,
+      "to": 822,
+      "type": "backend"
+    },
+    {
+      "participant": "coordinator",
+      "from": 255,
+      "to": 782,
+      "type": "backend"
+    },
+    {
+      "participant": "analyst",
+      "from": 295,
+      "to": 738,
+      "type": "backend"
+    },
+    {
+      "participant": "review",
+      "from": 350,
+      "to": 505,
+      "type": "security"
+    },
+    {
+      "participant": "backend",
+      "from": 548,
+      "to": 608,
+      "type": "database"
+    },
+    {
+      "participant": "store",
+      "from": 638,
+      "to": 692,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "No hidden execution",
+      "items": [
+        "Structural validation does not submit the query",
+        "The SQL visible in review is the SQL executed",
+        "Edited SQL is validated again before resume"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Rejection is a loop",
+      "items": [
+        "Reject returns feedback to the SQL analyst",
+        "A revised execute_sql call creates another interrupt",
+        "The run completes only after reviewed execution succeeds"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Result provenance",
+      "items": [
+        "Artifacts carry thread ID and source ID",
+        "Only a configured sample enters model context",
+        "The final SQL is recovered from the saved execution"
+      ]
+    }
+  ]
+}

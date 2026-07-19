@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Data-Source Onboarding Workflow",
+    "subtitle": "A source becomes selectable only after registry, backend, OSI, and live-schema checks pass",
+    "output": "data-source-onboarding.html",
+    "animation": "none"
+  },
+  "lanes": [
+    {
+      "id": "developer",
+      "label": "Developer"
+    },
+    {
+      "id": "registry",
+      "label": "Trusted Registry"
+    },
+    {
+      "id": "runtime",
+      "label": "API Readiness"
+    },
+    {
+      "id": "ui",
+      "label": "Streamlit"
+    },
+    {
+      "id": "exceptions",
+      "label": "Unavailable Source",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "author",
+      "label": "Author",
+      "fromCol": 0,
+      "toCol": 2
+    },
+    {
+      "id": "verify",
+      "label": "Resolve + verify",
+      "fromCol": 3,
+      "toCol": 5,
+      "variant": "emphasis"
+    },
+    {
+      "id": "publish",
+      "label": "Expose",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "source_definition",
+      "label": "Source definition",
+      "lane": "developer",
+      "fromCol": 0,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "failure_path",
+      "label": "Actionable diagnostics",
+      "lane": "exceptions",
+      "fromCol": 2,
+      "toCol": 4,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "target",
+    "osi",
+    "entry",
+    "catalog",
+    "resolve",
+    "validate",
+    "selectable"
+  ],
+  "nodes": [
+    {
+      "id": "target",
+      "lane": "developer",
+      "col": 0,
+      "type": "database",
+      "label": "DB target",
+      "sublabel": "local or cloud",
+      "width": 64
+    },
+    {
+      "id": "osi",
+      "lane": "developer",
+      "col": 1,
+      "type": "database",
+      "label": "OSI",
+      "sublabel": "curated model",
+      "width": 52
+    },
+    {
+      "id": "entry",
+      "lane": "developer",
+      "col": 2,
+      "type": "backend",
+      "label": "Registry",
+      "sublabel": "source config",
+      "width": 52
+    },
+    {
+      "id": "catalog",
+      "lane": "registry",
+      "col": 2,
+      "type": "database",
+      "label": "Catalog",
+      "sublabel": "strict YAML"
+    },
+    {
+      "id": "resolve",
+      "lane": "runtime",
+      "col": 3,
+      "type": "backend",
+      "label": "Resolve",
+      "sublabel": "backend + limits",
+      "width": 64
+    },
+    {
+      "id": "validate",
+      "lane": "runtime",
+      "col": 5,
+      "type": "security",
+      "label": "Validate",
+      "sublabel": "target + OSI + schema",
+      "tag": "blocking"
+    },
+    {
+      "id": "selectable",
+      "lane": "ui",
+      "col": 5,
+      "type": "frontend",
+      "label": "Selectable",
+      "sublabel": "new conversation"
+    },
+    {
+      "id": "blocked",
+      "lane": "exceptions",
+      "col": 4,
+      "type": "security",
+      "label": "Blocked",
+      "sublabel": "errors + warnings"
+    },
+    {
+      "id": "repair",
+      "lane": "exceptions",
+      "col": 2,
+      "type": "backend",
+      "label": "Repair",
+      "sublabel": "fix config or model"
+    }
+  ],
+  "edges": [
+    {
+      "from": "target",
+      "to": "osi",
+      "role": "main"
+    },
+    {
+      "from": "osi",
+      "to": "entry",
+      "role": "main"
+    },
+    {
+      "from": "entry",
+      "to": "catalog",
+      "label": "restart API",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "variant": "default",
+      "role": "main",
+      "labelDx": 40
+    },
+    {
+      "from": "catalog",
+      "to": "resolve",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "role": "main"
+    },
+    {
+      "from": "resolve",
+      "to": "validate",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "validate",
+      "to": "selectable",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "role": "main"
+    },
+    {
+      "from": "validate",
+      "to": "blocked",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "right",
+      "route": "outside-right",
+      "role": "error"
+    },
+    {
+      "from": "blocked",
+      "to": "repair",
+      "variant": "dashed",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Trusted configuration",
+      "items": [
+        "Users cannot submit arbitrary database locations or semantic files",
+        "Credentials remain outside data_sources.yaml",
+        "Per-source limits override validated global defaults"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Blocking checks",
+      "items": [
+        "Backend target must be usable",
+        "OSI 0.1.1 structure and relationships must be valid",
+        "Simple table and column references must match live metadata"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Healthy-source isolation",
+      "items": [
+        "One broken source does not disable healthy sources",
+        "Only ready sources appear in the selector",
+        "Diagnostics remain visible for unavailable sources",
+        "After repair, restart the API and repeat readiness checks"
+      ]
+    }
+  ]
+}

@@ -1,478 +1,374 @@
-# Project handoff: Chinook Deep-Agent text-to-SQL POC
+# Project handoff: Data Analytics Agent
 
 Last updated: 2026-07-18
 
 ## Executive summary
 
-The main deliverable is in [`data-analyst-agent/`](data-analyst-agent/). It is a
-localhost proof of concept for conversational analytics over Chinook SQLite:
+The active deliverable is [`data-analyst-agent/`](data-analyst-agent/), a local
+source-aware conversational analytics POC.
 
-- FastAPI owns conversations, runs, approval state, and result artifacts.
-- A Deep Agent coordinator delegates database questions to one isolated
-  `text-to-sql` subagent through the built-in `task` tool.
-- The specialist reads an OSI `0.1.1` semantic model before writing SQL.
-- Every `execute_sql` call pauses for human approval, editing, or rejection.
-- SQL is executed through deterministic read-only safeguards.
-- Streamlit provides a refresh-safe chat and SQL-review interface.
-- A Jupyter notebook explains the implementation step by step.
+It now supports multiple trusted data sources rather than being a
+Chinook-specific agent:
 
-The POC is functional and tested, but deliberately process-local and
-single-user. It is not production-ready without persistence, authentication,
-authorization, and stronger deterministic SQL/schema validation.
+- Chinook music store
+- Financial services
 
-## Requirements and decisions captured during the work
+Each conversation is permanently bound to one registered source. The source
+selects a required OSI `0.1.1` semantic model, SQL dialect, backend target,
+execution limits, description, and starter questions.
 
-The implementation was shaped by these explicit choices:
+A Deep Agent coordinator delegates database questions to an isolated
+text-to-SQL specialist. Every SQL execution pauses for approve/edit/reject
+review. The generic `SQLBackend` contract isolates database-specific
+validation, execution, metadata, deadlines, caps, and native safety controls.
+SQLite is implemented; Snowflake is the prioritized future adapter.
 
-- Database: Chinook SQLite for an easy local POC.
-- Model provider: OpenAI, configured through `.env`.
-- Default model: `gpt-5.4-mini`.
-- Interaction: conversational, non-token-streaming UI.
-- Agent activity: show sanitized status such as context loading, semantic-model
-  inspection, skill loading, planning, schema fallback, SQL checking, approval,
-  and execution.
-- Agent topology: coordinator plus a custom `text-to-sql` subagent invoked by
-  the built-in Deep Agents `task` tool.
-- Semantic grounding: read the OSI file first instead of discovering the
-  database through repeated SQL attempts.
-- SQL review: use LangChain/Deep Agents built-in HITL middleware with
-  approve/edit/reject decisions.
-- Structured output: provider-native strict Pydantic schemas at the executor,
-  specialist, and coordinator boundaries.
-- Result handling: retain up to 500 rows in a thread-scoped application
-  artifact; expose at most 10 sample rows to either model.
-- Answers: include direct answer, exact executed SQL/result ID when applicable,
-  material assumptions, and concise interpretation.
-- Simple list/ranking questions: default to five rows.
-- Persistence: local in-memory state is acceptable for the POC.
-- Conversation routing: retain `thread_id` in the Streamlit URL. This supports
-  refresh, bookmarks, duplicate tabs, and browser history. The ID is routing
-  state, not an authorization secret.
-- New conversation: create a new backend thread and update the URL.
-- UI direction: restrained analyst workspace, native Streamlit components,
-  accessible light/dark themes, minimal motion, and no unnecessary charts or
-  multipage navigation.
-- Local startup: one foreground Bash launcher should start and supervise both
-  FastAPI and Streamlit.
+This is intentionally a local, single-user, process-memory POC. It is not
+production-ready.
 
-## What has been implemented
+## Documentation
 
-### Agent architecture
+Start with:
 
-[`text2sql_agent/agent.py`](data-analyst-agent/text2sql_agent/agent.py)
-constructs:
+- [Project README](data-analyst-agent/README.md)
+- [Developer documentation index](data-analyst-agent/doc/README.md)
+- [Architecture](data-analyst-agent/doc/architecture.md)
+- [Using the agent](data-analyst-agent/doc/using-the-agent.md)
+- [Adding data sources](data-analyst-agent/doc/adding-data-sources.md)
+- [Backend development](data-analyst-agent/doc/backend-development.md)
+- [Safety and HITL](data-analyst-agent/doc/safety-and-hitl.md)
+- [Operations and testing](data-analyst-agent/doc/operations-and-testing.md)
+- [Conceptual Snowflake blueprint](data-analyst-agent/doc/snowflake-blueprint.md)
+- [Executable tutorial](data-analyst-agent/agent_internals_tutorial.ipynb)
 
-- one coordinator named `chinook-data-analyst`;
-- one custom subagent named `text-to-sql`;
-- no default general-purpose subagent;
-- a shared OpenAI chat model;
-- explicit query-writing and schema-exploration skills on the custom subagent;
-- filesystem permissions that allow only `AGENTS.md`, `semantic/**`, and
-  `skills/**`, followed by catch-all deny rules;
-- provider-native `SQLAnalysisResult` and `FinalAnswer` response contracts;
-- `InMemorySaver` checkpointing and `AgentContext(thread_id, run_id)`.
+Canonical Archify diagrams live under
+[`data-analyst-agent/doc/diagrams/`](data-analyst-agent/doc/diagrams/), with
+editable JSON, interactive HTML, and dual-theme SVG assets.
 
-The coordinator has only the safe `get_saved_result` tool. Database work is
-delegated to the specialist.
+## Confirmed design decisions
 
-The specialist has:
+- Product name: **Data Analytics Agent**.
+- Audience: Python and agent developers.
+- Source registry: trusted repository YAML; no arbitrary user uploads.
+- Semantic model: required per source; invalid/missing OSI blocks that source.
+- Conversation: one immutable source; switching source creates a new thread.
+- New conversation: keeps the selected source.
+- URL: stores `thread_id` for refresh/bookmark/history rehydration.
+- Source selector: disabled while a run or SQL review is active.
+- Agent topology: coordinator plus explicit text-to-SQL specialist; no default
+  general-purpose subagent.
+- SQL review: every execution uses built-in HITL approve/edit/reject.
+- Rejection: revision loop, not terminal completion.
+- SQL execution: exactly the reviewed text; no invisible limit rewrite.
+- SQL validation: one read-only SELECT/CTE/set-operation in source dialect.
+- Results: capped application artifacts; bounded sample enters model context.
+- Persistence: process-local is acceptable for the POC.
+- SQLite: local-file proof-of-concept backend.
+- Snowflake: next backend priority; blueprint remains conceptual until a client
+  is chosen.
+- PostgreSQL: not in current scope.
+- Future specialists: leave coordinator extension seams for capabilities such
+  as visualization without coupling them to database clients.
 
-- `sql_db_list_tables`, `sql_db_schema`, and `sql_db_query_checker` as
-  fallbacks;
-- no toolkit direct-query tool;
-- `execute_sql`, protected by approve/edit/reject HITL;
-- `get_saved_result` for prior artifacts;
-- explicit instructions to use OSI physical `source` and field-expression names
-  rather than semantic dataset/field identifiers.
+## Current architecture
 
-### OSI semantic layer
+![Data Analytics Agent architecture](data-analyst-agent/doc/diagrams/system-architecture.svg)
 
-[`semantic/chinook.osi.yaml`](data-analyst-agent/semantic/chinook.osi.yaml)
-uses OSI version `0.1.1` and covers all 11 Chinook tables:
+The primary runtime path is:
 
-- Artist
-- Album
-- Employee
-- Customer
-- Genre
-- Invoice
-- MediaType
-- Track
-- InvoiceLine
-- Playlist
-- PlaylistTrack
+```text
+Streamlit
+  -> FastAPI source-bound conversation/run
+  -> Data Analytics Agent coordinator
+  -> text-to-SQL specialist
+  -> selected OSI model
+  -> structural SQL validation
+  -> human review interrupt
+  -> source-bound SQLBackend
+  -> normalized result artifact
+  -> provenance-checked final answer
+```
 
-It includes fields, primary keys, relationships, synonyms, AI instructions, and
-canonical metrics:
+### Source binding
 
-- total revenue;
-- line revenue;
-- units sold;
-- invoice count;
-- customer count;
-- track count.
+Source isolation is enforced by:
 
-### Skills and context
+- conversation and run stores;
+- source-specific backend/agent resolution;
+- runtime `AgentContext`;
+- `execute_sql` source check;
+- source/thread-scoped model result access;
+- final-answer provenance validation;
+- Streamlit conversation switching.
 
-- [`AGENTS.md`](data-analyst-agent/AGENTS.md) contains stable operating policy.
-- [`skills/query-writing/SKILL.md`](data-analyst-agent/skills/query-writing/SKILL.md)
-  contains SQL-writing guidance.
-- [`skills/schema-exploration/SKILL.md`](data-analyst-agent/skills/schema-exploration/SKILL.md)
-  contains fallback schema-exploration guidance.
+Do not reduce source binding to a UI-only control.
 
-Custom Deep Agents subagents do not inherit coordinator skills automatically,
-so both skills are assigned explicitly.
+### Service construction
 
-### SQL safety
+[`Services`](data-analyst-agent/text2sql_agent/api.py) owns:
 
-[`text2sql_agent/sql_tools.py`](data-analyst-agent/text2sql_agent/sql_tools.py)
-implements defense in depth:
+- settings and registry catalog;
+- source summaries/readiness;
+- backend cache per source;
+- agent graph cache per source;
+- process-local stores;
+- shared `RunManager`.
 
-1. SQLGlot parses the SQLite dialect.
-2. Exactly one `exp.Query` is allowed.
-3. DDL, DML, transactions, commands, `PRAGMA`, `ATTACH`, and similar operations
-   are rejected.
-4. SQLite is opened with URI `mode=ro`.
-5. An SQLite authorizer denies mutation and administrative opcodes.
-6. A progress handler enforces the configured deadline.
-7. The executor fetches at most 501 rows, returns/stores 500, and reports an
-   accurate truncation flag.
-8. The exact reviewed SQL is executed without an invisible `LIMIT` rewrite.
+Registry/readiness caches require an API restart after configuration, OSI, or
+target changes.
 
-### Result artifacts and structured output
+## Implemented source system
 
-[`text2sql_agent/schemas.py`](data-analyst-agent/text2sql_agent/schemas.py)
-defines strict schemas including:
+[`data_sources.yaml`](data-analyst-agent/data_sources.yaml) defines:
 
-- `QueryResult`
-- `SQLAnalysisResult`
-- `FinalAnswer`
-- `SavedResult`
-- `ResultPage`
-- run, conversation, activity, approval, and API request/response models.
+- backend profiles;
+- default source;
+- source name and description;
+- backend reference and trusted target;
+- semantic model;
+- dialect;
+- starter questions;
+- optional limit overrides.
 
-[`text2sql_agent/stores.py`](data-analyst-agent/text2sql_agent/stores.py)
-provides thread-safe process-local stores for:
+[`data_sources.py`](data-analyst-agent/text2sql_agent/data_sources.py) uses
+strict Pydantic models, forbids unknown keys, resolves OSI paths under
+`semantic/`, and merges validated limits.
 
-- conversations;
-- runs and activity events;
-- full capped SQL result artifacts.
+[`semantic.py`](data-analyst-agent/text2sql_agent/semantic.py) checks:
 
-Models receive a result ID and at most 10 sample rows. The UI can retrieve the
-complete capped result through pagination.
+- OSI file, version, and structure;
+- datasets, fields, primary keys, and relationships;
+- selected dialect or `ANSI_SQL` expressions;
+- live table existence;
+- simple physical column existence;
+- metrics warning.
 
-### HITL and run lifecycle
+One unavailable source does not disable healthy sources. Streamlit lists ready
+sources and separately displays diagnostics for unavailable ones.
 
-[`text2sql_agent/run_manager.py`](data-analyst-agent/text2sql_agent/run_manager.py)
-implements:
+## Implemented semantic models
 
-- run states `queued`, `running`, `approval_required`, `completed`, and
-  `failed`;
-- internal Deep Agents `astream_events(version="v3")` consumption without
-  streaming model tokens to Streamlit;
-- sanitized activity labels;
-- approval extraction without exposing raw middleware tool payloads;
-- LangGraph resume commands shaped as
-  `Command(resume={"decisions": [...]})`;
-- edited-SQL validation before resume;
-- repeated rejection/replanning/approval cycles;
-- same-thread checkpoint resume.
+### Chinook
 
-### FastAPI
+[`chinook.osi.yaml`](data-analyst-agent/semantic/chinook.osi.yaml) covers all 11
+physical tables, relationships, physical fields, business descriptions, and
+canonical revenue/count metrics.
 
-[`text2sql_agent/api.py`](data-analyst-agent/text2sql_agent/api.py) exposes:
+### Financial
 
-- `GET /health`
-- `POST /api/conversations`
-- `GET /api/conversations/{thread_id}`
-- `POST /api/conversations/{thread_id}/messages`
-- `GET /api/runs/{run_id}?after_event_id=...`
-- `POST /api/runs/{run_id}/decisions`
-- `GET /api/results/{result_id}?offset=...&limit=...`
+[`financial.osi.yaml`](data-analyst-agent/semantic/financial.osi.yaml) covers:
 
-Agent work runs as FastAPI background tasks. Concurrent runs on the same
-conversation return `409`.
+- account;
+- card;
+- client;
+- disposition;
+- district;
+- loan;
+- standing order;
+- transaction.
 
-### Streamlit UI
+It includes relationships, status/direction/date context, and canonical count,
+volume, cash-flow, and loan metrics. It deliberately does not invent an
+undocumented currency.
 
-The entry point is
-[`streamlit_app.py`](data-analyst-agent/streamlit_app.py). Supporting modules
-are:
+## Implemented backend boundary
 
-- [`text2sql_agent/ui/api_client.py`](data-analyst-agent/text2sql_agent/ui/api_client.py)
-- [`text2sql_agent/ui/components.py`](data-analyst-agent/text2sql_agent/ui/components.py)
-- [`.streamlit/config.toml`](data-analyst-agent/.streamlit/config.toml)
+[`SQLBackend`](data-analyst-agent/text2sql_agent/backends/base.py) requires:
 
-Implemented UX:
+- `readiness_errors`;
+- `validate_sql`;
+- `execute`;
+- `list_tables`;
+- `get_table_schema`.
 
-- URL-backed conversation rehydration;
-- short conversation identifier and copyable full link in technical details;
-- new-conversation action;
-- API readiness indicator;
-- example prompts for empty conversations;
-- pending user message shown while the agent works;
-- live sanitized activity status;
-- focused SQL review card;
-- primary approve action;
-- edited-SQL action enabled only after a change;
-- progressively disclosed reject/replan feedback;
-- assumptions and interpretation;
-- complete capped result table;
-- CSV download;
-- collapsed exact executed SQL;
-- collapsed “How this was produced” activity timeline;
-- responsive layout with no horizontal page overflow at the tested 375px
-  viewport;
-- native Streamlit light/dark theme configuration.
+Execution normalizes to columns, row dictionaries, truncation, and elapsed
+time. Common decimal/date/time/bytes values are converted to stable
+JSON-compatible values.
 
-### Startup script
+[`SQLiteBackend`](data-analyst-agent/text2sql_agent/backends/sqlite.py) owns:
 
-[`scripts/start.sh`](data-analyst-agent/scripts/start.sh):
+- read-only URI connection;
+- SQLite mutation/administrative authorizer;
+- monotonic progress deadline;
+- capped fetch;
+- SQLite catalog and PRAGMA introspection;
+- connection cleanup.
 
-- checks for `uv`, `curl`, `.env`, API key, database, and semantic model;
-- runs `uv sync --locked`;
-- refuses to overwrite occupied ports;
-- starts FastAPI;
-- waits for `/health`;
-- starts Streamlit;
-- waits for Streamlit health;
-- reports both URLs;
-- supervises both processes;
-- stops both on Ctrl+C or child-process failure.
+The LangChain SQL toolkit, `langchain-community`, and SQLAlchemy are no longer
+dependencies.
 
-### Tutorial notebook
+## Agent and HITL behavior
 
-[`agent_internals_tutorial.ipynb`](data-analyst-agent/agent_internals_tutorial.ipynb)
-is an executable student lab covering:
+[`agent.py`](data-analyst-agent/text2sql_agent/agent.py) builds one source-bound
+coordinator graph with:
 
-- architecture;
-- OSI grounding;
-- prompts, memory, and skills;
-- structured schemas;
-- SQL safety;
-- result artifacts;
-- real agent construction;
-- HITL interruption/resume;
-- sanitized activity;
-- API lifecycle;
-- guided exercises.
+- source-specific coordinator and specialist prompts;
+- explicit OSI virtual path and dialect;
+- explicit query-writing/schema-exploration skills;
+- filesystem deny-by-default permissions;
+- structured specialist and coordinator outputs;
+- source-specific in-memory checkpointer.
 
-Live OpenAI calls are disabled by default through `RUN_LIVE_AGENT = False`.
+[`run_manager.py`](data-analyst-agent/text2sql_agent/run_manager.py) implements:
 
-## How to run the project
+- `queued`, `running`, `approval_required`, `completed`, and `failed`;
+- sanitized non-token-streaming activity;
+- approval extraction;
+- approve/edit/reject resume translation;
+- edited-SQL validation;
+- repeated rejection/reapproval cycles;
+- final result/SQL provenance checks;
+- conversation completion/failure ownership.
 
-From the project directory:
+[`sql_tools.py`](data-analyst-agent/text2sql_agent/sql_tools.py):
+
+- exposes generic list/schema/validate/execute tools;
+- checks runtime source on execution;
+- passes source limits to the backend;
+- stores complete capped results;
+- returns only the configured sample to the model;
+- restricts model result paging to current source/thread.
+
+## Streamlit behavior
+
+[`streamlit_app.py`](data-analyst-agent/streamlit_app.py) and
+[`ui/components.py`](data-analyst-agent/text2sql_agent/ui/components.py)
+provide:
+
+- ready-source selector;
+- source descriptions, backend/dialect badges, warnings, and errors;
+- automatic new conversation on source switch;
+- selector lock during active run/review;
+- new conversation with current source;
+- URL rehydration;
+- source-specific starter questions and chat placeholder;
+- sanitized progress;
+- exact editable SQL review;
+- approve/edit/reject and repeated revision UI;
+- result table, CSV, assumptions, interpretation, SQL, and activity.
+
+## Running locally
+
+From `data-analyst-agent/`:
 
 ```bash
-cd data-analyst-agent
 cp .env.example .env
-# Add OPENAI_API_KEY to .env.
+# Set OPENAI_API_KEY.
 ./scripts/start.sh
 ```
 
-Open:
+Endpoints:
 
 - Streamlit: `http://127.0.0.1:8501`
 - FastAPI health: `http://127.0.0.1:8000/health`
+- FastAPI docs: `http://127.0.0.1:8000/docs`
 
-Press Ctrl+C in the launcher terminal to stop both services.
+The launcher uses `uv sync --locked`, validates settings and source readiness,
+checks ports, starts both services, waits for health, and supervises shutdown.
 
-The local `chinook.db` currently exists and is gitignored. The local `.env`
-also exists and must never be committed or copied into logs/documentation.
+## Verification status
 
-At handoff time, ports 8000 and 8501 were not listening; start the services
-before browser testing.
+Last verified on 2026-07-18:
 
-## How to test
+```text
+47 passed, 1 skipped
+```
 
-Run the normal suite:
+The skip is the opt-in live OpenAI smoke test.
+
+Also verified:
+
+- Python compilation;
+- both sources ready with zero errors/warnings;
+- tutorial notebook executes end to end with live calls disabled;
+- Archify JSON and generated HTML validation;
+- dual-theme SVG rendering;
+- Streamlit source switching;
+- old URL source restoration;
+- new conversation retaining Financial;
+- no Streamlit runtime error during that flow;
+- `git diff --check`.
+
+Re-run all verification before relying on this count:
 
 ```bash
 cd data-analyst-agent
-uv run pytest -q
+uv run pytest
 ```
 
-Current verified result on 2026-07-18:
+## Prioritized next work
 
-```text
-29 passed, 1 skipped
-```
+### 1. Snowflake adapter
 
-The skipped test is the opt-in live OpenAI smoke test:
+This is the primary feature milestone.
 
-```bash
-RUN_LIVE_SMOKE=1 uv run pytest -m live
-```
+Use the [conceptual blueprint](data-analyst-agent/doc/snowflake-blueprint.md).
+The intended work is:
 
-The notebook was also executed end-to-end with live model calls disabled.
+1. choose/inject the Snowflake client or connection provider;
+2. implement `SQLBackend` responsibilities;
+3. evolve construction into an injected backend-provider registry;
+4. keep credentials outside registry/OSI;
+5. bind target database/schema context per source;
+6. use a read-only Snowflake role and provider-native timeout/cancellation;
+7. add fake adapter contract tests;
+8. add opt-in live smoke coverage;
+9. prove two Snowflake semantic sources can reuse one profile safely;
+10. preserve unchanged agent/API/UI contracts.
 
-The Streamlit flow was manually verified in the in-app browser:
+Do not implement against one globally mutable connection that changes
+database/schema/role across concurrent sources.
 
-1. Create a conversation.
-2. Submit an example analytical question.
-3. Observe sanitized progress.
-4. Reach SQL approval.
-5. Edit the generated SQL.
-6. Execute the edited SQL.
-7. Inspect answer, assumptions, interpretation, table, timing, and CSV action.
-8. Refresh and recover the same conversation from the URL.
-9. Start a new conversation and confirm the URL/thread changes.
-10. Check desktop and 375px layouts.
+### 2. Additional specialist agents
 
-## Known limitations and risks
+The coordinator may later route to specialists such as visualization.
 
-### Deliberate POC limitations
+Before implementing one:
 
-- All conversations, checkpoints, runs, events, and results are process-local.
-- Restarting FastAPI invalidates old conversation URLs. Streamlit detects the
-  resulting `404` and creates a new conversation.
-- There is no authentication, user identity, tenancy, or authorization.
-- The result endpoint is unscoped at HTTP level; an opaque result ID is not a
-  security boundary.
-- There is no recent-conversation index.
-- There are no charts or multipage navigation.
-- FastAPI background tasks and in-memory state are unsuitable for horizontal
-  scaling.
-- The model/result cap is 500 rows; this is not intended for bulk export.
+- define a narrow task description;
+- define strict input/output or artifact contracts;
+- scope saved-result access by thread/source;
+- keep credentials and cursors out of specialist context;
+- assign skills and filesystem permissions explicitly;
+- place HITL at real side effects;
+- keep coordinator ownership of the final answer;
+- test routing, repeated use, failure, and provenance.
 
-### SQL correctness risk
+A visualization specialist should consume a saved result ID and create a chart
+specification/artifact rather than execute SQL directly.
 
-During live testing, the model once generated SQL using OSI logical names such
-as `invoice_lines` instead of physical Chinook names such as `InvoiceLine`.
-The prompt was strengthened to make the distinction explicit, but prompt
-guidance is not a deterministic guarantee.
+### 3. Concise production hardening
 
-The current `sql_db_query_checker` is model-based and may not detect every
-missing physical table/column before HITL. The human can edit SQL, and execution
-will fail safely, but the review experience can still be improved.
+Before production:
 
-### Dependency and warning cleanup
+- authentication and source/result authorization;
+- durable stores and LangGraph checkpoints;
+- managed secrets and connection lifecycle;
+- audit trail for review decisions and executed SQL;
+- redacted logging/metrics/tracing;
+- cancellation, retries, rate limits, and concurrency policy;
+- tenant isolation and least-privilege database/network access;
+- retention, deletion, backup, and recovery.
 
-The normal tests currently show:
+## Known limitations and cautions
 
-- a `langchain-community` deprecation warning; the SQL toolkit should eventually
-  migrate to maintained standalone integrations or local deterministic tools;
-- a Starlette/FastAPI TestClient deprecation warning related to the HTTPX test
-  integration.
+- State disappears on API restart.
+- Result HTTP access is unscoped for the local single-user POC.
+- Registry and readiness changes require restart.
+- No Snowflake dependency or adapter exists.
+- No visualization specialist exists.
+- OSI generation is manual.
+- Readiness verifies simple identifiers, not arbitrary expression semantics.
+- SQL parser/HITL do not replace database permissions.
+- Live model behavior is nondeterministic; deterministic tests use fakes.
+- Local `.env` and database data must never be copied into docs or logs.
 
-Live runs also produced experimental LangGraph v3-streaming warnings and a
-Pydantic serialization warning involving `AgentContext` during resume. These
-did not break the verified workflow but should be investigated before a
-production iteration.
+## Maintenance rule
 
-### Configuration caveat
+When a stable contract changes, update in the same change:
 
-`.env.example` currently enables `LANGSMITH_TRACING=true` while also containing
-a placeholder LangSmith key. For a smoother first-run experience, consider
-making tracing opt-in by default.
-
-## Recommended next steps
-
-### Priority 0: correctness and security before broader use
-
-1. Add a deterministic pre-HITL SQL validation tool that:
-   - validates SQLGlot syntax and read-only semantics;
-   - runs `EXPLAIN QUERY PLAN` on a read-only SQLite connection;
-   - reports missing physical tables/columns before presenting SQL to the user.
-2. Require the specialist to call that validator before `execute_sql`.
-3. Add authentication and tenant-aware authorization if the app will be used by
-   more than one trusted local user.
-4. Scope result retrieval to the authenticated user/conversation at the API
-   boundary.
-
-### Priority 1: durable application state
-
-1. Replace `InMemorySaver` with a durable LangGraph checkpointer.
-2. Replace process-local conversation/run/result stores with a database or
-   object/artifact store.
-3. Persist conversation metadata separately from graph checkpoints.
-4. Define retention and deletion behavior for SQL results.
-5. Add restart/recovery integration tests.
-
-### Priority 2: evaluation and observability
-
-1. Build a Chinook evaluation set containing:
-   - natural-language question;
-   - expected tables/joins;
-   - expected SQL properties;
-   - expected result;
-   - expected assumptions.
-2. Track SQL validity, execution success, semantic accuracy, number of replans,
-   and human edit rate.
-3. Make LangSmith tracing explicitly opt-in and confirm prompts/results are
-   handled according to data policy.
-4. Resolve or consciously pin around the current dependency warnings.
-5. Add structured application logging with run/thread correlation IDs, while
-   keeping secrets, prompts, and result rows out of normal logs.
-
-### Priority 3: UX and operational polish
-
-1. Replace the blocking Streamlit polling loop with `st.fragment` auto-refresh
-   or another bounded polling mechanism if responsiveness becomes an issue.
-2. Add Streamlit `AppTest` coverage for empty state, approval controls,
-   change-aware edit behavior, new conversation, and expired-thread recovery.
-3. Add a recent-conversation list only after durable persistence exists.
-4. Add optional charts only after the answer/result contract includes validated
-   visualization intent and a table remains available as the accessible
-   alternative.
-5. Consider a production process supervisor/container setup instead of the
-   local foreground Bash launcher.
-
-## Key learnings
-
-1. **A semantic model reduces exploration but does not replace validation.**
-   OSI provides stable meaning, joins, metrics, and synonyms; a deterministic
-   live-schema check is still needed to catch drift and logical/physical naming
-   mistakes.
-2. **Logical and physical names must be unambiguous.** Agent prompts should
-   explicitly state that OSI dataset/field names are conceptual and
-   `source`/expression values are executable identifiers.
-3. **Custom subagents need explicit capabilities.** Deep Agents custom
-   subagents do not automatically inherit coordinator skills.
-4. **HITL requires stable checkpoint identity.** Interrupt and resume must use
-   the same checkpointer and `thread_id`, with decisions translated into the
-   exact LangGraph resume shape.
-5. **Human review complements deterministic safeguards.** Prompts and approval
-   are not security boundaries; SQL parsing, read-only mode, authorizers,
-   timeouts, and row caps remain essential.
-6. **Large results should be artifacts, not conversation context.** Keeping up
-   to 500 rows outside the checkpoint while sharing only 10 sample rows limits
-   token use and still supports full UI inspection.
-7. **Structured output turns agent behavior into an application interface.**
-   Strict schemas make API/UI code predictable and keep assumptions and
-   interpretation separate from raw data.
-8. **Observability must be intentionally sanitized.** Raw middleware
-   descriptions can expose tool arguments. Convert them to stable,
-   user-oriented activity labels at the API boundary.
-9. **URL-backed conversation IDs are appropriate routing state for this POC.**
-   They provide refresh and deep-link recovery, but must never be treated as
-   authorization tokens.
-10. **Real browser testing finds issues unit tests miss.** It exposed raw tool
-    payload text, logical-name SQL, action-state behavior, refresh handling, and
-    responsive-layout concerns.
-11. **Native Streamlit patterns age better than broad CSS overrides.** Theme
-    configuration, bordered containers, status blocks, pills, Material icons,
-    and horizontal containers produced a cleaner and more maintainable UI.
-12. **A foreground launcher is the right level of local orchestration.** It
-    keeps logs visible, fails early on configuration/port problems, and gives
-    one Ctrl+C cleanup path without introducing production infrastructure.
-
-## Primary references
-
-The implementation and documentation were informed by:
-
-- [LangChain Deep Agents documentation](https://docs.langchain.com/oss/python/deepagents/overview)
-- [Deep Agents subagents](https://docs.langchain.com/oss/python/deepagents/subagents)
-- [Deep Agents event streaming](https://docs.langchain.com/oss/python/deepagents/event-streaming)
-- [LangChain human-in-the-loop middleware](https://docs.langchain.com/oss/python/langchain/human-in-the-loop)
-- [LangChain structured output](https://docs.langchain.com/oss/python/langchain/structured-output)
-- [Datawhale Deep Agents in Action](https://datawhalechina.github.io/deepagents-in-action/)
-- [Apache Ossie/OSI core specification](https://github.com/apache/ossie/blob/main/core-spec/spec.md)
-- the repository-local `.codex/skills/langchain-dev-guide`;
-- the installed Streamlit version-matched development guidance;
-- UI/UX Pro Max accessibility, layout, and interaction guidance.
-
-For detailed user-facing setup and architecture documentation, continue with
-[`data-analyst-agent/README.md`](data-analyst-agent/README.md). For a teaching
-walkthrough, use
-[`data-analyst-agent/agent_internals_tutorial.ipynb`](data-analyst-agent/agent_internals_tutorial.ipynb).
+1. implementation and focused tests;
+2. root project README if user-facing;
+3. relevant `doc/` guide;
+4. affected Archify diagram JSON, HTML, and SVG;
+5. this handoff when current state or prioritized work changes.
