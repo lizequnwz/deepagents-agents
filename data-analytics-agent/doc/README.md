@@ -49,7 +49,7 @@ specialist and constrained chart contract.
 | [Backend development](backend-development.md) | Implementing or testing another `SQLBackend` |
 | [Safety and HITL](safety-and-hitl.md) | Changing SQL validation, approval, execution, result access, or trust boundaries |
 | [Operations and testing](operations-and-testing.md) | Configuration, startup, readiness, tests, notebook execution, and troubleshooting |
-| [Snowflake blueprint](snowflake-blueprint.md) | Planning the future Snowflake adapter at a conceptual level |
+| [Snowflake backend](snowflake-blueprint.md) | Configuring and understanding the optional `snowlib` adapter |
 
 ## Canonical diagrams
 

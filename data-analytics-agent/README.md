@@ -47,7 +47,7 @@ model.
 - At most `head(10)` rows visible to the coordinator and specialists
 - No generated SQL limit unless the user explicitly requests one
 - Streamlit result tables, CSV downloads, warnings, and source diagnostics
-- Clear extension seams for Snowflake and future specialist agents
+- Optional Snowflake adapter over an injected `snowlib` client
 
 ## Quick start
 
@@ -135,11 +135,12 @@ the source to the registry, restart FastAPI, and verify readiness. See
 - `get_table_schema`
 
 Provider-specific connections, metadata, timeouts, row caps, and native safety
-controls stay behind this contract. The current adapter is SQLite; Snowflake is
-a conceptual future adapter, not an installed dependency.
+controls stay behind this contract. SQLite is built in. Snowflake is available
+through an optional thin adapter over the separately provided `snowlib` client;
+SQLite-only installations do not import or initialize `snowlib`.
 
 See [Backend development](doc/backend-development.md) and the
-[conceptual Snowflake blueprint](doc/snowflake-blueprint.md).
+[Snowflake backend guide](doc/snowflake-blueprint.md).
 
 ## Safety
 
@@ -194,7 +195,8 @@ This remains a local, single-user POC:
 - conversations, runs, checkpoints, and results are process-local;
 - the result HTTP endpoint is not a production authorization boundary;
 - there is no authentication or durable persistence;
-- Snowflake is not implemented;
+- Snowflake requires the external `snowlib` package, its environment/config,
+  and a least-privilege default role/database/schema context;
 - visualization is intentionally limited to one validated chart over one saved
   result, without arbitrary Python or custom Plotly layout code;
 - semantic models are curated manually;

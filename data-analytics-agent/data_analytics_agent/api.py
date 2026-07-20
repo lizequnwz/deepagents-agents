@@ -42,6 +42,18 @@ from data_analytics_agent.stores import (
 )
 
 
+def _create_snowflake_client() -> Any:
+    """Create the optional snowlib client at the application boundary."""
+
+    try:
+        from snowlib import SnowflakeManager
+    except ImportError as exc:
+        raise RuntimeError(
+            "Snowflake sources require the optional snowlib package."
+        ) from exc
+    return SnowflakeManager().get_client()
+
+
 @dataclass
 class Services:
     settings: Settings = field(default_factory=Settings)
@@ -50,6 +62,7 @@ class Services:
     results: ResultStore = field(default_factory=ResultStore)
     agent: Any | None = None
     catalog: DataSourceCatalog | None = None
+    snowflake_client: Any | None = None
     _manager: RunManager | None = None
     _backends: dict[str, SQLBackend] = field(default_factory=dict)
     _agents: dict[str, Any] = field(default_factory=dict)
@@ -72,9 +85,16 @@ class Services:
         with self._lock:
             backend = self._backends.get(source_id)
             if backend is None:
+                source = self.source(source_id)
+                if (
+                    source.backend_type == "snowflake"
+                    and self.snowflake_client is None
+                ):
+                    self.snowflake_client = _create_snowflake_client()
                 backend = create_backend(
-                    self.source(source_id),
+                    source,
                     self.settings.project_root,
+                    snowflake_client=self.snowflake_client,
                 )
                 self._backends[source_id] = backend
             return backend

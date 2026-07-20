@@ -5,11 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 
 from data_analytics_agent.backends.base import SQLBackend
+from data_analytics_agent.backends.snowflake import (
+    SnowflakeBackend,
+    SnowflakeClient,
+)
 from data_analytics_agent.backends.sqlite import SQLiteBackend
 from data_analytics_agent.data_sources import DataSource
 
 
-def create_backend(source: DataSource, project_root: Path) -> SQLBackend:
+def create_backend(
+    source: DataSource,
+    project_root: Path,
+    *,
+    snowflake_client: SnowflakeClient | None = None,
+) -> SQLBackend:
     """Create one source-bound backend using a registered backend type."""
 
     if source.backend_type == "sqlite":
@@ -25,6 +34,18 @@ def create_backend(source: DataSource, project_root: Path) -> SQLBackend:
             else project_root / configured
         )
         backend = SQLiteBackend(database_path)
+    elif source.backend_type == "snowflake":
+        if source.target:
+            raise ValueError(
+                f"Snowflake source {source.source_id!r} must use the default "
+                "snowlib context and declare an empty target."
+            )
+        if snowflake_client is None:
+            raise ValueError(
+                f"Snowflake source {source.source_id!r} requires a snowlib "
+                "client."
+            )
+        backend = SnowflakeBackend(snowflake_client)
     else:
         raise ValueError(
             f"Unsupported backend type {source.backend_type!r} for source "

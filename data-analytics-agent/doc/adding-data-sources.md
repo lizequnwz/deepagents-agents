@@ -191,12 +191,13 @@ curation remain necessary.
 ## Cloud sources
 
 A cloud source uses the same semantic/source contract but a different backend
-profile. Credentials remain outside the registry. The target may carry trusted
-database/schema context, while several sources reuse one backend profile.
+profile. Credentials remain outside the registry. The current Snowflake
+adapter uses the single default `snowlib` context and requires `target: {}`;
+other cloud adapters may define different trusted target fields.
 
 Do not add a cloud source entry until its backend adapter exists. An unsupported
-backend is intentionally unavailable. See the conceptual
-[Snowflake blueprint](snowflake-blueprint.md).
+backend is intentionally unavailable. See the
+[Snowflake backend guide](snowflake-blueprint.md).
 
 ## Invariants
 
@@ -216,7 +217,8 @@ backend is intentionally unavailable. See the conceptual
 - Assuming CSV dictionary files are loaded by the agent.
 - Forgetting to restart the API after configuration changes.
 - Adding `model_sample_rows` larger than 10 or `max_result_rows`.
-- Declaring `snowflake` before implementing the adapter.
+- Declaring `snowflake` without the external `snowlib` package and its default
+  least-privilege context.
 
 ## Verification checklist
 

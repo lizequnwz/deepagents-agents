@@ -95,8 +95,9 @@ a new interrupt. Rejection is a loop, not a terminal run state.
 - capped `fetchmany(max_rows + 1)`;
 - connection cleanup in `finally`.
 
-A future cloud adapter must use an actual read-only database role and
-provider-native timeout/cancellation. Application parsing does not replace
+[`SnowflakeBackend`](../data_analytics_agent/backends/snowflake.py) additionally
+uses the configured least-privilege Snowflake role, forwards provider-native
+timeouts, and caps cursor fetching. Application parsing does not replace
 warehouse authorization.
 
 ## Automatic chart lifecycle

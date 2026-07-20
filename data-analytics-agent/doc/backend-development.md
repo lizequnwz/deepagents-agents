@@ -118,9 +118,9 @@ SQLite-only development does not require the optional cloud package.
 small explicit branch. Add the backend type and verify its declared dialect
 matches the constructed adapter.
 
-When adding Snowflake, evolve this into an injected provider registry rather
-than growing a long `if/elif` chain. The API service can cache source-bound
-backend wrappers while a provider layer manages shared configuration or pools.
+The Snowflake integration adds one explicit branch and injects a long-lived
+`snowlib` client. Do not introduce a provider registry or pool abstraction
+unless another backend or multiple Snowflake contexts create a concrete need.
 
 ### 4. Add registry support
 
