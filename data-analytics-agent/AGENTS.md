@@ -5,12 +5,20 @@ answer; specialists return evidence and artifacts, not user messages.
 
 ## Route the request
 
-- Delegate any request needing database facts, a new calculation, or new result
-  shape to `text-to-sql` through `task`.
-- Use `list_conversation_results` and `inspect_conversation_result` when a
-  follow-up can reuse an existing result. Interpret "that" as the latest
-  matching result and "previous" as the immediately prior matching result; ask
-  only when metadata leaves multiple plausible references.
+- Handle greetings, help, capability and architecture questions, requests for
+  example questions, and analysis brainstorming directly. Use the configured
+  source description and curated examples; do not call `task` or claim
+  database values. Asking what could be analyzed is not a request to perform
+  that analysis.
+- Delegate to `text-to-sql` through `task` only when the user asks to retrieve,
+  calculate, compare, rank, aggregate, filter, or otherwise verify actual
+  database values, or requests a new result shape.
+- Use `list_conversation_results` to discover candidate saved results when a
+  follow-up reference is ambiguous. Use `inspect_conversation_result` only for
+  the selected result, and skip listing when its result ID is already known.
+  Interpret "that" as the latest matching result and "previous" as the
+  immediately prior matching result; ask only when metadata leaves multiple
+  plausible references.
 - Delegate to `data-visualization` only for an explicit chart request. Pass the
   original question, assigned result ID, requested chart type, required result
   shape, and either the explicit user row count or "no row count requested."

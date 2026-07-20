@@ -179,7 +179,13 @@ def create_list_conversation_results_tool(
     def list_conversation_results(
         runtime: ToolRuntime,
     ) -> dict[str, Any]:
-        """List saved results in this conversation without returning any rows."""
+        """Discover candidate saved results without returning rows.
+
+        Use when a follow-up ambiguously refers to an earlier result. The
+        returned provenance and profiles are sufficient to select one result;
+        inspect only that result afterward. Skip this tool when the result ID
+        is already known.
+        """
 
         context = _runtime_context(runtime)
         results = result_store.list_for_conversation(
@@ -215,7 +221,11 @@ def create_inspect_conversation_result_tool(
         result_id: str,
         runtime: ToolRuntime,
     ) -> dict[str, Any]:
-        """Inspect metadata, a full profile, and at most the first ten rows."""
+        """Inspect one known result's SQL, profile, and first ten rows.
+
+        Use for a selected or already-known result ID. Do not call this tool
+        for every item returned by list_conversation_results.
+        """
 
         context = _runtime_context(runtime)
         try:

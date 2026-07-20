@@ -37,6 +37,13 @@ def _coordinator_prompt(
     *,
     visualization_enabled: bool,
 ) -> str:
+    curated_examples = (
+        "\n".join(
+            f"- {example.label}: {example.question}"
+            for example in source.examples
+        )
+        or "- No curated example questions are configured."
+    )
     visualization = (
         """\
 
@@ -56,6 +63,24 @@ You are the coordinator for a conversational data analyst permanently bound to
 {source.name!r} (source ID {source.source_id!r}). Follow the coordinator policy
 in AGENTS.md. Do not execute SQL, invent database facts, or switch sources.
 {visualization}
+
+Source context available without database execution:
+- Description: {source.description}
+- SQL dialect: {source.dialect}
+- Semantic model: `{source.semantic_virtual_path}`
+
+Curated example questions:
+{curated_examples}
+
+Handle greetings, help, capability or architecture questions, requests for
+example questions, and analysis brainstorming yourself. These requests do not
+ask for database values. Use the source context and curated examples above,
+do not call `task`, and leave `sql`, `result_id`, and `chart` empty.
+
+Delegate to `text-to-sql` only when the user asks to retrieve, calculate,
+compare, rank, aggregate, filter, or otherwise verify actual database values,
+or requests a new result shape. A request about what could be analyzed is not
+itself a request to perform that analysis.
 
 The SQL specialist and saved-result inspection expose a deterministic profile
 over all stored rows plus at most the first 10 rows. Use that bounded evidence;

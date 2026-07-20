@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from data_analytics_agent.agents.text_to_sql.agent import _sql_subagent_prompt
@@ -13,6 +15,7 @@ from data_analytics_agent.coordinator import (
     _coordinator_prompt,
     _final_answer_response_format,
 )
+from data_analytics_agent.data_sources import ExampleQuestion
 from data_analytics_agent.stores import ResultStore
 
 
@@ -108,6 +111,53 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
     assert "`create_chart` and `finish_visualization` are terminal" in (
         visualization_prompt.lower()
     )
+
+
+def test_coordinator_owns_help_and_question_brainstorming(
+    test_settings: Settings,
+) -> None:
+    source = replace(
+        test_settings.load_catalog().get("test"),
+        examples=(
+            ExampleQuestion(
+                label="Challenging comparison",
+                question="Which segments changed the most over time?",
+            ),
+        ),
+    )
+
+    prompt = _coordinator_prompt(source, visualization_enabled=True)
+    normalized = " ".join(prompt.split())
+
+    assert source.description in prompt
+    assert source.semantic_virtual_path in prompt
+    assert f"SQL dialect: {source.dialect}" in prompt
+    assert "Challenging comparison" in prompt
+    assert "Which segments changed the most over time?" in prompt
+    assert (
+        "Handle greetings, help, capability or architecture questions"
+        in normalized
+    )
+    assert "requests for example questions" in normalized
+    assert "do not call `task`" in normalized
+    assert (
+        "A request about what could be analyzed is not itself a request"
+        in normalized
+    )
+    assert (
+        "Delegate to `text-to-sql` only when the user asks to retrieve"
+        in normalized
+    )
+
+
+def test_coordinator_handles_sources_without_curated_examples(
+    test_settings: Settings,
+) -> None:
+    source = test_settings.load_catalog().get("test")
+
+    prompt = _coordinator_prompt(source, visualization_enabled=False)
+
+    assert "No curated example questions are configured." in prompt
 
 
 def test_visualization_subagent_reuses_the_configured_model(
