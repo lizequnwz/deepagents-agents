@@ -49,6 +49,7 @@ def build_visualization_subagent(
     result_store: ResultStore,
     model: Any,
     permissions: list[Any],
+    middleware: list[Any] | None = None,
 ) -> dict[str, Any]:
     """Build the optional constrained visualization specialist."""
 
@@ -87,4 +88,5 @@ def build_visualization_subagent(
         "model": model,
         "skills": ["/project/skills/data-visualization/"],
         "permissions": permissions,
+        "middleware": middleware or [],
     }

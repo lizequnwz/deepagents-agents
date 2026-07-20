@@ -23,7 +23,7 @@ Application defaults:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `OPENAI_MODEL` | `gpt-5.4-nano` | Agent model |
+| `OPENAI_MODEL` | `gpt-5.4-mini` | Agent model |
 | `DATA_SOURCES_CONFIG` | `data_sources.yaml` | Trusted registry path |
 | `API_BASE_URL` | `http://127.0.0.1:8000` | Streamlit API target |
 | `APP_BASE_URL` | `http://127.0.0.1:8501` | Conversation-link base |
@@ -31,6 +31,27 @@ Application defaults:
 | `SQL_MAX_RESULT_ROWS` | `500` | Global stored-result cap |
 | `MODEL_SAMPLE_ROWS` | `10` | Rows exposed to models |
 | `ENABLE_DATA_VISUALIZATION` | `true` | Plug the chart specialist into each source graph |
+
+Execution budgets use positive integer settings and cannot be disabled at
+runtime:
+
+| Agent | Model calls | All tool calls | Tool-specific calls |
+| --- | ---: | ---: | ---: |
+| Coordinator | `COORDINATOR_MODEL_CALL_LIMIT=12` | `COORDINATOR_TOOL_CALL_LIMIT=12` | `COORDINATOR_TASK_CALL_LIMIT=4` |
+| Text-to-SQL | `SQL_AGENT_MODEL_CALL_LIMIT=24` | `SQL_AGENT_TOOL_CALL_LIMIT=30` | `SQL_EXECUTE_CALL_LIMIT=3` |
+| Visualization | `VISUALIZATION_AGENT_MODEL_CALL_LIMIT=12` | `VISUALIZATION_AGENT_TOOL_CALL_LIMIT=16` | — |
+
+Each new user message starts a fresh budget. The same budget continues across
+approve, edit, and reject resumptions for that run. Exceeding a limit fails the
+run with `execution_budget_exceeded` rather than relying on a very high graph
+recursion limit.
+
+Failed runs always expose safe diagnostics: agent, budget type, limit,
+attempted count, run ID, and the specific tool when applicable. Set
+`AGENT_DEBUG_DETAILS=true` only for local debugging to include a rolling window
+of the last five tool payloads. Debug payloads are secret-redacted and bounded,
+but can still contain SQL, questions, and business data; do not enable them in
+an untrusted or shared environment.
 
 `PGEOCODE_DATA_DIR` may optionally set the cache directory for the US postal
 dataset used by ZIP and city/state maps. `pgeocode` downloads that generic
@@ -117,6 +138,8 @@ The normal suite covers:
 - caps, timeout, and normalization;
 - source/thread result isolation;
 - approval, edit, rejection, and repeated interrupts;
+- per-agent execution budgets, all-or-nothing parallel tool limits, and budget
+  continuity across review resumptions;
 - same-thread resume;
 - exact SQL provenance;
 - API rehydration and concurrent-run rejection;
@@ -204,6 +227,7 @@ Documentation maintenance checks:
 | Conversation URL returns new thread | API process memory was reset | Expected POC behavior; use durable stores in production |
 | Run stays in review | Human decision required | Approve, edit, or reject in Streamlit/API |
 | Run fails after edit | Edited SQL violated dialect/safety or provider failed | Inspect sanitized error and submit valid read-only SQL |
+| Run fails with `execution_budget_exceeded` | An agent exhausted its model or tool-call allowance | Use the diagnostics expander, then start a narrower or clearer request |
 | Chart review repeats | Spec was rejected or failed validation | Review feedback, columns, and chart-ready SQL shape |
 | ZIP/city map download fails | First-use `pgeocode` cache is unavailable | Restore network for initial cache or prepopulate `PGEOCODE_DATA_DIR` |
 | Live smoke skipped | Opt-in flag absent | Expected in normal suite |

@@ -165,6 +165,7 @@ class Services:
                     conversations=self.conversations,
                     runs=self.runs,
                     results=self.results,
+                    debug_details=self.settings.agent_debug_details,
                 )
             return self._manager
 

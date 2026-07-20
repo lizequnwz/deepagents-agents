@@ -28,6 +28,9 @@ from data_analytics_agent.agents.text_to_sql.tools import (
 from data_analytics_agent.backends import SQLBackend
 from data_analytics_agent.config import Settings
 from data_analytics_agent.data_sources import DataSource
+from data_analytics_agent.execution_budget import (
+    execution_budget_middleware,
+)
 from data_analytics_agent.schemas import FinalAnswer
 from data_analytics_agent.stores import ResultStore
 
@@ -184,6 +187,13 @@ def build_agent(
             result_store=result_store,
             model=chat_model,
             permissions=permissions,
+            middleware=execution_budget_middleware(
+                model_calls=settings.sql_agent_model_call_limit,
+                tool_calls=settings.sql_agent_tool_call_limit,
+                specific_tool_calls={
+                    "execute_sql": settings.sql_execute_call_limit,
+                },
+            ),
         )
     ]
     if settings.enable_data_visualization:
@@ -197,6 +207,14 @@ def build_agent(
                 result_store=result_store,
                 model=chat_model,
                 permissions=permissions,
+                middleware=execution_budget_middleware(
+                    model_calls=(
+                        settings.visualization_agent_model_call_limit
+                    ),
+                    tool_calls=(
+                        settings.visualization_agent_tool_call_limit
+                    ),
+                ),
             )
         )
 
@@ -212,6 +230,13 @@ def build_agent(
         subagents=subagents,
         backend=_project_backend(settings.project_root),
         permissions=permissions,
+        middleware=execution_budget_middleware(
+            model_calls=settings.coordinator_model_call_limit,
+            tool_calls=settings.coordinator_tool_call_limit,
+            specific_tool_calls={
+                "task": settings.coordinator_task_call_limit,
+            },
+        ),
         response_format=_final_answer_response_format(),
         state_schema=AnalyticsAgentState,
         checkpointer=checkpointer or InMemorySaver(),

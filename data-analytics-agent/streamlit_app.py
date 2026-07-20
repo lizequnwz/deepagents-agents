@@ -38,6 +38,7 @@ st.set_page_config(
 def initialize_session_state() -> None:
     st.session_state.setdefault("active_run_id", None)
     st.session_state.setdefault("last_run_error", None)
+    st.session_state.setdefault("last_run_diagnostics", None)
     st.session_state.setdefault("conversation_notice", None)
     st.session_state.setdefault("review_notice", None)
     st.session_state.setdefault("source_selector", None)
@@ -61,6 +62,7 @@ def clear_conversation_state() -> None:
             del st.session_state[key]
     st.session_state["active_run_id"] = None
     st.session_state["last_run_error"] = None
+    st.session_state["last_run_diagnostics"] = None
     st.session_state["review_notice"] = None
 
 
@@ -134,6 +136,25 @@ def clear_completed_run(run_id: str) -> None:
     st.session_state.pop(f"event_labels_{run_id}", None)
     st.session_state.pop(f"review_feedback_{run_id}", None)
     st.session_state.pop(f"review_phase_{run_id}", None)
+
+
+def render_execution_diagnostics(diagnostics: dict[str, Any]) -> None:
+    """Render bounded diagnostics for an execution-budget failure."""
+
+    with st.expander("Execution diagnostics", expanded=False):
+        safe_details = {
+            key: value
+            for key, value in diagnostics.items()
+            if key != "recent_tool_calls"
+        }
+        st.json(safe_details)
+        recent = diagnostics.get("recent_tool_calls") or []
+        if recent:
+            st.warning(
+                "Debug details may contain sensitive business data. "
+                "Credentials and recognized secrets are redacted."
+            )
+            st.json(recent)
 
 
 def poll_run(
@@ -320,6 +341,10 @@ if st.session_state.get("last_run_error"):
         st.session_state["last_run_error"],
         icon=":material/error:",
     )
+    if st.session_state.get("last_run_diagnostics"):
+        render_execution_diagnostics(
+            st.session_state["last_run_diagnostics"]
+        )
 
 if active_run_id:
     st.session_state["active_run_id"] = active_run_id
@@ -381,6 +406,9 @@ if active_run_id:
         st.session_state["last_run_error"] = (
             active_run.get("error") or "The agent run failed."
         )
+        st.session_state["last_run_diagnostics"] = active_run.get(
+            "diagnostics"
+        )
         clear_completed_run(active_run_id)
         st.rerun()
     elif active_run and active_run["status"] == "completed":
@@ -400,6 +428,7 @@ if not active_run_id:
     if question:
         try:
             st.session_state["last_run_error"] = None
+            st.session_state["last_run_diagnostics"] = None
             run = client.send_message(thread_id, question)
             st.session_state["active_run_id"] = run["run_id"]
             st.rerun()

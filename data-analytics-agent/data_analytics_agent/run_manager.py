@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections import deque
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import asdict, is_dataclass
+import json
 import re
 from typing import Any
 
+from langchain.agents.middleware.model_call_limit import (
+    ModelCallLimitExceededError,
+)
+from langchain.agents.middleware.tool_call_limit import (
+    ToolCallLimitExceededError,
+)
 from langgraph.types import Command
+from pydantic import BaseModel
 
 from data_analytics_agent.agents.text_to_sql.tools import (
     validate_readonly_sql,
@@ -27,9 +37,11 @@ from data_analytics_agent.schemas import (
     ApprovalRequest,
     ChatTurn,
     Decision,
+    ExecutionBudgetDiagnostics,
     FinalAnswer,
     RunStatus,
     SQLAnalysisResult,
+    ToolCallDiagnostic,
 )
 from data_analytics_agent.stores import (
     ConversationStore,
@@ -39,6 +51,205 @@ from data_analytics_agent.stores import (
 )
 
 RESHAPE_ACTIVITY_LABEL = "Chart data needs SQL reshaping"
+BUDGET_ERROR_MESSAGE = (
+    "This analysis exceeded its execution budget and was stopped before "
+    "completion. Start a new request with narrower or clearer instructions."
+)
+DEBUG_VALUE_CHAR_LIMIT = 4_000
+DEBUG_TOTAL_CHAR_LIMIT = 25_000
+_SECRET_KEYS = {
+    "api_key",
+    "apikey",
+    "authorization",
+    "connection_string",
+    "cookie",
+    "credentials",
+    "password",
+    "private_key",
+    "refresh_token",
+    "secret",
+    "token",
+    "access_token",
+}
+
+
+def _is_secret_key(value: Any) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", "_", str(value).lower()).strip("_")
+    return normalized in _SECRET_KEYS or normalized.endswith("_api_key")
+
+
+def _sanitize_debug_value(value: Any, *, depth: int = 0) -> Any:
+    """Convert a tool payload to bounded, JSON-safe, secret-redacted data."""
+
+    if depth >= 8:
+        return "[maximum depth reached]"
+    if isinstance(value, BaseModel):
+        value = value.model_dump(mode="json")
+    elif is_dataclass(value) and not isinstance(value, type):
+        value = asdict(value)
+    if isinstance(value, Mapping):
+        sanitized: dict[str, Any] = {}
+        items = list(value.items())
+        for key, item in items[:50]:
+            key_text = str(key)
+            sanitized[key_text] = (
+                "[REDACTED]"
+                if _is_secret_key(key_text)
+                else _sanitize_debug_value(item, depth=depth + 1)
+            )
+        if len(items) > 50:
+            sanitized["__truncated_items__"] = len(items) - 50
+        return sanitized
+    if isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    ):
+        items = list(value)
+        sanitized_items = [
+            _sanitize_debug_value(item, depth=depth + 1)
+            for item in items[:50]
+        ]
+        if len(items) > 50:
+            sanitized_items.append(
+                f"[{len(items) - 50} additional items truncated]"
+            )
+        return sanitized_items
+    if isinstance(value, bytes | bytearray):
+        return f"[{type(value).__name__} containing {len(value)} bytes]"
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    return str(value)
+
+
+def _serialize_debug_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    serialized = json.dumps(
+        _sanitize_debug_value(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    if len(serialized) <= DEBUG_VALUE_CHAR_LIMIT:
+        return serialized
+    omitted = len(serialized) - DEBUG_VALUE_CHAR_LIMIT
+    suffix = f"… [{omitted} characters truncated]"
+    return serialized[: DEBUG_VALUE_CHAR_LIMIT - len(suffix)] + suffix
+
+
+def _agent_name(graph_name: str) -> str | None:
+    normalized = graph_name.casefold()
+    if "text-to-sql" in normalized:
+        return "text-to-sql"
+    if "data-visualization" in normalized:
+        return "data-visualization"
+    if "data-analytics-agent" in normalized:
+        return "coordinator"
+    return None
+
+
+def _record_tool_event(
+    events: deque[dict[str, Any]],
+    data: dict[str, Any],
+    *,
+    agent: str,
+) -> None:
+    event_type = data.get("event")
+    tool_call_id = str(data.get("tool_call_id") or "")
+    if event_type == "tool-started":
+        events.append(
+            {
+                "tool_call_id": tool_call_id,
+                "agent": agent,
+                "tool_name": str(data.get("tool_name") or "unknown"),
+                "input": data.get("input"),
+                "output": None,
+                "error": None,
+            }
+        )
+        return
+    if event_type not in {"tool-finished", "tool-error"}:
+        return
+    matching = next(
+        (
+            item
+            for item in reversed(events)
+            if tool_call_id and item["tool_call_id"] == tool_call_id
+        ),
+        None,
+    )
+    if matching is None:
+        matching = {
+            "tool_call_id": tool_call_id,
+            "agent": agent,
+            "tool_name": str(data.get("tool_name") or "unknown"),
+            "input": None,
+            "output": None,
+            "error": None,
+        }
+        events.append(matching)
+    if event_type == "tool-finished":
+        matching["output"] = data.get("output")
+    else:
+        matching["error"] = str(data.get("message") or "Tool call failed.")
+
+
+def _debug_tool_calls(
+    events: deque[dict[str, Any]],
+    *,
+    agent: str,
+) -> list[ToolCallDiagnostic]:
+    matching = [item for item in events if item["agent"] == agent]
+    if not matching:
+        matching = list(events)
+    selected: list[ToolCallDiagnostic] = []
+    total_chars = 0
+    for item in reversed(matching):
+        diagnostic = ToolCallDiagnostic(
+            tool_name=item["tool_name"],
+            input=_serialize_debug_value(item.get("input")),
+            output=_serialize_debug_value(item.get("output")),
+            error=_serialize_debug_value(item.get("error")),
+        )
+        size = len(diagnostic.model_dump_json(exclude_none=True))
+        if total_chars + size > DEBUG_TOTAL_CHAR_LIMIT:
+            break
+        selected.append(diagnostic)
+        total_chars += size
+    return list(reversed(selected))
+
+
+def _budget_diagnostics(
+    exc: ModelCallLimitExceededError | ToolCallLimitExceededError,
+    *,
+    run_id: str,
+    agent: str,
+    events: deque[dict[str, Any]],
+    include_debug_details: bool,
+) -> ExecutionBudgetDiagnostics:
+    if isinstance(exc, ModelCallLimitExceededError):
+        budget_type = "model_calls"
+        tool_name = None
+        attempted_count = exc.thread_count + 1
+        limit = exc.thread_limit or exc.run_limit
+    else:
+        budget_type = "tool_calls"
+        tool_name = exc.tool_name
+        attempted_count = exc.thread_count
+        limit = exc.thread_limit or exc.run_limit
+    assert limit is not None
+    return ExecutionBudgetDiagnostics(
+        agent=agent,
+        budget_type=budget_type,
+        limit=limit,
+        attempted_count=attempted_count,
+        run_id=run_id,
+        tool_name=tool_name,
+        recent_tool_calls=(
+            _debug_tool_calls(events, agent=agent)
+            if include_debug_details
+            else []
+        ),
+    )
 
 
 def _single_decision(
@@ -346,6 +557,7 @@ class RunManager:
         conversations: ConversationStore,
         runs: RunStore,
         results: ResultStore,
+        debug_details: bool = False,
     ) -> None:
         if agent is None and agent_resolver is None:
             raise ValueError("An agent or agent_resolver is required.")
@@ -355,6 +567,8 @@ class RunManager:
         self.conversations = conversations
         self.runs = runs
         self.results = results
+        self.debug_details = debug_details
+        self._diagnostic_events: dict[str, deque[dict[str, Any]]] = {}
 
     def _validate_answer_provenance(
         self,
@@ -458,6 +672,10 @@ class RunManager:
             else self.agent
         )
         self.runs.set_status(run_id, RunStatus.RUNNING)
+        diagnostic_events = self._diagnostic_events.setdefault(
+            run_id, deque(maxlen=5)
+        )
+        active_agents = ["coordinator"]
         if not snapshot.events:
             self.runs.add_event(
                 run_id, "interpretation", "Interpreting the request"
@@ -481,17 +699,32 @@ class RunManager:
                 method = event.get("method")
                 params = event.get("params") or {}
                 data = params.get("data") or {}
-                if method == "tools" and data.get("event") == "tool-started":
-                    activity = _activity_for_tool(
-                        str(data.get("tool_name") or ""),
-                        data.get("input"),
+                if method == "tools":
+                    _record_tool_event(
+                        diagnostic_events,
+                        data,
+                        agent=active_agents[-1],
                     )
-                    if activity and activity[1] not in seen_labels:
-                        seen_labels.add(activity[1])
-                        self.runs.add_event(run_id, *activity)
+                    if data.get("event") == "tool-started":
+                        activity = _activity_for_tool(
+                            str(data.get("tool_name") or ""),
+                            data.get("input"),
+                        )
+                        if activity and activity[1] not in seen_labels:
+                            seen_labels.add(activity[1])
+                            self.runs.add_event(run_id, *activity)
                 elif method == "lifecycle":
                     graph_name = str(data.get("graph_name") or "")
                     lifecycle = data.get("event")
+                    lifecycle_agent = _agent_name(graph_name)
+                    if lifecycle == "started" and lifecycle_agent:
+                        if active_agents[-1] != lifecycle_agent:
+                            active_agents.append(lifecycle_agent)
+                    elif lifecycle == "completed" and lifecycle_agent:
+                        for index in range(len(active_agents) - 1, 0, -1):
+                            if active_agents[index] == lifecycle_agent:
+                                del active_agents[index]
+                                break
                     if "text-to-sql" in graph_name and lifecycle == "started":
                         label = "Text-to-SQL analyst started"
                         if label not in seen_labels:
@@ -563,6 +796,7 @@ class RunManager:
             )
             self.runs.add_event(run_id, "answer", "Preparing the final answer")
             self.runs.complete(run_id, answer)
+            self._diagnostic_events.pop(run_id, None)
             completed = self.runs.get(run_id)
             self.conversations.complete_run(
                 thread_id,
@@ -573,7 +807,29 @@ class RunManager:
                     activities=completed.events,
                 ),
             )
+        except (
+            ModelCallLimitExceededError,
+            ToolCallLimitExceededError,
+        ) as exc:
+            diagnostics = _budget_diagnostics(
+                exc,
+                run_id=run_id,
+                agent=active_agents[-1],
+                events=diagnostic_events,
+                include_debug_details=self.debug_details,
+            )
+            self._diagnostic_events.pop(run_id, None)
+            self.runs.add_event(
+                run_id, "error", "Execution budget exceeded"
+            )
+            self.runs.fail(
+                run_id,
+                BUDGET_ERROR_MESSAGE,
+                diagnostics=diagnostics,
+            )
+            self.conversations.fail_run(thread_id, run_id)
         except Exception as exc:
+            self._diagnostic_events.pop(run_id, None)
             message = str(exc) or exc.__class__.__name__
             self.runs.add_event(run_id, "error", "The run failed")
             self.runs.fail(run_id, message)

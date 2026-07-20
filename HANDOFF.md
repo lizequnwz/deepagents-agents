@@ -1,6 +1,6 @@
 # Project handoff: Data Analytics Agent
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## Executive summary
 
@@ -43,6 +43,10 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
 - Default general-purpose subagent: disabled.
 - Model: existing configured model reused by both specialists.
 - Source isolation: immutable per conversation and enforced below the UI.
+- Execution budgets: strict per-run model and tool-call limits on the
+  coordinator and both specialists; SQL review resumptions retain their
+  counters. Budget failure returns safe typed diagnostics, with bounded
+  secret-redacted tool payloads available only in opt-in debug mode.
 - SQL: one reviewed read-only query; exact edited SQL executes.
 - SQL limits: generated SQL has no default `LIMIT`; a limit appears only when
   the user explicitly requests a row count. The backend retrieval cap remains
@@ -92,12 +96,15 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
 Streamlit
   -> FastAPI source-bound conversation/run
   -> data-analytics coordinator
+     -> per-run model/tool/task budgets
      -> text-to-SQL specialist
+        -> per-run model/tool/execute_sql budgets
         -> OSI + SQL validation
         -> execute_sql HITL
         -> source-bound SQLBackend
         -> scoped SavedResult rows + immutable profile
      -> visualization specialist (explicit request + feature enabled)
+        -> per-run model/tool budgets
         -> inspect profile + head(10)
         -> validate strict ChartSpec
         -> automatic create_chart or explicit failure outcome
@@ -135,6 +142,8 @@ Do not weaken these invariants:
    chart success results, is explicitly reconstructed for the next turn.
 10. Full result rows remain outside model messages except for at most the first
     10; deterministic tools may validate/render against all stored rows.
+11. Agent execution budgets reset for a new run and persist across every
+    approve/edit/reject resume of that run.
 
 The chart renderer is trusted deterministic code. The model supplies only a
 constrained, validated specification—not executable Python. Incompatible chart
@@ -167,10 +176,10 @@ Endpoints:
 
 ## Verification status
 
-Last verified on 2026-07-19:
+Last verified on 2026-07-20:
 
 ```text
-81 passed, 1 skipped
+95 passed, 1 skipped
 ```
 
 The skip is the opt-in live OpenAI smoke test. Python compilation also passes.

@@ -27,7 +27,7 @@ sufficient by itself.
 | Chart validation | Strict schema, known columns/types, readability limits, immutable result ID |
 | Backend validation | Adapter validates again immediately before execution |
 | Native database control | SQLite read-only URI, authorizer, and progress deadline |
-| Limits | Timeout, capped fetch, bounded model sample |
+| Limits | Per-run agent execution budgets, timeout, capped fetch, bounded model sample |
 | Provenance | Results and answers are scoped to source and conversation |
 
 ## Structural validation is not execution
@@ -58,6 +58,17 @@ interrupts the action before the tool body runs.
 3. waits in `approval_required`;
 4. translates exactly one decision to LangGraph `Command(resume=...)`;
 5. resumes the same checkpoint thread.
+
+Model and tool-call counters are checkpointed with that run. Approving,
+editing, or rejecting does not reset them. A proposed `execute_sql` call counts
+before review, including rejected or invalid attempts, and the fourth proposal
+is stopped before another approval is displayed. A new user message receives a
+new budget.
+
+If a budget is exhausted, the run fails with a safe public message and typed
+diagnostics. Optional debug diagnostics retain only the last five bounded,
+secret-redacted tool payloads. Those payloads can still contain SQL and
+business data, so debug mode is intended only for trusted local operation.
 
 ### Approve
 
@@ -177,6 +188,7 @@ When modifying validation, approval, execution, or result access:
 - Trusting SQL or result ID from final model output.
 - Returning the entire result through model context.
 - Logging raw prompts, query payloads, rows, or credentials as progress.
+- Enabling debug tool payloads in a shared or untrusted environment.
 - Assuming an opaque result ID is an authorization boundary.
 - Adding a new specialist that can read artifacts without source/thread scope.
 

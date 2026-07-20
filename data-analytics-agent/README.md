@@ -152,6 +152,8 @@ See [Backend development](doc/backend-development.md) and the
 - Edited SQL is validated again.
 - The backend executes the exact reviewed SQL.
 - SQLite uses read-only mode, an authorizer, deadline, and capped fetch.
+- Per-agent model and tool-call budgets stop runaway loops and continue across
+  SQL review resumptions.
 - Results carry both source and conversation provenance.
 - Only the full-result profile and at most the first 10 rows enter model
   context.

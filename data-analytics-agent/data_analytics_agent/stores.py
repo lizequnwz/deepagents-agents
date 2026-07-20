@@ -15,6 +15,7 @@ from data_analytics_agent.schemas import (
     ChatTurn,
     ConversationResponse,
     FinalAnswer,
+    ExecutionBudgetDiagnostics,
     ResultPage,
     RunResponse,
     RunStatus,
@@ -225,6 +226,7 @@ class _Run:
     approval: ApprovalRequest | None = None
     answer: FinalAnswer | None = None
     error: str | None = None
+    diagnostics: ExecutionBudgetDiagnostics | None = None
 
 
 class RunStore:
@@ -264,6 +266,7 @@ class RunStore:
                 approval=item.approval,
                 answer=item.answer,
                 error=item.error,
+                diagnostics=item.diagnostics,
             )
 
     def set_status(self, run_id: str, status: RunStatus) -> None:
@@ -323,9 +326,16 @@ class RunStore:
             item.answer = answer
             item.approval = None
 
-    def fail(self, run_id: str, error: str) -> None:
+    def fail(
+        self,
+        run_id: str,
+        error: str,
+        *,
+        diagnostics: ExecutionBudgetDiagnostics | None = None,
+    ) -> None:
         with self._lock:
             item = self._get_mutable(run_id)
             item.status = RunStatus.FAILED
             item.error = error
+            item.diagnostics = diagnostics
             item.approval = None

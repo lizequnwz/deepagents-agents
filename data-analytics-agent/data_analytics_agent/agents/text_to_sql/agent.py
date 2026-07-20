@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain.agents.structured_output import ToolStrategy
 
 from data_analytics_agent.agents.text_to_sql.tools import (
@@ -62,10 +63,18 @@ def build_text_to_sql_subagent(
     result_store: ResultStore,
     model: Any,
     permissions: list[Any],
+    middleware: list[Any] | None = None,
 ) -> dict[str, Any]:
     """Build the source-bound, human-reviewed SQL specialist."""
 
     execute_sql = create_execute_sql_tool(source, backend, result_store)
+    review_middleware = HumanInTheLoopMiddleware(
+        interrupt_on={
+            "execute_sql": {
+                "allowed_decisions": ["approve", "edit", "reject"]
+            }
+        }
+    )
     fallback_tools = [
         create_list_tables_tool(backend),
         create_get_table_schema_tool(backend),
@@ -84,11 +93,9 @@ def build_text_to_sql_subagent(
         "model": model,
         "skills": ["/project/skills/text-to-sql/"],
         "permissions": permissions,
-        "interrupt_on": {
-            "execute_sql": {
-                "allowed_decisions": ["approve", "edit", "reject"]
-            }
-        },
+        # after_model hooks run in reverse registration order. Keep HITL first
+        # so execution-budget checks run before an approval is presented.
+        "middleware": [review_middleware, *(middleware or [])],
         "response_format": ToolStrategy(
             SQLAnalysisResult,
             handle_errors=SQL_OUTPUT_RETRY_MESSAGE,

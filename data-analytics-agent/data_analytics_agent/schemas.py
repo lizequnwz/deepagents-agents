@@ -149,6 +149,28 @@ class RunStatus(StrEnum):
     FAILED = "failed"
 
 
+class ToolCallDiagnostic(StrictModel):
+    tool_name: str
+    input: str | None = None
+    output: str | None = None
+    error: str | None = None
+
+
+class ExecutionBudgetDiagnostics(StrictModel):
+    code: Literal["execution_budget_exceeded"] = (
+        "execution_budget_exceeded"
+    )
+    agent: str
+    budget_type: Literal["model_calls", "tool_calls"]
+    limit: int = Field(ge=1)
+    attempted_count: int = Field(ge=1)
+    run_id: str
+    tool_name: str | None = None
+    recent_tool_calls: list[ToolCallDiagnostic] = Field(
+        default_factory=list
+    )
+
+
 class ActivityEvent(StrictModel):
     id: int
     kind: str
@@ -214,6 +236,7 @@ class RunResponse(StrictModel):
     approval: ApprovalRequest | None = None
     answer: FinalAnswer | None = None
     error: str | None = None
+    diagnostics: ExecutionBudgetDiagnostics | None = None
 
 
 class Decision(StrictModel):

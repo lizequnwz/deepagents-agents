@@ -19,6 +19,7 @@ dependencies = [
     "pandas>=2.2.0",
     "plotly>=6.3.0",
     "pgeocode>=0.5.0",
+    "langchain-community>=0.4.2",
 ]
 
 [dependency-groups]

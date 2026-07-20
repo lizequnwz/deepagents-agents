@@ -525,3 +525,21 @@ def render_approval(
                     "feedback": feedback.strip(),
                 }
     return None
+
+"""
+WITH artist_revenue AS (
+  SELECT
+    ar.name AS artist_name,
+    SUM(il.unit_price * il.quantity) AS total_revenue
+  FROM InvoiceLine il
+  JOIN Track t ON t.track_id = il.track_id
+  JOIN Album al ON al.album_id = t.album_id
+  JOIN Artist ar ON ar.artist_id = al.artist_id
+  GROUP BY ar.name
+)
+SELECT
+  artist_name,
+  total_revenue
+FROM artist_revenue
+ORDER BY total_revenue DESC, artist_name ASC;
+"""

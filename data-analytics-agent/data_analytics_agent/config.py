@@ -36,13 +36,24 @@ def _env_bool(name: str, default: bool) -> bool:
     raise ValueError(f"{name} must be true or false.")
 
 
+def _env_positive_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    try:
+        value = default if raw is None else int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive integer.") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer.")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     """Runtime settings loaded from environment variables."""
 
     project_root: Path = PROJECT_ROOT
     model: str = field(
-        default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-5.4-nano")
+        default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
     )
     data_sources_config_path: Path = field(
         default_factory=_data_sources_config_path
@@ -68,6 +79,49 @@ class Settings:
             "ENABLE_DATA_VISUALIZATION",
             True,
         )
+    )
+    coordinator_model_call_limit: int = field(
+        default_factory=lambda: _env_positive_int(
+            "COORDINATOR_MODEL_CALL_LIMIT", 12
+        )
+    )
+    coordinator_tool_call_limit: int = field(
+        default_factory=lambda: _env_positive_int(
+            "COORDINATOR_TOOL_CALL_LIMIT", 12
+        )
+    )
+    coordinator_task_call_limit: int = field(
+        default_factory=lambda: _env_positive_int(
+            "COORDINATOR_TASK_CALL_LIMIT", 4
+        )
+    )
+    sql_agent_model_call_limit: int = field(
+        default_factory=lambda: _env_positive_int(
+            "SQL_AGENT_MODEL_CALL_LIMIT", 24
+        )
+    )
+    sql_agent_tool_call_limit: int = field(
+        default_factory=lambda: _env_positive_int(
+            "SQL_AGENT_TOOL_CALL_LIMIT", 30
+        )
+    )
+    sql_execute_call_limit: int = field(
+        default_factory=lambda: _env_positive_int(
+            "SQL_EXECUTE_CALL_LIMIT", 3
+        )
+    )
+    visualization_agent_model_call_limit: int = field(
+        default_factory=lambda: _env_positive_int(
+            "VISUALIZATION_AGENT_MODEL_CALL_LIMIT", 12
+        )
+    )
+    visualization_agent_tool_call_limit: int = field(
+        default_factory=lambda: _env_positive_int(
+            "VISUALIZATION_AGENT_TOOL_CALL_LIMIT", 16
+        )
+    )
+    agent_debug_details: bool = field(
+        default_factory=lambda: _env_bool("AGENT_DEBUG_DETAILS", False)
     )
 
     def load_catalog(self) -> DataSourceCatalog:

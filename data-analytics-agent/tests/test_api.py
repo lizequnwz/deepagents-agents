@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
+from langchain.agents.middleware.tool_call_limit import (
+    ToolCallLimitExceededError,
+)
 
 from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
@@ -85,6 +89,62 @@ class FakeAgent:
         self.inputs.append(agent_input)
         self.configs.append(_kwargs["config"])
         return self.streams.popleft()
+
+
+class BudgetFailureStream(FakeStream):
+    def __init__(self, *, include_large_payload: bool = False) -> None:
+        super().__init__()
+        self.include_large_payload = include_large_payload
+
+    async def __aiter__(self):
+        yield {
+            "method": "lifecycle",
+            "params": {
+                "namespace": [],
+                "data": {
+                    "event": "started",
+                    "graph_name": "text-to-sql",
+                },
+            },
+        }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["text-to-sql"],
+                "data": {
+                    "event": "tool-started",
+                    "tool_call_id": "validation-1",
+                    "tool_name": "validate_sql",
+                    "input": {
+                        "query": "SELECT Name FROM Artist",
+                        "api_key": "must-not-leak",
+                    },
+                },
+            },
+        }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["text-to-sql"],
+                "data": {
+                    "event": "tool-finished",
+                    "tool_call_id": "validation-1",
+                    "tool_name": "validate_sql",
+                    "output": (
+                        "x" * 10_000
+                        if self.include_large_payload
+                        else {"valid": True}
+                    ),
+                },
+            },
+        }
+        raise ToolCallLimitExceededError(
+            thread_count=4,
+            run_count=0,
+            thread_limit=3,
+            run_limit=None,
+            tool_name="execute_sql",
+        )
 
 
 class FakeAutoChartStream(FakeStream):
@@ -300,6 +360,65 @@ def test_health_reports_visualization_feature_state(
 
     assert health.status_code == 200
     assert health.json()["visualization_enabled"] is True
+
+
+def test_budget_failure_returns_safe_diagnostics(
+    test_settings: Settings,
+) -> None:
+    services = Services(
+        settings=test_settings,
+        agent=FakeAgent([BudgetFailureStream()]),
+    )
+    client = TestClient(create_app(services))
+    thread_id = client.post("/api/conversations").json()["thread_id"]
+
+    created = client.post(
+        f"/api/conversations/{thread_id}/messages",
+        json={"message": "Run a difficult query"},
+    )
+    run = client.get(f"/api/runs/{created.json()['run_id']}").json()
+
+    assert run["status"] == "failed"
+    assert "execution budget" in run["error"]
+    assert run["diagnostics"] == {
+        "code": "execution_budget_exceeded",
+        "agent": "text-to-sql",
+        "budget_type": "tool_calls",
+        "limit": 3,
+        "attempted_count": 4,
+        "run_id": created.json()["run_id"],
+        "tool_name": "execute_sql",
+        "recent_tool_calls": [],
+    }
+    assert services.conversations.get(thread_id).active_run_id is None
+
+
+def test_debug_budget_failure_redacts_and_truncates_tool_payloads(
+    test_settings: Settings,
+) -> None:
+    services = Services(
+        settings=replace(test_settings, agent_debug_details=True),
+        agent=FakeAgent(
+            [BudgetFailureStream(include_large_payload=True)]
+        ),
+    )
+    client = TestClient(create_app(services))
+    thread_id = client.post("/api/conversations").json()["thread_id"]
+
+    created = client.post(
+        f"/api/conversations/{thread_id}/messages",
+        json={"message": "Run a difficult query"},
+    )
+    run = client.get(f"/api/runs/{created.json()['run_id']}").json()
+
+    recent = run["diagnostics"]["recent_tool_calls"]
+    assert len(recent) == 1
+    assert recent[0]["tool_name"] == "validate_sql"
+    assert "SELECT Name FROM Artist" in recent[0]["input"]
+    assert "must-not-leak" not in recent[0]["input"]
+    assert "[REDACTED]" in recent[0]["input"]
+    assert "characters truncated" in recent[0]["output"]
+    assert len(recent[0]["output"]) <= 4_000
 
 
 def test_api_chart_generation_is_automatic_and_completes_conversation(
