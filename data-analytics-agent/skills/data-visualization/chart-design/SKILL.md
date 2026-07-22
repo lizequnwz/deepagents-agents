@@ -20,6 +20,11 @@ description: Design one validated declarative ChartSpec from an existing chart-r
 ## Map fields by analytical role
 
 - Bar: categorical, temporal, or discrete-numeric x; numeric y.
+- Dual-axis bar/line: one numeric primary y rendered as bars and one numeric
+  `secondary_y` rendered as a line on the right axis. Use it when both metrics
+  share the x dimension but materially differ in scale or units. Prefer a
+  shared axis when the metrics are directly comparable. Dual-axis charts are
+  vertical and do not support multiple primary y fields or color grouping.
 - Line or area: temporal, numeric, or meaningfully ordered categorical x;
   numeric y.
 - Scatter: numeric x and one numeric y; optional nonnegative numeric size.
@@ -50,5 +55,5 @@ them, report that the chart cannot be created.
   latitude and longitude. Do not request ZIP-boundary choropleths.
 
 Use column names exactly as returned by the saved result. Give the chart a
-specific title and concise axis labels; do not encode unsupported styling or
-invent fields.
+specific title and concise axis labels, including `secondary_y_label` for a
+dual-axis chart; do not encode unsupported styling or invent fields.

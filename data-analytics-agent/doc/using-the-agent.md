@@ -144,7 +144,7 @@ active, the progress panel shows the chart type and a bounded subset of
 arguments such as x/y mappings, orientation, or category limit; internal result
 IDs and the full tool payload are not shown.
 
-Generated specs support bar, line, area,
+Generated specs support bar (including a constrained bar/line dual axis), line, area,
 scatter, pie/donut, histogram, box, heatmap, and simple maps. Business
 aggregation remains in reviewed SQL; only presentation sorting/category limits,
 histogram bins, and box-plot quartiles happen in the chart layer.

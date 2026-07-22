@@ -331,6 +331,10 @@ def _chart_activity(tool_input: Any) -> tuple[str, str]:
         if len(spec.y) > 3:
             y_columns = f"{y_columns}, …"
         arguments.append(f"y={y_columns}")
+    if spec.secondary_y:
+        arguments.append(
+            f"secondary y={_safe_activity_value(spec.secondary_y)}"
+        )
     if spec.value:
         arguments.append(f"value={_safe_activity_value(spec.value)}")
     if spec.location:

@@ -102,6 +102,78 @@ def test_chart_spec_is_constrained_and_rejects_ambiguous_wide_color() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        (
+            {"chart_type": "line", "secondary_y": "forecast"},
+            "supported only for bar charts",
+        ),
+        (
+            {"y": ["amount", "forecast"], "secondary_y": "rate"},
+            "exactly one primary y",
+        ),
+        (
+            {"secondary_y": "forecast", "orientation": "horizontal"},
+            "vertical orientation",
+        ),
+        (
+            {"secondary_y": "forecast", "color": "segment"},
+            "do not support color grouping",
+        ),
+        (
+            {"secondary_y_label": "Forecast"},
+            "requires a secondary_y column",
+        ),
+    ],
+)
+def test_dual_axis_bar_spec_rejects_ambiguous_shapes(
+    updates: dict,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        _bar_spec(**updates)
+
+
+def test_dual_axis_bar_validates_and_renders_secondary_line() -> None:
+    result = _saved_result(
+        rows=[
+            {"month": "2025-01", "revenue": 1200, "margin_rate": 0.2},
+            {"month": "2025-02", "revenue": 1500, "margin_rate": 0.24},
+        ]
+    )
+    spec = ChartSpec(
+        result_id=result.result_id,
+        chart_type="bar",
+        title="Revenue and margin rate",
+        x="month",
+        y=["revenue"],
+        secondary_y="margin_rate",
+        y_label="Revenue",
+        secondary_y_label="Margin rate",
+    )
+
+    validate_chart_spec(spec, result)
+    rendered = build_chart(spec, result.rows)
+
+    assert [trace.type for trace in rendered.figure.data] == ["bar", "scatter"]
+    assert rendered.figure.data[0].name == "revenue"
+    assert rendered.figure.data[1].name == "margin_rate"
+    assert rendered.figure.data[1].yaxis == "y2"
+    assert rendered.figure.layout.yaxis.title.text == "Revenue"
+    assert rendered.figure.layout.yaxis2.title.text == "Margin rate"
+    assert rendered.figure.layout.yaxis2.overlaying == "y"
+    assert rendered.figure.layout.yaxis2.side == "right"
+
+
+def test_dual_axis_bar_validates_secondary_y_as_numeric() -> None:
+    result = _saved_result()
+    spec = _bar_spec(secondary_y="category")
+
+    with pytest.raises(ValueError, match="'category' must be numeric"):
+        validate_chart_spec(spec, result)
+
+
 def test_chart_validation_enforces_columns_numeric_data_and_limits() -> None:
     result = _saved_result()
     validate_chart_spec(_bar_spec(), result)
@@ -508,6 +580,15 @@ def test_chart_progress_shows_safe_partial_arguments() -> None:
         "Generating bar chart · x=category · y=amount · horizontal · top 10"
     )
     assert spec.result_id not in label
+
+    combo = _bar_spec(secondary_y="forecast")
+    _, combo_label = _chart_activity(
+        {"spec": combo.model_dump(mode="json")}
+    )
+    assert combo_label == (
+        "Generating bar chart · x=category · y=amount · "
+        "secondary y=forecast"
+    )
 
 
 def test_chart_request_preserves_coordinator_answer_with_exact_sql_result() -> None:

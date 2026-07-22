@@ -48,6 +48,7 @@ class ChartSpec(VisualizationModel):
     title: str = Field(min_length=1, max_length=160)
     x: str | None = None
     y: list[str] = Field(default_factory=list, max_length=5)
+    secondary_y: str | None = None
     color: str | None = None
     size: str | None = None
     value: str | None = None
@@ -73,6 +74,7 @@ class ChartSpec(VisualizationModel):
     palette: Palette = Palette.DEFAULT
     x_label: str | None = Field(default=None, max_length=80)
     y_label: str | None = Field(default=None, max_length=80)
+    secondary_y_label: str | None = Field(default=None, max_length=80)
 
     @model_validator(mode="after")
     def validate_shape(self) -> ChartSpec:
@@ -116,6 +118,31 @@ class ChartSpec(VisualizationModel):
         if self.category_limit is not None and self.sort_by is None:
             raise ValueError(
                 "category_limit requires an explicit meaningful sort_by."
+            )
+        if self.secondary_y is not None:
+            if chart_type is not ChartType.BAR:
+                raise ValueError(
+                    "secondary_y is supported only for bar charts."
+                )
+            if len(self.y) != 1:
+                raise ValueError(
+                    "dual-axis bar charts require exactly one primary y."
+                )
+            if self.secondary_y == self.y[0]:
+                raise ValueError(
+                    "secondary_y must differ from the primary y."
+                )
+            if self.orientation != "vertical":
+                raise ValueError(
+                    "dual-axis bar charts require vertical orientation."
+                )
+            if self.color is not None:
+                raise ValueError(
+                    "dual-axis bar charts do not support color grouping."
+                )
+        elif self.secondary_y_label is not None:
+            raise ValueError(
+                "secondary_y_label requires a secondary_y column."
             )
 
         if chart_type in {

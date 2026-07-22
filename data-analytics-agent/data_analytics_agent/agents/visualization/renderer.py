@@ -128,16 +128,30 @@ def _style_figure(fig: go.Figure, spec: ChartSpec) -> go.Figure:
             y_title = spec.y_label or (
                 spec.y[0] if len(spec.y) == 1 else None
             )
-        fig.update_xaxes(
-            title_text=x_title,
-            showgrid=False,
-            zeroline=False,
+        fig.update_layout(
+            xaxis={
+                "title": {"text": x_title},
+                "showgrid": False,
+                "zeroline": False,
+            },
+            yaxis={
+                "title": {"text": y_title},
+                "gridcolor": "rgba(127,127,127,0.18)",
+                "zeroline": False,
+            },
         )
-        fig.update_yaxes(
-            title_text=y_title,
-            gridcolor="rgba(127,127,127,0.18)",
-            zeroline=False,
-        )
+        if spec.secondary_y:
+            fig.update_layout(
+                yaxis2={
+                    "title": {
+                        "text": spec.secondary_y_label or spec.secondary_y
+                    },
+                    "overlaying": "y",
+                    "side": "right",
+                    "showgrid": False,
+                    "zeroline": False,
+                }
+            )
     return fig
 
 
@@ -149,6 +163,8 @@ def _render_cartesian(
     discrete, continuous = _palette(spec)
     for column in spec.y:
         _numeric_column(frame, column, warnings)
+    if spec.secondary_y:
+        _numeric_column(frame, spec.secondary_y, warnings)
     if spec.size:
         _numeric_column(frame, spec.size, warnings, nonnegative=True)
     y_mapping: str | list[str] = (
@@ -166,7 +182,10 @@ def _render_cartesian(
             warnings.append(
                 f"Excluded {missing_points} missing bar point(s)."
             )
-        frame = frame.loc[frame[spec.y].notna().any(axis=1)]
+        plotted_columns = [*spec.y]
+        if spec.secondary_y:
+            plotted_columns.append(spec.secondary_y)
+        frame = frame.loc[frame[plotted_columns].notna().any(axis=1)]
         if frame.empty:
             raise ValueError("No usable chart points remain after validation.")
         if spec.orientation == "horizontal":
@@ -180,7 +199,7 @@ def _render_cartesian(
                 color_discrete_sequence=discrete,
                 color_continuous_scale=continuous,
             )
-        return px.bar(
+        figure = px.bar(
             frame,
             x=spec.x,
             y=y_mapping,
@@ -189,6 +208,21 @@ def _render_cartesian(
             color_discrete_sequence=discrete,
             color_continuous_scale=continuous,
         )
+        if spec.secondary_y:
+            figure.update_traces(name=spec.y[0], showlegend=True)
+            line_color = discrete[1] if len(discrete) > 1 else discrete[0]
+            figure.add_trace(
+                go.Scatter(
+                    x=frame[spec.x],
+                    y=frame[spec.secondary_y],
+                    name=spec.secondary_y,
+                    mode="lines+markers",
+                    line={"color": line_color},
+                    marker={"color": line_color},
+                    yaxis="y2",
+                )
+            )
+        return figure
     if spec.chart_type is ChartType.LINE:
         frame = _drop_missing(frame, [spec.x] if spec.x else [], warnings)
         return px.line(

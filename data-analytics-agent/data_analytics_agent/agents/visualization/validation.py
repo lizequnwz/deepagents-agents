@@ -70,6 +70,7 @@ def chart_columns(spec: ChartSpec) -> set[str]:
     values = {
         spec.x,
         *spec.y,
+        spec.secondary_y,
         spec.color,
         spec.size,
         spec.value,
@@ -223,6 +224,8 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
         ChartType.BOX,
     }:
         numeric_columns.extend(spec.y)
+    if spec.secondary_y:
+        numeric_columns.append(spec.secondary_y)
     if spec.chart_type is ChartType.HISTOGRAM and spec.x:
         numeric_columns.append(spec.x)
     if spec.size:
