@@ -1,13 +1,15 @@
 ---
 name: query-writing
-description: Write one safe, dialect-aware, chart-ready SELECT query and submit it for human-reviewed execution. Use for database analysis, metric calculations, ranking, time series, distributions, relationships, heatmap grids, and other result shaping against the selected data source.
+description: Write one safe, dialect-aware, chart-ready SELECT query from the OSI semantic model already loaded for the assignment, falling back to its runtime path only when absent, truncated, or compacted. Submit it for human-reviewed execution for database analysis, metrics, ranking, time series, distributions, relationships, heatmap grids, and other result shaping.
 ---
 
 # Query Writing
 
 ## Ground the query
 
-1. Read the exact OSI file from the runtime prompt with `limit=1000`.
+1. Use the OSI semantic model already loaded for this assignment. If it is
+   absent from context, truncated, or compacted, read the exact OSI path from
+   the runtime prompt with `limit=1000`.
 2. Apply its metric definitions, relationship paths, ambiguity guidance, and
    source-specific instructions.
 3. Use exact physical dataset `source` and field-expression names. Select only

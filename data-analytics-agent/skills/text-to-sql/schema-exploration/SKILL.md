@@ -1,11 +1,13 @@
 ---
 name: schema-exploration
-description: Ground a database question in the selected OSI semantic model and resolve logical-to-physical names, metrics, joins, synonyms, and source instructions. Use before query writing; use live schema tools only for a concrete missing detail or suspected drift.
+description: Ground a database question in the OSI semantic model already loaded for the assignment, falling back to its runtime path only when absent, truncated, or compacted. Resolve logical-to-physical names, metrics, joins, synonyms, and source instructions before query writing; use live schema tools only for a concrete missing detail or suspected drift.
 ---
 
 # Schema Exploration
 
-1. Read the exact OSI path from the runtime prompt with `limit=1000`.
+1. Use the OSI semantic model already loaded for this assignment. If it is
+   absent from context, truncated, or compacted, read the exact OSI path from
+   the runtime prompt with `limit=1000`.
 2. Identify the relevant logical datasets and fields, their exact physical
    sources or expressions, declared relationships, metric definitions,
    synonyms, and AI instructions.

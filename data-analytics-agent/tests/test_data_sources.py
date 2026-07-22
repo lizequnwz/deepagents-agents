@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +18,9 @@ from data_analytics_agent.coordinator import (
 )
 from data_analytics_agent.data_sources import ExampleQuestion
 from data_analytics_agent.stores import ResultStore
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_registry_resolves_source_semantic_target_and_limits(
@@ -111,6 +115,39 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
     assert "`create_chart` and `finish_visualization` are terminal" in (
         visualization_prompt.lower()
     )
+
+
+def test_sql_context_reads_are_batched_and_unique(
+    test_settings: Settings,
+) -> None:
+    source = test_settings.load_catalog().get("test")
+    normalized = " ".join(_sql_subagent_prompt(source).split())
+
+    assert (
+        "Issue these three independent reads in one tool-call batch when "
+        "possible"
+    ) in normalized
+    assert "read each path at most once per assignment" in normalized
+    assert "Re-read only if the earlier content was truncated or compacted" in (
+        normalized
+    )
+
+
+@pytest.mark.parametrize(
+    "skill_path",
+    [
+        "skills/text-to-sql/schema-exploration/SKILL.md",
+        "skills/text-to-sql/query-writing/SKILL.md",
+    ],
+)
+def test_sql_skills_reuse_the_loaded_osi(skill_path: str) -> None:
+    content = (PROJECT_ROOT / skill_path).read_text(encoding="utf-8")
+    normalized = " ".join(content.split())
+
+    assert "OSI semantic model already loaded for the assignment" in normalized
+    assert "If it is absent from context, truncated, or compacted" in normalized
+    assert "runtime prompt with `limit=1000`" in normalized
+    assert "Read the exact OSI" not in content
 
 
 def test_coordinator_owns_help_and_question_brainstorming(
