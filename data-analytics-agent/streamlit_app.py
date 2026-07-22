@@ -11,7 +11,9 @@ from dotenv import load_dotenv
 
 from data_analytics_agent.ui.api_client import APIError, AgentAPIClient
 from data_analytics_agent.ui.components import (
+    render_activity_timeline,
     render_approval,
+    render_debug_states,
     render_empty_state,
     render_page_header,
     render_pending_user_message,
@@ -39,6 +41,7 @@ def initialize_session_state() -> None:
     st.session_state.setdefault("active_run_id", None)
     st.session_state.setdefault("last_run_error", None)
     st.session_state.setdefault("last_run_diagnostics", None)
+    st.session_state.setdefault("last_run_debug_states", None)
     st.session_state.setdefault("conversation_notice", None)
     st.session_state.setdefault("review_notice", None)
     st.session_state.setdefault("source_selector", None)
@@ -50,7 +53,8 @@ def clear_conversation_state() -> None:
 
     removable_prefixes = (
         "event_cursor_",
-        "event_labels_",
+        "event_activities_",
+        "debug_states_",
         "sql_review_",
         "rejection_feedback_",
         "review_feedback_",
@@ -63,6 +67,7 @@ def clear_conversation_state() -> None:
     st.session_state["active_run_id"] = None
     st.session_state["last_run_error"] = None
     st.session_state["last_run_diagnostics"] = None
+    st.session_state["last_run_debug_states"] = None
     st.session_state["review_notice"] = None
 
 
@@ -133,7 +138,8 @@ def get_or_create_conversation(
 def clear_completed_run(run_id: str) -> None:
     st.session_state["active_run_id"] = None
     st.session_state.pop(f"event_cursor_{run_id}", None)
-    st.session_state.pop(f"event_labels_{run_id}", None)
+    st.session_state.pop(f"event_activities_{run_id}", None)
+    st.session_state.pop(f"debug_states_{run_id}", None)
     st.session_state.pop(f"review_feedback_{run_id}", None)
     st.session_state.pop(f"review_phase_{run_id}", None)
 
@@ -163,9 +169,15 @@ def poll_run(
     initial_run: dict[str, Any],
 ) -> dict[str, Any]:
     cursor_key = f"event_cursor_{run_id}"
-    labels_key = f"event_labels_{run_id}"
+    activities_key = f"event_activities_{run_id}"
+    debug_states_key = f"debug_states_{run_id}"
     cursor = int(st.session_state.get(cursor_key, 0))
-    labels: list[str] = st.session_state.setdefault(labels_key, [])
+    activities: list[dict[str, Any]] = st.session_state.setdefault(
+        activities_key, []
+    )
+    debug_states: list[dict[str, Any]] = st.session_state.setdefault(
+        debug_states_key, []
+    )
     run = initial_run if cursor == 0 else client.get_run(
         run_id, after_event_id=cursor
     )
@@ -184,15 +196,30 @@ def poll_run(
         expanded=True,
         state="running",
     ) as status_panel:
-        for label in labels:
-            st.caption(f":material/check: {label}")
+        timeline_slot = st.empty()
+        render_version = 0
 
         while True:
+            timeline_changed = render_version == 0
             for event in run["events"]:
-                label = event["label"]
-                labels.append(label)
-                st.caption(f":material/check: {label}")
-                status_panel.update(label=label, state="running", expanded=True)
+                activities.append(event)
+                timeline_changed = True
+                status_panel.update(
+                    label=event["label"], state="running", expanded=True
+                )
+            latest_debug_states = run.get("debug_states") or []
+            if latest_debug_states != debug_states:
+                debug_states[:] = latest_debug_states
+                timeline_changed = True
+            if timeline_changed:
+                render_version += 1
+                timeline_slot.empty()
+                with timeline_slot.container():
+                    render_activity_timeline(
+                        activities,
+                        debug_states=debug_states,
+                        key_prefix=f"live_{run_id}_{render_version}",
+                    )
 
             cursor = int(run["next_event_id"])
             st.session_state[cursor_key] = cursor
@@ -345,6 +372,11 @@ if st.session_state.get("last_run_error"):
         render_execution_diagnostics(
             st.session_state["last_run_diagnostics"]
         )
+    if st.session_state.get("last_run_debug_states"):
+        render_debug_states(
+            st.session_state["last_run_debug_states"],
+            key_prefix="last_failed_run",
+        )
 
 if active_run_id:
     st.session_state["active_run_id"] = active_run_id
@@ -409,6 +441,9 @@ if active_run_id:
         st.session_state["last_run_diagnostics"] = active_run.get(
             "diagnostics"
         )
+        st.session_state["last_run_debug_states"] = active_run.get(
+            "debug_states"
+        )
         clear_completed_run(active_run_id)
         st.rerun()
     elif active_run and active_run["status"] == "completed":
@@ -429,6 +464,7 @@ if not active_run_id:
         try:
             st.session_state["last_run_error"] = None
             st.session_state["last_run_diagnostics"] = None
+            st.session_state["last_run_debug_states"] = None
             run = client.send_message(thread_id, question)
             st.session_state["active_run_id"] = run["run_id"]
             st.rerun()

@@ -3,6 +3,7 @@ from __future__ import annotations
 from streamlit.testing.v1 import AppTest
 
 from data_analytics_agent.ui.components import (
+    consolidate_activity_events,
     conversation_url,
     rows_to_csv,
     sql_review_decision,
@@ -53,6 +54,102 @@ def test_any_exact_editor_change_submits_edited_sql() -> None:
         "action": "edit",
         "edited_sql": reviewed,
     }
+
+
+def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> None:
+    events = [
+        {
+            "id": 1,
+            "kind": "skill",
+            "label": "Loading skill · query-writing",
+            "phase": "started",
+            "agent": "text-to-sql",
+            "tool": {
+                "call_id": "call-1",
+                "name": "read_file",
+                "arguments": {"skill": "query-writing"},
+                "debug_input": {"file_path": "SKILL.md"},
+            },
+        },
+        {
+            "id": 2,
+            "kind": "skill",
+            "label": "Loaded skill · query-writing",
+            "phase": "completed",
+            "agent": "text-to-sql",
+            "tool": {
+                "call_id": "call-1",
+                "name": "read_file",
+                "arguments": {"skill": "query-writing"},
+            },
+        },
+        {
+            "id": 3,
+            "kind": "skill",
+            "label": "Loading skill · schema-exploration",
+            "phase": "started",
+            "agent": "text-to-sql",
+            "tool": {
+                "call_id": "call-2",
+                "name": "read_file",
+                "arguments": {"skill": "schema-exploration"},
+            },
+        },
+    ]
+
+    consolidated = consolidate_activity_events(events)
+
+    assert len(consolidated) == 2
+    assert consolidated[0]["phase"] == "completed"
+    assert consolidated[0]["label"] == "Loaded skill · query-writing"
+    assert consolidated[0]["tool"]["debug_input"] == {
+        "file_path": "SKILL.md"
+    }
+    assert consolidated[1]["tool"]["call_id"] == "call-2"
+
+
+def test_activity_renderer_shows_arguments_and_debug_state() -> None:
+    app = AppTest.from_string(
+        '''
+from data_analytics_agent.ui.components import render_activity_timeline
+
+render_activity_timeline(
+    [{
+        "id": 1,
+        "kind": "skill",
+        "label": "Loaded skill · query-writing",
+        "phase": "completed",
+        "agent": "text-to-sql",
+        "tool": {
+            "call_id": "call-1",
+            "name": "read_file",
+            "arguments": {"skill": "query-writing"},
+            "debug_input": {"file_path": "SKILL.md"},
+        },
+    }],
+    debug_states=[{
+        "agent": "text-to-sql",
+        "namespace": ["text-to-sql:abc"],
+        "captured_at": "2026-07-22T12:00:00Z",
+        "state": {"todos": [{"content": "Write SQL"}]},
+        "truncated": False,
+        "omitted_items": 0,
+        "omitted_messages": 0,
+    }],
+    key_prefix="test",
+)
+'''
+    ).run()
+
+    assert not app.exception
+    assert any(
+        "Loaded skill · query-writing · Text-to-SQL" in caption.value
+        for caption in app.caption
+    )
+    assert [panel.label for panel in app.get("status")] == [
+        "read_file",
+        "Agent state (debug)",
+    ]
 
 
 def test_api_client_fetches_every_result_page() -> None:

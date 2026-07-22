@@ -146,7 +146,7 @@ def build_agent(
             general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False)
         ),
     )
-    chat_model = model or ChatOpenAI(model=settings.model)
+    chat_model = ChatOpenAI(model=settings.model, streaming=False)
 
     list_results = create_list_conversation_results_tool(
         result_store,

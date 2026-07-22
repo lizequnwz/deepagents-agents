@@ -171,11 +171,37 @@ class ExecutionBudgetDiagnostics(StrictModel):
     )
 
 
+class ActivityTool(StrictModel):
+    """User-presentable details for one streamed tool lifecycle."""
+
+    call_id: str | None = None
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    debug_input: Any | None = None
+
+
 class ActivityEvent(StrictModel):
     id: int
     kind: str
     label: str
+    phase: Literal["info", "started", "completed", "failed"] = "info"
+    agent: str | None = None
+    tool: ActivityTool | None = None
     created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
+class AgentStateSnapshot(StrictModel):
+    """Bounded, debug-only view of the latest state for one agent."""
+
+    agent: str
+    namespace: list[str] = Field(default_factory=list)
+    state: dict[str, Any]
+    truncated: bool = False
+    omitted_items: int = Field(default=0, ge=0)
+    omitted_messages: int = Field(default=0, ge=0)
+    captured_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
 
@@ -195,6 +221,7 @@ class ChatTurn(StrictModel):
     user_message: str
     answer: FinalAnswer
     activities: list[ActivityEvent] = Field(default_factory=list)
+    debug_states: list[AgentStateSnapshot] = Field(default_factory=list)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -233,6 +260,7 @@ class RunResponse(StrictModel):
     status: RunStatus
     events: list[ActivityEvent]
     next_event_id: int
+    debug_states: list[AgentStateSnapshot] = Field(default_factory=list)
     approval: ApprovalRequest | None = None
     answer: FinalAnswer | None = None
     error: str | None = None

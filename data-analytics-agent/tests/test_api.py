@@ -194,6 +194,108 @@ class FakeAutoChartStream(FakeStream):
         }
 
 
+class DebugStateStream(FakeStream):
+    def __init__(self) -> None:
+        super().__init__(answer=FinalAnswer(answer="Debug run complete."))
+
+    async def __aiter__(self):
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["text-to-sql:abc"],
+                "data": {
+                    "event": "tool-started",
+                    "tool_call_id": "skill-call",
+                    "tool_name": "read_file",
+                    "input": {
+                        "file_path": (
+                            "/project/skills/text-to-sql/"
+                            "query-writing/SKILL.md"
+                        ),
+                        "limit": 1000,
+                        "api_key": "never-show",
+                    },
+                },
+            },
+        }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["text-to-sql:abc"],
+                "data": {
+                    "event": "tool-finished",
+                    "tool_call_id": "skill-call",
+                    "tool_name": "read_file",
+                    "output": "private skill contents",
+                },
+            },
+        }
+        yield {
+            "method": "values",
+            "params": {
+                "namespace": [],
+                "data": {
+                    "run_id": "run-root",
+                    "source_id": "test",
+                    "step": "initial",
+                    "messages": [{"type": "human", "content": "Question"}],
+                },
+            },
+        }
+        yield {
+            "method": "values",
+            "params": {
+                "namespace": [],
+                "data": {
+                    "run_id": "run-root",
+                    "source_id": "test",
+                    "step": "latest",
+                    "messages": [{"type": "ai", "content": "Answering"}],
+                },
+            },
+        }
+        yield {
+            "method": "values",
+            "params": {
+                "namespace": ["text-to-sql:abc"],
+                "data": {
+                    "run_id": "run-child",
+                    "password": "never-show",
+                    "messages": [
+                        {"type": "tool", "content": "sample business data"}
+                    ],
+                    "memory_contents": {
+                        "/project/AGENTS.md": "private policy"
+                    },
+                },
+            },
+        }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["text-to-sql:abc"],
+                "data": {
+                    "event": "tool-started",
+                    "tool_call_id": "search-call",
+                    "tool_name": "grep",
+                    "input": {"pattern": "Revenue", "path": "/project/semantic"},
+                },
+            },
+        }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["text-to-sql:abc"],
+                "data": {
+                    "event": "tool-error",
+                    "tool_call_id": "search-call",
+                    "tool_name": "grep",
+                    "message": "private backend failure",
+                },
+            },
+        }
+
+
 def test_api_approval_rejection_reapproval_and_rehydration(
     test_settings: Settings,
 ) -> None:
@@ -253,10 +355,21 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     assert first["approval"]["description"].startswith(
         "Review the generated SQL"
     )
-    assert any(
-        event["label"] == "Inspecting the OSI semantic model"
+    semantic_event = next(
+        event
         for event in first["events"]
+        if event["kind"] == "semantic"
     )
+    assert semantic_event["label"] == (
+        "Inspecting semantic model · chinook.osi.yaml"
+    )
+    assert semantic_event["phase"] == "started"
+    assert semantic_event["agent"] == "coordinator"
+    assert semantic_event["tool"]["name"] == "read_file"
+    assert semantic_event["tool"]["arguments"] == {
+        "path": "semantic/chinook.osi.yaml"
+    }
+    assert semantic_event["tool"]["debug_input"] is None
 
     rejected = client.post(
         f"/api/runs/{run_id}/decisions",
@@ -419,6 +532,98 @@ def test_debug_budget_failure_redacts_and_truncates_tool_payloads(
     assert "[REDACTED]" in recent[0]["input"]
     assert "characters truncated" in recent[0]["output"]
     assert len(recent[0]["output"]) <= 4_000
+
+
+def test_debug_activity_and_latest_agent_states_persist_in_history(
+    test_settings: Settings,
+) -> None:
+    services = Services(
+        settings=replace(test_settings, agent_debug_details=True),
+        agent=FakeAgent([DebugStateStream()]),
+    )
+    client = TestClient(create_app(services))
+    thread_id = client.post("/api/conversations").json()["thread_id"]
+
+    created = client.post(
+        f"/api/conversations/{thread_id}/messages",
+        json={"message": "Inspect debug activity"},
+    ).json()
+    run = client.get(f"/api/runs/{created['run_id']}").json()
+
+    assert run["status"] == "completed"
+    tool_events = [
+        event
+        for event in run["events"]
+        if (event.get("tool") or {}).get("call_id") == "skill-call"
+    ]
+    assert [event["phase"] for event in tool_events] == [
+        "started",
+        "completed",
+    ]
+    assert tool_events[0]["label"] == "Loading skill · query-writing"
+    assert tool_events[1]["label"] == "Loaded skill · query-writing"
+    assert tool_events[0]["tool"]["arguments"] == {
+        "path": "skills/text-to-sql/query-writing/SKILL.md",
+        "limit": 1000,
+        "skill": "query-writing",
+    }
+    debug_input = tool_events[0]["tool"]["debug_input"]
+    assert debug_input["api_key"] == "[REDACTED]"
+    assert "never-show" not in str(debug_input)
+    assert "private skill contents" not in str(tool_events)
+    failed = next(
+        event
+        for event in run["events"]
+        if (event.get("tool") or {}).get("call_id") == "search-call"
+        and event["phase"] == "failed"
+    )
+    assert failed["label"] == "Tool failed · grep"
+    assert "private backend failure" not in str(failed)
+
+    states = {snapshot["agent"]: snapshot for snapshot in run["debug_states"]}
+    assert set(states) == {"coordinator", "text-to-sql"}
+    assert states["coordinator"]["namespace"] == []
+    assert states["coordinator"]["state"]["step"] == "latest"
+    child = states["text-to-sql"]
+    assert child["state"]["password"] == "[REDACTED]"
+    assert child["state"]["memory_contents"] == {
+        "/project/AGENTS.md": {"characters": 14}
+    }
+    assert "private policy" not in str(child)
+
+    cursor_page = client.get(
+        f"/api/runs/{created['run_id']}?after_event_id="
+        f"{run['next_event_id']}"
+    ).json()
+    assert cursor_page["events"] == []
+    assert cursor_page["debug_states"] == run["debug_states"]
+
+    turn = client.get(f"/api/conversations/{thread_id}").json()["turns"][0]
+    assert turn["activities"] == run["events"]
+    assert turn["debug_states"] == run["debug_states"]
+
+
+def test_debug_state_and_raw_inputs_are_absent_when_disabled(
+    test_settings: Settings,
+) -> None:
+    services = Services(
+        settings=test_settings,
+        agent=FakeAgent([DebugStateStream()]),
+    )
+    client = TestClient(create_app(services))
+    thread_id = client.post("/api/conversations").json()["thread_id"]
+
+    created = client.post(
+        f"/api/conversations/{thread_id}/messages",
+        json={"message": "Inspect normal activity"},
+    ).json()
+    run = client.get(f"/api/runs/{created['run_id']}").json()
+
+    assert run["debug_states"] == []
+    assert all(
+        (event.get("tool") or {}).get("debug_input") is None
+        for event in run["events"]
+    )
 
 
 def test_api_chart_generation_is_automatic_and_completes_conversation(

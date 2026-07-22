@@ -47,6 +47,10 @@ model.
 - At most `head(10)` rows visible to the coordinator and specialists
 - No generated SQL limit unless the user explicitly requests one
 - Streamlit result tables, CSV downloads, warnings, and source diagnostics
+- Structured live activity showing named context, skills, agents, tools, and
+  curated tool arguments
+- Optional trusted-local debug views for redacted tool inputs and bounded
+  per-agent state snapshots
 - Optional Snowflake adapter over an injected `snowlib` client
 
 ## Quick start
@@ -83,7 +87,8 @@ Ctrl+C to stop them.
    review.
 4. Approve, edit, or reject with feedback.
 5. To visualize a result, explicitly ask for one chart.
-6. Watch the chart type and selected mappings in the progress panel.
+6. Expand progress steps to inspect loaded skills, context files, tools, and
+   curated arguments such as chart mappings.
 7. Inspect the rendered Plotly chart, underlying table/CSV, and executed SQL.
 
 Changing source starts a new conversation. **New conversation** retains the

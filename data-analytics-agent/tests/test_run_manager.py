@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from data_analytics_agent.run_manager import (
+    DEBUG_STATE_CHAR_LIMIT,
     RunManager,
+    _activity_arguments,
+    _activity_for_tool,
     _apply_sql_analysis,
+    _bounded_debug_value,
     _current_sql_analysis,
+    _sanitize_state_snapshot,
 )
 from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.schemas import FinalAnswer, SQLAnalysisResult
@@ -178,3 +185,91 @@ def test_previous_turn_sql_analysis_is_not_reused_for_a_followup() -> None:
     }
 
     assert _current_sql_analysis(output) is None
+
+
+def test_activity_names_specific_skill_and_curates_known_arguments() -> None:
+    skill_input = {
+        "file_path": "/project/skills/text-to-sql/query-writing/SKILL.md",
+        "offset": 0,
+        "limit": 1000,
+        "api_key": "never-show",
+    }
+
+    assert _activity_for_tool("read_file", skill_input) == (
+        "skill",
+        "Loading skill · query-writing",
+    )
+    assert _activity_arguments("read_file", skill_input) == {
+        "path": "skills/text-to-sql/query-writing/SKILL.md",
+        "offset": 0,
+        "limit": 1000,
+        "skill": "query-writing",
+    }
+    assert _activity_arguments(
+        "task",
+        {
+            "subagent_type": "text-to-sql",
+            "description": "private model-authored assignment",
+        },
+    ) == {"subagent_type": "text-to-sql"}
+    assert _activity_arguments(
+        "inspect_result_for_chart", {"result_id": "1234567890abcdef"}
+    ) == {"result": "12345678"}
+    assert _activity_arguments("unknown_tool", {"rows": [1, 2]}) == {}
+
+
+def test_debug_tool_input_is_secret_redacted_and_bounded() -> None:
+    bounded = _bounded_debug_value(
+        {"query": "SELECT 1", "api_key": "never-show", "value": "x" * 5000}
+    )
+
+    serialized = json.dumps(bounded)
+    assert "never-show" not in serialized
+    assert "[REDACTED]" in serialized
+    assert "truncated_characters" in bounded
+
+
+def test_debug_state_snapshot_is_safe_latest_state_shape() -> None:
+    snapshot = _sanitize_state_snapshot(
+        {
+            "thread_id": "thread-1",
+            "run_id": "run-1",
+            "source_id": "source-1",
+            "question": "Analyze revenue",
+            "password": "never-show",
+            "messages": [
+                {"type": "human", "content": f"message-{index}-" + "x" * 500}
+                for index in range(12)
+            ],
+            "memory_contents": {"/project/AGENTS.md": "private policy"},
+            "skills_metadata": [
+                {
+                    "name": "query-writing",
+                    "path": "/project/skills/query-writing/SKILL.md",
+                    "description": "not needed in debug state",
+                }
+            ],
+            "structured_response": {"answer": "y" * 30_000},
+        },
+        agent="text-to-sql",
+        namespace=["text-to-sql:abc"],
+    )
+
+    serialized = json.dumps(snapshot.state)
+    assert snapshot.agent == "text-to-sql"
+    assert snapshot.namespace == ["text-to-sql:abc"]
+    assert snapshot.omitted_messages == 2
+    assert len(snapshot.state["messages"]) == 10
+    assert snapshot.state["password"] == "[REDACTED]"
+    assert "private policy" not in serialized
+    assert snapshot.state["memory_contents"] == {
+        "/project/AGENTS.md": {"characters": 14}
+    }
+    assert snapshot.state["skills_metadata"] == [
+        {
+            "name": "query-writing",
+            "path": "/project/skills/query-writing/SKILL.md",
+        }
+    ]
+    assert snapshot.truncated is True
+    assert len(serialized) <= DEBUG_STATE_CHAR_LIMIT

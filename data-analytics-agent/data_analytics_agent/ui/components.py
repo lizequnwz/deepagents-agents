@@ -34,6 +34,168 @@ FALLBACK_EXAMPLES = [
     },
 ]
 
+_PHASE_ICONS = {
+    "info": ":material/info:",
+    "started": ":material/pending:",
+    "completed": ":material/check_circle:",
+    "failed": ":material/error:",
+}
+
+
+def consolidate_activity_events(
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge append-only tool lifecycle events for compact display."""
+
+    consolidated: list[dict[str, Any]] = []
+    tool_indexes: dict[str, int] = {}
+    for source in events:
+        event = dict(source)
+        tool = event.get("tool")
+        call_id = tool.get("call_id") if isinstance(tool, dict) else None
+        if not call_id:
+            consolidated.append(event)
+            continue
+        if call_id not in tool_indexes:
+            tool_indexes[call_id] = len(consolidated)
+            consolidated.append(event)
+            continue
+        existing = consolidated[tool_indexes[call_id]]
+        existing_tool = existing.get("tool") or {}
+        new_tool = tool or {}
+        existing.update(
+            {
+                "label": event.get("label", existing.get("label")),
+                "phase": event.get("phase", existing.get("phase")),
+                "agent": event.get("agent") or existing.get("agent"),
+                "created_at": event.get(
+                    "created_at", existing.get("created_at")
+                ),
+            }
+        )
+        existing["tool"] = {
+            **new_tool,
+            "arguments": (
+                new_tool.get("arguments")
+                or existing_tool.get("arguments")
+                or {}
+            ),
+            "debug_input": (
+                existing_tool.get("debug_input")
+                if existing_tool.get("debug_input") is not None
+                else new_tool.get("debug_input")
+            ),
+        }
+    return consolidated
+
+
+def _agent_label(agent: str | None) -> str:
+    return {
+        "coordinator": "Coordinator",
+        "text-to-sql": "Text-to-SQL",
+        "data-visualization": "Visualization",
+    }.get(agent or "", (agent or "Agent").replace("-", " ").title())
+
+
+def render_debug_states(
+    debug_states: list[dict[str, Any]],
+    *,
+    key_prefix: str,
+) -> None:
+    """Render trusted-local state snapshots supplied by the debug API."""
+
+    if not debug_states:
+        return
+    with st.expander(
+        "Agent state (debug)",
+        icon=":material/bug_report:",
+        expanded=False,
+        type="compact",
+        key=f"debug_state_{key_prefix}",
+    ):
+        st.warning(
+            "Debug state may contain questions, SQL, model text, sampled "
+            "business data, and unrecognized secrets.",
+            icon=":material/security:",
+        )
+        for snapshot in debug_states:
+            with st.container(border=True):
+                st.markdown(f"**{_agent_label(snapshot.get('agent'))}**")
+                namespace = snapshot.get("namespace") or []
+                captured_at = snapshot.get("captured_at")
+                metadata = " / ".join(str(item) for item in namespace)
+                if not metadata:
+                    metadata = "root namespace"
+                if captured_at:
+                    metadata = f"{metadata} · {captured_at}"
+                st.caption(metadata)
+                if snapshot.get("truncated"):
+                    st.caption(
+                        ":material/content_cut: Snapshot bounded for display · "
+                        f"{snapshot.get('omitted_messages', 0)} messages and "
+                        f"{snapshot.get('omitted_items', 0)} items omitted"
+                    )
+                st.json(snapshot.get("state") or {})
+
+
+def render_activity_timeline(
+    events: list[dict[str, Any]],
+    *,
+    debug_states: list[dict[str, Any]] | None = None,
+    key_prefix: str,
+) -> None:
+    """Render one compact activity timeline for live and completed runs."""
+
+    consolidated = consolidate_activity_events(events)
+    tool_totals: dict[str, int] = {}
+    for event in consolidated:
+        tool = event.get("tool") or {}
+        name = tool.get("name")
+        if name:
+            tool_totals[name] = tool_totals.get(name, 0) + 1
+    tool_seen: dict[str, int] = {}
+
+    for event in consolidated:
+        phase = str(event.get("phase") or "info")
+        icon = _PHASE_ICONS.get(phase, ":material/info:")
+        label = str(event.get("label") or "Agent activity")
+        agent = _agent_label(event.get("agent"))
+        st.caption(f"{icon} {label} · {agent}")
+
+        tool = event.get("tool") or {}
+        arguments = tool.get("arguments") or {}
+        debug_input = tool.get("debug_input")
+        if not arguments and debug_input is None:
+            continue
+        tool_name = str(tool.get("name") or "tool")
+        tool_seen[tool_name] = tool_seen.get(tool_name, 0) + 1
+        ordinal = (
+            f" · call {tool_seen[tool_name]}"
+            if tool_totals.get(tool_name, 0) > 1
+            else ""
+        )
+        event_key = tool.get("call_id") or event.get("id") or len(tool_seen)
+        with st.expander(
+            f"{tool_name}{ordinal}",
+            icon=":material/build:",
+            expanded=False,
+            type="compact",
+            key=f"activity_{key_prefix}_{event_key}",
+        ):
+            if arguments:
+                st.caption("Curated arguments")
+                st.json(arguments)
+            if debug_input is not None:
+                st.caption(
+                    "Redacted and bounded raw input · trusted local debug only"
+                )
+                st.json(debug_input)
+
+    render_debug_states(
+        debug_states or [],
+        key_prefix=key_prefix,
+    )
+
 
 def conversation_url(app_base_url: str, thread_id: str) -> str:
     """Build a refresh-safe conversation URL without duplicating parameters."""
@@ -397,16 +559,18 @@ def render_turn(
                 st.code(answer["sql"], language="sql")
 
         activities = turn.get("activities") or []
-        if activities:
-            with st.expander(
+        debug_states = turn.get("debug_states") or []
+        if activities or debug_states:
+            with st.status(
                 "How this was produced",
-                icon=":material/account_tree:",
                 expanded=False,
+                state="complete",
             ):
-                for event in activities:
-                    st.caption(
-                        f":material/check: {event['label']}"
-                    )
+                render_activity_timeline(
+                    activities,
+                    debug_states=debug_states,
+                    key_prefix=f"turn_{turn_key}",
+                )
 
 
 def render_pending_user_message(question: str) -> None:

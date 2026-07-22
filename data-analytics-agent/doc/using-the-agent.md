@@ -126,7 +126,23 @@ A completed turn can contain:
 - result table;
 - CSV download;
 - exact executed SQL;
-- sanitized activity history.
+- structured activity history with context, skill, agent, and tool lifecycle;
+- expandable curated tool arguments;
+- bounded debug tool inputs and agent state when trusted-local debug mode is
+  enabled.
+
+The activity API is append-only. Tool start, completion, and failure events
+share a call ID, and Streamlit consolidates those events into one progress
+step. Repeated calls remain visible instead of being deduplicated. Normal
+activity never includes tool outputs, result rows, model reasoning, or full
+delegation prompts.
+
+With `AGENT_DEBUG_DETAILS=true`, each active run and completed turn also
+contains the latest state snapshot for the coordinator and each observed
+specialist. Snapshots include bounded messages and ordinary state fields, but
+replace memory contents with path/size metadata and redact recognized secret
+keys. This mode can still expose questions, SQL, model text, sampled business
+data, and unrecognized secrets; use it only in a trusted local environment.
 
 The full capped result and its eager immutable column profile are stored outside
 model context. The SQL specialist, coordinator, and visualization specialist
@@ -196,7 +212,7 @@ remain restorable through their original URLs until the API restarts.
 | `POST /api/conversations` | Create a source-bound conversation |
 | `GET /api/conversations/{thread_id}` | Rehydrate turns and active run |
 | `POST /api/conversations/{thread_id}/messages` | Queue one run |
-| `GET /api/runs/{run_id}` | Poll state and incremental activity |
+| `GET /api/runs/{run_id}` | Poll status, incremental structured activity, and current debug snapshots |
 | `POST /api/runs/{run_id}/decisions` | Approve, edit, or reject pending SQL |
 | `GET /api/results/{result_id}` | Page through the saved capped result |
 

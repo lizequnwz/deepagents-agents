@@ -48,10 +48,18 @@ recursion limit.
 
 Failed runs always expose safe diagnostics: agent, budget type, limit,
 attempted count, run ID, and the specific tool when applicable. Set
-`AGENT_DEBUG_DETAILS=true` only for local debugging to include a rolling window
-of the last five tool payloads. Debug payloads are secret-redacted and bounded,
-but can still contain SQL, questions, and business data; do not enable them in
-an untrusted or shared environment.
+Set `AGENT_DEBUG_DETAILS=true` only for trusted local debugging. It enables:
+
+- bounded, recursively secret-key-redacted raw inputs on activity tool calls;
+- a rolling window of the last five tool payloads on execution-budget errors;
+- the latest bounded `values` state snapshot for the coordinator and each
+  observed specialist, retained with the completed turn.
+
+State snapshots retain at most 10 recent messages per agent, bound strings and
+collections, replace memory contents with path/size metadata, and are capped at
+20,000 serialized characters. Debug payloads can still contain SQL, questions,
+model text, sampled business data, and unrecognized secrets; never enable this
+mode in an untrusted or shared environment.
 
 `PGEOCODE_DATA_DIR` may optionally set the cache directory for the US postal
 dataset used by ZIP and city/state maps. `pgeocode` downloads that generic

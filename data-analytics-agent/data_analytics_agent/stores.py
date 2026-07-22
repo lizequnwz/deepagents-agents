@@ -10,7 +10,9 @@ from uuid import uuid4
 
 from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.schemas import (
+    AgentStateSnapshot,
     ActivityEvent,
+    ActivityTool,
     ApprovalRequest,
     ChatTurn,
     ConversationResponse,
@@ -223,6 +225,7 @@ class _Run:
     question: str
     status: RunStatus = RunStatus.QUEUED
     events: list[ActivityEvent] = field(default_factory=list)
+    debug_states: dict[str, AgentStateSnapshot] = field(default_factory=dict)
     approval: ApprovalRequest | None = None
     answer: FinalAnswer | None = None
     error: str | None = None
@@ -263,6 +266,7 @@ class RunStore:
                 status=item.status,
                 events=events,
                 next_event_id=len(item.events),
+                debug_states=list(item.debug_states.values()),
                 approval=item.approval,
                 answer=item.answer,
                 error=item.error,
@@ -273,14 +277,38 @@ class RunStore:
         with self._lock:
             self._get_mutable(run_id).status = status
 
-    def add_event(self, run_id: str, kind: str, label: str) -> ActivityEvent:
+    def add_event(
+        self,
+        run_id: str,
+        kind: str,
+        label: str,
+        *,
+        phase: str = "info",
+        agent: str | None = None,
+        tool: ActivityTool | None = None,
+    ) -> ActivityEvent:
         with self._lock:
             item = self._get_mutable(run_id)
             event = ActivityEvent(
-                id=len(item.events) + 1, kind=kind, label=label
+                id=len(item.events) + 1,
+                kind=kind,
+                label=label,
+                phase=phase,
+                agent=agent,
+                tool=tool,
             )
             item.events.append(event)
             return event
+
+    def set_debug_state(
+        self,
+        run_id: str,
+        snapshot: AgentStateSnapshot,
+    ) -> None:
+        """Replace the latest debug snapshot for one recognized agent."""
+
+        with self._lock:
+            self._get_mutable(run_id).debug_states[snapshot.agent] = snapshot
 
     def require_approval(
         self,
