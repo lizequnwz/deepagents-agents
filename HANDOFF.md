@@ -61,8 +61,8 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
   there is no chart approval interrupt.
 - Chart outcomes: `chart_created`, `needs_sql_reshape`, or `cannot_create`.
   The coordinator permits at most one reviewed SQL-reshape recovery cycle.
-- Agent skills: `skills/text-to-sql/` contains `schema-exploration` and
-  `query-writing`; `skills/data-visualization/` contains `chart-design`. Each
+- Agent skills: `skills/text-to-sql/` contains the combined `query-writing`
+  workflow; `skills/data-visualization/` contains `chart-design`. Each
   specialist loads only its own namespace. System prompts retain only runtime
   goals, hard boundaries, tool stages, and terminal contracts.
 - Chart progress: exposes chart type and a bounded subset of mappings while

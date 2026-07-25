@@ -124,30 +124,36 @@ def test_sql_context_reads_are_batched_and_unique(
     normalized = " ".join(_sql_subagent_prompt(source).split())
 
     assert (
-        "Issue these three independent reads in one tool-call batch when "
+        "Issue these two independent reads in one tool-call batch when "
         "possible"
     ) in normalized
+    assert "read the OSI file and the `query-writing` skill" in normalized
+    assert "schema-exploration" not in normalized
     assert "read each path at most once per assignment" in normalized
     assert "Re-read only if the earlier content was truncated or compacted" in (
         normalized
     )
 
 
-@pytest.mark.parametrize(
-    "skill_path",
-    [
-        "skills/text-to-sql/schema-exploration/SKILL.md",
-        "skills/text-to-sql/query-writing/SKILL.md",
-    ],
-)
-def test_sql_skills_reuse_the_loaded_osi(skill_path: str) -> None:
-    content = (PROJECT_ROOT / skill_path).read_text(encoding="utf-8")
+def test_sql_skill_reuses_the_loaded_osi_and_covers_schema_grounding() -> None:
+    skill_root = PROJECT_ROOT / "skills/text-to-sql"
+    content = (skill_root / "query-writing/SKILL.md").read_text(
+        encoding="utf-8"
+    )
     normalized = " ".join(content.split())
 
+    assert sorted(
+        path.name for path in skill_root.iterdir() if path.is_dir()
+    ) == ["query-writing"]
     assert "OSI semantic model already loaded for the assignment" in normalized
     assert "If it is absent from context, truncated, or compacted" in normalized
     assert "runtime prompt with `limit=1000`" in normalized
     assert "Read the exact OSI" not in content
+    assert "relevant logical datasets and fields" in normalized
+    assert "exact physical sources or expressions" in normalized
+    assert "declared relationships" in normalized
+    assert "requested business grain" in normalized
+    assert "distinguish physical source or expression names" in normalized
 
 
 def test_coordinator_owns_help_and_question_brainstorming(

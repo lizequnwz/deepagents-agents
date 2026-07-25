@@ -1,6 +1,6 @@
 ---
 name: query-writing
-description: Write one safe, dialect-aware, chart-ready SELECT query from the OSI semantic model already loaded for the assignment, falling back to its runtime path only when absent, truncated, or compacted. Submit it for human-reviewed execution for database analysis, metrics, ranking, time series, distributions, relationships, heatmap grids, and other result shaping.
+description: Ground a database question in the OSI semantic model already loaded for the assignment, then write one safe, dialect-aware, chart-ready SELECT query and submit it for human-reviewed execution. Use for database analysis, metrics, ranking, time series, distributions, relationships, heatmap grids, and other result shaping; fall back to the runtime OSI path only when its context is absent, truncated, or compacted.
 ---
 
 # Query Writing
@@ -10,12 +10,23 @@ description: Write one safe, dialect-aware, chart-ready SELECT query from the OS
 1. Use the OSI semantic model already loaded for this assignment. If it is
    absent from context, truncated, or compacted, read the exact OSI path from
    the runtime prompt with `limit=1000`.
-2. Apply its metric definitions, relationship paths, ambiguity guidance, and
-   source-specific instructions.
-3. Use exact physical dataset `source` and field-expression names. Select only
-   columns needed for the answer or requested chart.
-4. Use `write_todos` only when the assignment has several dependent analysis
+2. Identify the relevant logical datasets and fields, their exact physical
+   sources or expressions, declared relationships, metric definitions,
+   synonyms, and source-specific AI instructions.
+3. Resolve the requested business grain and note only material ambiguity that
+   changes the query or answer. Stop schema exploration when the OSI model
+   provides enough information to write the query.
+4. Use only declared relationship paths and exact physical dataset `source`
+   and field-expression names. Select only columns needed for the answer or
+   requested chart.
+5. Use `list_tables` or `get_table_schema` only to fill a named OSI gap or
+   verify suspected drift. These tools inspect metadata; do not use SQL to
+   probe row values for schema discovery.
+6. Use `write_todos` only when the assignment has several dependent analysis
    steps.
+
+When explaining schema, distinguish physical source or expression names from
+logical OSI dataset and field names.
 
 ## SQL rules
 
@@ -49,14 +60,12 @@ description: Write one safe, dialect-aware, chart-ready SELECT query from the OS
 
 ## Validate, review, and finish
 
-1. Use `list_tables` or `get_table_schema` only for a concrete OSI gap or
-   suspected schema drift.
-2. Call `validate_sql`, then `execute_sql`. Only `execute_sql` runs the query
+1. Call `validate_sql`, then `execute_sql`. Only `execute_sql` runs the query
    and pauses for human review.
-3. If review rejects the query, apply the feedback and submit a revised,
+2. If review rejects the query, apply the feedback and submit a revised,
    validated query. If review edits it, treat the executed edit as
    authoritative.
-4. Finish only after a successful `QueryResult`.
+3. Finish only after a successful `QueryResult`.
 
 Return the business answer plus the exact executed SQL, result ID, columns,
 full-result profile, at most the provided first 10 rows, stored row count, and
