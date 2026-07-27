@@ -18,6 +18,14 @@ from langchain.agents.middleware.tool_call_limit import (
 from langgraph.types import Command
 from pydantic import BaseModel
 
+from data_analytics_agent.agents.statistical_analysis.runner import (
+    PythonExecutionLimits,
+)
+from data_analytics_agent.agents.statistical_analysis.schemas import (
+    PythonExecutionResult,
+    StatisticalAnalysisOutcome,
+    StatisticalAnalysisResult,
+)
 from data_analytics_agent.agents.text_to_sql.tools import (
     validate_readonly_sql,
 )
@@ -34,9 +42,9 @@ from data_analytics_agent.agents.visualization.validation import (
 )
 from data_analytics_agent.data_sources import DataSource
 from data_analytics_agent.schemas import (
+    ActivityTool,
     AgentStateSnapshot,
     ApprovalRequest,
-    ActivityTool,
     ChatTurn,
     Decision,
     ExecutionBudgetDiagnostics,
@@ -53,10 +61,6 @@ from data_analytics_agent.stores import (
 )
 
 RESHAPE_ACTIVITY_LABEL = "Chart data needs SQL reshaping"
-BUDGET_ERROR_MESSAGE = (
-    "This analysis exceeded its execution budget and was stopped before "
-    "completion. Start a new request with narrower or clearer instructions."
-)
 DEBUG_VALUE_CHAR_LIMIT = 4_000
 DEBUG_TOTAL_CHAR_LIMIT = 25_000
 DEBUG_STATE_CHAR_LIMIT = 20_000
@@ -166,6 +170,8 @@ def _agent_name(graph_name: str) -> str | None:
         return "text-to-sql"
     if "data-visualization" in normalized:
         return "data-visualization"
+    if "statistical-analysis" in normalized:
+        return "statistical-analysis"
     if "data-analytics-agent" in normalized:
         return "coordinator"
     return None
@@ -455,6 +461,24 @@ def _budget_diagnostics(
     )
 
 
+def _budget_error_message(
+    diagnostics: ExecutionBudgetDiagnostics,
+) -> str:
+    """Explain which bounded agent loop stopped instead of blaming the user."""
+
+    budget = diagnostics.budget_type.replace("_", " ")
+    target = diagnostics.agent
+    if diagnostics.tool_name:
+        target = f"{target} tool {diagnostics.tool_name!r}"
+    return (
+        f"The {target} exceeded its {budget} execution budget "
+        f"({diagnostics.attempted_count} attempted; limit "
+        f"{diagnostics.limit}) and was stopped before completion. "
+        "This usually indicates an internal retry loop; review the execution "
+        "diagnostics before retrying."
+    )
+
+
 def _single_decision(
     approval: ApprovalRequest,
     decisions: list[Decision],
@@ -476,19 +500,23 @@ def decisions_to_command(
     decision = _single_decision(approval, decisions)
 
     if decision.action == "reject":
+        default_feedback = (
+            "Revise the Python and submit it for review again."
+            if approval.review_type == "python"
+            else "Revise the query and submit it for review again."
+        )
         translated = {
             "type": "reject",
-            "message": (
-                decision.feedback
-                or "Revise the query and submit it for review again."
-            ),
+            "message": decision.feedback or default_feedback,
         }
         return Command(resume={"decisions": [translated]})
 
-    if decision.action == "approve":
+    if decision.action == "approve" and approval.review_type == "sql":
         validate_readonly_sql(approval.query, approval.dialect)
         translated = {"type": "approve"}
-    else:
+    elif decision.action == "approve":
+        translated = {"type": "approve"}
+    elif approval.review_type == "sql":
         if not decision.edited_sql:
             raise ValueError("edited_sql is required for an edit decision.")
         validate_readonly_sql(decision.edited_sql, approval.dialect)
@@ -497,6 +525,25 @@ def decisions_to_command(
             "edited_action": {
                 "name": approval.action_name,
                 "args": {"query": decision.edited_sql},
+            },
+        }
+    else:
+        if decision.edited_python is None:
+            raise ValueError(
+                "edited_python is required for a Python edit decision."
+            )
+        if not decision.edited_python.strip():
+            raise ValueError("Reviewed Python cannot be empty.")
+        if not approval.parent_result_id:
+            raise ValueError("The Python review has no parent result ID.")
+        translated = {
+            "type": "edit",
+            "edited_action": {
+                "name": approval.action_name,
+                "args": {
+                    "result_id": approval.parent_result_id,
+                    "code": decision.edited_python,
+                },
             },
         }
     return Command(resume={"decisions": [translated]})
@@ -668,6 +715,7 @@ def _activity_arguments(tool_name: str, tool_input: Any) -> dict[str, Any]:
     if tool_name in {
         "inspect_conversation_result",
         "inspect_result_for_chart",
+        "inspect_result_for_statistics",
     }:
         result_id = str(data.get("result_id") or "")
         return {"result": result_id[:8]} if result_id else {}
@@ -684,6 +732,13 @@ def _activity_arguments(tool_name: str, tool_input: Any) -> dict[str, Any]:
                 data["message"], limit=240
             )
         return arguments
+    if tool_name == "execute_statistical_python":
+        result_id = str(data.get("result_id") or "")
+        code = str(data.get("code") or "")
+        arguments = {"code_lines": len(code.splitlines())}
+        if result_id:
+            arguments["result"] = result_id[:8]
+        return arguments
     return {}
 
 
@@ -693,6 +748,8 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
         subagent_type = data.get("subagent_type")
         if subagent_type == "data-visualization":
             return ("subagent", "Delegating to the visualization analyst")
+        if subagent_type == "statistical-analysis":
+            return ("subagent", "Delegating to the statistical analyst")
         return ("subagent", "Delegating to the text-to-SQL analyst")
     if tool_name == "read_file":
         path = _project_relative_path(
@@ -724,6 +781,10 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
         return ("result", "Inspecting a saved conversation result")
     if tool_name == "inspect_result_for_chart":
         return ("chart_data", "Inspecting chart-ready result data")
+    if tool_name == "inspect_result_for_statistics":
+        return ("statistics_data", "Inspecting statistical-analysis data")
+    if tool_name == "execute_statistical_python":
+        return ("statistics", "Executing reviewed statistical Python")
     if tool_name == "validate_chart":
         return ("chart_check", "Checking the chart specification")
     if tool_name == "create_chart":
@@ -760,6 +821,9 @@ def _extract_approval(
     interrupts: list[Any],
     *,
     source: DataSource | None = None,
+    result_store: ResultStore | None = None,
+    thread_id: str = "",
+    statistical_limits: PythonExecutionLimits | None = None,
 ) -> ApprovalRequest:
     for interrupt in interrupts:
         value = getattr(interrupt, "value", interrupt)
@@ -795,11 +859,50 @@ def _extract_approval(
                         source.limits.timeout_seconds if source else 10
                     ),
                     max_result_rows=(
-                        source.limits.max_result_rows if source else 500
+                        source.limits.max_result_rows if source else 10_000
                     ),
                     description=(
                         "Review the generated SQL before it is executed. "
                         "The database has not been queried yet."
+                    ),
+                )
+            code = arguments.get("code")
+            result_id = arguments.get("result_id")
+            if (
+                name == "execute_statistical_python"
+                and isinstance(code, str)
+                and isinstance(result_id, str)
+                and result_store is not None
+            ):
+                try:
+                    result = result_store.get(
+                        result_id,
+                        thread_id,
+                        source_id=source.source_id if source else None,
+                    )
+                except StoreNotFound as exc:
+                    raise RuntimeError(
+                        "The Python review references an out-of-scope result."
+                    ) from exc
+                limits = statistical_limits or PythonExecutionLimits()
+                return ApprovalRequest(
+                    action_name=name,
+                    query=code,
+                    allowed_decisions=allowed,
+                    review_type="python",
+                    source_id=result.source_id,
+                    timeout_seconds=limits.timeout_seconds,
+                    parent_result_id=result.result_id,
+                    originating_question=result.originating_question,
+                    executed_sql=result.executed_sql,
+                    columns=result.columns,
+                    sample_rows=result.rows[:10],
+                    profile=result.profile,
+                    row_count=result.row_count,
+                    truncated=result.truncated,
+                    description=(
+                        "Review the complete generated Python before it is "
+                        "executed against the scoped saved result."
                     ),
                 )
     raise RuntimeError("The run interrupted without a reviewable action.")
@@ -857,6 +960,32 @@ def _current_visualization(
     return None
 
 
+def _current_statistical_analysis(
+    output: dict[str, Any],
+) -> StatisticalAnalysisResult | None:
+    """Find the statistical specialist result from the current user turn."""
+
+    messages = output.get("messages")
+    if not isinstance(messages, list):
+        return None
+    for message in reversed(messages):
+        message_type = getattr(message, "type", None)
+        if message_type is None and isinstance(message, dict):
+            message_type = message.get("type") or message.get("role")
+        if message_type in {"human", "user"}:
+            return None
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, dict):
+            content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        try:
+            return StatisticalAnalysisResult.model_validate_json(content)
+        except ValueError:
+            continue
+    return None
+
+
 def _apply_sql_analysis(
     answer: FinalAnswer,
     output: dict[str, Any],
@@ -874,9 +1003,67 @@ def _apply_sql_analysis(
         "assumptions": analysis.assumptions,
         "interpretation": analysis.interpretation,
     }
-    if _current_visualization(output) is None:
+    if (
+        _current_visualization(output) is None
+        and _current_statistical_analysis(output) is None
+    ):
         updates["answer"] = analysis.answer
     return answer.model_copy(update=updates)
+
+
+def _apply_statistical_analysis(
+    answer: FinalAnswer,
+    output: dict[str, Any],
+    execution: PythonExecutionResult | None,
+) -> FinalAnswer:
+    """Attach exact reviewed code and application-captured outputs."""
+
+    analysis = _current_statistical_analysis(output)
+    if analysis is None:
+        analysis = answer.statistical_analysis
+    if analysis is None:
+        if execution is not None:
+            raise RuntimeError(
+                "Reviewed statistical Python executed without a terminal "
+                "statistical result."
+            )
+        return answer
+    if analysis.outcome is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED:
+        if execution is None:
+            raise RuntimeError(
+                "Statistical analysis claimed completion without a reviewed "
+                "execution."
+            )
+        if analysis.parent_result_id != execution.parent_result_id:
+            raise RuntimeError(
+                "Statistical analysis referenced a different parent result."
+            )
+        analysis = analysis.model_copy(
+            update={
+                "executed_python": execution.executed_python,
+                "outputs": execution.outputs,
+                "warnings": list(
+                    dict.fromkeys([*analysis.warnings, *execution.warnings])
+                ),
+            }
+        )
+    elif execution is not None:
+        raise RuntimeError(
+            "Reviewed statistical Python succeeded but the specialist returned "
+            "a non-completed outcome."
+        )
+    if not analysis.answer.strip():
+        analysis = analysis.model_copy(update={"answer": answer.answer})
+    if answer.result_id is not None and answer.result_id != analysis.parent_result_id:
+        raise RuntimeError(
+            "Coordinator and statistical specialist referenced different results."
+        )
+    return answer.model_copy(
+        update={
+            "result_id": analysis.parent_result_id,
+            "statistical_analysis": analysis,
+        }
+    )
 
 
 def _apply_visualization(
@@ -911,6 +1098,18 @@ def _apply_visualization(
     )
 
 
+def _conversation_history_answer(answer: FinalAnswer) -> str:
+    """Serialize a completed answer without binary statistical figure data."""
+
+    payload = answer.model_dump(mode="json", exclude_none=True)
+    statistical = payload.get("statistical_analysis")
+    if isinstance(statistical, dict):
+        for output in statistical.get("outputs") or []:
+            if isinstance(output, dict) and output.get("kind") == "figure":
+                output.pop("image_base64", None)
+    return json.dumps(payload, ensure_ascii=False)
+
+
 class RunManager:
     def __init__(
         self,
@@ -921,6 +1120,7 @@ class RunManager:
         conversations: ConversationStore,
         runs: RunStore,
         results: ResultStore,
+        statistical_execution_limits: PythonExecutionLimits | None = None,
         debug_details: bool = False,
     ) -> None:
         if agent is None and agent_resolver is None:
@@ -931,6 +1131,9 @@ class RunManager:
         self.conversations = conversations
         self.runs = runs
         self.results = results
+        self.statistical_execution_limits = (
+            statistical_execution_limits or PythonExecutionLimits()
+        )
         self.debug_details = debug_details
         self._diagnostic_events: dict[str, deque[dict[str, Any]]] = {}
 
@@ -951,6 +1154,10 @@ class RunManager:
                 raise RuntimeError(
                     "Agent returned SQL without an executed result."
                 )
+            if answer.statistical_analysis is not None:
+                raise RuntimeError(
+                    "Agent returned statistical analysis without a parent result."
+                )
             return answer
 
         try:
@@ -969,6 +1176,20 @@ class RunManager:
                     "Agent returned a chart for a different result."
                 )
             validate_chart_spec(answer.chart, result)
+        if answer.statistical_analysis is not None:
+            analysis = answer.statistical_analysis
+            if analysis.parent_result_id != result.result_id:
+                raise RuntimeError(
+                    "Agent returned statistical analysis for a different result."
+                )
+            if (
+                result.truncated
+                and analysis.outcome
+                is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED
+            ):
+                raise RuntimeError(
+                    "Agent returned statistical analysis for a truncated result."
+                )
         return answer.model_copy(update={"sql": result.executed_sql})
 
     async def start(self, run_id: str) -> None:
@@ -982,9 +1203,7 @@ class RunManager:
             messages.append(
                 {
                     "role": "assistant",
-                    "content": turn.answer.model_dump_json(
-                        exclude_none=True
-                    ),
+                    "content": _conversation_history_answer(turn.answer),
                 }
             )
         messages.append(
@@ -1016,10 +1235,12 @@ class RunManager:
             if decisions and isinstance(decisions[0], dict)
             else None
         )
+        review_type = self.runs.get_last_review_type(run_id)
+        artifact = "Python" if review_type == "python" else "SQL"
         if decision_type == "reject":
-            label = "Applying feedback and revising SQL"
+            label = f"Applying feedback and revising {artifact}"
         else:
-            label = "Executing reviewed SQL"
+            label = f"Executing reviewed {artifact}"
         self.runs.add_event(run_id, "resume", label, agent="coordinator")
         await self._drive(run_id, command)
 
@@ -1208,6 +1429,28 @@ class RunManager:
                             agent="data-visualization",
                         )
                     elif (
+                        "statistical-analysis" in graph_name
+                        and lifecycle == "started"
+                    ):
+                        self.runs.add_event(
+                            run_id,
+                            "subagent",
+                            "Statistical analyst started",
+                            phase="started",
+                            agent="statistical-analysis",
+                        )
+                    elif (
+                        "statistical-analysis" in graph_name
+                        and lifecycle == "completed"
+                    ):
+                        self.runs.add_event(
+                            run_id,
+                            "subagent",
+                            "Statistical analyst completed",
+                            phase="completed",
+                            agent="statistical-analysis",
+                        )
+                    elif (
                         "data-visualization" in graph_name
                         and lifecycle == "completed"
                     ):
@@ -1237,6 +1480,23 @@ class RunManager:
                         ),
                     )
 
+            statistical_delegations = len(
+                {
+                    event.tool.call_id or f"event-{event.id}"
+                    for event in self.runs.get(run_id).events
+                    if event.phase == "started"
+                    and event.tool is not None
+                    and event.tool.name == "task"
+                    and event.tool.arguments.get("subagent_type")
+                    == "statistical-analysis"
+                }
+            )
+            if statistical_delegations > 2:
+                raise RuntimeError(
+                    "Statistical analysis exceeded the single allowed "
+                    "SQL-reshape recovery cycle."
+                )
+
             interrupted = await stream.interrupted()
             if interrupted:
                 reshape_requests = sum(
@@ -1252,12 +1512,22 @@ class RunManager:
                 approval = _extract_approval(
                     await stream.interrupts(),
                     source=source,
+                    result_store=self.results,
+                    thread_id=thread_id,
+                    statistical_limits=self.statistical_execution_limits,
                 )
+                is_python = approval.review_type == "python"
                 self.runs.add_event(
                     run_id,
                     "approval",
-                    "SQL approval required",
-                    agent="text-to-sql",
+                    (
+                        "Python approval required"
+                        if is_python
+                        else "SQL approval required"
+                    ),
+                    agent=(
+                        "statistical-analysis" if is_python else "text-to-sql"
+                    ),
                 )
                 self.runs.require_approval(run_id, approval)
                 return
@@ -1272,6 +1542,11 @@ class RunManager:
                 else FinalAnswer.model_validate(answer_value)
             )
             answer = _apply_sql_analysis(answer, output)
+            answer = _apply_statistical_analysis(
+                answer,
+                output,
+                self.runs.get_statistical_execution(run_id),
+            )
             answer = _apply_visualization(answer, output)
             answer = self._validate_answer_provenance(
                 answer,
@@ -1318,7 +1593,7 @@ class RunManager:
             )
             self.runs.fail(
                 run_id,
-                BUDGET_ERROR_MESSAGE,
+                _budget_error_message(diagnostics),
                 diagnostics=diagnostics,
             )
             self.conversations.fail_run(thread_id, run_id)

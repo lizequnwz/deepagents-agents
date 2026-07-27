@@ -118,7 +118,7 @@ def load_data_source_catalog(
     *,
     config_path: Path | None = None,
     default_timeout_seconds: float = 10,
-    default_max_result_rows: int = 500,
+    default_max_result_rows: int = 10_000,
     default_model_sample_rows: int = 10,
 ) -> DataSourceCatalog:
     """Load and resolve the trusted source registry."""

@@ -17,6 +17,9 @@ from langchain.agents.structured_output import ProviderStrategy
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
+from data_analytics_agent.agents.statistical_analysis.agent import (
+    build_statistical_analysis_subagent,
+)
 from data_analytics_agent.agents.text_to_sql.agent import (
     build_text_to_sql_subagent,
 )
@@ -32,13 +35,14 @@ from data_analytics_agent.execution_budget import (
     execution_budget_middleware,
 )
 from data_analytics_agent.schemas import FinalAnswer
-from data_analytics_agent.stores import ResultStore
+from data_analytics_agent.stores import ResultStore, RunStore
 
 
 def _coordinator_prompt(
     source: DataSource,
     *,
     visualization_enabled: bool,
+    statistical_analysis_enabled: bool = True,
 ) -> str:
     curated_examples = (
         "\n".join(
@@ -61,11 +65,50 @@ Data visualization is disabled for this deployment. If the user explicitly
 requests a chart, say that visualization is unavailable; do not simulate one.
 """
     )
+    statistics = (
+        """\
+
+Statistical analysis is available. Route requests involving statistical tests,
+experiments, correlations, distributions, significance, regression,
+uncertainty, or similar inference to `statistical-analysis`.
+
+Assign exactly one source- and conversation-scoped saved SQL result by result
+ID. Conservatively reuse an untruncated result only when its provenance,
+population, grain, and columns clearly match the requested inference. Otherwise
+obtain a new analysis-ready result through `text-to-sql` and human SQL review
+first. Never copy a complete dataset into a task description.
+
+Preserve the variation needed for the requested relationship. In particular,
+do not reinterpret a categorical predictor versus numeric outcome as a
+correlation between two category-level aggregates. Ask `text-to-sql` for a
+defensible observational grain with repeated observations within categories;
+for a request such as sales versus genre, retain track- or transaction-level
+sales observations and include zero-sales entities when the estimand requires
+them.
+
+Accept one terminal statistical outcome: `analysis_completed`,
+`needs_sql_reshape`, `needs_clarification`, or `cannot_analyze`. On
+`needs_sql_reshape`, allow exactly one recovery cycle: obtain one new reviewed
+SQL result matching the requested shape, then call statistical analysis once
+more. If that attempt is still unsuitable or truncated, stop. Statistical
+diagnostic figures may be produced by reviewed Python even without an explicit
+chart request when they materially support the analysis.
+"""
+        if statistical_analysis_enabled
+        else """\
+
+Statistical analysis is disabled for this deployment. If the user requests
+statistical tests, experiments, correlations, distributions, significance,
+regression, uncertainty, or similar inference, say it is unavailable; do not
+simulate execution or delegate that request.
+"""
+    )
     return f"""\
 You are the coordinator for a conversational data analyst permanently bound to
 {source.name!r} (source ID {source.source_id!r}). Follow the coordinator policy
 in AGENTS.md. Do not execute SQL, invent database facts, or switch sources.
 {visualization}
+{statistics}
 
 Source context available without database execution:
 - Description: {source.description}
@@ -91,7 +134,12 @@ do not request or expose additional rows. Treat reviewed execution and
 terminal specialist results as authoritative, including human-edited scope.
 
 Return `FinalAnswer` with the direct business answer and, when present, the
-exact executed SQL, result ID, and generated `ChartSpec`. Include only material
+exact executed SQL, result ID, and generated `ChartSpec`. Do not reconstruct or
+copy a `StatisticalAnalysisResult`; leave `statistical_analysis` null or omit
+it. The application attaches the authoritative terminal specialist result,
+exact reviewed Python, and captured outputs after parsing. For successful
+statistical analysis, use the reviewed execution as authoritative evidence
+while composing the top-level answer in your own words. Include only material
 assumptions and a concise interpretation. Omit private reasoning and raw tool
 payloads.
 """
@@ -124,6 +172,7 @@ def _final_answer_response_format() -> ProviderStrategy[FinalAnswer]:
 def build_agent(
     settings: Settings,
     result_store: ResultStore,
+    run_store: RunStore | None = None,
     *,
     source: DataSource,
     backend: SQLBackend,
@@ -218,6 +267,27 @@ def build_agent(
             )
         )
 
+    if settings.enable_statistical_analysis:
+        statistical_run_store = run_store or RunStore()
+        subagents.append(
+            build_statistical_analysis_subagent(
+                source=source,
+                result_store=result_store,
+                run_store=statistical_run_store,
+                execution_limits=settings.statistical_execution_limits(),
+                model=chat_model,
+                permissions=permissions,
+                middleware=execution_budget_middleware(
+                    model_calls=(
+                        settings.statistical_agent_model_call_limit
+                    ),
+                    tool_calls=(
+                        settings.statistical_agent_tool_call_limit
+                    ),
+                ),
+            )
+        )
+
     return create_deep_agent(
         name="data-analytics-agent",
         model=chat_model,
@@ -225,6 +295,9 @@ def build_agent(
         system_prompt=_coordinator_prompt(
             source,
             visualization_enabled=settings.enable_data_visualization,
+            statistical_analysis_enabled=(
+                settings.enable_statistical_analysis
+            ),
         ),
         memory=["/project/AGENTS.md"],
         subagents=subagents,

@@ -87,6 +87,8 @@ sources:
         encoding="utf-8",
     )
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SQL_MAX_RESULT_ROWS", "10000")
+    monkeypatch.setenv("AGENT_DEBUG_DETAILS", "false")
     return Settings(
         project_root=project_root,
         data_sources_config_path=registry_path,

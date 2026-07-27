@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import csv
 import hashlib
 import io
@@ -229,6 +230,17 @@ def sql_review_decision(
     return {"action": "edit", "edited_sql": reviewed_sql}
 
 
+def python_review_decision(
+    generated_python: str,
+    reviewed_python: str,
+) -> dict[str, Any]:
+    """Translate authoritative Python editor contents to the API shape."""
+
+    if reviewed_python == generated_python:
+        return {"action": "approve"}
+    return {"action": "edit", "edited_python": reviewed_python}
+
+
 def _reset_sql_editor(editor_key: str, generated_sql: str) -> None:
     st.session_state[editor_key] = generated_sql
 
@@ -249,8 +261,8 @@ def render_page_header(source: dict[str, Any] | None = None) -> None:
         anchor=source_anchor,
     )
     st.caption(
-        "Semantic-grounded analytics. SQL is reviewed before execution; "
-        "explicitly requested charts are generated from constrained specs."
+        "Semantic-grounded analytics. SQL and statistical Python are reviewed "
+        "before execution; charts remain result-scoped."
     )
 
 
@@ -268,8 +280,8 @@ def render_sidebar(
     with st.sidebar:
         st.title("Data Analytics Agent")
         st.caption(
-            "Human-reviewed SQL and optional constrained charts with semantic "
-            "grounding and local in-memory conversation state."
+            "Human-reviewed SQL and statistical Python, optional constrained "
+            "charts, semantic grounding, and local in-memory conversation state."
         )
         ready_sources = [
             source for source in data_sources["sources"] if source["ready"]
@@ -322,6 +334,12 @@ def render_sidebar(
                     "Charts enabled",
                     icon=":material/bar_chart:",
                     color="blue",
+                )
+            if health.get("statistical_analysis_enabled"):
+                st.badge(
+                    "Statistics enabled",
+                    icon=":material/functions:",
+                    color="violet",
                 )
         elif health:
             st.warning("API setup incomplete", icon=":material/warning:")
@@ -541,6 +559,13 @@ def render_turn(
                     st.markdown("**Interpretation**")
                     st.markdown(interpretation)
 
+        statistical = answer.get("statistical_analysis")
+        if statistical:
+            _render_statistical_analysis(
+                statistical,
+                widget_key=turn_key,
+            )
+
         if answer.get("result_id"):
             _render_result(
                 client,
@@ -573,12 +598,107 @@ def render_turn(
                 )
 
 
+def _render_statistical_analysis(
+    analysis: dict[str, Any],
+    *,
+    widget_key: str,
+) -> None:
+    """Render bounded statistical outputs and inspectable methodology."""
+
+    outcome = str(analysis.get("outcome") or "cannot_analyze")
+    color = "green" if outcome == "analysis_completed" else "orange"
+    st.badge(
+        outcome.replace("_", " "),
+        icon=":material/functions:",
+        color=color,
+    )
+
+    for index, output in enumerate(analysis.get("outputs") or []):
+        name = str(output.get("name") or f"Output {index + 1}")
+        kind = output.get("kind")
+        if kind == "table":
+            st.markdown(f"**{name}**")
+            st.dataframe(
+                output.get("rows") or [],
+                column_order=output.get("columns") or None,
+                hide_index=True,
+                width="stretch",
+                key=f"stat_table_{widget_key}_{index}",
+            )
+        elif kind == "figure" and output.get("image_base64"):
+            try:
+                image = base64.b64decode(output["image_base64"], validate=True)
+                st.image(image, caption=name, width="stretch")
+            except (ValueError, TypeError):
+                st.warning(
+                    f"Statistical figure {name!r} could not be decoded.",
+                    icon=":material/warning:",
+                )
+        elif kind == "scalar":
+            st.markdown(f"**{name}:** {output.get('value')}")
+        else:
+            st.markdown(f"**{name}**")
+            st.markdown(str(output.get("text") or ""))
+
+    warnings = analysis.get("warnings") or []
+    for warning in warnings:
+        st.warning(str(warning), icon=":material/warning:")
+
+    with st.expander(
+        "Statistical method and assumptions",
+        icon=":material/science:",
+        expanded=False,
+    ):
+        method = analysis.get("method")
+        if method:
+            st.markdown("**Method**")
+            st.markdown(str(method))
+        assumptions = analysis.get("assumptions") or []
+        if assumptions:
+            st.markdown("**Assumptions**")
+            for assumption in assumptions:
+                st.markdown(f"- {assumption}")
+        interpretation = analysis.get("interpretation")
+        if interpretation:
+            st.markdown("**Interpretation**")
+            st.markdown(str(interpretation))
+
+    with st.expander(
+        "Reviewed statistical Python and provenance",
+        icon=":material/code:",
+        expanded=False,
+    ):
+        st.caption(
+            f"Parent result · `{str(analysis.get('parent_result_id') or '')}`"
+        )
+        if analysis.get("executed_python"):
+            st.code(analysis["executed_python"], language="python")
+
+
 def render_pending_user_message(question: str) -> None:
     with st.chat_message("user"):
         st.markdown(question)
 
 
 def render_approval(
+    run: dict[str, Any],
+    *,
+    revision_feedback: str | None = None,
+) -> dict[str, Any] | None:
+    """Render the appropriate SQL or Python human-review surface."""
+
+    if run["approval"].get("review_type") == "python":
+        return _render_python_approval(
+            run,
+            revision_feedback=revision_feedback,
+        )
+    return _render_sql_approval(
+        run,
+        revision_feedback=revision_feedback,
+    )
+
+
+def _render_sql_approval(
     run: dict[str, Any],
     *,
     revision_feedback: str | None = None,
@@ -688,4 +808,170 @@ def render_approval(
                     "action": "reject",
                     "feedback": feedback.strip(),
                 }
+    return None
+
+
+def _render_python_approval(
+    run: dict[str, Any],
+    *,
+    revision_feedback: str | None = None,
+) -> dict[str, Any] | None:
+    approval = run["approval"]
+    generated_python = approval["query"]
+    cycle_source = f"{run['next_event_id']}\0{generated_python}"
+    cycle_key = hashlib.sha256(cycle_source.encode("utf-8")).hexdigest()[:10]
+    editor_key = f"python_review_{run['run_id']}_{cycle_key}"
+    st.session_state.setdefault(editor_key, generated_python)
+
+    with st.container(border=True):
+        st.subheader("Review Python before execution", anchor=False)
+        st.warning(
+            "Nothing in this Python proposal has been executed yet. Approved "
+            "code runs with the local API service's file and process access.",
+            icon=":material/security:",
+        )
+        if revision_feedback:
+            st.success(
+                "Revised Python is ready for another review.",
+                icon=":material/check_circle:",
+            )
+            st.caption(f"Your feedback: {revision_feedback}")
+
+        with st.container(
+            horizontal=True,
+            vertical_alignment="center",
+            gap="small",
+        ):
+            st.badge(
+                f"Result {str(approval.get('parent_result_id') or '')[:8]}",
+                icon=":material/database:",
+                color="blue",
+            )
+            st.badge(
+                f"{approval.get('row_count', 0)} rows",
+                icon=":material/table_rows:",
+                color="gray",
+            )
+            st.badge(
+                str(approval.get("source_id") or "source"),
+                icon=":material/storage:",
+                color="gray",
+            )
+
+        st.caption(
+            "The immutable parent result is loaded as pandas `df`; `pd` and "
+            "`np` are preloaded. The complete code visible in the editor is "
+            "the exact code that will execute."
+        )
+        with st.expander(
+            "Input dataset provenance",
+            icon=":material/data_object:",
+            expanded=False,
+        ):
+            if approval.get("originating_question"):
+                st.markdown("**Originating question**")
+                st.markdown(str(approval["originating_question"]))
+            st.markdown("**Executed SQL**")
+            st.code(str(approval.get("executed_sql") or ""), language="sql")
+            st.markdown("**Columns and full-result profile**")
+            st.json(
+                {
+                    "columns": approval.get("columns") or [],
+                    "profile": approval.get("profile") or {},
+                    "truncated": approval.get("truncated"),
+                }
+            )
+            sample_rows = approval.get("sample_rows") or []
+            if sample_rows:
+                st.markdown("**First 10 rows at most**")
+                st.dataframe(
+                    sample_rows,
+                    column_order=approval.get("columns") or None,
+                    hide_index=True,
+                    width="stretch",
+                )
+
+        with st.form(
+            f"python_run_form_{run['run_id']}_{cycle_key}",
+            border=False,
+            enter_to_submit=False,
+        ):
+            reviewed_python = st.text_area(
+                "Python to execute",
+                height=420,
+                key=editor_key,
+                help=(
+                    "Review or edit the code. This exact text executes in a "
+                    "bounded subprocess against the immutable parent result."
+                ),
+            )
+            st.caption(
+                f"{approval['timeout_seconds']:g}-second timeout · scoped `df` "
+                "input · bounded stdout, tables, and figures"
+            )
+            run_python = st.form_submit_button(
+                "Run this Python",
+                icon=":material/play_arrow:",
+                type="primary",
+                key=f"run_python_{run['run_id']}_{cycle_key}",
+            )
+        st.button(
+            "Reset to generated Python",
+            icon=":material/restart_alt:",
+            type="tertiary",
+            key=f"reset_python_{run['run_id']}_{cycle_key}",
+            on_click=_reset_sql_editor,
+            args=(editor_key, generated_python),
+        )
+
+        if run_python:
+            if not reviewed_python.strip():
+                st.error(
+                    "Python code cannot be empty.",
+                    icon=":material/error:",
+                )
+                return None
+            return python_review_decision(
+                generated_python,
+                reviewed_python,
+            )
+
+        with st.expander(
+            "Reject and request changes",
+            icon=":material/replay:",
+            expanded=False,
+        ):
+            st.caption(
+                "The statistical analyst will propose revised Python. You "
+                "will review it again before anything executes."
+            )
+            with st.form(
+                f"python_reject_form_{run['run_id']}_{cycle_key}",
+                border=False,
+                enter_to_submit=False,
+            ):
+                feedback = st.text_area(
+                    "Feedback for the analyst",
+                    placeholder=(
+                        "Explain what should change in the method, data "
+                        "handling, outputs, or figures."
+                    ),
+                    height=100,
+                    key=(
+                        f"rejection_feedback_{run['run_id']}_{cycle_key}"
+                    ),
+                )
+                reject = st.form_submit_button(
+                    "Send feedback and revise",
+                    icon=":material/replay:",
+                    key=f"reject_python_{run['run_id']}_{cycle_key}",
+                )
+            if reject:
+                if not feedback.strip():
+                    st.error(
+                        "Add feedback describing how the Python should change.",
+                        icon=":material/error:",
+                    )
+                    return None
+                return {"action": "reject", "feedback": feedback.strip()}
     return None

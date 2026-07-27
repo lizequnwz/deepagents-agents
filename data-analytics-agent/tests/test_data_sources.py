@@ -36,7 +36,20 @@ def test_registry_resolves_source_semantic_target_and_limits(
     assert source.backend_type == "sqlite"
     assert source.dialect == "sqlite"
     assert source.target["path"] == "db/test.sqlite"
-    assert source.limits.max_result_rows == 500
+    assert source.limits.max_result_rows == 10_000
+
+
+def test_sql_result_limit_can_be_configured_from_env(
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SQL_MAX_RESULT_ROWS", "25000")
+    settings = Settings(
+        project_root=test_settings.project_root,
+        data_sources_config_path=test_settings.data_sources_config_path,
+    )
+
+    assert settings.load_catalog().get("test").limits.max_result_rows == 25_000
 
 
 def test_clear_semantic_schema_mismatch_blocks_source(
@@ -115,6 +128,46 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
     assert "`create_chart` and `finish_visualization` are terminal" in (
         visualization_prompt.lower()
     )
+
+
+def test_statistical_feature_flag_defaults_enabled_and_can_be_disabled(
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = test_settings.load_catalog().get("test")
+    assert test_settings.enable_statistical_analysis is True
+    enabled = _coordinator_prompt(
+        source,
+        visualization_enabled=True,
+        statistical_analysis_enabled=True,
+    )
+    normalized_enabled = " ".join(enabled.lower().split())
+    assert "route requests involving statistical tests" in normalized_enabled
+    assert "exactly one recovery cycle" in normalized_enabled
+    assert (
+        "leave `statistical_analysis` null or omit it" in normalized_enabled
+    )
+    assert (
+        "application attaches the authoritative terminal" in normalized_enabled
+    )
+    assert (
+        "do not reinterpret a categorical predictor versus numeric outcome"
+        in normalized_enabled
+    )
+
+    monkeypatch.setenv("ENABLE_STATISTICAL_ANALYSIS", "false")
+    disabled = Settings(
+        project_root=test_settings.project_root,
+        data_sources_config_path=test_settings.data_sources_config_path,
+    )
+    prompt = _coordinator_prompt(
+        source,
+        visualization_enabled=True,
+        statistical_analysis_enabled=disabled.enable_statistical_analysis,
+    )
+    assert disabled.enable_statistical_analysis is False
+    assert "statistical analysis is disabled" in prompt.lower()
+    assert "do not simulate execution" in " ".join(prompt.lower().split())
 
 
 def test_sql_context_reads_are_batched_and_unique(
@@ -229,7 +282,11 @@ def test_sparse_chart_contract_does_not_request_openai_strict_schema() -> None:
         "response_format"
     ]["json_schema"]
     chart_schema = response_format["schema"]["$defs"]["ChartSpec"]
+    statistical_schema = response_format["schema"]["$defs"][
+        "StatisticalAnalysisResult"
+    ]
 
     assert "strict" not in response_format
     assert "x" in chart_schema["properties"]
     assert "x" not in chart_schema["required"]
+    assert "answer" not in statistical_schema["required"]

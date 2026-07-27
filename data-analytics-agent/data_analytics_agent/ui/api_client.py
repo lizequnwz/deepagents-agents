@@ -7,6 +7,23 @@ from typing import Any
 
 import httpx
 
+from data_analytics_agent.schemas import API_CONTRACT_VERSION
+
+
+def api_contract_error(health: dict[str, Any]) -> str | None:
+    """Explain when Streamlit and FastAPI were loaded from different code."""
+
+    actual = health.get("api_contract_version")
+    if actual == API_CONTRACT_VERSION:
+        return None
+    displayed = "missing" if actual is None else repr(actual)
+    return (
+        "The API process is running an incompatible code version "
+        f"(contract {displayed}; this UI expects "
+        f"{API_CONTRACT_VERSION}). Stop the current services and restart "
+        "`./scripts/start.sh` before submitting another request."
+    )
+
 
 class APIError(RuntimeError):
     """A user-presentable API failure."""

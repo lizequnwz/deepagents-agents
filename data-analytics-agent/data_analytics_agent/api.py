@@ -18,6 +18,7 @@ from data_analytics_agent.run_manager import (
     decisions_to_command,
 )
 from data_analytics_agent.schemas import (
+    API_CONTRACT_VERSION,
     ConversationResponse,
     CreateConversationRequest,
     CreateConversationResponse,
@@ -170,6 +171,7 @@ class Services:
                 graph = build_agent(
                     self.settings,
                     self.results,
+                    self.runs,
                     source=source,
                     backend=self.backend_for_source(source_id),
                 )
@@ -185,6 +187,9 @@ class Services:
                     conversations=self.conversations,
                     runs=self.runs,
                     results=self.results,
+                    statistical_execution_limits=(
+                        self.settings.statistical_execution_limits()
+                    ),
                     debug_details=self.settings.agent_debug_details,
                 )
             return self._manager
@@ -231,10 +236,14 @@ def create_app(services: Services | None = None) -> FastAPI:
         return HealthResponse(
             status="not_ready" if errors else "ok",
             model=container.settings.model,
+            api_contract_version=API_CONTRACT_VERSION,
             default_source_id=default_source_id,
             ready_source_count=ready_count,
             visualization_enabled=(
                 container.settings.enable_data_visualization
+            ),
+            statistical_analysis_enabled=(
+                container.settings.enable_statistical_analysis
             ),
             errors=errors,
         )

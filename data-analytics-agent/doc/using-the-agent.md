@@ -87,6 +87,18 @@ Chart monthly inflows and outflows for 1998 as a line chart.
 The agent creates exactly one chart per request. If the current saved result is
 not chart-ready, it first proposes a new grouped query for SQL review.
 
+For statistical inference, ask the business question rather than naming a test
+unless you have a firm methodological requirement:
+
+```text
+Test whether transaction amounts differ between the two customer segments.
+Report effect size, uncertainty, assumptions, and useful diagnostics.
+```
+
+The coordinator reuses a clearly suitable untruncated saved result or proposes
+analysis-ready SQL first. Statistical methods are not restricted to a fixed
+catalog.
+
 ## Review SQL
 
 Every `execute_sql` action pauses before database execution. The review panel
@@ -116,6 +128,28 @@ Provide actionable feedback. Rejection does not complete the run and does not
 execute SQL. The text-to-SQL specialist revises its analysis and submits a new
 `execute_sql` action, producing another review cycle.
 
+## Review statistical Python
+
+Every `execute_statistical_python` action pauses before code execution. The
+review panel shows the complete proposed Python; immutable parent result and
+source; originating question and SQL; row count, truncation, columns, profile,
+and at most 10 preview rows; and the execution timeout.
+
+The runtime preloads the complete scoped saved result as pandas `df`, with `pd`
+and `np` also available. Code must assign a named dictionary to
+`analysis_outputs`. It may use pandas, NumPy, SciPy, statsmodels,
+scikit-learn, matplotlib, and seaborn to reshape data, handle missingness,
+derive fields, fit models, perform tests, and produce compact outputs.
+
+**Run this Python** approves unchanged code or submits the exact editor text as
+an authoritative edit. The parent result ID cannot be edited. Reject with
+feedback to request a new proposal. Failures return bounded diagnostics and
+require another review; at most three actual executions are permitted.
+
+The POC subprocess has a hard timeout and stripped service secrets, but it is
+not a production sandbox: reviewed code retains local filesystem, process,
+import, and network capabilities. Use it only in a trusted local environment.
+
 ## Read the result
 
 A completed turn can contain:
@@ -126,6 +160,8 @@ A completed turn can contain:
 - result table;
 - CSV download;
 - exact executed SQL;
+- structured statistical method, assumptions, warnings, interpretation,
+  compact outputs, bounded diagnostic figures, and exact executed Python;
 - structured activity history with context, skill, agent, and tool lifecycle;
 - expandable curated tool arguments;
 - bounded debug tool inputs and agent state when trusted-local debug mode is
@@ -213,7 +249,7 @@ remain restorable through their original URLs until the API restarts.
 | `GET /api/conversations/{thread_id}` | Rehydrate turns and active run |
 | `POST /api/conversations/{thread_id}/messages` | Queue one run |
 | `GET /api/runs/{run_id}` | Poll status, incremental structured activity, and current debug snapshots |
-| `POST /api/runs/{run_id}/decisions` | Approve, edit, or reject pending SQL |
+| `POST /api/runs/{run_id}/decisions` | Approve, edit, or reject pending SQL or Python |
 | `GET /api/results/{result_id}` | Page through the saved capped result |
 
 Use FastAPI `/docs` for authoritative request and response schemas.
@@ -226,10 +262,13 @@ Do not change these casually:
 2. An active conversation accepts only one run at a time.
 3. Every SQL execution requires an interrupt decision.
 4. The backend executes the exact reviewed SQL.
-5. Final executable answers must reference a result from the same source and
+5. Every statistical Python execution requires review and uses an immutable
+   scoped result ID.
+6. Statistical inference never runs on a result marked `truncated`.
+7. Final executable answers must reference a result from the same source and
    thread.
-6. Full results remain application artifacts, not model messages.
-7. Visualization occurs only on explicit request and produces one validated
+8. Full results remain application artifacts, not model messages.
+9. Visualization occurs only on explicit request and produces one validated
    chart tied to one saved result.
 
 ## Common problems
@@ -247,6 +286,9 @@ Do not change these casually:
 | Chart request reaches another SQL review | Existing result is not chart-ready | Review the new grouping/query; chart generation then continues automatically |
 | Map omits locations | ZIP/city-state values could not all be resolved | Read the coverage warning and correct or simplify the source result |
 | Chart feature unavailable | `ENABLE_DATA_VISUALIZATION=false` | Enable it and restart FastAPI |
+| Statistical feature unavailable | `ENABLE_STATISTICAL_ANALYSIS=false` | Enable it and restart FastAPI |
+| Statistical result needs SQL reshape | Result is truncated or analytically unsuitable | Review the one allowed analysis-ready SQL recovery query |
+| Python proposal fails | Runtime error, timeout, or bounded-output violation | Review the revised code; at most three actual runs are allowed |
 
 ## Verification checklist
 
@@ -261,3 +303,6 @@ Do not change these casually:
 - Non-chart questions do not invoke visualization.
 - Chart progress identifies the type and selected mappings.
 - Generated charts remain tied to the saved result ID.
+- Statistical review shows the immutable parent result and complete Python.
+- Edited Python shown after completion exactly matches what executed.
+- Truncated saved results cannot complete statistical analysis.

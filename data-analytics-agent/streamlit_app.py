@@ -9,7 +9,11 @@ from typing import Any
 import streamlit as st
 from dotenv import load_dotenv
 
-from data_analytics_agent.ui.api_client import APIError, AgentAPIClient
+from data_analytics_agent.ui.api_client import (
+    APIError,
+    AgentAPIClient,
+    api_contract_error,
+)
 from data_analytics_agent.ui.components import (
     render_activity_timeline,
     render_approval,
@@ -56,6 +60,7 @@ def clear_conversation_state() -> None:
         "event_activities_",
         "debug_states_",
         "sql_review_",
+        "python_review_",
         "rejection_feedback_",
         "review_feedback_",
         "review_phase_",
@@ -185,6 +190,8 @@ def poll_run(
     status_by_phase = {
         "revising_sql": "Feedback sent—revising SQL…",
         "executing_sql": "Executing reviewed SQL…",
+        "revising_python": "Feedback sent—revising Python…",
+        "executing_python": "Executing reviewed Python…",
     }
     initial_status = status_by_phase.get(
         review_phase,
@@ -226,12 +233,18 @@ def poll_run(
             state = run["status"]
 
             if state == "approval_required":
-                revised = review_phase == "revising_sql"
+                review_type = (run.get("approval") or {}).get(
+                    "review_type", "sql"
+                )
+                revised = str(review_phase or "").startswith("revising_")
+                artifact_label = (
+                    "Python" if review_type == "python" else "SQL"
+                )
                 status_panel.update(
                     label=(
-                        "Revised SQL is ready for review"
+                        f"Revised {artifact_label} is ready for review"
                         if revised
-                        else "SQL is ready for review"
+                        else f"{artifact_label} is ready for review"
                     ),
                     state="complete",
                     expanded=False,
@@ -269,6 +282,15 @@ try:
 except APIError as exc:
     health = None
     health_error = str(exc)
+
+if health is not None and (contract_error := api_contract_error(health)):
+    render_page_header()
+    st.error(contract_error, icon=":material/restart_alt:")
+    st.caption(
+        "Restarting the API clears its in-memory conversations and saved "
+        "results. Export anything you need before stopping the services."
+    )
+    st.stop()
 
 try:
     data_sources = client.get_data_sources()
@@ -401,15 +423,21 @@ if active_run_id:
         )
         if decision:
             is_rejection = decision["action"] == "reject"
+            review_type = active_run["approval"].get(
+                "review_type", "sql"
+            )
+            artifact_label = (
+                "Python" if review_type == "python" else "SQL"
+            )
             spinner_text = (
                 "Sending feedback to the analyst…"
                 if is_rejection
-                else "Submitting the reviewed SQL…"
+                else f"Submitting the reviewed {artifact_label}…"
             )
             status_text = (
-                "Feedback sent—revising SQL."
+                f"Feedback sent—revising {artifact_label}."
                 if is_rejection
-                else "Executing reviewed SQL."
+                else f"Executing reviewed {artifact_label}."
             )
             try:
                 with st.spinner(spinner_text):
@@ -422,7 +450,7 @@ if active_run_id:
                     ] = decision["feedback"]
                     st.session_state[
                         f"review_phase_{active_run_id}"
-                    ] = "revising_sql"
+                    ] = f"revising_{review_type}"
                 else:
                     st.session_state.pop(
                         f"review_feedback_{active_run_id}",
@@ -430,7 +458,7 @@ if active_run_id:
                     )
                     st.session_state[
                         f"review_phase_{active_run_id}"
-                    ] = "executing_sql"
+                    ] = f"executing_{review_type}"
                 st.rerun()
             except APIError as exc:
                 st.error(str(exc), icon=":material/error:")

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Statistical analysis"
+  short_description: "Robust statistical analysis and diagnostics"
+  default_prompt: "Use $statistical-analysis to conduct a robust statistical analysis with appropriate diagnostics."

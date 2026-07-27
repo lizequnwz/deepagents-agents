@@ -8,16 +8,19 @@ from threading import RLock
 from typing import Any
 from uuid import uuid4
 
+from data_analytics_agent.agents.statistical_analysis.schemas import (
+    PythonExecutionResult,
+)
 from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.schemas import (
-    AgentStateSnapshot,
     ActivityEvent,
     ActivityTool,
+    AgentStateSnapshot,
     ApprovalRequest,
     ChatTurn,
     ConversationResponse,
-    FinalAnswer,
     ExecutionBudgetDiagnostics,
+    FinalAnswer,
     ResultPage,
     RunResponse,
     RunStatus,
@@ -158,6 +161,7 @@ class _Conversation:
     thread_id: str
     source_id: str
     turns: list[ChatTurn] = field(default_factory=list)
+    run_ids: list[str] = field(default_factory=list)
     active_run_id: str | None = None
 
 
@@ -188,6 +192,7 @@ class ConversationStore:
                 thread_id=item.thread_id,
                 source_id=item.source_id,
                 turns=list(item.turns),
+                run_ids=list(item.run_ids),
                 active_run_id=item.active_run_id,
             )
 
@@ -198,6 +203,7 @@ class ConversationStore:
                 raise StoreNotFound(thread_id)
             if item.active_run_id is not None:
                 raise RuntimeError("A run is already active for this conversation.")
+            item.run_ids.append(run_id)
             item.active_run_id = run_id
 
     def complete_run(self, thread_id: str, run_id: str, turn: ChatTurn) -> None:
@@ -230,6 +236,9 @@ class _Run:
     answer: FinalAnswer | None = None
     error: str | None = None
     diagnostics: ExecutionBudgetDiagnostics | None = None
+    statistical_execution_attempts: int = 0
+    statistical_execution: PythonExecutionResult | None = None
+    last_review_type: str = "sql"
 
 
 class RunStore:
@@ -276,6 +285,45 @@ class RunStore:
     def set_status(self, run_id: str, status: RunStatus) -> None:
         with self._lock:
             self._get_mutable(run_id).status = status
+
+    def reserve_statistical_execution_attempt(
+        self,
+        run_id: str,
+        *,
+        maximum: int,
+    ) -> int:
+        """Count actual reviewed executions, excluding review rejections."""
+
+        with self._lock:
+            item = self._get_mutable(run_id)
+            if item.statistical_execution_attempts >= maximum:
+                raise RuntimeError(
+                    f"The run already used all {maximum} statistical Python "
+                    "execution attempts."
+                )
+            item.statistical_execution_attempts += 1
+            return item.statistical_execution_attempts
+
+    def record_statistical_execution(
+        self,
+        run_id: str,
+        execution: PythonExecutionResult,
+    ) -> None:
+        """Retain the authoritative successful execution for final validation."""
+
+        with self._lock:
+            self._get_mutable(run_id).statistical_execution = execution
+
+    def get_statistical_execution(
+        self,
+        run_id: str,
+    ) -> PythonExecutionResult | None:
+        with self._lock:
+            return self._get_mutable(run_id).statistical_execution
+
+    def get_last_review_type(self, run_id: str) -> str:
+        with self._lock:
+            return self._get_mutable(run_id).last_review_type
 
     def add_event(
         self,
@@ -344,6 +392,7 @@ class RunStore:
                     "This run is no longer awaiting that decision."
                 )
             item.status = RunStatus.RUNNING
+            item.last_review_type = expected.review_type
             item.approval = None
             item.error = None
 

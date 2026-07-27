@@ -404,6 +404,7 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     ).json()
     assert conversation["source_id"] == "test"
     assert conversation["active_run_id"] is None
+    assert conversation["run_ids"] == [run_id]
     assert len(conversation["turns"]) == 1
     assert conversation["turns"][0]["answer"]["answer"].startswith("Five")
     assert conversation["turns"][0]["answer"]["sql"] == executed_sql
@@ -472,7 +473,9 @@ def test_health_reports_visualization_feature_state(
     health = TestClient(create_app(services)).get("/health")
 
     assert health.status_code == 200
+    assert health.json()["api_contract_version"] == 2
     assert health.json()["visualization_enabled"] is True
+    assert health.json()["statistical_analysis_enabled"] is True
 
 
 def test_budget_failure_returns_safe_diagnostics(
@@ -493,6 +496,8 @@ def test_budget_failure_returns_safe_diagnostics(
 
     assert run["status"] == "failed"
     assert "execution budget" in run["error"]
+    assert "text-to-sql tool 'execute_sql'" in run["error"]
+    assert "4 attempted; limit 3" in run["error"]
     assert run["diagnostics"] == {
         "code": "execution_budget_exceeded",
         "agent": "text-to-sql",
@@ -503,7 +508,9 @@ def test_budget_failure_returns_safe_diagnostics(
         "tool_name": "execute_sql",
         "recent_tool_calls": [],
     }
-    assert services.conversations.get(thread_id).active_run_id is None
+    conversation = services.conversations.get(thread_id)
+    assert conversation.active_run_id is None
+    assert conversation.run_ids == [created.json()["run_id"]]
 
 
 def test_debug_budget_failure_redacts_and_truncates_tool_payloads(

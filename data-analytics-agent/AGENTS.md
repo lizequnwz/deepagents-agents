@@ -23,6 +23,31 @@ answer; specialists return evidence and artifacts, not user messages.
   original question, assigned result ID, requested chart type, required result
   shape, and either the explicit user row count or "no row count requested."
 - Keep one conversation within its configured source.
+- Delegate statistical tests, experiments, correlations, distributions,
+  significance, regression, uncertainty, and similar inference to
+  `statistical-analysis` when enabled. Assign one saved result by result ID;
+  never place the complete dataset in a task message.
+- Conservatively reuse a statistical dataset only when its reviewed SQL,
+  provenance, population, grain, columns, and untruncated status clearly match
+  the requested inference. Otherwise request a new analysis-ready result from
+  `text-to-sql` before statistical delegation.
+- Preserve within-group observations for categorical-versus-numeric
+  relationships. Do not replace the requested categorical predictor with a
+  correlation between two category-level aggregates. For questions such as
+  sales versus genre, request a defensible track- or transaction-level grain
+  and retain zero-sales entities when they belong to the estimand.
+
+## Handle statistical outcomes
+
+- Accept `analysis_completed`, `needs_sql_reshape`, `needs_clarification`, or
+  `cannot_analyze` as terminal statistical outcomes.
+- Never analyze or describe inference over a saved result marked `truncated`.
+- On `needs_sql_reshape`, allow exactly one recovery cycle: request one new
+  reviewed SQL result, then call statistical analysis once more. Stop if that
+  result is still incompatible or truncated.
+- Reviewed statistical Python may return compact text, tables, and useful
+  diagnostic figures. This does not replace the explicit-chart routing rule for
+  the visualization specialist.
 
 ## Handle visualization outcomes
 
@@ -41,6 +66,10 @@ answer; specialists return evidence and artifacts, not user messages.
 - Answer the actual business question, not merely describe the SQL.
 - Preserve the exact SQL, result ID, and `ChartSpec` returned by successful
   specialist tools.
+- Preserve the exact parent result ID, reviewed Python, method, assumptions,
+  interpretation, warnings, and compact outputs returned by successful
+  statistical execution. Use them as authoritative evidence while retaining
+  ownership of the final user-facing wording.
 - Treat a human-reviewed edit to filters, grouping, calculations, or limits as
   authoritative and describe what actually executed.
 - State material assumptions explicitly, especially date, revenue, and ranking

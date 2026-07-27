@@ -22,13 +22,46 @@ sufficient by itself.
 | Allowed query class | One `SELECT`, CTE, or set operation |
 | Forbidden operations | DDL, DML, transactions, commands, procedures, administrative/session and metadata operations |
 | HITL | Every `execute_sql` pauses for approve/edit/reject |
+| Python HITL | Every `execute_statistical_python` pauses with complete code and immutable input provenance |
 | Chart execution | `create_chart` auto-runs a constrained, result-scoped spec |
 | Edit validation | Edited text is parsed again before resume |
 | Chart validation | Strict schema, known columns/types, readability limits, immutable result ID |
 | Backend validation | Adapter validates again immediately before execution |
 | Native database control | SQLite read-only URI, authorizer, and progress deadline |
 | Limits | Per-run agent execution budgets, timeout, capped fetch, bounded model sample |
+| Python limits | Secret-stripped subprocess, hard timeout, three attempts, bounded stdout/tables/figures |
 | Provenance | Results and answers are scoped to source and conversation |
+
+## Reviewed statistical Python lifecycle
+
+Statistical Python never runs automatically. The coordinator first selects one
+untruncated source/thread-scoped saved SQL result by ID. If no clearly suitable
+result exists, text-to-SQL produces an analysis-ready dataset through the
+ordinary SQL review flow.
+
+The statistical specialist sees only result provenance, the full-result column
+profile, and at most 10 sample rows. It submits `result_id` plus complete Python
+to `execute_statistical_python`. Streamlit shows that code, the parent SQL,
+originating question, row count, columns/profile, and at most 10 preview rows.
+The parent result ID is immutable; the reviewer may approve, edit the code, or
+reject with feedback.
+
+After approval, the server revalidates result thread/source scope and refuses a
+result marked `truncated`. It loads the stored rows into pandas `df`; `pd` and
+`np` are also preloaded. The exact reviewed text executes in a child process
+with service secrets removed from its environment. This POC does not isolate
+the network, filesystem, imports, or child processes and must be treated as a
+trusted-local feature.
+
+Execution has a configurable hard timeout and bounded stdout, stderr, compact
+tables, textual values, and PNG figures. Code must assign a named dictionary to
+`analysis_outputs`; the complete input DataFrame is never returned. A failure
+returns bounded diagnostics to the specialist and requires a newly reviewed
+proposal. At most three actual executions are allowed; rejections do not count.
+
+Terminal outcomes are `analysis_completed`, `needs_sql_reshape`,
+`needs_clarification`, and `cannot_analyze`. Truncation always prevents
+`analysis_completed`. One `needs_sql_reshape` recovery is permitted.
 
 ## Structural validation is not execution
 

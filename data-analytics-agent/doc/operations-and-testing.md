@@ -28,9 +28,27 @@ Application defaults:
 | `API_BASE_URL` | `http://127.0.0.1:8000` | Streamlit API target |
 | `APP_BASE_URL` | `http://127.0.0.1:8501` | Conversation-link base |
 | `SQL_TIMEOUT_SECONDS` | `10` | Global execution deadline |
-| `SQL_MAX_RESULT_ROWS` | `500` | Global stored-result cap |
+| `SQL_MAX_RESULT_ROWS` | `10000` | Global stored-result cap; truncated results cannot be statistically analyzed |
 | `MODEL_SAMPLE_ROWS` | `10` | Rows exposed to models |
 | `ENABLE_DATA_VISUALIZATION` | `true` | Plug the chart specialist into each source graph |
+| `ENABLE_STATISTICAL_ANALYSIS` | `true` | Plug the reviewed statistical Python specialist into each source graph |
+
+Statistical Python settings are configurable in `.env`:
+
+| Setting | Default | Purpose |
+| --- | ---: | --- |
+| `STATISTICAL_PYTHON_TIMEOUT_SECONDS` | `30` | Hard child-process timeout |
+| `STATISTICAL_MAX_STDOUT_CHARS` | `10000` | Captured stdout/stderr characters each |
+| `STATISTICAL_MAX_OUTPUT_ITEMS` | `10` | Named `analysis_outputs` entries |
+| `STATISTICAL_MAX_OUTPUT_ROWS` | `50` | Rows per compact output table |
+| `STATISTICAL_MAX_OUTPUT_COLUMNS` | `20` | Columns per compact output table |
+| `STATISTICAL_MAX_OUTPUT_CHARS` | `50000` | Combined non-image output characters |
+| `STATISTICAL_MAX_FIGURES` | `4` | Figures per execution |
+| `STATISTICAL_MAX_FIGURE_BYTES` | `1048576` | PNG bytes per figure |
+| `STATISTICAL_MAX_TOTAL_FIGURE_BYTES` | `3145728` | Combined PNG bytes |
+| `STATISTICAL_MAX_FIGURE_WIDTH` | `1600` | Maximum rendered width |
+| `STATISTICAL_MAX_FIGURE_HEIGHT` | `1200` | Maximum rendered height |
+| `STATISTICAL_MAX_EXECUTION_ATTEMPTS` | `3` | Actual runs, excluding review rejections |
 
 Execution budgets use positive integer settings and cannot be disabled at
 runtime:
@@ -40,6 +58,7 @@ runtime:
 | Coordinator | `COORDINATOR_MODEL_CALL_LIMIT=12` | `COORDINATOR_TOOL_CALL_LIMIT=12` | `COORDINATOR_TASK_CALL_LIMIT=4` |
 | Text-to-SQL | `SQL_AGENT_MODEL_CALL_LIMIT=24` | `SQL_AGENT_TOOL_CALL_LIMIT=30` | `SQL_EXECUTE_CALL_LIMIT=3` |
 | Visualization | `VISUALIZATION_AGENT_MODEL_CALL_LIMIT=12` | `VISUALIZATION_AGENT_TOOL_CALL_LIMIT=16` | — |
+| Statistical analysis | `STATISTICAL_AGENT_MODEL_CALL_LIMIT=24` | `STATISTICAL_AGENT_TOOL_CALL_LIMIT=24` | Three actual executions enforced separately |
 
 Each new user message starts a fresh budget. The same budget continues across
 approve, edit, and reject resumptions for that run. Exceeding a limit fails the
@@ -90,6 +109,21 @@ The launcher:
 6. starts Streamlit and waits for its health endpoint;
 7. supervises both child processes.
 
+Development reload is enabled by default. The FastAPI watcher includes
+`*.py`, `*.md`, `*.yaml`, `*.yml`, and `.env`, so changes to application code,
+agent policies/skills, source configuration, and semantic models take effect
+without manually restarting the launcher. Streamlit also reruns on watched
+source changes.
+
+FastAPI reload creates a new process and therefore clears the POC's in-memory
+`ConversationStore`, `RunStore`, and `ResultStore`, including pending HITL
+reviews and statistical outputs. Use non-reloading mode for longer manual test
+sessions:
+
+```bash
+API_AUTO_RELOAD=false ./scripts/start.sh
+```
+
 Separate processes:
 
 ```bash
@@ -100,8 +134,9 @@ uv run streamlit run streamlit_app.py \
   --server.address 127.0.0.1 --server.port 8501
 ```
 
-Registry and readiness summaries are cached. Restart FastAPI after modifying
-the registry, semantic models, backend targets, or global limits.
+Registry and readiness summaries are cached. With auto-reload disabled,
+restart FastAPI after modifying the registry, semantic models, backend targets,
+or global limits.
 
 ## Readiness
 
@@ -150,6 +185,8 @@ The normal suite covers:
   continuity across review resumptions;
 - same-thread resume;
 - exact SQL provenance;
+- exact reviewed statistical Python, result scope, truncation refusal, output
+  bounds, figure capture, and repair-attempt limits;
 - API rehydration and concurrent-run rejection;
 - Streamlit helper behavior;
 - constrained chart schema and presentation limits;
@@ -235,6 +272,8 @@ Documentation maintenance checks:
 | Conversation URL returns new thread | API process memory was reset | Expected POC behavior; use durable stores in production |
 | Run stays in review | Human decision required | Approve, edit, or reject in Streamlit/API |
 | Run fails after edit | Edited SQL violated dialect/safety or provider failed | Inspect sanitized error and submit valid read-only SQL |
+| Python review returns after a failure | Reviewed code failed or exceeded a bound | Inspect the bounded error, review the repaired proposal, or reject with guidance |
+| Statistical analysis requests new SQL | Result was truncated or had the wrong grain/columns | Review the single analysis-ready reshape query |
 | Run fails with `execution_budget_exceeded` | An agent exhausted its model or tool-call allowance | Use the diagnostics expander, then start a narrower or clearer request |
 | Chart review repeats | Spec was rejected or failed validation | Review feedback, columns, and chart-ready SQL shape |
 | ZIP/city map download fails | First-use `pgeocode` cache is unavailable | Restore network for initial cache or prepopulate `PGEOCODE_DATA_DIR` |

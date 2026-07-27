@@ -8,7 +8,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from data_analytics_agent.agents.statistical_analysis.schemas import (
+    StatisticalAnalysisResult,
+)
 from data_analytics_agent.agents.visualization.schemas import ChartSpec
+
+API_CONTRACT_VERSION = 2
 
 
 class StrictModel(BaseModel):
@@ -109,6 +114,7 @@ class FinalAnswer(StrictModel):
     assumptions: list[str] = Field(default_factory=list)
     interpretation: str = ""
     chart: ChartSpec | None = None
+    statistical_analysis: StatisticalAnalysisResult | None = None
 
 
 class SavedResult(StrictModel):
@@ -210,10 +216,19 @@ class ApprovalRequest(StrictModel):
     action_name: str
     query: str
     allowed_decisions: list[Literal["approve", "edit", "reject"]]
+    review_type: Literal["sql", "python"] = "sql"
     source_id: str = ""
     dialect: str = "sqlite"
     timeout_seconds: float = Field(default=10, gt=0)
-    max_result_rows: int = Field(default=500, ge=1)
+    max_result_rows: int = Field(default=10_000, ge=1)
+    parent_result_id: str | None = None
+    originating_question: str = ""
+    executed_sql: str | None = None
+    columns: list[str] = Field(default_factory=list)
+    sample_rows: list[dict[str, Any]] = Field(default_factory=list)
+    profile: ResultProfile | None = None
+    row_count: int | None = Field(default=None, ge=0)
+    truncated: bool | None = None
     description: str = "Review the generated SQL before it is executed."
 
 
@@ -231,6 +246,7 @@ class ConversationResponse(StrictModel):
     thread_id: str
     source_id: str
     turns: list[ChatTurn]
+    run_ids: list[str] = Field(default_factory=list)
     active_run_id: str | None = None
 
 
@@ -270,6 +286,7 @@ class RunResponse(StrictModel):
 class Decision(StrictModel):
     action: Literal["approve", "edit", "reject"]
     edited_sql: str | None = None
+    edited_python: str | None = None
     feedback: str | None = None
 
 
@@ -280,9 +297,11 @@ class DecisionRequest(StrictModel):
 class HealthResponse(StrictModel):
     status: Literal["ok", "not_ready"]
     model: str
+    api_contract_version: int = API_CONTRACT_VERSION
     default_source_id: str | None = None
     ready_source_count: int = 0
     visualization_enabled: bool = False
+    statistical_analysis_enabled: bool = False
     errors: list[str]
 
 

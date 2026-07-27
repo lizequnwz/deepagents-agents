@@ -16,12 +16,13 @@ inside an adapter.
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
-| Streamlit | Source selection, conversation URL, polling, SQL review, progress, result and Plotly presentation | Agent graph, credentials, SQL execution |
+| Streamlit | Source selection, conversation URL, polling, SQL/Python review, progress, statistical/result/Plotly presentation | Agent graph, credentials, SQL or Python execution |
 | FastAPI | Source catalog, conversations, runs, SQL decisions, result endpoint, service construction | Open-ended business interpretation |
 | Coordinator | Conversational context, delegation, model-generated structured answers | Direct SQL execution |
 | Text-to-SQL specialist | OSI reading, query design, structural validation, execution request, interpretation | Source switching |
 | Visualization specialist | One constrained chart spec over one scoped saved result | SQL, arbitrary Python, source switching |
-| HITL middleware | Pause and approve/edit/reject resume shape for SQL | Database authorization |
+| Statistical specialist | General reviewed Python over one scoped saved SQL result | SQL, source switching, unreviewed execution |
+| HITL middleware | Pause and approve/edit/reject resume shape for SQL and Python | Database authorization or a production code sandbox |
 | `SQLBackend` | Provider dialect, validation, execution, metadata, native safety controls | Business semantics |
 | OSI model | Curated entities, physical expressions, relationships, metrics, AI context | Credentials or connection lifecycle |
 | Process-local stores | Conversation, run, event, and result artifacts | Durable or multi-user persistence |
@@ -73,10 +74,13 @@ thread/source provenance.
 - one custom `text-to-sql` specialist;
 - an optional `data-visualization` specialist when
   `ENABLE_DATA_VISUALIZATION=true`;
+- an optional `statistical-analysis` specialist when
+  `ENABLE_STATISTICAL_ANALYSIS=true`;
 - no default general-purpose subagent;
 - source-specific prompts and tools;
 - agent-scoped `skills/text-to-sql/` and `skills/data-visualization/`
-  namespaces, each exposed only to its matching specialist;
+  and `skills/statistics/` namespaces, each exposed only to its matching
+  specialist;
 - filesystem read access only to `AGENTS.md`, `semantic/**`, and `skills/**`;
 - provider/tool structured-output contracts;
 - a source-specific in-memory LangGraph checkpointer.
@@ -86,6 +90,11 @@ results but cannot execute SQL. `agents/text_to_sql/` owns database analysis;
 `agents/visualization/` owns the chart schema, result-scoped tools, validation,
 geocoding, and deterministic renderer. The root `agent.py` remains a thin
 compatibility import for Deep Agents tooling.
+
+`agents/statistical_analysis/` owns result inspection, the Python HITL tool,
+bounded subprocess execution, typed statistical outputs, and the terminal
+statistical outcome contract. It receives a result ID, not row data in the task
+message.
 
 ## Request and result flow
 
@@ -116,6 +125,16 @@ compatibility import for Deep Agents tooling.
 17. `RunManager` preserves the exact generated spec and canonical success
     message with result provenance.
 18. Streamlit reconstructs Plotly and exposes the underlying table/CSV.
+19. For a statistical request, the coordinator conservatively reuses an
+    untruncated suitable result or obtains a new reviewed SQL result.
+20. The statistical specialist inspects bounded provenance/profile/sample data,
+    writes Python, and calls `execute_statistical_python` with the result ID.
+21. HITL exposes the complete code and immutable dataset provenance. The exact
+    approved or edited code runs in a secret-stripped subprocess where `df`,
+    `pd`, and `np` are preloaded.
+22. The runner returns bounded text, scalars, compact tables, and PNG figures;
+    `RunManager` attaches the authoritative code and outputs while the
+    coordinator retains final-answer wording.
 
 LangGraph checkpoints are isolated by `run_id`. Typed graph state retains the
 conversation `thread_id`, `run_id`, `source_id`, and current question for
@@ -158,6 +177,21 @@ Supported chart types are bar, line, area, scatter, pie/donut, histogram, box,
 heatmap, and map. Renderer-owned palettes/layout prevent arbitrary Plotly
 configuration. Maps support coordinates, US ZIP/city-state centroid markers,
 US state choropleths, and ISO-country choropleths.
+
+## Statistical-analysis capability
+
+`ENABLE_STATISTICAL_ANALYSIS` defaults to `true`. Disabling it removes the
+specialist and makes the coordinator report statistical execution as
+unavailable. The specialist is not limited to a catalog of tests: reviewed code
+may use pandas, NumPy, SciPy, statsmodels, scikit-learn, matplotlib, and seaborn.
+
+The input contract is one source/thread-scoped saved result ID. The execution
+tool loads its rows as pandas `df` only after approval. `pd` and `np` are
+preloaded. Reviewed code must assign a named `analysis_outputs` dictionary;
+supported values normalize to bounded text, scalar, table, or figure outputs.
+Truncated inputs cannot execute. `needs_sql_reshape` permits one reviewed SQL
+recovery cycle; execution failures permit two reviewed repairs after the first
+attempt.
 
 ## Adding specialist capabilities
 

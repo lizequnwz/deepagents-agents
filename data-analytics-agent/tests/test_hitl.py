@@ -56,3 +56,24 @@ def test_reject_includes_feedback(approval: ApprovalRequest) -> None:
             {"type": "reject", "message": "Group by country instead."}
         ]
     }
+
+
+def test_python_edit_preserves_parent_result_and_exact_code() -> None:
+    approval = ApprovalRequest(
+        action_name="execute_statistical_python",
+        query='analysis_outputs = {"Mean": df.value.mean()}',
+        allowed_decisions=["approve", "edit", "reject"],
+        review_type="python",
+        parent_result_id="result-1",
+    )
+    edited = 'analysis_outputs = {"Median": df.value.median()}\n'
+
+    command = decisions_to_command(
+        approval,
+        [Decision(action="edit", edited_python=edited)],
+    )
+
+    assert command.resume["decisions"][0]["edited_action"] == {
+        "name": "execute_statistical_python",
+        "args": {"result_id": "result-1", "code": edited},
+    }

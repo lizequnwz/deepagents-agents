@@ -14,6 +14,14 @@ That specialist receives an immutable full-result profile plus at most 10 rows,
 validates one constrained Plotly `ChartSpec`, and returns an explicit terminal
 outcome to the coordinator.
 
+For statistical tests, experiments, correlations, distributions, regression,
+and related inference, an optional statistical-analysis specialist consumes one
+source/thread-scoped saved result by ID. It writes general Python, pauses for
+approve/edit/reject review, then executes the exact reviewed code with the
+saved data preloaded as pandas `df`. Compact tables, text, and bounded
+matplotlib/seaborn figures return to the coordinator; the complete DataFrame
+never enters an agent message.
+
 Included local sources:
 
 - **Chinook music store** — catalog, customers, invoices, and playlists
@@ -39,6 +47,13 @@ model.
 - Mandatory human review of every SQL execution
 - Repeated rejection, revision, and reapproval cycles
 - Exact edited-SQL execution and result provenance
+- Optional, feature-flagged statistical-analysis specialist
+- Mandatory review of every statistical Python execution and exact edited-code
+  execution
+- General pandas/NumPy/SciPy/statsmodels/scikit-learn analysis with bounded
+  matplotlib/seaborn figures
+- Truncated-result refusal, one SQL-reshape recovery, and three actual Python
+  execution attempts at most
 - Optional, feature-flagged visualization specialist using the existing model
 - One automatically executed, constrained chart tool
 - Bar, line, area, scatter, pie/donut, histogram, box, heatmap, and map charts
@@ -79,6 +94,17 @@ The launcher runs `uv sync --locked`, validates the registry and source
 readiness, starts FastAPI and Streamlit, and supervises both processes. Press
 Ctrl+C to stop them.
 
+Development auto-reload is enabled by default. FastAPI reloads when Python,
+Markdown skill/policy, YAML configuration/semantic-model, or `.env` files
+change; Streamlit reruns when its watched source changes. Because all POC stores
+are process-local, a FastAPI reload clears conversations, saved SQL results,
+in-flight reviews, and statistical outputs. Disable reload when retaining a
+manual test session matters:
+
+```bash
+API_AUTO_RELOAD=false ./scripts/start.sh
+```
+
 ## Use the agent
 
 1. Select a ready source in the sidebar.
@@ -86,10 +112,13 @@ Ctrl+C to stop them.
 3. Inspect joins, filters, measures, dates, ordering, and row limit in the SQL
    review.
 4. Approve, edit, or reject with feedback.
-5. To visualize a result, explicitly ask for one chart.
-6. Expand progress steps to inspect loaded skills, context files, tools, and
+5. For statistical inference, review the complete proposed Python and immutable
+   input-result provenance before execution.
+6. To visualize a regular saved result, explicitly ask for one chart.
+7. Expand progress steps to inspect loaded skills, context files, tools, and
    curated arguments such as chart mappings.
-7. Inspect the rendered Plotly chart, underlying table/CSV, and executed SQL.
+8. Inspect statistical outputs or the rendered Plotly chart, parent table/CSV,
+   exact Python, and executed SQL.
 
 Changing source starts a new conversation. **New conversation** retains the
 selected source. Previous conversations remain available through their URLs
@@ -153,16 +182,20 @@ See [Backend development](doc/backend-development.md) and the
 - SQLGlot permits one `SELECT`/CTE/set-operation query.
 - Validation does not submit a preflight query.
 - Every `execute_sql` action pauses for human review.
+- Every `execute_statistical_python` action pauses for human review.
 - `create_chart` executes automatically only after strict schema and
   result-scoped validation.
 - Edited SQL is validated again.
 - The backend executes the exact reviewed SQL.
+- A bounded subprocess executes the exact reviewed Python with service secrets
+  removed from its environment. It is not a production sandbox.
 - SQLite uses read-only mode, an authorizer, deadline, and capped fetch.
 - Per-agent model and tool-call budgets stop runaway loops and continue across
   SQL review resumptions.
 - Results carry both source and conversation provenance.
 - Only the full-result profile and at most the first 10 rows enter model
   context.
+- Statistical execution refuses saved results marked `truncated`.
 
 Read [SQL safety and human review](doc/safety-and-hitl.md) before changing
 validation, approval, execution, or result access.
@@ -204,6 +237,10 @@ This remains a local, single-user POC:
   and a least-privilege default role/database/schema context;
 - visualization is intentionally limited to one validated chart over one saved
   result, without arbitrary Python or custom Plotly layout code;
+- reviewed statistical Python is trusted-local code with filesystem, process,
+  and network capabilities; production sandboxing is out of scope;
+- statistical outputs remain embedded in the conversation result rather than a
+  separately persisted derived-artifact store;
 - semantic models are curated manually;
 - production deployment, audit, retention, and tenant isolation are out of
   scope.

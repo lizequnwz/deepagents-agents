@@ -6,9 +6,13 @@ from data_analytics_agent.ui.components import (
     consolidate_activity_events,
     conversation_url,
     rows_to_csv,
+    python_review_decision,
     sql_review_decision,
 )
-from data_analytics_agent.ui.api_client import AgentAPIClient
+from data_analytics_agent.ui.api_client import (
+    AgentAPIClient,
+    api_contract_error,
+)
 
 
 def test_conversation_url_replaces_existing_thread_and_preserves_query() -> None:
@@ -16,11 +20,21 @@ def test_conversation_url_replaces_existing_thread_and_preserves_query() -> None
         "http://127.0.0.1:8501/?mode=review&thread_id=old",
         "new-thread",
     )
-
     assert url == (
         "http://127.0.0.1:8501/?mode=review&thread_id=new-thread"
     )
 
+
+def test_api_contract_mismatch_requires_service_restart() -> None:
+    assert api_contract_error({"api_contract_version": 2}) is None
+    missing = api_contract_error({})
+    stale = api_contract_error({"api_contract_version": 1})
+
+    assert missing is not None
+    assert "contract missing" in missing
+    assert stale is not None
+    assert "contract 1" in stale
+    assert "restart `./scripts/start.sh`" in stale
 
 def test_rows_to_csv_uses_declared_column_order_and_escaping() -> None:
     content = rows_to_csv(
@@ -53,6 +67,16 @@ def test_any_exact_editor_change_submits_edited_sql() -> None:
     assert sql_review_decision(generated, reviewed) == {
         "action": "edit",
         "edited_sql": reviewed,
+    }
+
+
+def test_any_exact_python_editor_change_is_authoritative() -> None:
+    generated = 'analysis_outputs = {"Mean": df.value.mean()}'
+    reviewed = f"{generated}\n"
+
+    assert python_review_decision(generated, reviewed) == {
+        "action": "edit",
+        "edited_python": reviewed,
     }
 
 
@@ -209,6 +233,97 @@ render_approval(
         caption.value == "Your feedback: Let's make it top 10."
         for caption in app.caption
     )
+
+
+def test_python_review_shows_complete_code_and_dataset_provenance() -> None:
+    app = AppTest.from_string(
+        '''
+from data_analytics_agent.ui.components import render_approval
+
+render_approval({
+    "run_id": "run-python",
+    "next_event_id": 12,
+    "approval": {
+        "review_type": "python",
+        "query": "analysis_outputs = {'Mean': float(df.value.mean())}",
+        "source_id": "test",
+        "parent_result_id": "result-12345678",
+        "originating_question": "Return all values",
+        "executed_sql": "SELECT value FROM measurements",
+        "columns": ["value"],
+        "sample_rows": [{"value": 1}, {"value": 2}],
+        "profile": {"scope": "stored_rows", "row_count": 2, "columns": []},
+        "row_count": 2,
+        "truncated": False,
+        "timeout_seconds": 30,
+    },
+})
+'''
+    ).run()
+
+    assert not app.exception
+    assert app.subheader[0].value == "Review Python before execution"
+    assert app.text_area[0].value == (
+        "analysis_outputs = {'Mean': float(df.value.mean())}"
+    )
+    assert any(
+        "exact code that will execute" in caption.value
+        for caption in app.caption
+    )
+
+
+def test_completed_statistical_turn_renders_compact_outputs_and_code() -> None:
+    app = AppTest.from_string(
+        '''
+from data_analytics_agent.ui.components import render_turn
+
+class Client:
+    def get_result(self, _result_id):
+        return {
+            "result_id": "result-1",
+            "executed_sql": "SELECT value FROM measurements",
+            "columns": ["value"],
+            "rows": [{"value": 1}, {"value": 2}],
+            "row_count": 2,
+            "truncated": False,
+            "elapsed_ms": 1.0,
+        }
+
+render_turn(
+    Client(),
+    {
+        "user_message": "Estimate the mean",
+        "answer": {
+            "answer": "The estimated mean is 1.5.",
+            "result_id": "result-1",
+            "sql": "SELECT value FROM measurements",
+            "assumptions": [],
+            "interpretation": "",
+            "statistical_analysis": {
+                "outcome": "analysis_completed",
+                "parent_result_id": "result-1",
+                "executed_python": (
+                    "analysis_outputs = {'Mean': float(df.value.mean())}"
+                ),
+                "answer": "The mean is 1.5.",
+                "method": "Arithmetic mean with a 95% confidence target.",
+                "assumptions": ["Two-sided alpha = 0.05."],
+                "interpretation": "The sample center is 1.5.",
+                "warnings": [],
+                "outputs": [{"name": "Mean", "kind": "scalar", "value": 1.5}],
+            },
+        },
+        "activities": [],
+    },
+    turn_key="turn-statistics",
+    source_id="test",
+)
+'''
+    ).run()
+
+    assert not app.exception
+    assert any("Mean:** 1.5" in markdown.value for markdown in app.markdown)
+    assert len(app.get("code")) == 2
 
 
 def test_reused_result_has_unique_widgets_in_each_turn() -> None:

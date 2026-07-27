@@ -8,6 +8,7 @@ API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8000}"
 STREAMLIT_HOST="${STREAMLIT_HOST:-127.0.0.1}"
 STREAMLIT_PORT="${STREAMLIT_PORT:-8501}"
+API_AUTO_RELOAD="${API_AUTO_RELOAD:-true}"
 API_PID=""
 STREAMLIT_PID=""
 
@@ -99,6 +100,29 @@ if port_is_open "${STREAMLIT_HOST}" "${STREAMLIT_PORT}"; then
   exit 1
 fi
 
+case "${API_AUTO_RELOAD}" in
+  true|1|yes|on)
+    API_RELOAD_ARGS=(
+      --reload
+      --reload-dir "${PROJECT_ROOT}"
+      --reload-include '*.py'
+      --reload-include '*.md'
+      --reload-include '*.yaml'
+      --reload-include '*.yml'
+      --reload-include '.env'
+      --reload-exclude '.venv/**'
+      --reload-exclude '.git/**'
+    )
+    ;;
+  false|0|no|off)
+    API_RELOAD_ARGS=()
+    ;;
+  *)
+    echo "API_AUTO_RELOAD must be true or false." >&2
+    exit 1
+    ;;
+esac
+
 export API_BASE_URL="${API_BASE_URL:-http://${API_HOST}:${API_PORT}}"
 export APP_BASE_URL="${APP_BASE_URL:-http://${STREAMLIT_HOST}:${STREAMLIT_PORT}}"
 export PYTHONUNBUFFERED=1
@@ -106,14 +130,16 @@ export PYTHONUNBUFFERED=1
 echo "Starting FastAPI at ${API_BASE_URL}…"
 uv run uvicorn data_analytics_agent.api:app \
   --host "${API_HOST}" \
-  --port "${API_PORT}" &
+  --port "${API_PORT}" \
+  "${API_RELOAD_ARGS[@]}" &
 API_PID="$!"
 wait_for_service "FastAPI" "${API_BASE_URL}/health" "${API_PID}"
 
 echo "Starting Streamlit at ${APP_BASE_URL}…"
 uv run streamlit run streamlit_app.py \
   --server.address="${STREAMLIT_HOST}" \
-  --server.port="${STREAMLIT_PORT}" &
+  --server.port="${STREAMLIT_PORT}" \
+  --server.runOnSave=true &
 STREAMLIT_PID="$!"
 wait_for_service \
   "Streamlit" \
