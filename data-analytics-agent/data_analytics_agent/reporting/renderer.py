@@ -34,7 +34,7 @@ from data_analytics_agent.schemas import SavedResult
 
 _SCRIPT_PATTERN = re.compile(r"<script(?:\s[^>]*)?>(.*?)</script>", re.DOTALL)
 _INLINE_PATTERN = re.compile(r"\*\*(.+?)\*\*|`([^`]+)`")
-REPORT_RENDERER_VERSION = "1.0"
+REPORT_RENDERER_VERSION = "1.1"
 
 
 def _inline_text(value: str) -> str:
@@ -172,9 +172,13 @@ def _metrics(block: ReportMetricsBlock) -> str:
         + "</article>"
         for metric in block.metrics
     )
+    tablet_columns = min(block.columns, 3)
+    mobile_columns = min(block.columns, 2)
     return (
         '<section class="report-block">'
-        f"{title}<div class=\"metrics-grid\" style=\"--metric-columns:{block.columns}\">"
+        f"{title}<div class=\"metrics-grid\" style=\"--metric-columns:{block.columns};"
+        f"--metric-tablet-columns:{tablet_columns};"
+        f"--metric-mobile-columns:{mobile_columns}\">"
         f"{items}</div></section>"
     )
 
@@ -387,16 +391,16 @@ html {{ scroll-behavior: smooth; }}
 body {{ margin: 0; background: var(--background); color: var(--text); font-family: var(--font); font-size: 16px; line-height: 1.62; }}
 button, summary {{ font: inherit; }}
 a {{ color: var(--primary); }}
-.report-shell {{ width: min(1180px, calc(100% - 2rem)); margin: 0 auto; padding: clamp(1rem, 4vw, 4rem) 0; }}
-.report-hero {{ position: relative; overflow: hidden; padding: clamp(2rem, 7vw, 5rem); border-radius: calc(var(--radius) * 1.25); color: white; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 62%, #020617)); box-shadow: 0 24px 70px color-mix(in srgb, var(--primary) 24%, transparent); }}
+.report-shell {{ width: calc(100% - clamp(1rem, 3vw, 3rem)); max-width: 1360px; margin: 0 auto; padding: clamp(.75rem, 2.5vw, 2.5rem) 0; }}
+.report-hero {{ position: relative; overflow: hidden; padding: clamp(1.75rem, 4vw, 3.5rem) clamp(1.25rem, 3vw, 2.5rem); border-radius: calc(var(--radius) * 1.25); color: white; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 62%, #020617)); box-shadow: 0 24px 70px color-mix(in srgb, var(--primary) 24%, transparent); }}
 .report-hero::after {{ content: ''; position: absolute; width: 24rem; height: 24rem; border-radius: 50%; right: -10rem; top: -12rem; background: color-mix(in srgb, var(--accent) 60%, transparent); filter: blur(2px); opacity: .55; }}
 .eyebrow {{ margin: 0 0 .75rem; letter-spacing: .13em; text-transform: uppercase; font-size: .78rem; font-weight: 700; }}
 h1, h2, h3 {{ line-height: 1.16; text-wrap: balance; }}
-h1 {{ position: relative; z-index: 1; margin: 0; max-width: 18ch; font-size: clamp(2.3rem, 7vw, 5.7rem); letter-spacing: -.045em; }}
+h1 {{ position: relative; z-index: 1; margin: 0; max-width: 22ch; font-size: clamp(2.15rem, 6vw, 4.9rem); letter-spacing: -.045em; overflow-wrap: anywhere; }}
 .subtitle {{ position: relative; z-index: 1; max-width: 68ch; margin: 1.2rem 0 0; font-size: clamp(1.05rem, 2vw, 1.35rem); opacity: .9; }}
 .report-meta {{ position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: .65rem 1.25rem; margin-top: 2rem; font-size: .88rem; opacity: .84; }}
 .report-content {{ display: grid; gap: var(--gap); margin-top: var(--gap); }}
-.report-block {{ background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: clamp(1.15rem, 3vw, 2.2rem); box-shadow: 0 12px 36px color-mix(in srgb, var(--text) 7%, transparent); }}
+.report-block {{ min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: clamp(1.1rem, 2.25vw, 1.8rem); box-shadow: 0 12px 36px color-mix(in srgb, var(--text) 7%, transparent); }}
 .report-block > :first-child {{ margin-top: 0; }} .report-block > :last-child {{ margin-bottom: 0; }}
 .report-block h2 {{ margin: 0 0 1rem; font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -.025em; }}
 .report-block h3 {{ margin: 1.2rem 0 .45rem; font-size: 1.05rem; }}
@@ -415,6 +419,7 @@ h1 {{ position: relative; z-index: 1; margin: 0; max-width: 18ch; font-size: cla
 table {{ width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .9rem; }}
 caption {{ padding: .8rem 1rem; color: var(--muted); text-align: left; }} th, td {{ padding: .7rem .85rem; text-align: left; border-top: 1px solid var(--border); vertical-align: top; }} th {{ position: sticky; top: 0; background: color-mix(in srgb, var(--primary) 8%, var(--surface)); font-weight: 720; }} tbody tr:nth-child(even) {{ background: color-mix(in srgb, var(--text) 2.5%, transparent); }}
 .chart-summary, figcaption {{ color: var(--muted); }} figure {{ margin: 0; }} figcaption {{ margin-top: .6rem; font-size: .88rem; }}
+.chart-block .plotly-graph-div {{ max-width: 100%; }} .chart-data .report-block {{ margin-top: .75rem; padding: 0; border: 0; box-shadow: none; }}
 .chart-warning {{ padding: .75rem 1rem; color: #7C2D12; background: #FFF7ED; border-radius: .65rem; }}
 .analysis-warnings {{ padding: .25rem .9rem; color: #7C2D12; background: #FFF7ED; border-radius: .65rem; }} .analysis-warnings ul {{ margin-top: 0; }} .analysis-warning {{ margin: .45rem 0; }}
 .stat-scalar {{ display: flex; justify-content: space-between; gap: 1rem; padding: .85rem 0; border-bottom: 1px solid var(--border); }} .stat-scalar strong {{ font-variant-numeric: tabular-nums; }}
@@ -422,40 +427,47 @@ caption {{ padding: .8rem 1rem; color: var(--muted); text-align: left; }} th, td
 details {{ margin-top: 1rem; }} summary {{ min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--primary); font-weight: 700; }} summary:focus-visible, .theme-toggle:focus-visible {{ outline: 3px solid var(--accent); outline-offset: 3px; }}
 .theme-toggle {{ position: fixed; z-index: 10; right: 1rem; bottom: 1rem; min-width: 44px; min-height: 44px; padding: .65rem .85rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); cursor: pointer; box-shadow: 0 8px 28px color-mix(in srgb, var(--text) 15%, transparent); }}
 .report-footer {{ color: var(--muted); margin: 2rem auto 0; max-width: 72ch; text-align: center; font-size: .86rem; }}
-.provenance {{ margin-top: var(--gap); }} .provenance code {{ overflow-wrap: anywhere; }}
+.sql-queries {{ margin-top: var(--gap); }} .sql-queries-intro, .sql-query-meta {{ color: var(--muted); }}
+.sql-query {{ padding-top: 1rem; border-top: 1px solid var(--border); }} .sql-query:first-of-type {{ margin-top: 1rem; }}
+.sql-query h3 {{ margin: 0; }} .sql-query-meta {{ margin: .25rem 0 .65rem; font-size: .84rem; }}
+.sql-query pre {{ max-width: 100%; margin: 0; padding: 1rem; overflow: auto; border: 1px solid var(--border); border-radius: calc(var(--radius) * .65); background: color-mix(in srgb, var(--text) 6%, var(--surface)); font-size: .82rem; line-height: 1.55; tab-size: 2; white-space: pre; }}
+.sql-query pre code {{ padding: 0; background: transparent; }}
 code {{ padding: .1rem .3rem; border-radius: .25rem; background: color-mix(in srgb, var(--text) 8%, transparent); }}
 body[data-theme='dark'] {{ --surface: #111827; --background: #020617; --text: #F8FAFC; --muted: #CBD5E1; --border: #334155; }}
 @media (prefers-color-scheme: dark) {{ body:not([data-theme='light']) {{ --surface: #111827; --background: #020617; --text: #F8FAFC; --muted: #CBD5E1; --border: #334155; }} }}
-@media (max-width: 760px) {{ .report-shell {{ width: min(100% - 1rem, 1180px); }} .report-hero {{ padding: 2rem 1.2rem; }} .metrics-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} .infographic.steps .infographic-item::after {{ display: none; }} .report-block {{ padding: 1.05rem; }} }}
-@media (max-width: 430px) {{ .metrics-grid {{ grid-template-columns: 1fr; }} body {{ font-size: 16px; }} }}
+@media (max-width: 1100px) {{ .metrics-grid {{ grid-template-columns: repeat(var(--metric-tablet-columns), minmax(0, 1fr)); }} }}
+@media (max-width: 700px) {{ .report-shell {{ width: calc(100% - 1rem); }} .report-hero {{ padding: 1.75rem 1.1rem; }} .metrics-grid {{ grid-template-columns: repeat(var(--metric-mobile-columns), minmax(0, 1fr)); }} .infographic.steps .infographic-item::after {{ display: none; }} .report-block {{ padding: 1.05rem; }} }}
+@media (max-width: 430px) {{ .metrics-grid {{ grid-template-columns: 1fr; }} body {{ font-size: 16px; }} .sql-query pre {{ padding: .8rem; font-size: .78rem; }} }}
 @media (prefers-reduced-motion: reduce) {{ *, *::before, *::after {{ scroll-behavior: auto !important; transition: none !important; animation: none !important; }} }}
-@media print {{ .theme-toggle {{ display: none; }} body {{ background: white; color: #111827; }} .report-shell {{ width: 100%; padding: 0; }} .report-hero, .report-block {{ box-shadow: none; break-inside: avoid; }} details > * {{ display: block !important; }} }}
+@media print {{ .theme-toggle {{ display: none; }} body {{ background: white; color: #111827; }} .report-shell {{ width: 100%; max-width: none; padding: 0; }} .report-hero, .report-block {{ box-shadow: none; break-inside: avoid; }} .sql-query pre {{ white-space: pre-wrap; overflow-wrap: anywhere; }} details > * {{ display: block !important; }} }}
 """
 
 
-def _provenance(
-    results: Mapping[str, SavedResult],
-    analyses: Mapping[str, ResolvedStatisticalAnalysis],
-) -> str:
-    result_items = "".join(
-        "<li>"
-        f"Result <code>{escape(result.result_id)}</code> · "
-        f"{result.row_count:,} rows · {escape(result.short_label)}"
-        "</li>"
-        for result in results.values()
-    )
-    analysis_items = "".join(
-        "<li>"
-        f"Statistical analysis <code>{escape(item.reference_id)}</code> · "
-        f"parent result <code>{escape(item.parent_result_id)}</code>"
-        "</li>"
-        for item in analyses.values()
-    )
-    if not result_items and not analysis_items:
+def _sql_queries(results: Mapping[str, SavedResult]) -> str:
+    """Render exact reviewed SQL without exposing opaque artifact IDs."""
+
+    if not results:
         return ""
+    query_items = "".join(
+        '<article class="sql-query">'
+        f"<h3>Query {index}: {escape(result.short_label)}</h3>"
+        f'<p class="sql-query-meta">Returned {result.row_count:,} rows'
+        + (
+            " (truncated at the configured limit)"
+            if result.truncated
+            else ""
+        )
+        + "</p>"
+        f'<pre aria-label="SQL for query {index}"><code class="language-sql">'
+        f"{escape(result.executed_sql)}</code></pre></article>"
+        for index, result in enumerate(results.values(), start=1)
+    )
     return (
-        '<details class="report-block provenance"><summary>Data provenance</summary>'
-        f"<ul>{result_items}{analysis_items}</ul></details>"
+        '<section class="report-block sql-queries">'
+        "<h2>SQL queries</h2>"
+        '<p class="sql-queries-intro">Run these exact reviewed queries against '
+        "the report data source to reproduce its inputs.</p>"
+        f"{query_items}</section>"
     )
 
 
@@ -567,7 +579,7 @@ def render_report(
         "</header>"
         '<div id="report-content" class="report-content">'
         f"{''.join(block_html)}</div>"
-        f"{_provenance(results, analyses)}{footer}</main>"
+        f"{_sql_queries(results)}{footer}</main>"
         f"<script>{interaction_script}</script></body>"
     )
     csp = _script_csp(content)

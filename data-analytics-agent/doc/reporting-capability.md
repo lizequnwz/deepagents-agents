@@ -126,15 +126,15 @@ Describes the rendered document declaratively:
 - scoped bindings to SQL results, chart specs, statistical outputs, and safe
   media assets;
 - accessibility text, chart summaries, table alternatives, footnotes,
-  methodology, and provenance;
+  methodology, and reproducible SQL;
 - renderer-owned interaction options selected from an audited capability set.
 
 The block model is extensible rather than tied to named report types. The first
 renderer supports narrative, metric grid, callout, infographic composition,
 table, chart, and statistical-analysis blocks. Headings, methodology,
-provenance, and appendices can be expressed through those semantic blocks. New
-block types extend the schema and renderer without granting the model an
-executable-code escape hatch.
+reproducibility notes, and appendices can be expressed through those semantic
+blocks. New block types extend the schema and renderer without granting the
+model an executable-code escape hatch.
 
 The model may define content, composition, semantic tokens, safe chart
 bindings, and inline SVG instructions supported by the schema. It may not
@@ -145,8 +145,9 @@ HTML.
 
 - Reports may combine multiple artifacts only when every artifact belongs to
   the current conversation and immutable source.
-- Every evidence-bearing block retains its input artifact references so
-  provenance can be displayed or inspected.
+- Every evidence-bearing block retains its input artifact references for
+  internal scope checks and inspection. Reader-facing reports show the exact
+  reviewed SQL instead of opaque artifact IDs.
 - Full result rows remain outside model messages. The model works from bounded
   samples and profiles; the trusted renderer resolves referenced data directly
   from application stores.
@@ -183,7 +184,9 @@ The renderer should also provide:
 - print CSS even though first-class PDF or PNG export is deferred;
 - locale-aware number, date, and currency formatting;
 - deterministic output for the same spec, renderer version, and artifacts;
-- visible generation and provenance metadata appropriate to the report;
+- visible generation metadata plus the exact reviewed SQL needed to reproduce
+  the report inputs, without exposing opaque result IDs as reader-facing
+  provenance;
 - safe failure output when a referenced artifact is missing or out of scope.
 
 ## Design-quality contract

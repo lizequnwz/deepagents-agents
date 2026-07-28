@@ -49,7 +49,10 @@ scope and renders the standalone document.
 ## Content and artifact rules
 
 - Preserve material qualifications, uncertainty, assumptions, warnings, and
-  provenance. Distinguish observation, inference, and recommendation.
+  reproducibility. Distinguish observation, inference, and recommendation.
+- The renderer automatically appends one `SQL queries` section containing the
+  exact reviewed SQL for every referenced result. Do not add a duplicate
+  provenance, result-ID, or SQL appendix block to the `ReportSpec`.
 - Use a `table` block for stored result data. Set `include_all_rows=true` only
   when the requested report must show all rows; otherwise select the necessary
   columns and a purposeful `row_limit`.
@@ -86,7 +89,7 @@ to the content, for example:
 - **Executive briefing** — decision-first headline, KPIs, risks, supporting
   evidence, and recommended actions.
 - **Analytical deep dive** — denser evidence, several sections, charts with
-  accessible data alternatives, and detailed provenance.
+  accessible data alternatives, and detailed reproducibility notes.
 
 Do not force the user to select one of these labels.
 

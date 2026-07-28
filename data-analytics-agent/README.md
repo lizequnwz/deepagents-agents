@@ -75,7 +75,8 @@ model.
   per-agent state snapshots
 - Optional Snowflake adapter over an injected `snowlib` client
 - Feature-flagged coordinator reporting skill with open-ended design direction
-- Accessible self-contained HTML reports with scoped provenance, versioning,
+- Accessible self-contained HTML reports with reproducible SQL, scoped
+  provenance, versioning,
   isolated preview, and byte-identical download
 
 ## Quick start

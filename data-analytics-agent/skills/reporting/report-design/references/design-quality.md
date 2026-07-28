@@ -9,8 +9,8 @@ Apply these rules when constructing `ReportTheme` and choosing report blocks.
   decoration or color alone.
 - Keep one coherent visual language across the document.
 - Prefer a readable narrative sequence: context, evidence, interpretation, and
-  implications. Move secondary detail to methodology, provenance, or appendix
-  blocks.
+  implications. Move secondary detail to methodology, reproducible SQL, or
+  appendix blocks.
 - Use a bento-style metric or infographic grid only when its cards form a clear
   group. Avoid a dashboard-like grid for long-form narrative.
 
@@ -54,6 +54,12 @@ Apply these rules when constructing `ReportTheme` and choosing report blocks.
 
 - Use concise titles and sentence casing.
 - Use whitespace to group related evidence and separate conceptual sections.
+- Keep the report canvas broad enough to use the available viewport. Avoid
+  oversized outer gutters or stacking large container and card padding into an
+  exaggerated left inset. Use modest, fluid horizontal padding and verify the
+  result at desktop, tablet, and phone widths.
+- Keep grids responsive to both the viewport and requested item count. Cards,
+  charts, tables, long titles, and SQL must not force horizontal page overflow.
 - Avoid emoji as structural icons and avoid mixed visual effects.
 - Include material caveats near the affected evidence rather than hiding them
   only in a footer.

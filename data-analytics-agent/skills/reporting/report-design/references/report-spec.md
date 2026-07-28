@@ -161,3 +161,8 @@ The `report_json` string may decode to only:
 
 Do not add raw HTML, CSS, JavaScript, event handlers, remote URLs, or unknown
 fields. The renderer owns executable and presentation code.
+
+The renderer automatically adds one final `SQL queries` section whenever the
+report references saved results. It shows the exact human-reviewed SQL that was
+executed, deduplicated by result, so readers can reproduce the report inputs.
+Do not create a narrative provenance appendix that repeats result IDs or SQL.

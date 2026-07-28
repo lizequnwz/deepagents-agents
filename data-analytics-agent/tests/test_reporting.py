@@ -207,6 +207,85 @@ def test_renderer_escapes_model_text_and_includes_all_requested_rows() -> None:
     assert "sha256-" in html
     assert 'src="http' not in html
     assert 'href="http' not in html
+    assert "SQL queries" in html
+    assert saved.executed_sql in html
+    assert "Data provenance" not in html
+    assert saved.result_id not in html
+    assert "max-width: 1360px" in html
+    assert "padding: clamp(1.75rem, 4vw, 3.5rem)" in html
+
+
+def test_renderer_deduplicates_and_escapes_reproducible_sql() -> None:
+    results = ResultStore()
+    saved = results.save(
+        thread_id="thread-1",
+        source_id="source-1",
+        executed_sql="SELECT '<unsafe>' AS label",
+        columns=["label"],
+        rows=[{"label": "<unsafe>"}],
+        truncated=True,
+        elapsed_ms=1.0,
+        originating_question="Inspect a label",
+    )
+    spec = ReportSpec.model_validate(
+        {
+            "title": "Reproducible report",
+            "blocks": [
+                {
+                    "type": "table",
+                    "result_id": saved.result_id,
+                    "title": "Labels",
+                },
+                {
+                    "type": "table",
+                    "result_id": saved.result_id,
+                    "title": "Labels again",
+                },
+            ],
+        }
+    )
+
+    html = render_report(
+        spec,
+        results={saved.result_id: saved},
+        analyses={},
+        generated_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+
+    assert html.count('<article class="sql-query">') == 1
+    assert "SELECT &#x27;&lt;unsafe&gt;&#x27; AS label" in html
+    assert "truncated at the configured limit" in html
+    assert saved.result_id not in html
+
+
+def test_metric_grid_caps_columns_at_responsive_breakpoints() -> None:
+    spec = ReportSpec.model_validate(
+        {
+            "title": "Responsive metrics",
+            "blocks": [
+                {
+                    "type": "metrics",
+                    "columns": 6,
+                    "metrics": [
+                        {"label": f"Metric {index}", "value": str(index)}
+                        for index in range(1, 7)
+                    ],
+                }
+            ],
+        }
+    )
+
+    html = render_report(
+        spec,
+        results={},
+        analyses={},
+        generated_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+
+    assert "--metric-columns:6" in html
+    assert "--metric-tablet-columns:3" in html
+    assert "--metric-mobile-columns:2" in html
+    assert "SQL queries" not in html
 
 
 def test_report_tool_enforces_scope_and_versions_revisions() -> None:
@@ -259,7 +338,7 @@ def test_report_tool_enforces_scope_and_versions_revisions() -> None:
         revised.report.report_id,
         "thread-1",
         source_id="source-1",
-    ).renderer_version == "1.0"
+    ).renderer_version == "1.1"
 
     wrong_thread = SimpleNamespace(
         state={
