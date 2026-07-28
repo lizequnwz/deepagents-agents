@@ -71,6 +71,9 @@ model.
 - Streamlit result tables, CSV downloads, warnings, and source diagnostics
 - Structured live activity showing named context, skills, agents, tools, and
   curated tool arguments
+- In-memory run and conversation diagnostics for provider-reported tokens,
+  elapsed/active/review time, per-agent aggregates, and tool durations
+- Rotating privacy-bounded API logs in `logs/api.log`
 - Optional trusted-local debug views for redacted tool inputs and bounded
   per-agent state snapshots
 - Optional Snowflake adapter over an injected `snowlib` client
@@ -133,6 +136,8 @@ API_AUTO_RELOAD=false ./scripts/start.sh
    curated arguments such as chart mappings.
 8. Inspect statistical outputs or the rendered Plotly chart, parent table/CSV,
    exact Python, and executed SQL.
+9. Expand run diagnostics, or the sidebar conversation diagnostics, to inspect
+   operational usage and timing.
 
 Changing source starts a new conversation. **New conversation** retains the
 selected source. Previous conversations remain available through their URLs

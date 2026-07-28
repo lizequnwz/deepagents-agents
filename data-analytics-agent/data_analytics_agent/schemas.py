@@ -14,7 +14,7 @@ from data_analytics_agent.agents.statistical_analysis.schemas import (
 from data_analytics_agent.agents.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 4
+API_CONTRACT_VERSION = 5
 
 
 class StrictModel(BaseModel):
@@ -189,6 +189,62 @@ class RunStatus(StrEnum):
     FAILED = "failed"
 
 
+class TokenUsage(StrictModel):
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    total_tokens: int = Field(default=0, ge=0)
+    cached_input_tokens: int | None = Field(default=None, ge=0)
+    reasoning_output_tokens: int | None = Field(default=None, ge=0)
+
+
+class AgentDiagnostics(StrictModel):
+    agent: str
+    tokens: TokenUsage = Field(default_factory=TokenUsage)
+    model_calls: int = Field(default=0, ge=0)
+    model_call_errors: int = Field(default=0, ge=0)
+    model_calls_missing_usage: int = Field(default=0, ge=0)
+    model_ms: int = Field(default=0, ge=0)
+    max_model_call_ms: int = Field(default=0, ge=0)
+    tool_calls: int = Field(default=0, ge=0)
+    tool_call_errors: int = Field(default=0, ge=0)
+    tool_ms: int = Field(default=0, ge=0)
+
+
+class RunDiagnostics(StrictModel):
+    model: str = ""
+    tokens: TokenUsage = Field(default_factory=TokenUsage)
+    token_usage_partial: bool = False
+    model_calls: int = Field(default=0, ge=0)
+    model_call_errors: int = Field(default=0, ge=0)
+    model_calls_missing_usage: int = Field(default=0, ge=0)
+    model_ms: int = Field(default=0, ge=0)
+    max_model_call_ms: int = Field(default=0, ge=0)
+    tool_calls: int = Field(default=0, ge=0)
+    tool_call_errors: int = Field(default=0, ge=0)
+    tool_ms: int = Field(default=0, ge=0)
+    elapsed_ms: int = Field(default=0, ge=0)
+    active_ms: int = Field(default=0, ge=0)
+    approval_wait_ms: int = Field(default=0, ge=0)
+    agents: list[AgentDiagnostics] = Field(default_factory=list)
+
+
+class ConversationDiagnostics(StrictModel):
+    tokens: TokenUsage = Field(default_factory=TokenUsage)
+    token_usage_partial: bool = False
+    model_calls: int = Field(default=0, ge=0)
+    model_call_errors: int = Field(default=0, ge=0)
+    model_calls_missing_usage: int = Field(default=0, ge=0)
+    model_ms: int = Field(default=0, ge=0)
+    tool_calls: int = Field(default=0, ge=0)
+    tool_call_errors: int = Field(default=0, ge=0)
+    tool_ms: int = Field(default=0, ge=0)
+    elapsed_ms: int = Field(default=0, ge=0)
+    active_ms: int = Field(default=0, ge=0)
+    approval_wait_ms: int = Field(default=0, ge=0)
+    run_count: int = Field(default=0, ge=0)
+    has_active_run: bool = False
+
+
 class ToolCallDiagnostic(StrictModel):
     tool_name: str
     input: str | None = None
@@ -227,6 +283,7 @@ class ActivityEvent(StrictModel):
     phase: Literal["info", "started", "completed", "failed"] = "info"
     agent: str | None = None
     tool: ActivityTool | None = None
+    duration_ms: int | None = Field(default=None, ge=0)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -272,6 +329,7 @@ class ChatTurn(StrictModel):
     answer: FinalAnswer
     activities: list[ActivityEvent] = Field(default_factory=list)
     debug_states: list[AgentStateSnapshot] = Field(default_factory=list)
+    diagnostics: RunDiagnostics = Field(default_factory=RunDiagnostics)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -283,6 +341,9 @@ class ConversationResponse(StrictModel):
     turns: list[ChatTurn]
     run_ids: list[str] = Field(default_factory=list)
     active_run_id: str | None = None
+    diagnostics: ConversationDiagnostics = Field(
+        default_factory=ConversationDiagnostics
+    )
 
 
 class CreateConversationRequest(StrictModel):
@@ -316,6 +377,7 @@ class RunResponse(StrictModel):
     answer: FinalAnswer | None = None
     error: str | None = None
     diagnostics: ExecutionBudgetDiagnostics | None = None
+    run_diagnostics: RunDiagnostics = Field(default_factory=RunDiagnostics)
 
 
 class Decision(StrictModel):

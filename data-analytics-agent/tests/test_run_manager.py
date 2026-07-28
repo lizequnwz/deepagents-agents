@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, LLMResult
 
 from data_analytics_agent.run_manager import (
     DEBUG_STATE_CHAR_LIMIT,
+    RunDiagnosticsCallback,
     RunManager,
     _activity_arguments,
     _activity_for_tool,
@@ -27,6 +30,44 @@ def _manager(results: ResultStore) -> RunManager:
         runs=RunStore(),
         results=results,
     )
+
+
+def test_diagnostics_callback_attributes_provider_usage_to_agent() -> None:
+    runs = RunStore()
+    run_id = runs.create("thread-a", "source-a", "Question")
+    callback = RunDiagnosticsCallback(runs, run_id)
+    model_call_id = uuid4()
+
+    callback.on_chat_model_start(
+        {},
+        [[HumanMessage(content="Question")]],
+        run_id=model_call_id,
+        metadata={"lc_agent_name": "text-to-sql"},
+    )
+    callback.on_llm_end(
+        LLMResult(
+            generations=[
+                [
+                    ChatGeneration(
+                        message=AIMessage(
+                            content="Answer",
+                            usage_metadata={
+                                "input_tokens": 12,
+                                "output_tokens": 3,
+                                "total_tokens": 15,
+                            },
+                        )
+                    )
+                ]
+            ]
+        ),
+        run_id=model_call_id,
+    )
+
+    diagnostics = runs.diagnostics(run_id)
+    assert diagnostics.tokens.total_tokens == 15
+    assert diagnostics.token_usage_partial is False
+    assert diagnostics.agents[0].agent == "text-to-sql"
 
 
 def test_stored_executed_sql_overrides_stale_model_sql() -> None:

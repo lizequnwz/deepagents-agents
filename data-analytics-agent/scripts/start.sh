@@ -119,6 +119,7 @@ echo "Starting FastAPI at ${API_BASE_URL}…"
 uv run uvicorn data_analytics_agent.api:app \
   --host "${API_HOST}" \
   --port "${API_PORT}" \
+  --no-access-log \
   "${API_RELOAD_ARGS[@]}" &
 API_PID="$!"
 wait_for_service "FastAPI" "${API_BASE_URL}/health" "${API_PID}"

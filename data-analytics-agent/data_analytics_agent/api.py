@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 from threading import RLock
 from typing import Any
 
@@ -13,6 +14,7 @@ from data_analytics_agent.coordinator import build_agent
 from data_analytics_agent.backends import SQLBackend, create_backend
 from data_analytics_agent.config import Settings
 from data_analytics_agent.data_sources import DataSource, DataSourceCatalog
+from data_analytics_agent.logging_config import configure_api_logging
 from data_analytics_agent.run_manager import (
     RunManager,
     decisions_to_command,
@@ -44,6 +46,8 @@ from data_analytics_agent.stores import (
     StatisticalAnalysisStore,
     StoreNotFound,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _create_snowflake_client() -> Any:
@@ -208,11 +212,13 @@ class Services:
 
 def create_app(services: Services | None = None) -> FastAPI:
     container = services or Services()
+    log_path = configure_api_logging(container.settings.project_root)
     app = FastAPI(
         title="Data Analytics Agent API",
         version="0.6.0",
     )
     app.state.services = container
+    logger.info("api.configured log_file=%s", log_path)
 
     @app.exception_handler(StoreNotFound)
     async def not_found_handler(_request, _exc):
@@ -312,7 +318,14 @@ def create_app(services: Services | None = None) -> FastAPI:
         response_model=ConversationResponse,
     )
     async def get_conversation(thread_id: str) -> ConversationResponse:
-        return container.conversations.get(thread_id)
+        conversation = container.conversations.get(thread_id)
+        return conversation.model_copy(
+            update={
+                "diagnostics": container.runs.conversation_diagnostics(
+                    conversation.run_ids
+                )
+            }
+        )
 
     @app.post(
         "/api/conversations/{thread_id}/messages",
@@ -348,6 +361,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             thread_id,
             conversation.source_id,
             request.message.strip(),
+            model=container.settings.model,
         )
         try:
             container.conversations.begin_run(thread_id, run_id)
@@ -394,7 +408,9 @@ def create_app(services: Services | None = None) -> FastAPI:
                 detail=str(exc),
             ) from exc
         try:
-            container.runs.claim_approval(run_id, run.approval)
+            approval_wait_ms = container.runs.claim_approval(
+                run_id, run.approval
+            )
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -404,6 +420,12 @@ def create_app(services: Services | None = None) -> FastAPI:
             container.manager().resume,
             run_id,
             command,
+        )
+        logger.info(
+            "run.resumed run_id=%s thread_id=%s approval_wait_ms=%d",
+            run_id,
+            run.thread_id,
+            approval_wait_ms,
         )
         return CreateRunResponse(run_id=run_id, status=RunStatus.RUNNING)
 

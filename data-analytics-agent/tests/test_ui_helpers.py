@@ -26,7 +26,7 @@ def test_conversation_url_replaces_existing_thread_and_preserves_query() -> None
 
 
 def test_api_contract_mismatch_requires_service_restart() -> None:
-    assert api_contract_error({"api_contract_version": 4}) is None
+    assert api_contract_error({"api_contract_version": 5}) is None
     missing = api_contract_error({})
     stale = api_contract_error({"api_contract_version": 2})
 
@@ -88,6 +88,7 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
             "label": "Loading skill · query-writing",
             "phase": "started",
             "agent": "text-to-sql",
+            "duration_ms": 250,
             "tool": {
                 "call_id": "call-1",
                 "name": "read_file",
@@ -129,6 +130,7 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
     assert consolidated[0]["tool"]["debug_input"] == {
         "file_path": "SKILL.md"
     }
+    assert consolidated[0]["duration_ms"] == 250
     assert consolidated[1]["tool"]["call_id"] == "call-2"
 
 
@@ -174,6 +176,49 @@ render_activity_timeline(
         "read_file",
         "Agent state (debug)",
     ]
+
+
+def test_run_diagnostics_renderer_shows_operational_summary() -> None:
+    app = AppTest.from_string(
+        '''
+from data_analytics_agent.ui.components import render_run_diagnostics
+
+render_run_diagnostics({
+    "tokens": {
+        "input_tokens": 100,
+        "output_tokens": 25,
+        "total_tokens": 125,
+    },
+    "token_usage_partial": True,
+    "model_calls": 2,
+    "tool_calls": 1,
+    "elapsed_ms": 2500,
+    "active_ms": 2000,
+    "approval_wait_ms": 500,
+    "agents": [{
+        "agent": "text-to-sql",
+        "tokens": {"total_tokens": 125},
+        "model_calls": 2,
+        "model_ms": 1500,
+        "max_model_call_ms": 900,
+        "tool_calls": 1,
+        "tool_ms": 300,
+    }],
+}, key="test")
+'''
+    ).run()
+
+    assert not app.exception
+    assert [metric.label for metric in app.metric] == [
+        "Tokens",
+        "Elapsed",
+        "Active",
+        "Approval wait",
+    ]
+    assert any(
+        "token total is partial" in caption.value
+        for caption in app.caption
+    )
 
 
 def test_api_client_fetches_every_result_page() -> None:

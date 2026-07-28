@@ -433,6 +433,12 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     assert len(conversation["turns"]) == 1
     assert conversation["turns"][0]["answer"]["answer"].startswith("Five")
     assert conversation["turns"][0]["answer"]["sql"] == executed_sql
+    assert conversation["diagnostics"]["run_count"] == 1
+    assert conversation["diagnostics"]["tool_calls"] == 3
+    assert conversation["diagnostics"]["has_active_run"] is False
+    assert conversation["turns"][0]["diagnostics"] == completed[
+        "run_diagnostics"
+    ]
 
 
 def test_concurrent_run_is_rejected(test_settings: Settings) -> None:
@@ -498,7 +504,7 @@ def test_health_reports_visualization_feature_state(
     health = TestClient(create_app(services)).get("/health")
 
     assert health.status_code == 200
-    assert health.json()["api_contract_version"] == 4
+    assert health.json()["api_contract_version"] == 5
     assert health.json()["reporting_enabled"] is True
     assert health.json()["visualization_enabled"] is True
     assert health.json()["statistical_analysis_enabled"] is True

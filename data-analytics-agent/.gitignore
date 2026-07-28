@@ -26,6 +26,9 @@ htmlcov/
 agent_files/
 agent_workspace/
 
+# Runtime logs
+logs/
+
 # IDE
 .vscode/
 .idea/

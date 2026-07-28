@@ -17,10 +17,12 @@ from data_analytics_agent.ui.api_client import (
 from data_analytics_agent.ui.components import (
     render_activity_timeline,
     render_approval,
+    render_conversation_diagnostics,
     render_debug_states,
     render_empty_state,
     render_page_header,
     render_pending_user_message,
+    render_run_diagnostics,
     render_sidebar,
     render_turn,
 )
@@ -46,6 +48,7 @@ def initialize_session_state() -> None:
     st.session_state.setdefault("last_run_error", None)
     st.session_state.setdefault("last_run_diagnostics", None)
     st.session_state.setdefault("last_run_debug_states", None)
+    st.session_state.setdefault("last_run_metrics", None)
     st.session_state.setdefault("conversation_notice", None)
     st.session_state.setdefault("review_notice", None)
     st.session_state.setdefault("source_selector", None)
@@ -73,6 +76,7 @@ def clear_conversation_state() -> None:
     st.session_state["last_run_error"] = None
     st.session_state["last_run_diagnostics"] = None
     st.session_state["last_run_debug_states"] = None
+    st.session_state["last_run_metrics"] = None
     st.session_state["review_notice"] = None
 
 
@@ -172,6 +176,9 @@ def poll_run(
     client: AgentAPIClient,
     run_id: str,
     initial_run: dict[str, Any],
+    *,
+    thread_id: str,
+    conversation_diagnostics_slot: Any,
 ) -> dict[str, Any]:
     cursor_key = f"event_cursor_{run_id}"
     activities_key = f"event_activities_{run_id}"
@@ -204,7 +211,9 @@ def poll_run(
         state="running",
     ) as status_panel:
         timeline_slot = st.empty()
+        diagnostics_slot = st.empty()
         render_version = 0
+        diagnostics_render_version = 0
 
         while True:
             timeline_changed = render_version == 0
@@ -227,6 +236,27 @@ def poll_run(
                         debug_states=debug_states,
                         key_prefix=f"live_{run_id}_{render_version}",
                     )
+            diagnostics_slot.empty()
+            diagnostics_render_version += 1
+            with diagnostics_slot.container():
+                render_run_diagnostics(
+                    run.get("run_diagnostics") or {},
+                    activities=activities,
+                    key=(
+                        f"live_run_diagnostics_{run_id}_"
+                        f"{diagnostics_render_version}"
+                    ),
+                )
+            live_conversation = client.get_conversation(thread_id)
+            conversation_diagnostics_slot.empty()
+            with conversation_diagnostics_slot.container():
+                render_conversation_diagnostics(
+                    live_conversation.get("diagnostics") or {},
+                    key=(
+                        f"live_conversation_diagnostics_{run_id}_"
+                        f"{diagnostics_render_version}"
+                    ),
+                )
 
             cursor = int(run["next_event_id"])
             st.session_state[cursor_key] = cursor
@@ -343,14 +373,16 @@ active_run_id = (
     or st.session_state.get("active_run_id")
 )
 
-if render_sidebar(
+new_conversation, conversation_diagnostics_slot = render_sidebar(
     thread_id=thread_id,
     app_base_url=APP_BASE_URL,
     health=health,
     health_error=health_error,
     data_sources=data_sources,
     source_switch_disabled=bool(active_run_id),
-):
+    diagnostics=conversation.get("diagnostics") or {},
+)
+if new_conversation:
     try:
         # The selector widget already exists on this run. Its value is already
         # the conversation's source, so do not mutate the widget-backed key.
@@ -399,13 +431,24 @@ if st.session_state.get("last_run_error"):
             st.session_state["last_run_debug_states"],
             key_prefix="last_failed_run",
         )
+    if st.session_state.get("last_run_metrics"):
+        render_run_diagnostics(
+            st.session_state["last_run_metrics"],
+            key="last_failed_run_metrics",
+        )
 
 if active_run_id:
     st.session_state["active_run_id"] = active_run_id
     try:
         initial_run = client.get_run(active_run_id)
         render_pending_user_message(initial_run["question"])
-        active_run = poll_run(client, active_run_id, initial_run)
+        active_run = poll_run(
+            client,
+            active_run_id,
+            initial_run,
+            thread_id=thread_id,
+            conversation_diagnostics_slot=conversation_diagnostics_slot,
+        )
     except APIError as exc:
         st.error(str(exc), icon=":material/error:")
         active_run = None
@@ -472,6 +515,9 @@ if active_run_id:
         st.session_state["last_run_debug_states"] = active_run.get(
             "debug_states"
         )
+        st.session_state["last_run_metrics"] = active_run.get(
+            "run_diagnostics"
+        )
         clear_completed_run(active_run_id)
         st.rerun()
     elif active_run and active_run["status"] == "completed":
@@ -493,6 +539,7 @@ if not active_run_id:
             st.session_state["last_run_error"] = None
             st.session_state["last_run_diagnostics"] = None
             st.session_state["last_run_debug_states"] = None
+            st.session_state["last_run_metrics"] = None
             run = client.send_message(thread_id, question)
             st.session_state["active_run_id"] = run["run_id"]
             st.rerun()

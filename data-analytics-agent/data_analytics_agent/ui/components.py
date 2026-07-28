@@ -74,6 +74,9 @@ def consolidate_activity_events(
                 "created_at": event.get(
                     "created_at", existing.get("created_at")
                 ),
+                "duration_ms": event.get(
+                    "duration_ms", existing.get("duration_ms")
+                ),
             }
         )
         existing["tool"] = {
@@ -98,6 +101,144 @@ def _agent_label(agent: str | None) -> str:
         "text-to-sql": "Text-to-SQL",
         "data-visualization": "Visualization",
     }.get(agent or "", (agent or "Agent").replace("-", " ").title())
+
+
+def _format_duration(milliseconds: int | float | None) -> str:
+    value = max(0, float(milliseconds or 0))
+    if value < 1000:
+        return f"{round(value):,} ms"
+    seconds = value / 1000
+    if seconds < 60:
+        return f"{seconds:.1f} s"
+    minutes, remainder = divmod(seconds, 60)
+    return f"{int(minutes)}m {remainder:.0f}s"
+
+
+def _format_tokens(value: int | None) -> str:
+    return f"{int(value or 0):,}"
+
+
+def render_conversation_diagnostics(
+    diagnostics: dict[str, Any],
+    *,
+    key: str | None = None,
+) -> None:
+    """Render compact aggregate diagnostics beside conversation metadata."""
+
+    tokens = diagnostics.get("tokens") or {}
+    partial = bool(diagnostics.get("token_usage_partial"))
+    active = bool(diagnostics.get("has_active_run"))
+    qualifier = "partial" if partial else "reported"
+    state = " · active" if active else ""
+    with st.expander(
+        "Conversation diagnostics",
+        icon=":material/monitoring:",
+        expanded=False,
+        key=key,
+    ):
+        st.caption(
+            f"{_format_tokens(tokens.get('total_tokens'))} tokens ({qualifier})"
+            f" · {_format_duration(diagnostics.get('elapsed_ms'))} elapsed"
+            f" · {int(diagnostics.get('run_count') or 0)} runs{state}"
+        )
+        st.caption(
+            f"Active {_format_duration(diagnostics.get('active_ms'))} · "
+            f"approval wait "
+            f"{_format_duration(diagnostics.get('approval_wait_ms'))}"
+        )
+
+
+def render_run_diagnostics(
+    diagnostics: dict[str, Any],
+    *,
+    activities: list[dict[str, Any]] | None = None,
+    key: str | None = None,
+) -> None:
+    """Render one bounded operational summary for a run."""
+
+    tokens = diagnostics.get("tokens") or {}
+    partial = bool(diagnostics.get("token_usage_partial"))
+    with st.expander(
+        "Run diagnostics",
+        icon=":material/monitoring:",
+        expanded=False,
+        key=key,
+    ):
+        columns = st.columns(4)
+        columns[0].metric(
+            "Tokens",
+            _format_tokens(tokens.get("total_tokens")),
+            help="Provider-reported total across all model calls.",
+        )
+        columns[1].metric(
+            "Elapsed",
+            _format_duration(diagnostics.get("elapsed_ms")),
+        )
+        columns[2].metric(
+            "Active",
+            _format_duration(diagnostics.get("active_ms")),
+        )
+        columns[3].metric(
+            "Approval wait",
+            _format_duration(diagnostics.get("approval_wait_ms")),
+        )
+        details = [
+            f"input {_format_tokens(tokens.get('input_tokens'))}",
+            f"output {_format_tokens(tokens.get('output_tokens'))}",
+            f"{int(diagnostics.get('model_calls') or 0)} model calls",
+            f"{int(diagnostics.get('tool_calls') or 0)} tool calls",
+        ]
+        if tokens.get("cached_input_tokens") is not None:
+            details.append(
+                "cached input "
+                + _format_tokens(tokens.get("cached_input_tokens"))
+            )
+        if tokens.get("reasoning_output_tokens") is not None:
+            details.append(
+                "reasoning output "
+                + _format_tokens(tokens.get("reasoning_output_tokens"))
+            )
+        if partial:
+            details.append("token total is partial")
+        st.caption(" · ".join(details))
+
+        agent_rows = []
+        for agent in diagnostics.get("agents") or []:
+            agent_tokens = agent.get("tokens") or {}
+            agent_rows.append(
+                {
+                    "Agent": _agent_label(agent.get("agent")),
+                    "Tokens": int(agent_tokens.get("total_tokens") or 0),
+                    "Model calls": int(agent.get("model_calls") or 0),
+                    "Model time": _format_duration(agent.get("model_ms")),
+                    "Max model call": _format_duration(
+                        agent.get("max_model_call_ms")
+                    ),
+                    "Tool calls": int(agent.get("tool_calls") or 0),
+                    "Tool time": _format_duration(agent.get("tool_ms")),
+                }
+            )
+        if agent_rows:
+            st.markdown("**By agent**")
+            st.dataframe(agent_rows, hide_index=True, width="stretch")
+
+        tool_rows = []
+        for event in consolidate_activity_events(activities or []):
+            tool = event.get("tool") or {}
+            duration_ms = event.get("duration_ms")
+            if not tool.get("name") or duration_ms is None:
+                continue
+            tool_rows.append(
+                {
+                    "Tool": str(tool["name"]),
+                    "Agent": _agent_label(event.get("agent")),
+                    "Status": str(event.get("phase") or "completed"),
+                    "Duration": _format_duration(duration_ms),
+                }
+            )
+        if tool_rows:
+            st.markdown("**Tool calls**")
+            st.dataframe(tool_rows, hide_index=True, width="stretch")
 
 
 def render_debug_states(
@@ -163,7 +304,12 @@ def render_activity_timeline(
         icon = _PHASE_ICONS.get(phase, ":material/info:")
         label = str(event.get("label") or "Agent activity")
         agent = _agent_label(event.get("agent"))
-        st.caption(f"{icon} {label} · {agent}")
+        duration = (
+            f" · {_format_duration(event.get('duration_ms'))}"
+            if event.get("duration_ms") is not None
+            else ""
+        )
+        st.caption(f"{icon} {label} · {agent}{duration}")
 
         tool = event.get("tool") or {}
         arguments = tool.get("arguments") or {}
@@ -276,7 +422,8 @@ def render_sidebar(
     health_error: str | None,
     data_sources: dict[str, Any],
     source_switch_disabled: bool,
-) -> bool:
+    diagnostics: dict[str, Any],
+) -> tuple[bool, Any]:
     """Render app-level metadata and return whether New conversation was used."""
 
     with st.sidebar:
@@ -378,6 +525,12 @@ def render_sidebar(
                     st.caption(warning)
 
         st.caption(f"Conversation · `{thread_id[:8]}`")
+        diagnostics_slot = st.empty()
+        with diagnostics_slot.container():
+            render_conversation_diagnostics(
+                diagnostics,
+                key=f"conversation_diagnostics_{thread_id}",
+            )
         with st.expander(
             "Technical details",
             icon=":material/info:",
@@ -398,7 +551,7 @@ def render_sidebar(
                 "Conversation data is process-local and is cleared when the "
                 "FastAPI server restarts."
             )
-        return new_conversation
+        return new_conversation, diagnostics_slot
 
 
 def render_empty_state(
@@ -678,6 +831,12 @@ def render_turn(
                     debug_states=debug_states,
                     key_prefix=f"turn_{turn_key}",
                 )
+        if turn.get("diagnostics"):
+            render_run_diagnostics(
+                turn["diagnostics"],
+                activities=activities,
+                key=f"run_diagnostics_{turn_key}",
+            )
 
 
 def _render_statistical_analysis(

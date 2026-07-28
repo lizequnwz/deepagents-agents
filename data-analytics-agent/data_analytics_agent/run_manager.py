@@ -6,9 +6,13 @@ from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 import json
+import logging
 import re
 from typing import Any
 
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain.agents.middleware.model_call_limit import (
     ModelCallLimitExceededError,
 )
@@ -63,6 +67,8 @@ from data_analytics_agent.stores import (
     StatisticalAnalysisStore,
     StoreNotFound,
 )
+
+logger = logging.getLogger(__name__)
 
 RESHAPE_ACTIVITY_LABEL = "Chart data needs SQL reshaping"
 DEBUG_VALUE_CHAR_LIMIT = 4_000
@@ -192,6 +198,119 @@ def _agent_for_namespace(
         return "coordinator"
     joined = "/".join(str(item) for item in namespace)
     return _agent_name(joined) or fallback
+
+
+def _agent_for_model_metadata(metadata: Mapping[str, Any] | None) -> str:
+    if not metadata:
+        return "unknown"
+    candidate = metadata.get("lc_agent_name")
+    if isinstance(candidate, str):
+        return _agent_name(candidate) or "unknown"
+    return "unknown"
+
+
+class RunDiagnosticsCallback(BaseCallbackHandler):
+    """Aggregate completed model-call diagnostics into the current run."""
+
+    def __init__(self, runs: RunStore, run_id: str) -> None:
+        super().__init__()
+        self.runs = runs
+        self.run_id = run_id
+
+    def on_chat_model_start(
+        self,
+        serialized: dict[str, Any],
+        messages: list[list[Any]],
+        *,
+        run_id: Any,
+        metadata: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        del serialized, messages, kwargs
+        self.runs.start_model_call(
+            self.run_id,
+            str(run_id),
+            agent=_agent_for_model_metadata(metadata),
+        )
+
+    def on_llm_end(
+        self,
+        response: LLMResult,
+        *,
+        run_id: Any,
+        **kwargs: Any,
+    ) -> None:
+        del kwargs
+        usage = None
+        try:
+            generation = response.generations[0][0]
+        except IndexError:
+            generation = None
+        if isinstance(generation, ChatGeneration):
+            message = generation.message
+            if isinstance(message, AIMessage):
+                usage = message.usage_metadata
+        self.runs.finish_model_call(
+            self.run_id,
+            str(run_id),
+            usage=usage,
+        )
+
+    def on_llm_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: Any,
+        **kwargs: Any,
+    ) -> None:
+        del error, kwargs
+        self.runs.finish_model_call(
+            self.run_id,
+            str(run_id),
+            usage=None,
+            failed=True,
+        )
+
+
+def _log_run_summary(event: str, snapshot: Any) -> None:
+    diagnostics = snapshot.run_diagnostics
+    logger.info(
+        "%s run_id=%s thread_id=%s status=%s total_tokens=%d "
+        "token_usage_partial=%s model_calls=%d tool_calls=%d elapsed_ms=%d "
+        "active_ms=%d approval_wait_ms=%d",
+        event,
+        snapshot.run_id,
+        snapshot.thread_id,
+        snapshot.status.value,
+        diagnostics.tokens.total_tokens,
+        diagnostics.token_usage_partial,
+        diagnostics.model_calls,
+        diagnostics.tool_calls,
+        diagnostics.elapsed_ms,
+        diagnostics.active_ms,
+        diagnostics.approval_wait_ms,
+    )
+
+
+def _log_agent_summaries(snapshot: Any) -> None:
+    for agent in snapshot.run_diagnostics.agents:
+        logger.info(
+            "agent.summary run_id=%s agent=%s total_tokens=%d "
+            "token_usage_partial=%s model_calls=%d model_call_errors=%d "
+            "model_ms=%d max_model_call_ms=%d tool_calls=%d "
+            "tool_call_errors=%d tool_ms=%d",
+            snapshot.run_id,
+            agent.agent,
+            agent.tokens.total_tokens,
+            bool(agent.model_calls_missing_usage),
+            agent.model_calls,
+            agent.model_call_errors,
+            agent.model_ms,
+            agent.max_model_call_ms,
+            agent.tool_calls,
+            agent.tool_call_errors,
+            agent.tool_ms,
+        )
 
 
 def _sanitize_state_snapshot(
@@ -1356,7 +1475,7 @@ class RunManager:
             if self.agent_resolver is not None
             else self.agent
         )
-        self.runs.set_status(run_id, RunStatus.RUNNING)
+        self.runs.start_active(run_id)
         diagnostic_events = self._diagnostic_events.setdefault(
             run_id, deque(maxlen=5)
         )
@@ -1378,14 +1497,17 @@ class RunManager:
         # A run owns its checkpoint lifecycle. Conversation history is supplied
         # explicitly in start(), so a directly completed chart cannot leave a
         # stale nested interrupt for the next user turn.
-        config = {"configurable": {"thread_id": run_id}}
+        config = {
+            "configurable": {"thread_id": run_id},
+            "callbacks": [RunDiagnosticsCallback(self.runs, run_id)],
+        }
         try:
             stream = await graph.astream_events(
                 agent_input,
                 config=config,
                 version="v3",
             )
-            tool_sequence = 0
+            tool_sequence = self.runs.get(run_id).next_event_id
             tool_activities: dict[
                 str, tuple[str, str, str, str, dict[str, Any]]
             ] = {}
@@ -1427,6 +1549,11 @@ class RunManager:
                             arguments,
                         )
                         open_tool_calls.setdefault(tool_name, []).append(call_id)
+                        self.runs.start_tool_call(
+                            run_id,
+                            call_id,
+                            agent=event_agent,
+                        )
                         self.runs.add_event(
                             run_id,
                             *activity,
@@ -1464,6 +1591,15 @@ class RunManager:
                             ) = recorded
                             tool_name = recorded_tool_name
                         failed = lifecycle == "tool-error"
+                        if not call_id:
+                            tool_sequence += 1
+                            call_id = f"tool-{tool_sequence}"
+                        duration_ms = self.runs.finish_tool_call(
+                            run_id,
+                            call_id,
+                            agent=recorded_agent,
+                            failed=failed,
+                        )
                         self.runs.add_event(
                             run_id,
                             kind,
@@ -1474,11 +1610,20 @@ class RunManager:
                             ),
                             phase="failed" if failed else "completed",
                             agent=recorded_agent,
+                            duration_ms=duration_ms,
                             tool=ActivityTool(
                                 call_id=call_id or None,
                                 name=tool_name,
                                 arguments=arguments,
                             ),
+                        )
+                        logger.info(
+                            "%s run_id=%s agent=%s tool=%s duration_ms=%d",
+                            "tool.failed" if failed else "tool.completed",
+                            run_id,
+                            recorded_agent,
+                            tool_name,
+                            duration_ms,
                         )
                         if call_id:
                             candidates = open_tool_calls.get(tool_name) or []
@@ -1630,6 +1775,7 @@ class RunManager:
                     ),
                 )
                 self.runs.require_approval(run_id, approval)
+                _log_run_summary("run.paused", self.runs.get(run_id))
                 return
 
             output = await stream.output()
@@ -1679,6 +1825,8 @@ class RunManager:
             self.runs.complete(run_id, answer)
             self._diagnostic_events.pop(run_id, None)
             completed = self.runs.get(run_id)
+            _log_run_summary("run.completed", completed)
+            _log_agent_summaries(completed)
             self.conversations.complete_run(
                 thread_id,
                 run_id,
@@ -1687,6 +1835,7 @@ class RunManager:
                     answer=answer,
                     activities=completed.events,
                     debug_states=completed.debug_states,
+                    diagnostics=completed.run_diagnostics,
                 ),
             )
         except (
@@ -1713,6 +1862,9 @@ class RunManager:
                 _budget_error_message(diagnostics),
                 diagnostics=diagnostics,
             )
+            failed = self.runs.get(run_id)
+            _log_run_summary("run.failed", failed)
+            _log_agent_summaries(failed)
             self.conversations.fail_run(thread_id, run_id)
         except Exception as exc:
             self._diagnostic_events.pop(run_id, None)
@@ -1725,4 +1877,7 @@ class RunManager:
                 agent=active_agents[-1],
             )
             self.runs.fail(run_id, message)
+            failed = self.runs.get(run_id)
+            _log_run_summary("run.failed", failed)
+            _log_agent_summaries(failed)
             self.conversations.fail_run(thread_id, run_id)

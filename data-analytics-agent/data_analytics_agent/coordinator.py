@@ -220,6 +220,7 @@ def _build_chat_model(settings: Settings, model: Any | None = None) -> Any:
     return init_chat_model(
         settings.model,
         model_provider=settings.model_provider,
+        streaming=False,
     )
 
 

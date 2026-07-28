@@ -83,7 +83,7 @@ limit.
 
 Failed runs always expose safe diagnostics: agent, budget type, limit,
 attempted count, run ID, and the specific tool when applicable. Set
-Set `AGENT_DEBUG_DETAILS=true` only for trusted local debugging. It enables:
+`AGENT_DEBUG_DETAILS=true` only for trusted local debugging. It enables:
 
 - bounded, recursively secret-key-redacted raw inputs on activity tool calls;
 - a rolling window of the last five tool payloads on execution-budget errors;
@@ -106,6 +106,30 @@ Secrets never belong in the registry, semantic files, tests, logs, or docs.
 Optional LangSmith settings are present in `.env.example`. Treat traces as a
 data-governance boundary: do not assume prompts, SQL, or outputs are safe to
 send to an external observability service.
+
+## Operational diagnostics and logs
+
+Diagnostics are collected locally without LangSmith. Each run reports
+provider-reported input, output, and total tokens; optional cached-input and
+reasoning-output tokens; model/tool call counts and durations; elapsed time;
+active execution time; and approval wait time. Agent rows are aggregate only.
+Conversation diagnostics sum every run, including active and failed runs.
+
+A token total is marked partial when a model call is still active or its
+provider did not return complete usage metadata. The application does not
+estimate missing tokens and does not calculate monetary cost. Diagnostics are
+process-local and reset with the API process. LangChain models initialized by
+the application use `streaming=False` so callback completion and usage
+collection follow one predictable path.
+
+The API always writes concise `key=value` logs to stderr and
+`logs/api.log`. The file rotates at 10 MiB and retains five backups. It records
+API/Uvicorn startup and errors plus run pause/resume/completion/failure,
+per-agent summaries, and completed/failed tool durations. Uvicorn access logs
+are disabled because Streamlit polls the API frequently. Prompts, responses,
+request bodies, tool payloads, SQL, results, and report contents are not logged.
+Log initialization is intentionally fail-fast if the directory or file cannot
+be created.
 
 ## Startup
 
@@ -144,7 +168,7 @@ Separate processes:
 
 ```bash
 uv run uvicorn data_analytics_agent.api:app \
-  --host 127.0.0.1 --port 8000
+  --host 127.0.0.1 --port 8000 --no-access-log
 
 uv run streamlit run streamlit_app.py \
   --server.address 127.0.0.1 --server.port 8501
@@ -204,6 +228,9 @@ The normal suite covers:
 - exact reviewed statistical Python, result scope, truncation refusal, output
   bounds, figure capture, and repair-attempt limits;
 - API rehydration and concurrent-run rejection;
+- provider-reported token aggregation, per-agent timing, approval wait, and
+  conversation totals with controlled clocks and fake model responses;
+- rotating API log initialization and access-log suppression;
 - Streamlit helper behavior;
 - constrained chart schema and presentation limits;
 - automatic chart execution, safe progress arguments, and result provenance;

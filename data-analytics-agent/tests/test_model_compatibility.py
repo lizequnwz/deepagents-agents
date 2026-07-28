@@ -242,6 +242,7 @@ def test_bedrock_configuration_uses_injected_or_factory_model(
     assert captured == {
         "model": "us.anthropic.claude-sonnet-4-6",
         "model_provider": "bedrock_converse",
+        "streaming": False,
     }
 
 

@@ -7,7 +7,99 @@ from data_analytics_agent.agents.text_to_sql.tools import (
     create_inspect_conversation_result_tool,
     create_list_conversation_results_tool,
 )
-from data_analytics_agent.stores import ResultStore, StoreNotFound
+from data_analytics_agent.schemas import ApprovalRequest, FinalAnswer
+from data_analytics_agent.stores import ResultStore, RunStore, StoreNotFound
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def test_run_diagnostics_aggregate_tokens_agents_and_timing() -> None:
+    clock = FakeClock()
+    store = RunStore(clock=clock)
+    run_id = store.create("thread-a", "source-a", "Question", model="test")
+
+    clock.advance(1)
+    store.start_active(run_id)
+    clock.advance(1)
+    store.start_model_call(run_id, "model-1", agent="text-to-sql")
+    assert store.diagnostics(run_id).token_usage_partial is True
+
+    clock.advance(2)
+    store.finish_model_call(
+        run_id,
+        "model-1",
+        usage={
+            "input_tokens": 100,
+            "output_tokens": 25,
+            "total_tokens": 125,
+            "input_token_details": {"cache_read": 40},
+            "output_token_details": {"reasoning": 10},
+        },
+    )
+    store.start_model_call(run_id, "model-2", agent="unknown")
+    clock.advance(1)
+    store.finish_model_call(run_id, "model-2", usage=None)
+    store.start_tool_call(run_id, "tool-1", agent="text-to-sql")
+    clock.advance(0.5)
+    duration_ms = store.finish_tool_call(
+        run_id,
+        "tool-1",
+        agent="text-to-sql",
+        failed=False,
+    )
+    assert duration_ms == 500
+
+    approval = ApprovalRequest(
+        interrupt_id="review-1",
+        action_name="execute_sql",
+        query="SELECT 1",
+        allowed_decisions=["approve"],
+    )
+    store.require_approval(run_id, approval)
+    clock.advance(3)
+    assert store.claim_approval(run_id, approval) == 3_000
+    store.start_active(run_id)
+    clock.advance(2)
+    store.complete(run_id, FinalAnswer(answer="Done"))
+
+    diagnostics = store.diagnostics(run_id)
+    assert diagnostics.model == "test"
+    assert diagnostics.tokens.model_dump() == {
+        "input_tokens": 100,
+        "output_tokens": 25,
+        "total_tokens": 125,
+        "cached_input_tokens": 40,
+        "reasoning_output_tokens": 10,
+    }
+    assert diagnostics.token_usage_partial is True
+    assert diagnostics.model_calls == 2
+    assert diagnostics.model_calls_missing_usage == 1
+    assert diagnostics.model_ms == 3_000
+    assert diagnostics.max_model_call_ms == 2_000
+    assert diagnostics.tool_calls == 1
+    assert diagnostics.tool_ms == 500
+    assert diagnostics.elapsed_ms == 10_500
+    assert diagnostics.active_ms == 6_500
+    assert diagnostics.approval_wait_ms == 3_000
+    assert [agent.agent for agent in diagnostics.agents] == [
+        "text-to-sql",
+        "unknown",
+    ]
+
+    conversation = store.conversation_diagnostics([run_id, "missing"])
+    assert conversation.run_count == 1
+    assert conversation.tokens.total_tokens == 125
+    assert conversation.elapsed_ms == 10_500
+    assert conversation.has_active_run is False
 
 
 def test_result_pagination_and_thread_isolation() -> None:
