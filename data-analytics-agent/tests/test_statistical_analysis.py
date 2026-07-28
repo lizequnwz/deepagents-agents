@@ -233,6 +233,7 @@ def test_python_approval_contains_complete_code_and_bounded_provenance() -> None
     )
     code = 'analysis_outputs = {"Mean": float(df.value.mean())}\n'
     interrupt = SimpleNamespace(
+        id="python-review-1",
         value={
             "action_requests": [
                 {

@@ -10,13 +10,16 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import Command
 import pytest
 
 from data_analytics_agent.agents.text_to_sql.agent import (
     SQL_OUTPUT_RETRY_MESSAGE,
 )
-from data_analytics_agent.schemas import SQLAnalysisResult
+from data_analytics_agent.run_manager import (
+    _extract_approval,
+    decisions_to_command,
+)
+from data_analytics_agent.schemas import Decision, SQLAnalysisResult
 
 GENERATED_SQL = "SELECT Name FROM Artist LIMIT 5"
 EDITED_SQL = "SELECT Name FROM Artist ORDER BY Name LIMIT 3"
@@ -190,7 +193,46 @@ class ScriptedChatModel(BaseChatModel):
         )
 
 
-def _build_graph(state: ScriptState):
+class ParallelCoordinatorModel(ScriptedChatModel):
+    """Issue two SQL assignments to reproduce parallel nested interrupts."""
+
+    def _coordinator_response(
+        self,
+        messages: list[BaseMessage],
+    ) -> AIMessage:
+        if any(
+            isinstance(message, ToolMessage) and message.name == "task"
+            for message in messages
+        ):
+            return AIMessage(content="Both SQL analyses completed.")
+        return AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "task",
+                    "args": {
+                        "description": "Answer database question A with SQL.",
+                        "subagent_type": "text-to-sql",
+                    },
+                    "id": "task-call-a",
+                },
+                {
+                    "name": "task",
+                    "args": {
+                        "description": "Answer database question B with SQL.",
+                        "subagent_type": "text-to-sql",
+                    },
+                    "id": "task-call-b",
+                },
+            ],
+        )
+
+
+def _build_graph(
+    state: ScriptState,
+    *,
+    coordinator_model: BaseChatModel | None = None,
+):
     @tool
     def execute_sql(query: str) -> dict[str, Any]:
         """Execute a human-reviewed SQL query."""
@@ -223,10 +265,8 @@ def _build_graph(state: ScriptState):
         ),
     }
     return create_deep_agent(
-        model=ScriptedChatModel(
-            role="coordinator",
-            script_state=state,
-        ),
+        model=coordinator_model
+        or ScriptedChatModel(role="coordinator", script_state=state),
         subagents=[sql_subagent],
         checkpointer=InMemorySaver(),
     )
@@ -248,19 +288,11 @@ def test_editor_sql_is_the_only_sql_executed() -> None:
     assert interrupted["__interrupt__"]
     assert state.executed == []
 
+    approval = _extract_approval(interrupted["__interrupt__"])
     completed = graph.invoke(
-        Command(
-            resume={
-                "decisions": [
-                    {
-                        "type": "edit",
-                        "edited_action": {
-                            "name": "execute_sql",
-                            "args": {"query": EDITED_SQL},
-                        },
-                    }
-                ]
-            }
+        decisions_to_command(
+            approval,
+            [Decision(action="edit", edited_sql=EDITED_SQL)],
         ),
         config,
     )
@@ -281,16 +313,11 @@ def test_rejection_feedback_forces_revision_and_invalid_completion_retries() -> 
     )
     assert interrupted["__interrupt__"]
 
+    approval = _extract_approval(interrupted["__interrupt__"])
     revised_interrupt = graph.invoke(
-        Command(
-            resume={
-                "decisions": [
-                    {
-                        "type": "reject",
-                        "message": feedback,
-                    }
-                ]
-            }
+        decisions_to_command(
+            approval,
+            [Decision(action="reject", feedback=feedback)],
         ),
         config,
     )
@@ -304,10 +331,55 @@ def test_rejection_feedback_forces_revision_and_invalid_completion_retries() -> 
     assert state.validation_retry_seen is True
     assert state.executed == []
 
+    revised_approval = _extract_approval(revised_interrupt["__interrupt__"])
     completed = graph.invoke(
-        Command(resume={"decisions": [{"type": "approve"}]}),
+        decisions_to_command(
+            revised_approval,
+            [Decision(action="approve")],
+        ),
         config,
     )
 
     assert "__interrupt__" not in completed
     assert state.executed == [REVISED_SQL]
+
+
+def test_parallel_sql_interrupts_are_reviewed_sequentially_by_id() -> None:
+    state = ScriptState()
+    graph = _build_graph(
+        state,
+        coordinator_model=ParallelCoordinatorModel(
+            role="coordinator",
+            script_state=state,
+        ),
+    )
+    config = _config("parallel-sql-reviews")
+
+    interrupted = graph.invoke(
+        {"messages": [{"role": "user", "content": "Create a report"}]},
+        config,
+    )
+    pending = interrupted["__interrupt__"]
+    assert len(pending) == 2
+    assert pending[0].id != pending[1].id
+    assert state.executed == []
+
+    first_approval = _extract_approval([pending[0]])
+    after_first = graph.invoke(
+        decisions_to_command(first_approval, [Decision(action="approve")]),
+        config,
+    )
+
+    remaining = after_first["__interrupt__"]
+    assert len(remaining) == 1
+    assert remaining[0].id == pending[1].id
+    assert state.executed == [GENERATED_SQL]
+
+    second_approval = _extract_approval(list(remaining))
+    completed = graph.invoke(
+        decisions_to_command(second_approval, [Decision(action="approve")]),
+        config,
+    )
+
+    assert "__interrupt__" not in completed
+    assert state.executed == [GENERATED_SQL, GENERATED_SQL]

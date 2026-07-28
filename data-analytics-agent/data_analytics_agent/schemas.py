@@ -14,7 +14,7 @@ from data_analytics_agent.agents.statistical_analysis.schemas import (
 from data_analytics_agent.agents.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 3
+API_CONTRACT_VERSION = 4
 
 
 class StrictModel(BaseModel):
@@ -247,6 +247,7 @@ class AgentStateSnapshot(StrictModel):
 
 
 class ApprovalRequest(StrictModel):
+    interrupt_id: str = Field(min_length=1)
     action_name: str
     query: str
     allowed_decisions: list[Literal["approve", "edit", "reject"]]

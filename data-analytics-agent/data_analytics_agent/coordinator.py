@@ -174,6 +174,11 @@ compare, rank, aggregate, filter, or otherwise verify actual database values,
 or requests a new result shape. A request about what could be analyzed is not
 itself a request to perform that analysis.
 
+Run text-to-SQL delegations sequentially. Never issue more than one `task` call
+to `text-to-sql` in the same model response. Wait for the current specialist's
+human-reviewed result before starting another text-to-SQL task, including when
+gathering several artifacts for a report.
+
 The SQL specialist and saved-result inspection expose a deterministic profile
 over all stored rows plus at most the first 10 rows. Use that bounded evidence;
 do not request or expose additional rows. Treat reviewed execution and

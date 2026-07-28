@@ -12,6 +12,7 @@ from data_analytics_agent.schemas import (
 @pytest.fixture
 def approval() -> ApprovalRequest:
     return ApprovalRequest(
+        interrupt_id="sql-review-1",
         action_name="execute_sql",
         query="SELECT Name FROM Artist LIMIT 5",
         allowed_decisions=["approve", "edit", "reject"],
@@ -20,7 +21,9 @@ def approval() -> ApprovalRequest:
 
 def test_approve_resume_shape(approval: ApprovalRequest) -> None:
     command = decisions_to_command(approval, [Decision(action="approve")])
-    assert command.resume == {"decisions": [{"type": "approve"}]}
+    assert command.resume == {
+        approval.interrupt_id: {"decisions": [{"type": "approve"}]}
+    }
 
 
 def test_edit_is_validated_and_preserves_action_order(
@@ -30,7 +33,8 @@ def test_edit_is_validated_and_preserves_action_order(
     command = decisions_to_command(
         approval, [Decision(action="edit", edited_sql=edited)]
     )
-    assert command.resume["decisions"][0]["edited_action"] == {
+    resume_value = command.resume[approval.interrupt_id]
+    assert resume_value["decisions"][0]["edited_action"] == {
         "name": "execute_sql",
         "args": {"query": edited},
     }
@@ -52,14 +56,17 @@ def test_reject_includes_feedback(approval: ApprovalRequest) -> None:
         [Decision(action="reject", feedback="Group by country instead.")],
     )
     assert command.resume == {
-        "decisions": [
-            {"type": "reject", "message": "Group by country instead."}
-        ]
+        approval.interrupt_id: {
+            "decisions": [
+                {"type": "reject", "message": "Group by country instead."}
+            ]
+        }
     }
 
 
 def test_python_edit_preserves_parent_result_and_exact_code() -> None:
     approval = ApprovalRequest(
+        interrupt_id="python-review-1",
         action_name="execute_statistical_python",
         query='analysis_outputs = {"Mean": df.value.mean()}',
         allowed_decisions=["approve", "edit", "reject"],
@@ -73,7 +80,8 @@ def test_python_edit_preserves_parent_result_and_exact_code() -> None:
         [Decision(action="edit", edited_python=edited)],
     )
 
-    assert command.resume["decisions"][0]["edited_action"] == {
+    resume_value = command.resume[approval.interrupt_id]
+    assert resume_value["decisions"][0]["edited_action"] == {
         "name": "execute_statistical_python",
         "args": {"result_id": "result-1", "code": edited},
     }

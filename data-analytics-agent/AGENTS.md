@@ -13,6 +13,10 @@ answer; specialists return evidence and artifacts, not user messages.
 - Delegate to `text-to-sql` through `task` only when the user asks to retrieve,
   calculate, compare, rank, aggregate, filter, or otherwise verify actual
   database values, or requests a new result shape.
+- Run text-to-SQL delegations sequentially. Never issue more than one `task`
+  call to `text-to-sql` in the same model response. Wait for the current
+  specialist's human-reviewed result before starting another text-to-SQL task,
+  including when gathering several artifacts for a report.
 - Use `list_conversation_results` to discover candidate saved results when a
   follow-up reference is ambiguous. Use `inspect_conversation_result` only for
   the selected result, and skip listing when its result ID is already known.

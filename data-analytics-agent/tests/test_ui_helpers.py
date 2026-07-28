@@ -26,7 +26,7 @@ def test_conversation_url_replaces_existing_thread_and_preserves_query() -> None
 
 
 def test_api_contract_mismatch_requires_service_restart() -> None:
-    assert api_contract_error({"api_contract_version": 3}) is None
+    assert api_contract_error({"api_contract_version": 4}) is None
     missing = api_contract_error({})
     stale = api_contract_error({"api_contract_version": 2})
 

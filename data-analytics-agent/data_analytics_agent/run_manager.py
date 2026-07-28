@@ -513,7 +513,11 @@ def decisions_to_command(
             "type": "reject",
             "message": decision.feedback or default_feedback,
         }
-        return Command(resume={"decisions": [translated]})
+        return Command(
+            resume={
+                approval.interrupt_id: {"decisions": [translated]},
+            }
+        )
 
     if decision.action == "approve" and approval.review_type == "sql":
         validate_readonly_sql(approval.query, approval.dialect)
@@ -550,7 +554,11 @@ def decisions_to_command(
                 },
             },
         }
-    return Command(resume={"decisions": [translated]})
+    return Command(
+        resume={
+            approval.interrupt_id: {"decisions": [translated]},
+        }
+    )
 
 
 def _safe_activity_value(value: Any, *, limit: int = 36) -> str:
@@ -855,6 +863,11 @@ def _extract_approval(
     statistical_limits: PythonExecutionLimits | None = None,
 ) -> ApprovalRequest:
     for interrupt in interrupts:
+        interrupt_id = getattr(interrupt, "id", None)
+        if not isinstance(interrupt_id, str) or not interrupt_id:
+            raise RuntimeError(
+                "The run interrupted without a resumable interrupt ID."
+            )
         value = getattr(interrupt, "value", interrupt)
         if not isinstance(value, dict):
             continue
@@ -879,6 +892,7 @@ def _extract_approval(
             query = arguments.get("query")
             if name == "execute_sql" and isinstance(query, str):
                 return ApprovalRequest(
+                    interrupt_id=interrupt_id,
                     action_name=name,
                     query=query,
                     allowed_decisions=allowed,
@@ -915,6 +929,7 @@ def _extract_approval(
                     ) from exc
                 limits = statistical_limits or PythonExecutionLimits()
                 return ApprovalRequest(
+                    interrupt_id=interrupt_id,
                     action_name=name,
                     query=code,
                     allowed_decisions=allowed,
@@ -1311,9 +1326,12 @@ class RunManager:
         run_id: str,
         command: Command,
     ) -> None:
+        resume_value = command.resume
+        if isinstance(resume_value, dict) and "decisions" not in resume_value:
+            resume_value = next(iter(resume_value.values()), None)
         decisions = (
-            command.resume.get("decisions", [])
-            if isinstance(command.resume, dict)
+            resume_value.get("decisions", [])
+            if isinstance(resume_value, dict)
             else []
         )
         decision_type = (

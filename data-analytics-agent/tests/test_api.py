@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from langchain.agents.middleware.tool_call_limit import (
     ToolCallLimitExceededError,
 )
+from langgraph.types import Interrupt
 
 from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
@@ -24,9 +25,11 @@ class FakeStream:
         self,
         *,
         approval_sql: str | None = None,
+        interrupt_id: str = "fake-review",
         answer: FinalAnswer | None = None,
     ) -> None:
         self.approval_sql = approval_sql
+        self.interrupt_id = interrupt_id
         self.answer = answer
 
     async def __aiter__(self):
@@ -47,28 +50,31 @@ class FakeStream:
     async def interrupted(self) -> bool:
         return self.approval_sql is not None
 
-    async def interrupts(self) -> list[dict[str, Any]]:
+    async def interrupts(self) -> list[Interrupt]:
         if self.approval_sql is None:
             return []
         return [
-            {
-                "action_requests": [
-                    {
-                        "name": "execute_sql",
-                        "args": {"query": self.approval_sql},
-                        "description": "Review SQL",
-                    }
-                ],
-                "review_configs": [
-                    {
-                        "allowed_decisions": [
-                            "approve",
-                            "edit",
-                            "reject",
-                        ]
-                    }
-                ],
-            }
+            Interrupt(
+                id=self.interrupt_id,
+                value={
+                    "action_requests": [
+                        {
+                            "name": "execute_sql",
+                            "args": {"query": self.approval_sql},
+                            "description": "Review SQL",
+                        }
+                    ],
+                    "review_configs": [
+                        {
+                            "allowed_decisions": [
+                                "approve",
+                                "edit",
+                                "reject",
+                            ]
+                        }
+                    ],
+                },
+            )
         ]
 
     async def output(self) -> dict[str, Any] | None:
@@ -302,11 +308,15 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     final_stream = FakeStream()
     fake = FakeAgent(
         [
-            FakeStream(approval_sql="SELECT Name FROM Artist LIMIT 5"),
+            FakeStream(
+                approval_sql="SELECT Name FROM Artist LIMIT 5",
+                interrupt_id="initial-sql-review",
+            ),
             FakeStream(
                 approval_sql=(
                     "SELECT Name FROM Artist ORDER BY Name LIMIT 5"
-                )
+                ),
+                interrupt_id="revised-sql-review",
             ),
             final_stream,
         ]
@@ -351,6 +361,7 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     run_id = created.json()["run_id"]
     first = client.get(f"/api/runs/{run_id}").json()
     assert first["status"] == "approval_required"
+    assert first["approval"]["interrupt_id"] == "initial-sql-review"
     assert "Args:" not in first["approval"]["description"]
     assert first["approval"]["description"].startswith(
         "Review the generated SQL"
@@ -385,6 +396,7 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     assert rejected.status_code == 202
     second = client.get(f"/api/runs/{run_id}").json()
     assert second["status"] == "approval_required"
+    assert second["approval"]["interrupt_id"] == "revised-sql-review"
     assert "ORDER BY Name" in second["approval"]["query"]
     assert any(
         event["label"] == "Applying feedback and revising SQL"
@@ -398,6 +410,19 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     assert approved.status_code == 202
     completed = client.get(f"/api/runs/{run_id}").json()
     assert completed["status"] == "completed"
+    assert fake.inputs[1].resume == {
+        "initial-sql-review": {
+            "decisions": [
+                {
+                    "type": "reject",
+                    "message": "Sort the result alphabetically.",
+                }
+            ]
+        }
+    }
+    assert fake.inputs[2].resume == {
+        "revised-sql-review": {"decisions": [{"type": "approve"}]}
+    }
 
     conversation = client.get(
         f"/api/conversations/{thread_id}"
@@ -473,7 +498,7 @@ def test_health_reports_visualization_feature_state(
     health = TestClient(create_app(services)).get("/health")
 
     assert health.status_code == 200
-    assert health.json()["api_contract_version"] == 3
+    assert health.json()["api_contract_version"] == 4
     assert health.json()["reporting_enabled"] is True
     assert health.json()["visualization_enabled"] is True
     assert health.json()["statistical_analysis_enabled"] is True

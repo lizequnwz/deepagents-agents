@@ -87,10 +87,18 @@ interrupts the action before the tool body runs.
 [`run_manager.py`](../data_analytics_agent/run_manager.py):
 
 1. extracts only a reviewable `execute_sql` request;
-2. returns source, dialect, timeout, cap, and exact SQL to the application;
+2. preserves its opaque LangGraph interrupt ID and returns source, dialect,
+   timeout, cap, and exact SQL to the application;
 3. waits in `approval_required`;
-4. translates exactly one decision to LangGraph `Command(resume=...)`;
+4. translates exactly one decision to an ID-addressed LangGraph
+   `Command(resume=...)`;
 5. resumes the same checkpoint thread.
+
+If parallel graph branches nevertheless produce several pending interrupts,
+the application reviews and resumes one interrupt by ID, then presents the next
+remaining review. Coordinator policy also requires text-to-SQL delegations to
+run sequentially so ordinary report generation does not create parallel SQL
+reviews.
 
 Model and tool-call counters are checkpointed with that run. Approving,
 editing, or rejecting does not reset them. A proposed `execute_sql` call counts
