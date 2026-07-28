@@ -5,7 +5,13 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class VisualizationModel(BaseModel):
@@ -43,11 +49,11 @@ class VisualizationOutcome(StrEnum):
 class ChartSpec(VisualizationModel):
     """One reviewed, declarative chart over one saved result."""
 
-    result_id: str = Field(min_length=1)
+    result_id: str
     chart_type: ChartType
-    title: str = Field(min_length=1, max_length=160)
+    title: str
     x: str | None = None
-    y: list[str] = Field(default_factory=list, max_length=5)
+    y: list[str] = Field(default_factory=list)
     secondary_y: str | None = None
     color: str | None = None
     size: str | None = None
@@ -67,14 +73,56 @@ class ChartSpec(VisualizationModel):
     orientation: Literal["vertical", "horizontal"] = "vertical"
     sort_by: str | None = None
     sort_direction: Literal["ascending", "descending"] = "ascending"
-    category_limit: int | None = Field(default=None, ge=1, le=30)
-    bin_count: int | None = Field(default=None, ge=5, le=100)
+    category_limit: int | None = None
+    bin_count: int | None = None
     box_points: Literal["outliers", "all", "none"] = "outliers"
     donut: bool = False
     palette: Palette = Palette.DEFAULT
-    x_label: str | None = Field(default=None, max_length=80)
-    y_label: str | None = Field(default=None, max_length=80)
-    secondary_y_label: str | None = Field(default=None, max_length=80)
+    x_label: str | None = None
+    y_label: str | None = None
+    secondary_y_label: str | None = None
+
+    @field_validator("result_id", "title")
+    @classmethod
+    def validate_required_text(cls, value: str) -> str:
+        if not value:
+            raise ValueError("Chart result_id and title must be nonempty.")
+        return value
+
+    @field_validator("title")
+    @classmethod
+    def validate_title_length(cls, value: str) -> str:
+        if len(value) > 160:
+            raise ValueError("Chart titles must be at most 160 characters.")
+        return value
+
+    @field_validator("y")
+    @classmethod
+    def validate_series_count(cls, value: list[str]) -> list[str]:
+        if len(value) > 5:
+            raise ValueError("Charts support at most five y series.")
+        return value
+
+    @field_validator("category_limit")
+    @classmethod
+    def validate_category_limit(cls, value: int | None) -> int | None:
+        if value is not None and not 1 <= value <= 30:
+            raise ValueError("category_limit must be between 1 and 30.")
+        return value
+
+    @field_validator("bin_count")
+    @classmethod
+    def validate_bin_count(cls, value: int | None) -> int | None:
+        if value is not None and not 5 <= value <= 100:
+            raise ValueError("bin_count must be between 5 and 100.")
+        return value
+
+    @field_validator("x_label", "y_label", "secondary_y_label")
+    @classmethod
+    def validate_label_length(cls, value: str | None) -> str | None:
+        if value is not None and len(value) > 80:
+            raise ValueError("Chart axis labels must be at most 80 characters.")
+        return value
 
     @model_validator(mode="after")
     def validate_shape(self) -> ChartSpec:

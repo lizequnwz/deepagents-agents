@@ -48,7 +48,7 @@ def test_statistical_prompt_prevents_retry_loops_and_redundant_payloads(
     assert (
         "`result_not_found`, return `cannot_analyze` immediately" in normalized
     )
-    assert "leave `executed_python` null and `outputs` empty" in normalized
+    assert "Do not copy the code, binary figures, or outputs" in normalized
     assert "two-sided alpha 0.05" in normalized
     assert "random seed 0" in normalized
     assert "require repeated observations within categories" in normalized

@@ -108,6 +108,30 @@ class SQLAnalysisResult(StrictModel):
     interpretation: str = ""
 
 
+class SQLAnalysisResponse(StrictModel):
+    """Provider-facing narrative for a reviewed SQL result.
+
+    Exact rows, columns, profiles, counts, and truncation state remain in
+    ``ResultStore`` and are resolved from ``result_id`` by trusted code.
+    """
+
+    answer: str
+    sql: str
+    result_id: str
+    assumptions: list[str] = Field(default_factory=list)
+    interpretation: str = ""
+
+
+class CoordinatorResponse(StrictModel):
+    """Small provider-facing response; trusted artifacts are attached later."""
+
+    answer: str
+    sql: str | None = None
+    result_id: str | None = None
+    assumptions: list[str] = Field(default_factory=list)
+    interpretation: str = ""
+
+
 class FinalAnswer(StrictModel):
     answer: str
     sql: str | None = None

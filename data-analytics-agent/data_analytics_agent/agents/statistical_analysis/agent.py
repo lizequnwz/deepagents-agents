@@ -11,7 +11,7 @@ from data_analytics_agent.agents.statistical_analysis.runner import (
     PythonExecutionLimits,
 )
 from data_analytics_agent.agents.statistical_analysis.schemas import (
-    StatisticalAnalysisResult,
+    StatisticalAnalysisResponse,
 )
 from data_analytics_agent.agents.statistical_analysis.tools import (
     create_execute_statistical_python_tool,
@@ -22,12 +22,11 @@ from data_analytics_agent.stores import ResultStore, RunStore
 
 STATISTICAL_OUTPUT_RETRY_MESSAGE = """\
 Use `analysis_completed` only after `execute_statistical_python` returns
-`ok: true`. Return the parent result ID and analytical narrative, but leave
-`executed_python` null and `outputs` empty; the application attaches its
-authoritative execution record. After rejection, revise the code from the
-feedback and request review again. After an execution failure, repair the code
-and request a fresh review while attempts remain. Never claim success for
-truncated data.
+`ok: true`. Return the parent result ID and analytical narrative only; the
+application attaches its authoritative reviewed code and outputs. After
+rejection, revise the code from the feedback and request review again. After an
+execution failure, repair the code and request a fresh review while attempts
+remain. Never claim success for truncated data.
 """
 
 
@@ -40,7 +39,7 @@ def _statistical_subagent_prompt(
 You are the isolated statistical-analysis specialist for {source.name!r},
 permanently bound to source ID {source.source_id!r}. Analyze exactly one saved
 SQL result assigned by the coordinator and return one terminal
-`StatisticalAnalysisResult`.
+`StatisticalAnalysisResponse`.
 
 Your first action must read the `statistical-analysis` skill with `limit=1000`;
 then call `inspect_result_for_statistics` exactly once for the assigned result
@@ -90,9 +89,9 @@ Completeness and terminal outcomes:
 - Return `cannot_analyze` when the data cannot support the inference or all
   execution attempts fail.
 - Return `analysis_completed` only after reviewed code succeeds. Do not copy
-  the code, binary figures, or outputs into the terminal model response: leave
-  `executed_python` null and `outputs` empty. The application will attach the
-  exact reviewed code and authoritative bounded outputs it already captured.
+  the code, binary figures, or outputs into the terminal model response. The
+  application will attach the exact reviewed code and authoritative bounded
+  outputs it already captured.
 
 The coordinator owns the final user-facing response. Provide authoritative,
 concise evidence: direct answer, method, assumptions, interpretation, warnings,
@@ -152,7 +151,7 @@ def build_statistical_analysis_subagent(
         # checks happen before an approval is exposed.
         "middleware": [review_middleware, *(middleware or [])],
         "response_format": ToolStrategy(
-            StatisticalAnalysisResult,
+            StatisticalAnalysisResponse,
             handle_errors=STATISTICAL_OUTPUT_RETRY_MESSAGE,
             tool_message_content=(
                 "Statistical analysis reached a terminal outcome."

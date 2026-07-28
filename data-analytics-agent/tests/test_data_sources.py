@@ -144,12 +144,8 @@ def test_statistical_feature_flag_defaults_enabled_and_can_be_disabled(
     normalized_enabled = " ".join(enabled.lower().split())
     assert "route requests involving statistical tests" in normalized_enabled
     assert "exactly one recovery cycle" in normalized_enabled
-    assert (
-        "leave `statistical_analysis` null or omit it" in normalized_enabled
-    )
-    assert (
-        "application attaches the authoritative terminal" in normalized_enabled
-    )
+    assert "do not reconstruct any of those artifacts" in normalized_enabled
+    assert "application attaches the exact validated" in normalized_enabled
     assert (
         "do not reinterpret a categorical predictor versus numeric outcome"
         in normalized_enabled
@@ -277,16 +273,17 @@ def test_visualization_subagent_reuses_the_configured_model(
     assert "interrupt_on" not in subagent
 
 
-def test_sparse_chart_contract_does_not_request_openai_strict_schema() -> None:
+def test_coordinator_uses_small_non_strict_provider_schema() -> None:
     response_format = _final_answer_response_format().to_model_kwargs()[
         "response_format"
     ]["json_schema"]
-    chart_schema = response_format["schema"]["$defs"]["ChartSpec"]
-    statistical_schema = response_format["schema"]["$defs"][
-        "StatisticalAnalysisResult"
-    ]
 
     assert "strict" not in response_format
-    assert "x" in chart_schema["properties"]
-    assert "x" not in chart_schema["required"]
-    assert "answer" not in statistical_schema["required"]
+    assert "$defs" not in response_format["schema"]
+    assert set(response_format["schema"]["properties"]) == {
+        "answer",
+        "sql",
+        "result_id",
+        "assumptions",
+        "interpretation",
+    }

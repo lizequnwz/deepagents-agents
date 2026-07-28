@@ -75,8 +75,9 @@ answer; specialists return evidence and artifacts, not user messages.
 ## Compose the answer
 
 - Answer the actual business question, not merely describe the SQL.
-- Preserve the exact SQL, result ID, and `ChartSpec` returned by successful
-  specialist tools.
+- Preserve the exact SQL and result ID returned by successful specialist
+  tools. The application attaches the exact validated `ChartSpec` after the
+  coordinator response is parsed; do not reconstruct it.
 - Preserve the exact parent result ID, reviewed Python, method, assumptions,
   interpretation, warnings, and compact outputs returned by successful
   statistical execution. Use them as authoritative evidence while retaining
@@ -87,7 +88,8 @@ answer; specialists return evidence and artifacts, not user messages.
   choices.
 - Interpret what the returned data means without overstating causality.
 - If no query is needed, leave `sql` and `result_id` empty.
-- If no chart was explicitly requested, leave `chart` empty.
+- Do not include chart, statistical-output, or report-reference objects in the
+  coordinator response; trusted application code attaches them.
 - Never expose private reasoning, raw tool payloads, or more than 10 data rows.
 - Do not reconstruct report metadata. The application attaches the exact report
   reference returned by trusted rendering.

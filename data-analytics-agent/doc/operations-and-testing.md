@@ -13,17 +13,28 @@ Copy:
 cp .env.example .env
 ```
 
-Required:
+Choose one provider:
 
 ```text
-OPENAI_API_KEY
+MODEL_PROVIDER=openai
+MODEL_ID=gpt-5.4-mini
+OPENAI_API_KEY=...
+```
+
+or use Bedrock Converse with the standard AWS credential chain:
+
+```text
+MODEL_PROVIDER=bedrock_converse
+MODEL_ID=us.anthropic.claude-sonnet-4-6
+AWS_REGION=us-east-1
 ```
 
 Application defaults:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `OPENAI_MODEL` | `gpt-5.4-mini` | Agent model |
+| `MODEL_PROVIDER` | `openai` | `openai` or `bedrock_converse` |
+| `MODEL_ID` | `gpt-5.4-mini` | Provider-native agent model ID; falls back to legacy `OPENAI_MODEL` |
 | `DATA_SOURCES_CONFIG` | `data_sources.yaml` | Trusted registry path |
 | `API_BASE_URL` | `http://127.0.0.1:8000` | Streamlit API target |
 | `APP_BASE_URL` | `http://127.0.0.1:8501` | Conversation-link base |

@@ -24,7 +24,7 @@ From `data-analytics-agent/`:
 
 ```bash
 cp .env.example .env
-# Set OPENAI_API_KEY in .env.
+# Choose MODEL_PROVIDER/MODEL_ID and configure OpenAI or AWS credentials.
 ./scripts/start.sh
 ```
 

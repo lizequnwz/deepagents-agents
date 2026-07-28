@@ -88,15 +88,14 @@ class PythonExecutionResult(StrictModel):
 
 
 class StatisticalAnalysisResult(StrictModel):
-    """Terminal result returned by the statistical-analysis specialist."""
+    """Authoritative application result for terminal statistical analysis."""
 
     outcome: StatisticalAnalysisOutcome
     analysis_id: str | None = None
     parent_result_id: str
     executed_python: str | None = None
-    # The coordinator may emit a sparse copy before RunManager attaches the
-    # authoritative specialist result. RunManager guarantees that the final
-    # user-facing contract has an answer by backfilling its top-level answer.
+    # RunManager guarantees that the final user-facing contract has an answer
+    # and attaches the reviewed code and bounded execution outputs.
     answer: str = ""
     method: str = ""
     assumptions: list[str] = Field(default_factory=list)
@@ -114,3 +113,19 @@ class StatisticalAnalysisResult(StrictModel):
                 "Only analysis_completed may contain statistical outputs."
             )
         return self
+
+
+class StatisticalAnalysisResponse(StrictModel):
+    """Provider-facing terminal narrative for statistical analysis.
+
+    Reviewed code and bounded outputs are application-owned artifacts and are
+    attached by ``RunManager`` after this response is parsed.
+    """
+
+    outcome: StatisticalAnalysisOutcome
+    parent_result_id: str
+    answer: str = ""
+    method: str = ""
+    assumptions: list[str] = Field(default_factory=list)
+    interpretation: str = ""
+    warnings: list[str] = Field(default_factory=list)

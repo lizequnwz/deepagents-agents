@@ -15,14 +15,15 @@ from data_analytics_agent.agents.text_to_sql.tools import (
 )
 from data_analytics_agent.backends import SQLBackend
 from data_analytics_agent.data_sources import DataSource
-from data_analytics_agent.schemas import SQLAnalysisResult
+from data_analytics_agent.schemas import SQLAnalysisResponse
 from data_analytics_agent.stores import ResultStore
 
 SQL_OUTPUT_RETRY_MESSAGE = """\
 Finish only after `execute_sql` succeeds. After rejection, apply the feedback,
-validate the revision, and submit it for review. Copy `sql`, `result_id`,
-`columns`, `sample_rows`, `profile`, `row_count`, and `truncated` from the
-successful `QueryResult`; use its `executed_sql` as `sql`.
+validate the revision, and submit it for review. Copy `result_id` and
+`executed_sql` from the successful `QueryResult`, using `executed_sql` as
+`sql`. The application owns the saved rows, columns, profile, count, and
+truncation state.
 """
 
 
@@ -50,12 +51,13 @@ Hard boundaries:
 - A rejection requires revision and another review. A human-edited execution
   replaces stale scope from the assignment.
 
-Finish only after `execute_sql` succeeds. Return `SQLAnalysisResult` using the
-successful `QueryResult`: copy its exact `executed_sql` to `sql` and copy its
-result ID, columns, sample rows, full-result profile, stored row count, and
-truncation flag. Provide a direct business answer, material assumptions, and a
-concise interpretation. Do not expose private reasoning or more than the
-provided 10 sample rows.
+Finish only after `execute_sql` succeeds. Return `SQLAnalysisResponse` using the
+successful `QueryResult`: copy its exact `executed_sql` to `sql` and its result
+ID to `result_id`. The application already owns the exact rows, columns,
+full-result profile, stored row count, and truncation flag; do not reproduce
+them. Provide a direct business answer, material assumptions, and a concise
+interpretation. Do not expose private reasoning or more than the provided 10
+sample rows.
 """
 
 
@@ -100,7 +102,7 @@ def build_text_to_sql_subagent(
         # so execution-budget checks run before an approval is presented.
         "middleware": [review_middleware, *(middleware or [])],
         "response_format": ToolStrategy(
-            SQLAnalysisResult,
+            SQLAnalysisResponse,
             handle_errors=SQL_OUTPUT_RETRY_MESSAGE,
             tool_message_content=(
                 "SQL analysis completed from a reviewed execution."

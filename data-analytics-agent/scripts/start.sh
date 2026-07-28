@@ -76,11 +76,6 @@ if ! command -v curl >/dev/null 2>&1; then
   echo "curl is required for local service health checks." >&2
   exit 1
 fi
-if [[ ! -f ".env" ]]; then
-  echo ".env is missing. Copy .env.example to .env and add OPENAI_API_KEY." >&2
-  exit 1
-fi
-
 echo "Preparing the locked Python environment…"
 uv sync --locked
 

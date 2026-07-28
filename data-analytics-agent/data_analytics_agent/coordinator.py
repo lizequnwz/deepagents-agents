@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -10,11 +11,11 @@ from deepagents import (
     GeneralPurposeSubagentProfile,
     HarnessProfile,
     create_deep_agent,
-    register_harness_profile,
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
+from deepagents.profiles import register_harness_profile
 from langchain.agents.structured_output import ProviderStrategy
-from langchain_openai import ChatOpenAI
+from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import InMemorySaver
 
 from data_analytics_agent.agents.statistical_analysis.agent import (
@@ -39,7 +40,7 @@ from data_analytics_agent.reporting.tools import (
     create_inspect_conversation_analysis_tool,
     create_list_conversation_analyses_tool,
 )
-from data_analytics_agent.schemas import FinalAnswer
+from data_analytics_agent.schemas import CoordinatorResponse
 from data_analytics_agent.stores import (
     ReportStore,
     ResultStore,
@@ -178,19 +179,12 @@ over all stored rows plus at most the first 10 rows. Use that bounded evidence;
 do not request or expose additional rows. Treat reviewed execution and
 terminal specialist results as authoritative, including human-edited scope.
 
-Return `FinalAnswer` with the direct business answer and, when present, the
-exact executed SQL, result ID, and generated `ChartSpec`. Do not reconstruct or
-copy a `StatisticalAnalysisResult`; leave `statistical_analysis` null or omit
-it. The application attaches the authoritative terminal specialist result,
-exact reviewed Python, and captured outputs after parsing. For successful
-statistical analysis, use the reviewed execution as authoritative evidence
-while composing the top-level answer in your own words. Include only material
-assumptions and a concise interpretation. Omit private reasoning and raw tool
-payloads.
-
-Do not reconstruct a report reference. Leave `report` null or omit it; the
-application attaches the exact report ID, version, timestamp, and content hash
-returned by `create_report`.
+Return `CoordinatorResponse` with the direct business answer and, when present,
+the reviewed result ID and SQL. The application attaches the exact validated
+`ChartSpec`, terminal statistical result, reviewed Python and outputs, and
+report reference after parsing. Do not reconstruct any of those artifacts.
+Include only material assumptions and a concise interpretation. Omit private
+reasoning and raw tool payloads.
 """
 
 
@@ -205,17 +199,57 @@ def _project_backend(project_root: Path) -> CompositeBackend:
     )
 
 
-def _final_answer_response_format() -> ProviderStrategy[FinalAnswer]:
-    """Use native JSON Schema without OpenAI's all-fields-required mode.
+def _final_answer_response_format() -> ProviderStrategy[CoordinatorResponse]:
+    """Return the small cross-provider coordinator response contract."""
 
-    FinalAnswer embeds a sparse ChartSpec whose chart-specific fields are
-    nullable or defaulted. OpenAI strict schemas require every object property
-    to be listed as required, which is incompatible with that declarative
-    contract. LangChain still parses the provider JSON, and RunManager applies
-    Pydantic and result-provenance validation before completing the turn.
-    """
+    return ProviderStrategy(CoordinatorResponse, strict=False)
 
-    return ProviderStrategy(FinalAnswer, strict=False)
+
+def _build_chat_model(settings: Settings, model: Any | None = None) -> Any:
+    """Construct the configured provider model unless one was injected."""
+
+    if model is not None:
+        return model
+    return init_chat_model(
+        settings.model,
+        model_provider=settings.model_provider,
+    )
+
+
+def _model_harness_profile_key(model: Any, settings: Settings) -> str:
+    """Resolve the registry key DeepAgents will use for a model instance."""
+
+    provider: str | None = None
+    try:
+        params = model._get_ls_params()
+    except (AttributeError, TypeError, NotImplementedError):
+        params = None
+    if isinstance(params, Mapping):
+        candidate = params.get("ls_provider")
+        if isinstance(candidate, str) and candidate:
+            provider = candidate
+
+    identifier = getattr(model, "model_name", None) or getattr(
+        model, "model", None
+    )
+    if provider and isinstance(identifier, str) and identifier:
+        return f"{provider}:{identifier}"
+    if provider:
+        return provider
+    return f"{settings.model_provider}:{settings.model}"
+
+
+def _configure_harness_profile(model: Any, settings: Settings) -> None:
+    """Disable only the default general-purpose subagent for this model."""
+
+    register_harness_profile(
+        _model_harness_profile_key(model, settings),
+        HarnessProfile(
+            general_purpose_subagent=GeneralPurposeSubagentProfile(
+                enabled=False
+            )
+        ),
+    )
 
 
 def build_agent(
@@ -240,13 +274,8 @@ def build_agent(
     if backend_errors:
         raise RuntimeError(" ".join(backend_errors))
 
-    register_harness_profile(
-        f"openai:{settings.model}",
-        HarnessProfile(
-            general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False)
-        ),
-    )
-    chat_model = ChatOpenAI(model=settings.model, streaming=False)
+    chat_model = _build_chat_model(settings, model)
+    _configure_harness_profile(chat_model, settings)
 
     list_results = create_list_conversation_results_tool(
         result_store,

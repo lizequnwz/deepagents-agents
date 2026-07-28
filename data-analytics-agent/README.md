@@ -85,12 +85,13 @@ Prerequisites:
 - Python 3.11+
 - [`uv`](https://docs.astral.sh/uv/)
 - `curl`
-- OpenAI API key
+- OpenAI API key or AWS credentials with Bedrock model access
 - local database files expected by [`data_sources.yaml`](data_sources.yaml)
 
 ```bash
 cp .env.example .env
-# Set OPENAI_API_KEY in .env.
+# Choose MODEL_PROVIDER/MODEL_ID and configure its credentials in .env or
+# through the standard AWS credential chain.
 ./scripts/start.sh
 ```
 

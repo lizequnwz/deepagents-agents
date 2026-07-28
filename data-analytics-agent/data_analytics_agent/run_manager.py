@@ -52,6 +52,7 @@ from data_analytics_agent.schemas import (
     FinalAnswer,
     RunStatus,
     SQLAnalysisResult,
+    SQLAnalysisResponse,
     ToolCallDiagnostic,
 )
 from data_analytics_agent.stores import (
@@ -936,7 +937,9 @@ def _extract_approval(
     raise RuntimeError("The run interrupted without a reviewable action.")
 
 
-def _current_sql_analysis(output: dict[str, Any]) -> SQLAnalysisResult | None:
+def _current_sql_analysis(
+    output: dict[str, Any],
+) -> SQLAnalysisResult | SQLAnalysisResponse | None:
     """Find the reviewed SQL subagent result from the current user turn."""
 
     messages = output.get("messages")
@@ -955,10 +958,11 @@ def _current_sql_analysis(output: dict[str, Any]) -> SQLAnalysisResult | None:
             content = message.get("content")
         if not isinstance(content, str):
             continue
-        try:
-            return SQLAnalysisResult.model_validate_json(content)
-        except ValueError:
-            continue
+        for schema in (SQLAnalysisResult, SQLAnalysisResponse):
+            try:
+                return schema.model_validate_json(content)
+            except ValueError:
+                pass
     return None
 
 
@@ -1618,11 +1622,14 @@ class RunManager:
             if not output or "structured_response" not in output:
                 raise RuntimeError("Agent completed without a structured response.")
             answer_value = output["structured_response"]
-            answer = (
-                answer_value
-                if isinstance(answer_value, FinalAnswer)
-                else FinalAnswer.model_validate(answer_value)
-            )
+            if isinstance(answer_value, FinalAnswer):
+                answer = answer_value
+            elif isinstance(answer_value, BaseModel):
+                answer = FinalAnswer.model_validate(
+                    answer_value.model_dump(mode="python")
+                )
+            else:
+                answer = FinalAnswer.model_validate(answer_value)
             answer = _apply_sql_analysis(answer, output)
             answer = _apply_statistical_analysis(
                 answer,

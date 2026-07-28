@@ -66,8 +66,14 @@ class Settings:
     """Runtime settings loaded from environment variables."""
 
     project_root: Path = PROJECT_ROOT
+    model_provider: str = field(
+        default_factory=lambda: os.getenv("MODEL_PROVIDER", "openai")
+    )
     model: str = field(
-        default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
+        default_factory=lambda: os.getenv(
+            "MODEL_ID",
+            os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
+        )
     )
     data_sources_config_path: Path = field(
         default_factory=_data_sources_config_path
@@ -248,7 +254,11 @@ class Settings:
 
     def readiness_errors(self) -> list[str]:
         errors: list[str] = []
-        if not os.getenv("OPENAI_API_KEY"):
+        if self.model_provider not in {"openai", "bedrock_converse"}:
+            errors.append(
+                "MODEL_PROVIDER must be openai or bedrock_converse."
+            )
+        if self.model_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
             errors.append(
                 "OPENAI_API_KEY is missing. Copy .env.example to .env and add a key."
             )
