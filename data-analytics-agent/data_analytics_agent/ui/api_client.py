@@ -141,3 +141,8 @@ class AgentAPIClient:
         combined["offset"] = 0
         combined["limit"] = len(rows)
         return combined
+
+    def get_report(self, report_id: str) -> dict[str, Any]:
+        """Fetch the exact stored HTML and immutable report metadata."""
+
+        return self.request("GET", f"/api/reports/{report_id}", timeout=30)

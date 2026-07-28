@@ -7,7 +7,7 @@ from threading import RLock
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from data_analytics_agent.coordinator import build_agent
 from data_analytics_agent.backends import SQLBackend, create_backend
@@ -17,6 +17,7 @@ from data_analytics_agent.run_manager import (
     RunManager,
     decisions_to_command,
 )
+from data_analytics_agent.reporting.schemas import ReportResponse
 from data_analytics_agent.schemas import (
     API_CONTRACT_VERSION,
     ConversationResponse,
@@ -37,8 +38,10 @@ from data_analytics_agent.schemas import (
 from data_analytics_agent.semantic import validate_semantic_model
 from data_analytics_agent.stores import (
     ConversationStore,
+    ReportStore,
     ResultStore,
     RunStore,
+    StatisticalAnalysisStore,
     StoreNotFound,
 )
 
@@ -61,6 +64,10 @@ class Services:
     conversations: ConversationStore = field(default_factory=ConversationStore)
     runs: RunStore = field(default_factory=RunStore)
     results: ResultStore = field(default_factory=ResultStore)
+    analyses: StatisticalAnalysisStore = field(
+        default_factory=StatisticalAnalysisStore
+    )
+    reports: ReportStore = field(default_factory=ReportStore)
     agent: Any | None = None
     catalog: DataSourceCatalog | None = None
     snowflake_client: Any | None = None
@@ -172,6 +179,8 @@ class Services:
                     self.settings,
                     self.results,
                     self.runs,
+                    analysis_store=self.analyses,
+                    report_store=self.reports,
                     source=source,
                     backend=self.backend_for_source(source_id),
                 )
@@ -187,6 +196,8 @@ class Services:
                     conversations=self.conversations,
                     runs=self.runs,
                     results=self.results,
+                    analyses=self.analyses,
+                    reports=self.reports,
                     statistical_execution_limits=(
                         self.settings.statistical_execution_limits()
                     ),
@@ -199,7 +210,7 @@ def create_app(services: Services | None = None) -> FastAPI:
     container = services or Services()
     app = FastAPI(
         title="Data Analytics Agent API",
-        version="0.5.0",
+        version="0.6.0",
     )
     app.state.services = container
 
@@ -245,6 +256,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             statistical_analysis_enabled=(
                 container.settings.enable_statistical_analysis
             ),
+            reporting_enabled=container.settings.enable_reporting,
             errors=errors,
         )
 
@@ -403,6 +415,25 @@ def create_app(services: Services | None = None) -> FastAPI:
     ) -> ResultPage:
         return container.results.page_unscoped(
             result_id, offset=offset, limit=limit
+        )
+
+    @app.get("/api/reports/{report_id}", response_model=ReportResponse)
+    async def get_report(report_id: str) -> ReportResponse:
+        return container.reports.response_unscoped(report_id)
+
+    @app.get("/api/reports/{report_id}/download")
+    async def download_report(report_id: str) -> Response:
+        report = container.reports.get_unscoped(report_id)
+        return Response(
+            content=report.html.encode("utf-8"),
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="report-{report.report_id[:8]}-'
+                    f'v{report.version}.html"'
+                ),
+                "ETag": f'"{report.html_sha256}"',
+            },
         )
 
     return app

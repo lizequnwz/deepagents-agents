@@ -4,14 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import hashlib
 from threading import RLock
 from typing import Any
 from uuid import uuid4
 
 from data_analytics_agent.agents.statistical_analysis.schemas import (
     PythonExecutionResult,
+    StatisticalAnalysisResult,
 )
 from data_analytics_agent.profiling import profile_result
+from data_analytics_agent.reporting.schemas import (
+    ReportArtifact,
+    ReportResponse,
+    ReportSpec,
+)
+from data_analytics_agent.reporting.renderer import REPORT_RENDERER_VERSION
 from data_analytics_agent.schemas import (
     ActivityEvent,
     ActivityTool,
@@ -25,6 +33,7 @@ from data_analytics_agent.schemas import (
     RunResponse,
     RunStatus,
     SavedResult,
+    SavedStatisticalAnalysis,
 )
 
 
@@ -153,6 +162,149 @@ class ResultStore:
             result.thread_id,
             offset=offset,
             limit=limit,
+        )
+
+
+class StatisticalAnalysisStore:
+    """Retains reusable, source-scoped statistical analysis artifacts."""
+
+    def __init__(self) -> None:
+        self._items: dict[str, SavedStatisticalAnalysis] = {}
+        self._lock = RLock()
+
+    def save(
+        self,
+        *,
+        thread_id: str,
+        source_id: str,
+        analysis: StatisticalAnalysisResult,
+    ) -> SavedStatisticalAnalysis:
+        analysis_id = str(uuid4())
+        authoritative = analysis.model_copy(update={"analysis_id": analysis_id})
+        saved = SavedStatisticalAnalysis(
+            analysis_id=analysis_id,
+            thread_id=thread_id,
+            source_id=source_id,
+            analysis=authoritative,
+            created_at=datetime.now(timezone.utc),
+        )
+        with self._lock:
+            self._items[analysis_id] = saved
+        return saved
+
+    def get(
+        self,
+        analysis_id: str,
+        thread_id: str,
+        *,
+        source_id: str | None = None,
+    ) -> SavedStatisticalAnalysis:
+        with self._lock:
+            item = self._items.get(analysis_id)
+        if (
+            item is None
+            or item.thread_id != thread_id
+            or (source_id is not None and item.source_id != source_id)
+        ):
+            raise StoreNotFound(analysis_id)
+        return item
+
+    def list_for_conversation(
+        self,
+        thread_id: str,
+        *,
+        source_id: str,
+    ) -> list[SavedStatisticalAnalysis]:
+        with self._lock:
+            items = [
+                item
+                for item in self._items.values()
+                if item.thread_id == thread_id and item.source_id == source_id
+            ]
+        return sorted(items, key=lambda item: item.created_at)
+
+
+class ReportStore:
+    """Stores exact rendered HTML outside model and checkpoint context."""
+
+    def __init__(self) -> None:
+        self._items: dict[str, ReportArtifact] = {}
+        self._lock = RLock()
+
+    def save(
+        self,
+        *,
+        thread_id: str,
+        source_id: str,
+        spec: ReportSpec,
+        html: str,
+        input_result_ids: list[str],
+        input_analysis_ids: list[str],
+    ) -> ReportArtifact:
+        previous: ReportArtifact | None = None
+        if spec.previous_report_id:
+            previous = self.get(
+                spec.previous_report_id,
+                thread_id,
+                source_id=source_id,
+            )
+        artifact = ReportArtifact(
+            report_id=str(uuid4()),
+            thread_id=thread_id,
+            source_id=source_id,
+            title=spec.title,
+            version=(previous.version + 1 if previous else 1),
+            previous_report_id=previous.report_id if previous else None,
+            spec=spec,
+            html=html,
+            html_sha256=hashlib.sha256(html.encode("utf-8")).hexdigest(),
+            renderer_version=REPORT_RENDERER_VERSION,
+            input_result_ids=list(dict.fromkeys(input_result_ids)),
+            input_analysis_ids=list(dict.fromkeys(input_analysis_ids)),
+            created_at=datetime.now(timezone.utc),
+        )
+        with self._lock:
+            self._items[artifact.report_id] = artifact
+        return artifact
+
+    def get(
+        self,
+        report_id: str,
+        thread_id: str,
+        *,
+        source_id: str | None = None,
+    ) -> ReportArtifact:
+        with self._lock:
+            item = self._items.get(report_id)
+        if (
+            item is None
+            or item.thread_id != thread_id
+            or (source_id is not None and item.source_id != source_id)
+        ):
+            raise StoreNotFound(report_id)
+        return item
+
+    def get_unscoped(self, report_id: str) -> ReportArtifact:
+        with self._lock:
+            item = self._items.get(report_id)
+        if item is None:
+            raise StoreNotFound(report_id)
+        return item
+
+    def response_unscoped(self, report_id: str) -> ReportResponse:
+        item = self.get_unscoped(report_id)
+        return ReportResponse(
+            report_id=item.report_id,
+            source_id=item.source_id,
+            title=item.title,
+            version=item.version,
+            previous_report_id=item.previous_report_id,
+            html=item.html,
+            html_sha256=item.html_sha256,
+            renderer_version=item.renderer_version,
+            input_result_ids=item.input_result_ids,
+            input_analysis_ids=item.input_analysis_ids,
+            created_at=item.created_at,
         )
 
 

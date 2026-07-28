@@ -210,6 +210,34 @@ Recommended rules:
 6. Keep final answer ownership with the coordinator.
 7. Test routing, artifact scope, failure behavior, and repeated calls.
 
+## Reporting capability
+
+Reporting is implemented without adding another specialist. The coordinator
+already owns the conversation and receives evidence from all three specialists,
+so it lazy-loads the `report-design` skill and calls a trusted deterministic
+HTML renderer.
+
+The coordinator may reuse multiple same-thread, same-source artifacts and may
+invoke SQL, visualization, or statistical analysis when evidence is missing.
+It produces a structured `ReportSpec`; application code resolves full required
+data outside model context and renders canonical, self-contained HTML. Every
+safe preview is downloadable in Streamlit and can be revised conversationally,
+without an approval or finalization ceremony.
+
+This capability introduces an artifact-composition seam rather than an execution
+seam. A future reporting subagent is justified only if report context pressure,
+independent lifecycle needs, or specialist tooling outweigh the added handoff
+and model-call complexity.
+
+`StatisticalAnalysisStore` gives completed analyses reusable IDs, while
+`ReportStore` retains exact HTML bytes, the validated specification, input
+references, version lineage, renderer version, and content hash. FastAPI serves
+the stored artifact, and Streamlit verifies the hash before isolated preview and
+download.
+
+See [Reporting capability](reporting-capability.md) for the contracts, design
+rules, implementation map, limitations, and graduation criteria.
+
 ## Invariants
 
 - Registry entries are trusted configuration, not user input.

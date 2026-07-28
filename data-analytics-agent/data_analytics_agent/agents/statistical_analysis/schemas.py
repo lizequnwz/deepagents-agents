@@ -91,6 +91,7 @@ class StatisticalAnalysisResult(StrictModel):
     """Terminal result returned by the statistical-analysis specialist."""
 
     outcome: StatisticalAnalysisOutcome
+    analysis_id: str | None = None
     parent_result_id: str
     executed_python: str | None = None
     # The coordinator may emit a sparse copy before RunManager attaches the

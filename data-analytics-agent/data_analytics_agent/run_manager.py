@@ -41,6 +41,7 @@ from data_analytics_agent.agents.visualization.validation import (
     validate_chart_spec,
 )
 from data_analytics_agent.data_sources import DataSource
+from data_analytics_agent.reporting.schemas import ReportToolResult
 from data_analytics_agent.schemas import (
     ActivityTool,
     AgentStateSnapshot,
@@ -55,8 +56,10 @@ from data_analytics_agent.schemas import (
 )
 from data_analytics_agent.stores import (
     ConversationStore,
+    ReportStore,
     ResultStore,
     RunStore,
+    StatisticalAnalysisStore,
     StoreNotFound,
 )
 
@@ -719,6 +722,20 @@ def _activity_arguments(tool_name: str, tool_input: Any) -> dict[str, Any]:
     }:
         result_id = str(data.get("result_id") or "")
         return {"result": result_id[:8]} if result_id else {}
+    if tool_name == "inspect_conversation_analysis":
+        analysis_id = str(data.get("analysis_id") or "")
+        return {"analysis": analysis_id[:8]} if analysis_id else {}
+    if tool_name == "create_report":
+        raw_spec = data.get("spec")
+        if not isinstance(raw_spec, Mapping):
+            return {}
+        arguments = {
+            "title": _safe_activity_value(raw_spec.get("title"), limit=120),
+            "block_count": len(raw_spec.get("blocks") or []),
+        }
+        if raw_spec.get("previous_report_id"):
+            arguments["revision"] = True
+        return arguments
     if tool_name in {"validate_chart", "create_chart"}:
         return _chart_arguments(tool_input)
     if tool_name == "finish_visualization":
@@ -777,6 +794,10 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
         return ("execution", "Executing approved SQL")
     if tool_name == "list_conversation_results":
         return ("result", "Listing saved conversation results")
+    if tool_name == "list_conversation_analyses":
+        return ("statistics_data", "Listing saved statistical analyses")
+    if tool_name == "inspect_conversation_analysis":
+        return ("statistics_data", "Inspecting a saved statistical analysis")
     if tool_name == "inspect_conversation_result":
         return ("result", "Inspecting a saved conversation result")
     if tool_name == "inspect_result_for_chart":
@@ -794,6 +815,8 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
         if outcome == "needs_sql_reshape":
             return ("chart", RESHAPE_ACTIVITY_LABEL)
         return ("chart", "Requested chart cannot be created")
+    if tool_name == "create_report":
+        return ("report", "Rendering self-contained HTML report")
     return ("tool", f"Using tool · {tool_name or 'unknown'}")
 
 
@@ -986,6 +1009,30 @@ def _current_statistical_analysis(
     return None
 
 
+def _current_report(output: dict[str, Any]) -> ReportToolResult | None:
+    """Find the authoritative report tool result from the current turn."""
+
+    messages = output.get("messages")
+    if not isinstance(messages, list):
+        return None
+    for message in reversed(messages):
+        message_type = getattr(message, "type", None)
+        if message_type is None and isinstance(message, dict):
+            message_type = message.get("type") or message.get("role")
+        if message_type in {"human", "user"}:
+            return None
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, dict):
+            content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        try:
+            return ReportToolResult.model_validate_json(content)
+        except ValueError:
+            continue
+    return None
+
+
 def _apply_sql_analysis(
     answer: FinalAnswer,
     output: dict[str, Any],
@@ -1098,6 +1145,15 @@ def _apply_visualization(
     )
 
 
+def _apply_report(answer: FinalAnswer, output: dict[str, Any]) -> FinalAnswer:
+    """Attach only the exact report reference returned by trusted rendering."""
+
+    report = _current_report(output)
+    if report is None:
+        return answer
+    return answer.model_copy(update={"report": report.report})
+
+
 def _conversation_history_answer(answer: FinalAnswer) -> str:
     """Serialize a completed answer without binary statistical figure data."""
 
@@ -1120,6 +1176,8 @@ class RunManager:
         conversations: ConversationStore,
         runs: RunStore,
         results: ResultStore,
+        analyses: StatisticalAnalysisStore | None = None,
+        reports: ReportStore | None = None,
         statistical_execution_limits: PythonExecutionLimits | None = None,
         debug_details: bool = False,
     ) -> None:
@@ -1131,6 +1189,8 @@ class RunManager:
         self.conversations = conversations
         self.runs = runs
         self.results = results
+        self.analyses = analyses or StatisticalAnalysisStore()
+        self.reports = reports or ReportStore()
         self.statistical_execution_limits = (
             statistical_execution_limits or PythonExecutionLimits()
         )
@@ -1144,6 +1204,23 @@ class RunManager:
         source_id: str,
     ) -> FinalAnswer:
         """Require executable answers to reference this conversation's result."""
+
+        if answer.report is not None:
+            try:
+                report = self.reports.get(
+                    answer.report.report_id,
+                    thread_id,
+                    source_id=source_id,
+                )
+            except StoreNotFound as exc:
+                raise RuntimeError(
+                    "Agent returned an unknown or out-of-conversation report."
+                ) from exc
+            if report.reference() != answer.report:
+                raise RuntimeError(
+                    "Agent returned report metadata that differs from the "
+                    "stored artifact."
+                )
 
         if answer.result_id is None:
             if answer.chart is not None:
@@ -1548,6 +1625,20 @@ class RunManager:
                 self.runs.get_statistical_execution(run_id),
             )
             answer = _apply_visualization(answer, output)
+            if (
+                answer.statistical_analysis is not None
+                and answer.statistical_analysis.outcome
+                is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED
+            ):
+                saved_analysis = self.analyses.save(
+                    thread_id=thread_id,
+                    source_id=source_id,
+                    analysis=answer.statistical_analysis,
+                )
+                answer = answer.model_copy(
+                    update={"statistical_analysis": saved_analysis.analysis}
+                )
+            answer = _apply_report(answer, output)
             answer = self._validate_answer_provenance(
                 answer,
                 thread_id,

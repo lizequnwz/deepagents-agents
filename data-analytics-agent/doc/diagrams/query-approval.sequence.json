@@ -2,82 +2,111 @@
   "schema_version": 1,
   "diagram_type": "sequence",
   "meta": {
-    "title": "Query Execution and Approval Sequence",
-    "subtitle": "One source-bound turn with rejection, revision, reviewed execution, and result provenance",
+    "title": "SQL and Statistical Python Review Sequence",
+    "subtitle": "One source-bound analysis with rejection, exact reviewed execution, and authoritative output attachment",
     "output": "query-approval.html",
     "animation": "none",
-    "viewBox": [920, 1000]
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "viewBox": [1240, 1580],
+    "views": [
+      {
+        "id": "sql-review",
+        "label": "SQL review and evidence",
+        "focus": ["user", "ui", "api", "coordinator", "sql_agent", "review", "backend", "result_store"],
+        "note": "Rejection returns to the SQL specialist; approval or edit executes the exact reviewed query."
+      },
+      {
+        "id": "python-review",
+        "label": "Python review and execution",
+        "focus": ["coordinator", "statistics", "result_store", "review", "python_runtime"],
+        "note": "The statistical specialist delegates by result ID and every actual Python execution requires review."
+      },
+      {
+        "id": "authoritative-answer",
+        "label": "Authoritative answer attachment",
+        "focus": ["statistics", "python_runtime", "coordinator", "api", "ui", "user"],
+        "note": "RunManager attaches the exact reviewed code and captured outputs before Streamlit presents the answer."
+      }
+    ]
   },
   "participants": [
     {
       "id": "user",
       "type": "external",
       "label": "User",
-      "sublabel": "business reviewer"
+      "sublabel": "reviewer"
     },
     {
       "id": "ui",
       "type": "frontend",
       "label": "Streamlit",
-      "sublabel": "chat + SQL editor"
+      "sublabel": "chat + review"
     },
     {
       "id": "api",
       "type": "backend",
-      "label": "FastAPI",
+      "label": "API",
       "sublabel": "run lifecycle"
     },
     {
       "id": "coordinator",
       "type": "backend",
       "label": "Coordinator",
-      "sublabel": "source-bound agent"
+      "sublabel": "routing"
     },
     {
-      "id": "analyst",
+      "id": "sql_agent",
       "type": "backend",
-      "label": "SQL Analyst",
-      "sublabel": "OSI-grounded"
+      "label": "Text-to-SQL",
+      "sublabel": "OSI + SQL"
     },
     {
       "id": "review",
       "type": "security",
-      "label": "HITL Review",
-      "sublabel": "approve/edit/reject"
+      "label": "HITL review",
+      "sublabel": "edit / approve"
     },
     {
       "id": "backend",
       "type": "database",
       "label": "SQLBackend",
-      "sublabel": "validated execution"
+      "sublabel": "SQL execution"
     },
     {
-      "id": "store",
+      "id": "result_store",
       "type": "database",
-      "label": "Result Store",
-      "sublabel": "source + thread scoped"
+      "label": "ResultStore",
+      "sublabel": "scoped result"
+    },
+    {
+      "id": "statistics",
+      "type": "backend",
+      "label": "Statistics",
+      "sublabel": "Python specialist"
+    },
+    {
+      "id": "python_runtime",
+      "type": "database",
+      "label": "Py runtime",
+      "sublabel": "runner + store"
     }
   ],
   "segments": [
     {
       "from": 150,
-      "to": 330,
-      "label": "Intake + planning"
+      "to": 690,
+      "label": "Reviewed SQL evidence"
     },
     {
-      "from": 342,
-      "to": 520,
-      "label": "Human review loop"
+      "from": 710,
+      "to": 1300,
+      "label": "Reviewed statistical Python"
     },
     {
-      "from": 532,
-      "to": 742,
-      "label": "Reviewed execution"
-    },
-    {
-      "from": 754,
-      "to": 850,
-      "label": "Answer + presentation"
+      "from": 1320,
+      "to": 1460,
+      "label": "Authoritative presentation"
     }
   ],
   "messages": [
@@ -85,7 +114,7 @@
       "from": "user",
       "to": "ui",
       "y": 180,
-      "label": "ask business question",
+      "label": "ask statistical business question",
       "variant": "default"
     },
     {
@@ -104,94 +133,165 @@
     },
     {
       "from": "coordinator",
-      "to": "analyst",
+      "to": "sql_agent",
       "y": 300,
-      "label": "delegate database question",
+      "label": "request analysis-ready dataset",
       "variant": "emphasis",
-      "note": "The analyst reads the selected OSI model before writing SQL."
+      "note": "The specialist reads the selected OSI model before writing SQL."
     },
     {
-      "from": "analyst",
+      "from": "sql_agent",
       "to": "review",
-      "y": 360,
+      "y": 350,
       "label": "propose validated SQL",
       "variant": "security"
     },
     {
       "from": "review",
-      "to": "analyst",
-      "y": 405,
+      "to": "sql_agent",
+      "y": 395,
       "label": "reject with feedback",
       "variant": "return"
     },
     {
-      "from": "analyst",
+      "from": "sql_agent",
       "to": "review",
-      "y": 450,
+      "y": 440,
       "label": "submit revised SQL",
       "variant": "security"
     },
     {
       "from": "review",
-      "to": "analyst",
-      "y": 495,
+      "to": "sql_agent",
+      "y": 485,
       "label": "approve or edit exact SQL",
       "variant": "security"
     },
     {
-      "from": "analyst",
+      "from": "sql_agent",
       "to": "backend",
-      "y": 555,
+      "y": 530,
       "label": "execute reviewed SQL",
       "variant": "emphasis"
     },
     {
       "from": "backend",
-      "to": "analyst",
-      "y": 600,
-      "label": "normalized capped rows",
+      "to": "result_store",
+      "y": 575,
+      "label": "save rows + immutable profile",
+      "variant": "emphasis"
+    },
+    {
+      "from": "result_store",
+      "to": "sql_agent",
+      "y": 620,
+      "label": "result ID + profile + head(10)",
       "variant": "return"
     },
     {
-      "from": "analyst",
-      "to": "store",
-      "y": 645,
-      "label": "save full capped artifact",
+      "from": "sql_agent",
+      "to": "coordinator",
+      "y": 665,
+      "label": "structured evidence",
+      "variant": "return"
+    },
+    {
+      "from": "coordinator",
+      "to": "statistics",
+      "y": 740,
+      "label": "delegate assigned result ID",
+      "variant": "emphasis"
+    },
+    {
+      "from": "statistics",
+      "to": "result_store",
+      "y": 785,
+      "label": "inspect scoped provenance",
       "variant": "default"
     },
     {
-      "from": "store",
-      "to": "analyst",
-      "y": 685,
-      "label": "result ID + small sample",
+      "from": "result_store",
+      "to": "statistics",
+      "y": 830,
+      "label": "profile + head(10), never full rows",
       "variant": "return"
     },
     {
-      "from": "analyst",
+      "from": "statistics",
+      "to": "review",
+      "y": 875,
+      "label": "propose Python + immutable result ID",
+      "variant": "security"
+    },
+    {
+      "from": "review",
+      "to": "statistics",
+      "y": 920,
+      "label": "reject with feedback",
+      "variant": "return"
+    },
+    {
+      "from": "statistics",
+      "to": "review",
+      "y": 965,
+      "label": "submit revised Python",
+      "variant": "security"
+    },
+    {
+      "from": "review",
+      "to": "statistics",
+      "y": 1010,
+      "label": "approve or edit exact Python",
+      "variant": "security"
+    },
+    {
+      "from": "statistics",
+      "to": "python_runtime",
+      "y": 1055,
+      "label": "execute over complete scoped df",
+      "variant": "emphasis",
+      "note": "Rejections do not count; no more than three actual executions may run."
+    },
+    {
+      "from": "python_runtime",
+      "to": "statistics",
+      "y": 1100,
+      "label": "bounded tables, text, scalars, figures",
+      "variant": "return"
+    },
+    {
+      "from": "statistics",
       "to": "coordinator",
-      "y": 730,
-      "label": "structured SQL analysis",
+      "y": 1145,
+      "label": "terminal statistical outcome",
       "variant": "return"
     },
     {
       "from": "coordinator",
       "to": "api",
-      "y": 775,
-      "label": "provenance-checked answer",
+      "y": 1190,
+      "label": "provenance-checked final wording",
       "variant": "return"
+    },
+    {
+      "from": "python_runtime",
+      "to": "api",
+      "y": 1240,
+      "label": "attach exact code + authoritative outputs",
+      "variant": "emphasis"
     },
     {
       "from": "api",
       "to": "ui",
-      "y": 815,
-      "label": "completed turn + result ID",
+      "y": 1350,
+      "label": "completed answer + attached artifacts",
       "variant": "return"
     },
     {
       "from": "ui",
       "to": "user",
-      "y": 855,
-      "label": "answer, table, SQL, CSV",
+      "y": 1400,
+      "label": "answer, table, SQL, Python, figures",
       "variant": "return"
     }
   ],
@@ -199,72 +299,84 @@
     {
       "participant": "ui",
       "from": 210,
-      "to": 862,
+      "to": 1410,
       "type": "frontend"
     },
     {
       "participant": "api",
       "from": 215,
-      "to": 822,
+      "to": 1360,
       "type": "backend"
     },
     {
       "participant": "coordinator",
       "from": 255,
-      "to": 782,
+      "to": 1200,
       "type": "backend"
     },
     {
-      "participant": "analyst",
+      "participant": "sql_agent",
       "from": 295,
-      "to": 738,
+      "to": 675,
       "type": "backend"
     },
     {
       "participant": "review",
-      "from": 350,
-      "to": 505,
+      "from": 340,
+      "to": 1020,
       "type": "security"
     },
     {
       "participant": "backend",
-      "from": 548,
-      "to": 608,
+      "from": 520,
+      "to": 585,
       "type": "database"
     },
     {
-      "participant": "store",
-      "from": 638,
-      "to": 692,
+      "participant": "result_store",
+      "from": 565,
+      "to": 840,
+      "type": "database"
+    },
+    {
+      "participant": "statistics",
+      "from": 730,
+      "to": 1155,
+      "type": "backend"
+    },
+    {
+      "participant": "python_runtime",
+      "from": 1045,
+      "to": 1250,
       "type": "database"
     }
   ],
   "cards": [
     {
       "dot": "rose",
-      "title": "No hidden execution",
+      "title": "Two reviewed execution boundaries",
       "items": [
-        "Structural validation does not submit the query",
-        "The SQL visible in review is the SQL executed",
-        "Edited SQL is validated again before resume"
+        "SQL review happens before the database is touched",
+        "Python review happens before code runs over the complete DataFrame",
+        "An edit replaces the proposal as the authoritative executable"
       ]
     },
     {
       "dot": "cyan",
-      "title": "Rejection is a loop",
+      "title": "Result-ID delegation",
       "items": [
-        "Reject returns feedback to the SQL analyst",
-        "A revised execute_sql call creates another interrupt",
-        "The run completes only after reviewed execution succeeds"
+        "The statistical task carries one scoped result ID, not row data",
+        "Model context receives provenance, a full profile, and at most head(10)",
+        "The execution process alone receives the complete saved result"
       ]
     },
     {
       "dot": "emerald",
-      "title": "Result provenance",
+      "title": "Authoritative presentation",
       "items": [
-        "Artifacts carry thread ID and source ID",
-        "Only a configured sample enters model context",
-        "The final SQL is recovered from the saved execution"
+        "The statistical specialist returns one explicit terminal outcome",
+        "RunStore retains the exact reviewed code and bounded outputs",
+        "RunManager attaches those artifacts before Streamlit renders them"
       ]
     }
   ]

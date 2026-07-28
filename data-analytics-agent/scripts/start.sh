@@ -110,8 +110,8 @@ case "${API_AUTO_RELOAD}" in
       --reload-include '*.yaml'
       --reload-include '*.yml'
       --reload-include '.env'
-      --reload-exclude '.venv/**'
-      --reload-exclude '.git/**'
+      --reload-exclude '.venv'
+      --reload-exclude '.git'
     )
     ;;
   false|0|no|off)

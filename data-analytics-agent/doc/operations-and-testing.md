@@ -32,6 +32,7 @@ Application defaults:
 | `MODEL_SAMPLE_ROWS` | `10` | Rows exposed to models |
 | `ENABLE_DATA_VISUALIZATION` | `true` | Plug the chart specialist into each source graph |
 | `ENABLE_STATISTICAL_ANALYSIS` | `true` | Plug the reviewed statistical Python specialist into each source graph |
+| `ENABLE_REPORTING` | `true` | Add the coordinator report-design skill and trusted HTML renderer |
 
 Statistical Python settings are configurable in `.env`:
 
@@ -116,9 +117,9 @@ without manually restarting the launcher. Streamlit also reruns on watched
 source changes.
 
 FastAPI reload creates a new process and therefore clears the POC's in-memory
-`ConversationStore`, `RunStore`, and `ResultStore`, including pending HITL
-reviews and statistical outputs. Use non-reloading mode for longer manual test
-sessions:
+`ConversationStore`, `RunStore`, `ResultStore`, `StatisticalAnalysisStore`, and
+`ReportStore`, including pending HITL reviews, reusable analyses, and report
+versions. Use non-reloading mode for longer manual test sessions:
 
 ```bash
 API_AUTO_RELOAD=false ./scripts/start.sh

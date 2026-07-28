@@ -34,8 +34,18 @@ from data_analytics_agent.data_sources import DataSource
 from data_analytics_agent.execution_budget import (
     execution_budget_middleware,
 )
+from data_analytics_agent.reporting.tools import (
+    create_create_report_tool,
+    create_inspect_conversation_analysis_tool,
+    create_list_conversation_analyses_tool,
+)
 from data_analytics_agent.schemas import FinalAnswer
-from data_analytics_agent.stores import ResultStore, RunStore
+from data_analytics_agent.stores import (
+    ReportStore,
+    ResultStore,
+    RunStore,
+    StatisticalAnalysisStore,
+)
 
 
 def _coordinator_prompt(
@@ -43,6 +53,7 @@ def _coordinator_prompt(
     *,
     visualization_enabled: bool,
     statistical_analysis_enabled: bool = True,
+    reporting_enabled: bool = True,
 ) -> str:
     curated_examples = (
         "\n".join(
@@ -103,12 +114,38 @@ regression, uncertainty, or similar inference, say it is unavailable; do not
 simulate execution or delegate that request.
 """
     )
+    reporting = (
+        """\
+
+Reporting is available for explicit requests for a report, infographic,
+briefing, findings document, data story, or downloadable HTML. Keep reporting
+in the coordinator; do not delegate it to another subagent. Load the
+report-design skill, reuse suitable same-conversation artifacts, and obtain new
+reviewed SQL or statistical evidence when necessary. Then call `create_report`
+with one declarative `ReportSpec`. Trusted application code owns HTML, CSS,
+JavaScript, artifact resolution, rendering, and storage. Never write or request
+arbitrary markup or scripts.
+
+A report may combine multiple result and statistical-analysis artifacts from
+this conversation and source. Use `list_conversation_analyses` and
+`inspect_conversation_analysis` when a prior statistical artifact is ambiguous.
+For a revision, preserve the previous report ID in `ReportSpec`. Every safe
+version is immediately downloadable; do not require approval or finalization.
+"""
+        if reporting_enabled
+        else """\
+
+Reporting is disabled for this deployment. If the user requests a report or
+infographic, say that downloadable HTML reporting is unavailable.
+"""
+    )
     return f"""\
 You are the coordinator for a conversational data analyst permanently bound to
 {source.name!r} (source ID {source.source_id!r}). Follow the coordinator policy
 in AGENTS.md. Do not execute SQL, invent database facts, or switch sources.
 {visualization}
 {statistics}
+{reporting}
 
 Source context available without database execution:
 - Description: {source.description}
@@ -142,6 +179,10 @@ statistical analysis, use the reviewed execution as authoritative evidence
 while composing the top-level answer in your own words. Include only material
 assumptions and a concise interpretation. Omit private reasoning and raw tool
 payloads.
+
+Do not reconstruct a report reference. Leave `report` null or omit it; the
+application attaches the exact report ID, version, timestamp, and content hash
+returned by `create_report`.
 """
 
 
@@ -174,6 +215,8 @@ def build_agent(
     result_store: ResultStore,
     run_store: RunStore | None = None,
     *,
+    analysis_store: StatisticalAnalysisStore | None = None,
+    report_store: ReportStore | None = None,
     source: DataSource,
     backend: SQLBackend,
     model: Any | None = None,
@@ -206,6 +249,30 @@ def build_agent(
         source_id=source.source_id,
         model_sample_rows=source.limits.model_sample_rows,
     )
+    shared_run_store = run_store or RunStore()
+    shared_analysis_store = analysis_store or StatisticalAnalysisStore()
+    shared_report_store = report_store or ReportStore()
+    coordinator_tools = [list_results, inspect_result]
+    if settings.enable_reporting:
+        coordinator_tools.extend(
+            [
+                create_list_conversation_analyses_tool(
+                    shared_analysis_store,
+                    source_id=source.source_id,
+                ),
+                create_inspect_conversation_analysis_tool(
+                    shared_analysis_store,
+                    source_id=source.source_id,
+                ),
+                create_create_report_tool(
+                    result_store,
+                    shared_analysis_store,
+                    shared_run_store,
+                    shared_report_store,
+                    source_id=source.source_id,
+                ),
+            ]
+        )
 
     permissions = [
         FilesystemPermission(
@@ -268,12 +335,11 @@ def build_agent(
         )
 
     if settings.enable_statistical_analysis:
-        statistical_run_store = run_store or RunStore()
         subagents.append(
             build_statistical_analysis_subagent(
                 source=source,
                 result_store=result_store,
-                run_store=statistical_run_store,
+                run_store=shared_run_store,
                 execution_limits=settings.statistical_execution_limits(),
                 model=chat_model,
                 permissions=permissions,
@@ -291,13 +357,19 @@ def build_agent(
     return create_deep_agent(
         name="data-analytics-agent",
         model=chat_model,
-        tools=[list_results, inspect_result],
+        tools=coordinator_tools,
         system_prompt=_coordinator_prompt(
             source,
             visualization_enabled=settings.enable_data_visualization,
             statistical_analysis_enabled=(
                 settings.enable_statistical_analysis
             ),
+            reporting_enabled=settings.enable_reporting,
+        ),
+        skills=(
+            ["/project/skills/reporting/"]
+            if settings.enable_reporting
+            else None
         ),
         memory=["/project/AGENTS.md"],
         subagents=subagents,

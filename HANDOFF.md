@@ -31,12 +31,16 @@ agent messages.
 This remains a local, single-user, process-memory POC. It is not production
 ready.
 
-**Documentation debt:** the canonical diagrams under
-[`data-analytics-agent/doc/diagrams/`](data-analytics-agent/doc/diagrams/) still
-predate the statistical-analysis subagent. Their Archify JSON sources,
-interactive HTML, and dual-theme SVG exports must be updated to show the new
-subagent, reviewed-Python HITL sequence, saved-result/result-ID boundary,
-authoritative execution attachment, and Streamlit statistical outputs.
+Flexible reporting is now implemented as a feature-flagged coordinator skill,
+not a fourth specialist. The coordinator can reuse multiple same-thread,
+same-source SQL/chart/statistical artifacts or invoke missing reviewed analysis,
+then submit a strict `ReportSpec` to trusted code. The renderer produces
+canonical self-contained HTML with scoped provenance, version lineage, CSP,
+isolated Streamlit preview, and immediate byte-identical download.
+
+The canonical Archify diagrams show the coordinator, three analytical
+specialists, provider-neutral `SQLBackend`, reviewed execution boundaries,
+artifact stores, coordinator-owned reporting, and Streamlit outputs.
 
 ## Start here
 
@@ -46,6 +50,7 @@ authoritative execution attachment, and Streamlit statistical outputs.
 - [Using the agent](data-analytics-agent/doc/using-the-agent.md)
 - [Safety and HITL](data-analytics-agent/doc/safety-and-hitl.md)
 - [Operations and testing](data-analytics-agent/doc/operations-and-testing.md)
+- [Reporting capability](data-analytics-agent/doc/reporting-capability.md)
 - [Executable tutorial](data-analytics-agent/agent_internals_tutorial.ipynb)
 
 Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
@@ -111,6 +116,22 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
   and graphics guidance. Each specialist loads only its own namespace. System
   prompts retain only runtime goals, hard boundaries, tool stages, and terminal
   contracts.
+- Reporting topology: a lazy-loaded coordinator skill, not a fourth subagent.
+  The coordinator retains conversation context, may invoke existing specialists
+  for missing evidence, and produces a structured `ReportSpec` for trusted
+  rendering. Graduate reporting into a specialist only if measured context
+  pressure, independent lifecycle needs, or specialist tooling justify the
+  additional handoff.
+- Report output: canonical self-contained HTML, combining multiple
+  same-thread/same-source artifacts with provenance. A trusted deterministic
+  renderer owns markup assembly and any audited JavaScript; the model cannot
+  inject arbitrary scripts. Every safe Streamlit preview is downloadable and
+  conversationally revisable without mandatory approval or finalization.
+- Report design: style remains open-ended. Infographic, statistical
+  report, executive briefing, exploratory report, comparison, and appendix are
+  examples rather than an allowlist. UI/UX Pro Max guidance supplies
+  accessibility, responsive layout, typography, chart, motion, and design-token
+  quality checks.
 - Chart progress: exposes chart type and a bounded subset of mappings while
   omitting the result ID and full tool payload.
 - Output: one chart per request.
@@ -134,18 +155,21 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
   stored in the completed turn; Plotly is reconstructed from its saved result,
   with no separate chart store.
 - Statistical persistence: the successful `PythonExecutionResult` is retained
-  in process-local `RunStore`, merged into the completed `FinalAnswer`, and then
-  retained with the in-memory conversation. Derived statistical outputs do not
-  yet receive a reusable result ID or durable store. Binary figures are omitted
-  from later model history but remain in the completed in-memory answer for
+  in process-local `RunStore`, merged into the completed `FinalAnswer`, and
+  saved under a reusable source/thread-scoped analysis ID. Binary figures are
+  omitted from later model history but remain available to trusted report and
   Streamlit rendering until the API reloads.
+- Report persistence: `ReportStore` retains exact self-contained HTML, validated
+  specification, renderer version, input references, previous-version lineage,
+  and SHA-256 content hash. FastAPI and Streamlit serve the stored bytes rather
+  than reconstructing model-authored markup.
 - Development reload: `./scripts/start.sh` enables Uvicorn reload and
   Streamlit run-on-save by default. API reload clears all process-local stores;
   use `API_AUTO_RELOAD=false ./scripts/start.sh` for a stable manual session.
 - Runtime compatibility: Streamlit checks `api_contract_version` and blocks
   requests to a stale FastAPI process instead of silently running old code.
-- Backend: SQLite is implemented behind `SQLBackend`; Snowflake remains the
-  next backend candidate.
+- Backend: all database execution is exposed through the provider-neutral
+  `SQLBackend`; provider-specific behavior remains behind adapters.
 
 ## Current architecture
 
@@ -173,9 +197,15 @@ Streamlit
         -> execute_statistical_python HITL (approve/edit/reject)
         -> bounded exact-code execution + compact tables/text/scalars/figures
         -> terminal statistical outcome returned to coordinator
+     -> report-design skill (explicit document request + feature enabled)
+        -> discover same-thread/same-source results and analyses
+        -> invoke missing SQL, visualization, or statistical work as needed
+        -> validate strict declarative ReportSpec with no executable markup
+        -> trusted renderer embeds required data/assets into standalone HTML
   -> provenance-checked FinalAnswer
-  -> RunManager attaches authoritative statistical execution artifacts
-  -> deterministic Plotly/statistical outputs + underlying table/CSV
+  -> RunManager attaches authoritative statistical and report artifacts
+  -> deterministic Plotly/statistical outputs + table/CSV + report iframe
+  -> exact report HTML download from versioned process-local ReportStore
 ```
 
 The feature folders are:
@@ -183,6 +213,8 @@ The feature folders are:
 - [`agents/text_to_sql/`](data-analytics-agent/data_analytics_agent/agents/text_to_sql/)
 - [`agents/visualization/`](data-analytics-agent/data_analytics_agent/agents/visualization/)
 - [`agents/statistical_analysis/`](data-analytics-agent/data_analytics_agent/agents/statistical_analysis/)
+- [`reporting/`](data-analytics-agent/data_analytics_agent/reporting/)
+- [`skills/reporting/report-design/`](data-analytics-agent/skills/reporting/report-design/)
 
 The visualization folder owns:
 
@@ -199,6 +231,15 @@ The statistical-analysis folder owns:
 - exact-code child-process execution, timeout/failure handling, and bounded
   stdout/table/text/figure capture;
 - source/thread/result provenance enforcement and execution-attempt accounting.
+
+The reporting folder and coordinator skill own:
+
+- open-ended requirement interpretation and UI/UX quality guidance;
+- `ReportBrief`, strict typed `ReportSpec`, theme, artifact, and reference
+  contracts;
+- same-thread/same-source artifact resolution and report revision lineage;
+- escaped semantic HTML, embedded charts/figures/data, restrictive CSP, print
+  styling, renderer-owned theme interaction, and exact content hashing.
 
 ## Safety and provenance
 
@@ -225,6 +266,10 @@ Do not weaken these invariants:
     10; deterministic tools may validate/render against all stored rows.
 15. Agent execution budgets reset for a new run and persist across every
     approve/edit/reject resume of that run.
+16. Reports combine only same-thread/same-source artifacts; model-authored
+    values remain declarative data and never become executable HTML or scripts.
+17. Every report reference is replaced with the exact stored ID, version,
+    timestamp, and content hash; Streamlit verifies that hash before preview.
 
 The chart renderer is trusted deterministic code. The model supplies only a
 constrained, validated specification—not executable Python. Incompatible chart
@@ -269,7 +314,7 @@ Endpoints:
 Last verified on 2026-07-27:
 
 ```text
-137 passed, 1 skipped
+146 passed, 1 skipped
 ```
 
 The skip is the opt-in live OpenAI smoke test. Python compilation also passes.
@@ -286,30 +331,35 @@ Also execute the tutorial with live calls disabled, validate/render/check the
 affected Archify diagram, validate both configured sources, and run
 `git diff --check`.
 
+The reporting implementation is covered by focused contract, scope, renderer,
+versioning, API byte-identity, and Streamlit tests. The report-design skill
+passes skill validation; full Python compilation and `git diff --check` pass.
 The statistical-analysis implementation and follow-up debugging were also
 checked through focused schema/HITL/runner/UI tests, a live current-code request
-through SQL and Python review, API contract inspection, Bash syntax validation,
-full compilation, and `git diff --check`.
+through SQL and Python review, API contract inspection, and Bash syntax
+validation.
+
+The refreshed system-architecture and SQL/Python-review diagrams both pass all
+nine Archify showcase checks. Their exported dual-theme SVGs pass XML
+validation and were visually reviewed in light and dark themes after one label-
+fit correction round.
 
 ## Prioritized next work
 
-### 1. Update canonical diagrams for the statistical-analysis subagent
+### 1. Exercise and harden reporting with real conversations
 
-The prose documentation describes the new specialist, but the canonical
-diagram assets do not. Update and regenerate:
+Use a real model to exercise an infographic, a statistical report, and a
+user-directed visual style through the complete UI. Cover reuse of prior
+artifacts, missing-analysis routing through SQL/Python review, conversational
+revision with `previous_report_id`, full-row table inclusion when explicitly
+needed, and offline opening of the downloaded HTML.
 
-- `doc/diagrams/system-architecture.architecture.json`, `.html`, and `.svg` to
-  add statistical routing, result-ID-only delegation, `RunStore`, reviewed
-  execution, authoritative attachment, and Streamlit output rendering;
-- `doc/diagrams/query-approval.sequence.json`, `.html`, and `.svg` to add
-  Python approve/edit/reject, rejection revision, execution failure repair,
-  three-execution maximum, and terminal statistical outcomes;
-- any data-lineage or lifecycle labels elsewhere in `doc/diagrams/` that still
-  imply text-to-SQL and visualization are the only specialists.
-
-Use the Archify render/export commands in
-[`doc/README.md`](data-analytics-agent/doc/README.md#canonical-diagrams), then
-run Archify `validate` and `check` for every changed source and HTML artifact.
+Add browser-based accessibility and visual-regression checks at phone, tablet,
+desktop, print, light, dark, reduced-motion, and keyboard-focused states. Add
+offline geographic topology embedding before permitting map chart blocks in
+reports. Keep reporting in the coordinator unless measured context pressure,
+independent lifecycle needs, or specialist tooling establishes a concrete
+reason for a fourth subagent.
 
 ### 2. Live statistical and visualization flows
 
@@ -328,14 +378,7 @@ Use a real model to exercise:
 5. rehydration of a generated chart and its success message;
 6. a partially resolved ZIP/city-state map.
 
-### 3. Snowflake adapter
-
-Use the [conceptual blueprint](data-analytics-agent/doc/snowflake-blueprint.md).
-Keep credentials outside registry/OSI, inject connection ownership, bind
-database/schema/role per source, use a read-only role and provider-native
-timeout/cancellation, and preserve unchanged agent/API/UI contracts.
-
-### 4. Production hardening
+### 3. Production hardening
 
 - authentication and source/result authorization;
 - durable stores and LangGraph checkpoints;
@@ -345,7 +388,7 @@ timeout/cancellation, and preserve unchanged agent/API/UI contracts.
 - cancellation, retries, rate limits, and concurrency policy;
 - retention, deletion, backup, tenant isolation, and least privilege.
 
-### 5. Deferred visualization and orchestration hardening
+### 4. Deferred visualization and orchestration hardening
 
 Keep the current POC tolerant and simple until real usage justifies these:
 
@@ -382,14 +425,14 @@ Keep the current POC tolerant and simple until real usage justifies these:
 - The local result HTTP endpoint is not a production authorization boundary.
 - Registry/readiness changes require reload or restart when auto-reload is
   disabled.
-- No Snowflake adapter exists.
+- Reports and reusable statistical analyses are process-local and are not an
+  authenticated production authorization boundary; API reload removes them.
+- Self-contained report maps are rejected until geographic topology can be
+  embedded without a network dependency.
 - Chart generation is deliberately one-chart, declarative, and non-extensible
   at runtime.
 - Statistical Python is trusted-local reviewed code, not a production sandbox;
-  its output artifacts are bounded but process-local and not independently
-  reusable.
-- Canonical documentation diagrams still need the statistical-analysis
-  subagent and Python HITL/result-attachment flows added.
+  its bounded reusable output artifacts remain process-local.
 - Mixed-value chart validation is intentionally tolerant for the POC; invalid
   points can be excluded with visible warnings.
 - ZIP/city maps depend on generic centroid lookup, not boundary geometry.

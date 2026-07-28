@@ -1,0 +1,4 @@
+interface:
+  display_name: "Report design"
+  short_description: "Build accessible self-contained analytical HTML reports"
+  default_prompt: "Create a professional self-contained HTML report from the current conversation's analysis artifacts."

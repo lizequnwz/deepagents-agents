@@ -1,1 +1,1 @@
-"""Source-aware, human-reviewed SQL and visualization agent."""
+"""Source-aware analytics with reviewed execution and standalone HTML reports."""

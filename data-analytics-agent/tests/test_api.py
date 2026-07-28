@@ -473,7 +473,8 @@ def test_health_reports_visualization_feature_state(
     health = TestClient(create_app(services)).get("/health")
 
     assert health.status_code == 200
-    assert health.json()["api_contract_version"] == 2
+    assert health.json()["api_contract_version"] == 3
+    assert health.json()["reporting_enabled"] is True
     assert health.json()["visualization_enabled"] is True
     assert health.json()["statistical_analysis_enabled"] is True
 

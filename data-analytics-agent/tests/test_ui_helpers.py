@@ -26,14 +26,14 @@ def test_conversation_url_replaces_existing_thread_and_preserves_query() -> None
 
 
 def test_api_contract_mismatch_requires_service_restart() -> None:
-    assert api_contract_error({"api_contract_version": 2}) is None
+    assert api_contract_error({"api_contract_version": 3}) is None
     missing = api_contract_error({})
-    stale = api_contract_error({"api_contract_version": 1})
+    stale = api_contract_error({"api_contract_version": 2})
 
     assert missing is not None
     assert "contract missing" in missing
     assert stale is not None
-    assert "contract 1" in stale
+    assert "contract 2" in stale
     assert "restart `./scripts/start.sh`" in stale
 
 def test_rows_to_csv_uses_declared_column_order_and_escaping() -> None:

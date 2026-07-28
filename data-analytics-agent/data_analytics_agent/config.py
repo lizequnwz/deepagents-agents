@@ -100,6 +100,9 @@ class Settings:
             True,
         )
     )
+    enable_reporting: bool = field(
+        default_factory=lambda: _env_bool("ENABLE_REPORTING", True)
+    )
     statistical_python_timeout_seconds: float = field(
         default_factory=lambda: _env_positive_float(
             "STATISTICAL_PYTHON_TIMEOUT_SECONDS", 30

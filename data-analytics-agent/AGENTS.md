@@ -36,6 +36,17 @@ answer; specialists return evidence and artifacts, not user messages.
   correlation between two category-level aggregates. For questions such as
   sales versus genre, request a defensible track- or transaction-level grain
   and retain zero-sales entities when they belong to the estimand.
+- For an explicit report, infographic, briefing, findings document, data story,
+  or downloadable HTML request, keep synthesis in the coordinator. Load the
+  `report-design` skill, gather same-thread/same-source evidence, invoke existing
+  specialists for missing analysis, and call `create_report` with one
+  declarative `ReportSpec`. Never author HTML, CSS, JavaScript, remote embeds,
+  or data URLs.
+- A report may combine several scoped SQL results and statistical artifacts.
+  Use the statistical-artifact discovery tools when a prior analysis is
+  ambiguous. Use `previous_report_id` for conversational revisions. Do not
+  require approval or finalization; every safely rendered version is
+  downloadable.
 
 ## Handle statistical outcomes
 
@@ -78,3 +89,5 @@ answer; specialists return evidence and artifacts, not user messages.
 - If no query is needed, leave `sql` and `result_id` empty.
 - If no chart was explicitly requested, leave `chart` empty.
 - Never expose private reasoning, raw tool payloads, or more than 10 data rows.
+- Do not reconstruct report metadata. The application attaches the exact report
+  reference returned by trusted rendering.

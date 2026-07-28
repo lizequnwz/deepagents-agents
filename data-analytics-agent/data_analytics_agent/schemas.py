@@ -12,8 +12,9 @@ from data_analytics_agent.agents.statistical_analysis.schemas import (
     StatisticalAnalysisResult,
 )
 from data_analytics_agent.agents.visualization.schemas import ChartSpec
+from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 2
+API_CONTRACT_VERSION = 3
 
 
 class StrictModel(BaseModel):
@@ -115,6 +116,15 @@ class FinalAnswer(StrictModel):
     interpretation: str = ""
     chart: ChartSpec | None = None
     statistical_analysis: StatisticalAnalysisResult | None = None
+    report: ReportReference | None = None
+
+
+class SavedStatisticalAnalysis(StrictModel):
+    analysis_id: str
+    thread_id: str
+    source_id: str
+    analysis: StatisticalAnalysisResult
+    created_at: datetime
 
 
 class SavedResult(StrictModel):
@@ -302,6 +312,7 @@ class HealthResponse(StrictModel):
     ready_source_count: int = 0
     visualization_enabled: bool = False
     statistical_analysis_enabled: bool = False
+    reporting_enabled: bool = False
     errors: list[str]
 
 

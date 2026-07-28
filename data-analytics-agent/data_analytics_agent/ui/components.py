@@ -341,6 +341,12 @@ def render_sidebar(
                     icon=":material/functions:",
                     color="violet",
                 )
+            if health.get("reporting_enabled"):
+                st.badge(
+                    "HTML reports enabled",
+                    icon=":material/article:",
+                    color="blue",
+                )
         elif health:
             st.warning("API setup incomplete", icon=":material/warning:")
             for error in health.get("errors", []):
@@ -533,6 +539,66 @@ def _render_result(
         render_table()
 
 
+def _render_report(
+    client: AgentAPIClient,
+    reference: dict[str, Any],
+    *,
+    widget_key: str,
+) -> None:
+    """Preview and download the exact trusted self-contained report bytes."""
+
+    report_id = str(reference.get("report_id") or "")
+    try:
+        report = client.get_report(report_id)
+    except APIError as exc:
+        st.warning(
+            f"Saved report is unavailable: {exc}",
+            icon=":material/warning:",
+        )
+        return
+
+    html = str(report.get("html") or "")
+    actual_hash = hashlib.sha256(html.encode("utf-8")).hexdigest()
+    expected_hash = str(reference.get("html_sha256") or "")
+    if actual_hash != expected_hash or actual_hash != report.get("html_sha256"):
+        st.error(
+            "The report content hash does not match its stored reference.",
+            icon=":material/security:",
+        )
+        return
+
+    with st.container(border=True):
+        with st.container(
+            horizontal=True,
+            vertical_alignment="center",
+            gap="small",
+        ):
+            st.badge(
+                f"Report v{report['version']}",
+                icon=":material/article:",
+                color="blue",
+            )
+            st.caption(str(report["title"]))
+        st.iframe(
+            html,
+            width="stretch",
+            height="content",
+            tab_index=0,
+        )
+        st.download_button(
+            "Download HTML report",
+            data=html.encode("utf-8"),
+            file_name=(
+                f"report-{report_id[:8]}-v{report['version']}.html"
+            ),
+            mime="text/html",
+            icon=":material/download:",
+            on_click="ignore",
+            width="content",
+            key=f"download_report_{report_id}_{widget_key}",
+        )
+
+
 def render_turn(
     client: AgentAPIClient,
     turn: dict[str, Any],
@@ -563,6 +629,14 @@ def render_turn(
         if statistical:
             _render_statistical_analysis(
                 statistical,
+                widget_key=turn_key,
+            )
+
+        report = answer.get("report")
+        if report:
+            _render_report(
+                client,
+                report,
                 widget_key=turn_key,
             )
 

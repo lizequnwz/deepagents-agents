@@ -32,6 +32,13 @@ entry point; these guides explain the contracts and procedures behind it.
 3. [`safety-and-hitl.md`](safety-and-hitl.md#trust-boundary)
 4. [`backend-development.md`](backend-development.md#keep-backend-and-agent-contracts-separate)
 
+### Extend or operate reporting
+
+1. [`reporting-capability.md`](reporting-capability.md)
+2. [`architecture.md`](architecture.md#reporting-capability)
+3. [`safety-and-hitl.md`](safety-and-hitl.md#trust-boundary)
+4. Review `data_analytics_agent/reporting/` and the saved-artifact contracts.
+
 The executable [`agent_internals_tutorial.ipynb`](../agent_internals_tutorial.ipynb)
 is the companion lab. It demonstrates the registry, OSI grounding, backend
 contract, result provenance, HITL interruption, API lifecycle, and UI behavior.
@@ -44,6 +51,7 @@ specialist and constrained chart contract.
 | --- | --- |
 | [Using the agent](using-the-agent.md) | Running the UI, selecting sources, reviewing SQL, restoring conversations, or diagnosing user-facing problems |
 | [Architecture](architecture.md) | Understanding ownership, source binding, agent topology, extension seams, or process-local limitations |
+| [Reporting capability](reporting-capability.md) | Using or extending the coordinator reporting skill, structured report contract, self-contained HTML renderer, or Streamlit preview/download flow |
 | [Adding data sources](adding-data-sources.md) | Registering another SQLite database or changing source metadata and limits |
 | [Semantic-model best practices](semantic-model-best-practices.md) | Authoring or reviewing an OSI `0.1.1` model |
 | [Backend development](backend-development.md) | Implementing or testing another `SQLBackend` |

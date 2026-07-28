@@ -37,6 +37,13 @@ async function exportSvg(inputPath, outputPath) {
     /(<svg\b[\s\S]*?<\/svg>)/,
     "rendered diagram SVG",
   );
+  // Archify's inline SVG is authored inside HTML, where valueless data
+  // attributes are valid. Standalone SVG is XML, so give those attributes an
+  // explicit value before writing the export.
+  svg = svg.replace(
+    /\s(data-detail-anchor|data-legend-bridge)(?=\s|>)/g,
+    ' $1="true"',
+  );
   const viewBox = capture(svg, /viewBox="([^"]+)"/, "SVG viewBox")
     .trim()
     .split(/\s+/)

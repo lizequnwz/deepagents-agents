@@ -99,6 +99,37 @@ The coordinator reuses a clearly suitable untruncated saved result or proposes
 analysis-ready SQL first. Statistical methods are not restricted to a fixed
 catalog.
 
+## Create a report or infographic
+
+Ask for the document you want in ordinary language. You may specify audience,
+purpose, style, density, sections, format, or visual direction, or let the
+coordinator infer a professional default. For example:
+
+```text
+Create a concise editorial infographic for operations leaders using the
+analysis so far. Emphasize the three most actionable findings and include the
+supporting chart and provenance.
+```
+
+```text
+Build a detailed statistical analysis report with methods, assumptions,
+diagnostics, estimates, uncertainty, interpretation, and the useful output
+tables. Use a restrained technical style.
+```
+
+The coordinator reuses compatible results, charts, and statistical analyses
+from the current conversation. If evidence is missing, it invokes the existing
+specialist flow first, including normal SQL or Python review when applicable.
+It asks a clarification only when the answer would materially change the
+document.
+
+Each successfully rendered report appears in an isolated preview and is
+immediately downloadable as the canonical self-contained HTML file. You can
+open that file offline, request feedback-driven revisions in chat, or ask for
+further analysis first. There is no mandatory approve or finalize step. A
+report embeds every row only when the requested presentation needs every row;
+otherwise it includes only the displayed or charted evidence.
+
 ## Review SQL
 
 Every `execute_sql` action pauses before database execution. The review panel

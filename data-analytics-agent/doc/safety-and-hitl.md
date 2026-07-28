@@ -5,7 +5,7 @@
 Safety is layered. No prompt, parser, human decision, or database permission is
 sufficient by itself.
 
-![Query execution and approval sequence](diagrams/query-approval.svg)
+![SQL and statistical Python review sequence](diagrams/query-approval.svg)
 
 [Open the interactive diagram](diagrams/query-approval.html) ·
 [Edit the Archify source](diagrams/query-approval.sequence.json)
@@ -27,7 +27,7 @@ sufficient by itself.
 | Edit validation | Edited text is parsed again before resume |
 | Chart validation | Strict schema, known columns/types, readability limits, immutable result ID |
 | Backend validation | Adapter validates again immediately before execution |
-| Native database control | SQLite read-only URI, authorizer, and progress deadline |
+| Native database control | Adapter-enforced read-only access, provider timeout/cancellation, and capped retrieval |
 | Limits | Per-run agent execution budgets, timeout, capped fetch, bounded model sample |
 | Python limits | Secret-stripped subprocess, hard timeout, three attempts, bounded stdout/tables/figures |
 | Provenance | Results and answers are scoped to source and conversation |
@@ -199,6 +199,23 @@ Untrusted:
 
 Human approval is informed consent for one reviewed query, not authorization
 to broaden source access or run arbitrary statements.
+
+### Report-rendering boundary
+
+The reporting capability does not add an execution approval. It is a
+read-only composition flow over artifacts that already passed their existing
+SQL or Python review boundaries.
+
+Treat model-produced `ReportBrief` and `ReportSpec` values as untrusted until
+schema, artifact scope, and content bindings are validated. The renderer and
+its small optional interaction library are trusted application code. The model
+may select audited interactions declaratively, but it cannot provide scripts,
+event handlers, remote embeds, or raw executable HTML. The self-contained file
+may combine only current-thread/current-source artifacts, and Streamlit should
+preview it in an isolated frame rather than inject it into the application DOM.
+
+See [Reporting capability](reporting-capability.md) for the complete
+renderer, artifact, and UI contract.
 
 ## Safe change method
 

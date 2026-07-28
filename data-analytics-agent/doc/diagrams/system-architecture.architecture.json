@@ -3,291 +3,244 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Data Analytics Agent Architecture",
-    "subtitle": "Human-reviewed SQL and explicit, automatically validated visualization",
+    "subtitle": "Three analytical specialists plus coordinator-owned self-contained HTML reporting",
     "output": "system-architecture.html",
     "animation": "none",
-    "viewBox": [1360, 900]
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "viewBox": [1600, 1000],
+    "views": [
+      {
+        "id": "sql-path",
+        "label": "Reviewed SQL path",
+        "focus": ["streamlit", "api", "coordinator", "sql_agent", "sql_backend", "result_store"],
+        "note": "OSI-guided SQL pauses for review before the provider-neutral backend stores scoped rows and profile metadata."
+      },
+      {
+        "id": "statistics-path",
+        "label": "Reviewed statistics",
+        "focus": ["coordinator", "statistical", "result_store", "run_store", "streamlit"],
+        "note": "The statistical specialist sees bounded context; exact reviewed Python runs over the complete scoped result."
+      },
+      {
+        "id": "reporting-path",
+        "label": "HTML reporting",
+        "focus": ["coordinator", "reporting", "result_store", "run_store", "report_store", "api", "streamlit"],
+        "note": "The coordinator loads report-design, combines scoped artifacts, and calls a trusted renderer for downloadable standalone HTML."
+      }
+    ]
   },
   "components": [
     {
       "id": "user",
       "type": "external",
       "label": "Analyst",
-      "sublabel": "question or chart request",
-      "pos": [40, 340],
-      "size": [120, 64]
+      "sublabel": "question or report request",
+      "pos": [30, 400],
+      "size": [145, 68]
     },
     {
       "id": "streamlit",
       "type": "frontend",
       "label": "Streamlit",
-      "sublabel": "chat + SQL review + Plotly",
-      "pos": [210, 340],
-      "size": [130, 64]
+      "sublabel": "chat + review + report iframe",
+      "pos": [215, 400],
+      "size": [175, 68]
     },
     {
-      "id": "fastapi",
+      "id": "api",
       "type": "backend",
-      "label": "FastAPI",
+      "label": "FastAPI + RunManager",
       "sublabel": "source-bound lifecycle",
-      "pos": [390, 340],
-      "size": [130, 64]
+      "pos": [435, 400],
+      "size": [180, 68]
     },
     {
       "id": "coordinator",
       "type": "backend",
       "label": "Coordinator",
-      "sublabel": "capability routing",
-      "pos": [570, 340],
-      "size": [130, 64]
+      "sublabel": "routing + synthesis + answer",
+      "pos": [660, 400],
+      "size": [185, 68]
     },
     {
       "id": "sql_agent",
       "type": "backend",
       "label": "Text-to-SQL",
-      "sublabel": "isolated specialist",
-      "pos": [750, 340],
-      "size": [130, 64]
+      "sublabel": "OSI-guided SQL + review",
+      "pos": [900, 230],
+      "size": [175, 68]
     },
     {
-      "id": "semantic",
+      "id": "sql_backend",
       "type": "database",
-      "label": "Selected OSI",
-      "sublabel": "semantic model 0.1.1",
-      "pos": [750, 140],
-      "size": [130, 64],
-      "tag": "required"
-    },
-    {
-      "id": "sql_review",
-      "type": "security",
-      "label": "SQL Review",
-      "sublabel": "approve / edit / reject",
-      "pos": [930, 185],
-      "size": [140, 64],
-      "tag": "before execution"
-    },
-    {
-      "id": "backend",
-      "type": "backend",
       "label": "SQLBackend",
-      "sublabel": "generic execution contract",
-      "pos": [930, 340],
-      "size": [140, 64]
+      "sublabel": "provider-neutral contract",
+      "pos": [1130, 230],
+      "size": [175, 68]
     },
     {
-      "id": "stores",
+      "id": "result_store",
       "type": "database",
-      "label": "Process Stores",
-      "sublabel": "threads + runs + results",
-      "pos": [1120, 140],
-      "size": [150, 64],
-      "tag": "POC memory"
-    },
-    {
-      "id": "sqlite",
-      "type": "database",
-      "label": "SQLiteBackend",
-      "sublabel": "local read-only files",
-      "pos": [1120, 340],
-      "size": [150, 64]
+      "label": "ResultStore",
+      "sublabel": "rows + profile + provenance",
+      "pos": [1360, 230],
+      "size": [185, 68],
+      "tag": "process memory"
     },
     {
       "id": "visualization",
       "type": "backend",
       "label": "Visualization",
-      "sublabel": "one constrained ChartSpec",
-      "pos": [750, 540],
-      "size": [140, 64],
-      "tag": "feature-flagged"
+      "sublabel": "result ID to ChartSpec",
+      "pos": [920, 400],
+      "size": [175, 68],
+      "tag": "explicit request"
     },
     {
-      "id": "renderer",
-      "type": "frontend",
-      "label": "Plotly Renderer",
-      "sublabel": "trusted deterministic code",
-      "pos": [1120, 540],
-      "size": [150, 64]
+      "id": "statistical",
+      "type": "backend",
+      "label": "Statistical analysis",
+      "sublabel": "reviewed Python + runner",
+      "pos": [900, 590],
+      "size": [185, 68],
+      "tag": "three executions max"
     },
     {
-      "id": "snowflake",
-      "type": "cloud",
-      "label": "Snowflake Adapter",
-      "sublabel": "future cloud backend",
-      "pos": [1120, 690],
-      "size": [150, 64],
-      "tag": "conceptual"
+      "id": "run_store",
+      "type": "database",
+      "label": "RunStore + analysis IDs",
+      "sublabel": "exact code + outputs",
+      "pos": [1200, 590],
+      "size": [205, 68],
+      "tag": "authoritative"
+    },
+    {
+      "id": "reporting",
+      "type": "backend",
+      "label": "Report design + renderer",
+      "sublabel": "ReportSpec to standalone HTML",
+      "pos": [900, 60],
+      "size": [215, 68],
+      "tag": "coordinator skill"
+    },
+    {
+      "id": "report_store",
+      "type": "database",
+      "label": "ReportStore",
+      "sublabel": "HTML + spec + provenance",
+      "pos": [1200, 60],
+      "size": [190, 68],
+      "tag": "versioned"
     }
   ],
   "boundaries": [
     {
       "kind": "region",
       "label": "Source-bound agent runtime",
-      "wraps": [
-        "coordinator",
-        "sql_agent",
-        "semantic",
-        "sql_review",
-        "backend",
-        "visualization"
-      ]
+      "wraps": ["coordinator", "sql_agent", "visualization", "statistical", "reporting"]
     },
     {
       "kind": "security-group",
-      "label": "Reviewed SQL and validated chart boundary",
-      "wraps": [
-        "sql_review",
-        "backend",
-        "sqlite",
-        "visualization",
-        "renderer"
-      ]
+      "label": "Reviewed execution and scoped artifact boundary",
+      "wraps": ["sql_backend", "result_store", "run_store", "report_store"]
     }
   ],
   "connections": [
     {
+      "id": "analyst-to-ui",
       "from": "user",
       "to": "streamlit",
       "variant": "emphasis"
     },
     {
+      "id": "ui-to-api",
       "from": "streamlit",
-      "to": "fastapi",
+      "to": "api",
       "label": "HTTP",
       "variant": "emphasis"
     },
     {
-      "from": "fastapi",
+      "id": "api-to-coordinator",
+      "from": "api",
       "to": "coordinator",
-      "label": "source context",
-      "variant": "emphasis",
-      "labelAt": [545, 418]
+      "variant": "emphasis"
     },
     {
+      "id": "coordinator-to-sql",
       "from": "coordinator",
       "to": "sql_agent",
-      "label": "data task",
       "variant": "emphasis"
     },
     {
+      "id": "sql-to-backend",
       "from": "sql_agent",
-      "to": "semantic",
-      "label": "read first",
-      "fromSide": "top",
-      "toSide": "bottom",
-      "route": "orthogonal-v",
-      "labelDx": 45
+      "to": "sql_backend",
+      "variant": "security"
     },
     {
-      "from": "sql_agent",
-      "to": "sql_review",
-      "label": "proposed SQL",
-      "variant": "security",
-      "fromSide": "right",
-      "toSide": "left",
-      "route": "orthogonal-h",
-      "labelAt": [905, 276]
-    },
-    {
-      "from": "sql_review",
-      "to": "backend",
-      "label": "reviewed SQL",
-      "variant": "security",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "route": "orthogonal-v",
-      "labelDx": 48
-    },
-    {
-      "from": "backend",
-      "to": "sqlite",
+      "id": "backend-to-result",
+      "from": "sql_backend",
+      "to": "result_store",
       "variant": "emphasis"
     },
     {
-      "from": "backend",
-      "to": "stores",
-      "label": "SavedResult",
-      "fromSide": "top",
-      "toSide": "left",
-      "route": "orthogonal-h",
-      "labelAt": [1100, 265]
-    },
-    {
-      "from": "backend",
-      "to": "snowflake",
-      "label": "future",
-      "variant": "dashed",
-      "fromSide": "bottom",
-      "toSide": "left",
-      "route": "orthogonal-h",
-      "labelAt": [1085, 670]
-    },
-    {
+      "id": "coordinator-to-visualization",
       "from": "coordinator",
       "to": "visualization",
-      "label": "explicit chart task",
-      "variant": "emphasis",
-      "fromSide": "bottom",
-      "toSide": "left",
-      "route": "orthogonal-h",
-      "labelAt": [690, 515]
+      "variant": "emphasis"
     },
     {
-      "from": "stores",
-      "to": "visualization",
-      "label": "scoped result",
-      "variant": "dashed",
-      "fromSide": "right",
-      "toSide": "bottom",
-      "via": [[1310, 172], [1310, 640], [820, 640]],
-      "labelSegment": 1,
-      "labelDx": 48
+      "id": "coordinator-to-statistics",
+      "from": "coordinator",
+      "to": "statistical",
+      "variant": "emphasis"
     },
     {
-      "from": "stores",
-      "to": "renderer",
-      "label": "full capped rows",
-      "variant": "dashed",
-      "fromSide": "left",
-      "toSide": "top",
-      "via": [[1090, 172], [1090, 500], [1195, 500]],
-      "labelAt": [1040, 470]
+      "id": "statistics-to-run-store",
+      "from": "statistical",
+      "to": "run_store",
+      "variant": "security"
     },
     {
-      "from": "visualization",
-      "to": "renderer",
-      "label": "validated ChartSpec",
-      "variant": "emphasis",
-      "fromSide": "right",
-      "toSide": "left",
-      "labelAt": [910, 618]
+      "id": "coordinator-to-reporting",
+      "from": "coordinator",
+      "to": "reporting",
+      "variant": "emphasis"
+    },
+    {
+      "id": "reporting-to-report-store",
+      "from": "reporting",
+      "to": "report_store",
+      "variant": "emphasis"
     }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "Source isolation",
+      "title": "One coordinator, three analytical specialists",
       "items": [
-        "A conversation is permanently bound to one registered source",
-        "The source fixes OSI, dialect, limits, backend target, and result scope"
+        "Text-to-SQL retrieves source-bound evidence",
+        "Visualization produces validated ChartSpec artifacts",
+        "Statistical analysis runs exact human-reviewed Python"
       ]
     },
     {
-      "dot": "rose",
-      "title": "Reviewed SQL, constrained charts",
+      "dot": "violet",
+      "title": "Reporting stays with the coordinator",
       "items": [
-        "Every SQL execution pauses before database access",
-        "Explicit chart requests auto-run only a validated declarative spec",
-        "Result provenance cannot change and arbitrary Python never executes"
+        "report-design loads only for explicit document requests",
+        "ReportSpec combines same-thread and same-source artifacts",
+        "Trusted code owns HTML, CSP, charts, and renderer JavaScript"
       ]
     },
     {
       "dot": "emerald",
-      "title": "Plug-and-play visualization",
+      "title": "Immediately portable output",
       "items": [
-        "Explicit requests route one saved result to the optional specialist",
-        "One generic ChartSpec covers common charts without arbitrary Python",
-        "Disabling the feature leaves text-to-SQL behavior unchanged"
+        "Every safe report version is stored with a content hash",
+        "Streamlit previews in an isolated iframe",
+        "The exact self-contained HTML bytes are downloadable"
       ]
     }
   ]

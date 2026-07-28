@@ -22,6 +22,13 @@ saved data preloaded as pandas `df`. Compact tables, text, and bounded
 matplotlib/seaborn figures return to the coordinator; the complete DataFrame
 never enters an agent message.
 
+For an explicit report, infographic, briefing, or data-story request, the
+coordinator loads its report-design skill, reuses compatible artifacts or runs
+missing analysis through the existing review flows, and produces a strict
+`ReportSpec`. Trusted code renders one self-contained HTML file for isolated
+Streamlit preview and immediate download; revisions remain conversational and
+do not require an approve/finalize ceremony.
+
 Included local sources:
 
 - **Chinook music store** — catalog, customers, invoices, and playlists
@@ -67,6 +74,9 @@ model.
 - Optional trusted-local debug views for redacted tool inputs and bounded
   per-agent state snapshots
 - Optional Snowflake adapter over an injected `snowlib` client
+- Feature-flagged coordinator reporting skill with open-ended design direction
+- Accessible self-contained HTML reports with scoped provenance, versioning,
+  isolated preview, and byte-identical download
 
 ## Quick start
 
@@ -98,8 +108,8 @@ Development auto-reload is enabled by default. FastAPI reloads when Python,
 Markdown skill/policy, YAML configuration/semantic-model, or `.env` files
 change; Streamlit reruns when its watched source changes. Because all POC stores
 are process-local, a FastAPI reload clears conversations, saved SQL results,
-in-flight reviews, and statistical outputs. Disable reload when retaining a
-manual test session matters:
+in-flight reviews, statistical analyses, and report versions. Disable reload
+when retaining a manual test session matters:
 
 ```bash
 API_AUTO_RELOAD=false ./scripts/start.sh
@@ -224,7 +234,9 @@ Start at [`doc/README.md`](doc/README.md). It provides learning paths for:
 - adding sources and OSI models;
 - implementing database backends;
 - changing safety/HITL;
-- understanding the text-to-SQL and visualization specialists.
+- understanding the text-to-SQL, visualization, and statistical specialists;
+- using or extending the coordinator reporting skill and self-contained HTML
+  renderer.
 
 ## Current limitations
 
@@ -239,8 +251,10 @@ This remains a local, single-user POC:
   result, without arbitrary Python or custom Plotly layout code;
 - reviewed statistical Python is trusted-local code with filesystem, process,
   and network capabilities; production sandboxing is out of scope;
-- statistical outputs remain embedded in the conversation result rather than a
-  separately persisted derived-artifact store;
+- completed statistical outputs and report versions are process-local reusable
+  artifacts and disappear on API reload;
+- self-contained report maps are not yet supported because offline geographic
+  topology is not embedded;
 - semantic models are curated manually;
 - production deployment, audit, retention, and tenant isolation are out of
   scope.
