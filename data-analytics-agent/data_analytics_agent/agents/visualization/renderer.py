@@ -30,11 +30,24 @@ class RenderedChart:
     warnings: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class ChartRenderStyle:
+    """Trusted presentation overrides for a specific rendering surface."""
+
+    discrete_colors: tuple[str, ...] = ()
+    continuous_colors: tuple[str, ...] = ()
+    show_title: bool = True
+    font_family: str | None = None
+
+
 def _is_number(value: Any) -> bool:
     return isinstance(value, Real) and not isinstance(value, bool)
 
 
-def _palette(spec: ChartSpec) -> tuple[list[str], list[str]]:
+def _palette(
+    spec: ChartSpec,
+    style: ChartRenderStyle | None = None,
+) -> tuple[list[str], list[str]]:
     discrete = {
         Palette.DEFAULT: px.colors.qualitative.Safe,
         Palette.BLUES: px.colors.sequential.Blues[2:],
@@ -53,6 +66,11 @@ def _palette(spec: ChartSpec) -> tuple[list[str], list[str]]:
         Palette.SUNSET: px.colors.sequential.Sunset,
         Palette.RED_BLUE: px.colors.diverging.RdBu,
     }[spec.palette]
+    if spec.palette is Palette.DEFAULT and style is not None:
+        if style.discrete_colors:
+            discrete = list(style.discrete_colors)
+        if style.continuous_colors:
+            continuous = list(style.continuous_colors)
     return list(discrete), list(continuous)
 
 
@@ -98,10 +116,27 @@ def _drop_missing(
     return usable
 
 
-def _style_figure(fig: go.Figure, spec: ChartSpec) -> go.Figure:
+def _style_figure(
+    fig: go.Figure,
+    spec: ChartSpec,
+    style: ChartRenderStyle | None = None,
+) -> go.Figure:
+    show_title = style is None or style.show_title
     fig.update_layout(
-        title={"text": spec.title, "x": 0.01, "xanchor": "left"},
-        margin={"l": 24, "r": 24, "t": 64, "b": 32},
+        title=(
+            {"text": spec.title, "x": 0.01, "xanchor": "left"}
+            if show_title
+            else None
+        ),
+        margin={
+            "l": 24,
+            "r": 24,
+            "t": 64 if show_title else 24,
+            "b": 32,
+        },
+        font={"family": style.font_family}
+        if style is not None and style.font_family
+        else None,
         legend={
             "title_text": "",
             "orientation": "h",
@@ -159,8 +194,9 @@ def _render_cartesian(
     frame: pd.DataFrame,
     spec: ChartSpec,
     warnings: list[str],
+    style: ChartRenderStyle | None = None,
 ) -> go.Figure:
-    discrete, continuous = _palette(spec)
+    discrete, continuous = _palette(spec, style)
     for column in spec.y:
         _numeric_column(frame, column, warnings)
     if spec.secondary_y:
@@ -295,12 +331,13 @@ def _render_pie(
     frame: pd.DataFrame,
     spec: ChartSpec,
     warnings: list[str],
+    style: ChartRenderStyle | None = None,
 ) -> go.Figure:
     assert spec.x is not None
     values = spec.y[0]
     _numeric_column(frame, values, warnings, nonnegative=True)
     frame = _drop_missing(frame, [spec.x, values], warnings)
-    discrete, _ = _palette(spec)
+    discrete, _ = _palette(spec, style)
     return px.pie(
         frame,
         names=spec.x,
@@ -314,6 +351,7 @@ def _render_heatmap(
     frame: pd.DataFrame,
     spec: ChartSpec,
     warnings: list[str],
+    style: ChartRenderStyle | None = None,
 ) -> go.Figure:
     assert spec.x is not None and spec.value is not None
     y_column = spec.y[0]
@@ -328,7 +366,7 @@ def _render_heatmap(
         columns=spec.x,
         values=spec.value,
     )
-    _, continuous = _palette(spec)
+    _, continuous = _palette(spec, style)
     return go.Figure(
         data=go.Heatmap(
             x=list(matrix.columns),
@@ -346,8 +384,9 @@ def _render_map(
     spec: ChartSpec,
     warnings: list[str],
     resolver: USLocationResolver,
+    style: ChartRenderStyle | None = None,
 ) -> go.Figure:
-    discrete, continuous = _palette(spec)
+    discrete, continuous = _palette(spec, style)
     if spec.map_mode == "choropleth":
         assert spec.location is not None and spec.value is not None
         _numeric_column(frame, spec.value, warnings)
@@ -473,6 +512,7 @@ def build_chart(
     rows: list[dict[str, Any]],
     *,
     resolver: USLocationResolver | None = None,
+    style: ChartRenderStyle | None = None,
 ) -> RenderedChart:
     """Build one Plotly figure from a previously validated ChartSpec."""
 
@@ -503,19 +543,20 @@ def build_chart(
         raise ValueError("No rows remain for chart rendering.")
 
     if spec.chart_type is ChartType.PIE:
-        figure = _render_pie(frame, spec, warnings)
+        figure = _render_pie(frame, spec, warnings, style)
     elif spec.chart_type is ChartType.HEATMAP:
-        figure = _render_heatmap(frame, spec, warnings)
+        figure = _render_heatmap(frame, spec, warnings, style)
     elif spec.chart_type is ChartType.MAP:
         figure = _render_map(
             frame,
             spec,
             warnings,
             resolver or USLocationResolver(),
+            style,
         )
     else:
-        figure = _render_cartesian(frame, spec, warnings)
+        figure = _render_cartesian(frame, spec, warnings, style)
     return RenderedChart(
-        figure=_style_figure(figure, spec),
+        figure=_style_figure(figure, spec, style),
         warnings=tuple(dict.fromkeys(warnings)),
     )

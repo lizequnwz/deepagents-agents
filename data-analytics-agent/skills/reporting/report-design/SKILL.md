@@ -59,6 +59,10 @@ scope and renders the standalone document.
 - Use a `chart` block with a valid `ChartSpec` and a concise text summary of its
   main insight. Provide the table alternative unless the same data table is
   already adjacent and redundant.
+- For coordinator-authored report charts, normally omit `chart.palette` so the
+  renderer applies the report-safe blue/amber/teal design system consistently.
+  Set a non-default palette only when its sequential or diverging meaning is
+  analytically useful; do not vary palettes decoratively between blocks.
 - Use `statistical_analysis` with `analysis_id` for a prior reusable analysis.
   For reviewed Python completed in this run, use `use_current_run=true` and the
   exact parent result ID. Keep method and interpretation faithful to the

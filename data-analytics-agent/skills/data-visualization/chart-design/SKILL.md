@@ -57,3 +57,16 @@ them, report that the chart cannot be created.
 Use column names exactly as returned by the saved result. Give the chart a
 specific title and concise axis labels, including `secondary_y_label` for a
 dual-axis chart; do not encode unsupported styling or invent fields.
+
+## Choose color deliberately
+
+- Prefer `default` for categorical series. The trusted renderer supplies a
+  restrained, colorblind-conscious sequence appropriate to its presentation
+  surface; do not choose a palette merely for decoration.
+- Use `blues` or `teal` for ordered magnitude, and `viridis` for a perceptually
+  uniform continuous scale. Use `red_blue` only for a genuinely diverging
+  measure with a meaningful midpoint.
+- Use `sunset` or `plasma` sparingly when the subject benefits from a warmer or
+  higher-energy direction. Keep one palette language across related charts.
+- Never rely on hue alone. Retain axis labels, legends, hover values, the text
+  summary, and the accessible table alternative.

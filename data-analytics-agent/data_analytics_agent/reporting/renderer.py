@@ -13,7 +13,10 @@ from typing import Any
 
 from plotly.io import to_html as plotly_to_html
 
-from data_analytics_agent.agents.visualization.renderer import build_chart
+from data_analytics_agent.agents.visualization.renderer import (
+    ChartRenderStyle,
+    build_chart,
+)
 from data_analytics_agent.agents.visualization.schemas import ChartType
 from data_analytics_agent.agents.visualization.validation import (
     validate_chart_spec,
@@ -34,7 +37,35 @@ from data_analytics_agent.schemas import SavedResult
 
 _SCRIPT_PATTERN = re.compile(r"<script(?:\s[^>]*)?>(.*?)</script>", re.DOTALL)
 _INLINE_PATTERN = re.compile(r"\*\*(.+?)\*\*|`([^`]+)`")
-REPORT_RENDERER_VERSION = "1.1"
+REPORT_RENDERER_VERSION = "1.2"
+
+# Report-owned semantic chart tokens. Every categorical color maintains at
+# least 3:1 contrast against both the light and dark report surfaces.
+_REPORT_CHART_DISCRETE = (
+    "#2563EB",  # primary blue
+    "#D97706",  # highlight amber
+    "#0F766E",  # comparison teal
+    "#9333EA",  # secondary violet
+    "#DB2777",  # secondary rose
+    "#4D7C0F",  # secondary olive
+    "#0891B2",  # secondary cyan
+)
+_REPORT_CHART_CONTINUOUS = (
+    "#E0F2FE",
+    "#7DD3FC",
+    "#0284C7",
+    "#075985",
+    "#082F49",
+)
+_REPORT_CHART_STYLE = ChartRenderStyle(
+    discrete_colors=_REPORT_CHART_DISCRETE,
+    continuous_colors=_REPORT_CHART_CONTINUOUS,
+    show_title=False,
+    font_family=(
+        "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "
+        "Segoe UI, sans-serif"
+    ),
+)
 
 
 def _inline_text(value: str) -> str:
@@ -316,7 +347,11 @@ def _chart(
             "topology must also be embedded. Use a table or non-map chart."
         )
     validate_chart_spec(block.chart, result)
-    rendered = build_chart(block.chart, result.rows)
+    rendered = build_chart(
+        block.chart,
+        result.rows,
+        style=_REPORT_CHART_STYLE,
+    )
     chart_html = plotly_to_html(
         rendered.figure,
         include_plotlyjs=True if include_plotly else False,
@@ -384,6 +419,7 @@ def _style(spec: ReportSpec) -> str:
   --surface: {theme.surface_color}; --background: {theme.background_color};
   --text: {theme.text_color}; --muted: {theme.muted_color};
   --border: color-mix(in srgb, var(--text) 14%, transparent);
+  --chart-grid: rgba(71, 85, 105, .24);
   --gap: {gap}; --radius: {radius}; --font: {_font_stack(theme.font_style)};
 }}
 * {{ box-sizing: border-box; }}
@@ -433,8 +469,8 @@ details {{ margin-top: 1rem; }} summary {{ min-height: 44px; display: flex; alig
 .sql-query pre {{ max-width: 100%; margin: 0; padding: 1rem; overflow: auto; border: 1px solid var(--border); border-radius: calc(var(--radius) * .65); background: color-mix(in srgb, var(--text) 6%, var(--surface)); font-size: .82rem; line-height: 1.55; tab-size: 2; white-space: pre; }}
 .sql-query pre code {{ padding: 0; background: transparent; }}
 code {{ padding: .1rem .3rem; border-radius: .25rem; background: color-mix(in srgb, var(--text) 8%, transparent); }}
-body[data-theme='dark'] {{ --surface: #111827; --background: #020617; --text: #F8FAFC; --muted: #CBD5E1; --border: #334155; }}
-@media (prefers-color-scheme: dark) {{ body:not([data-theme='light']) {{ --surface: #111827; --background: #020617; --text: #F8FAFC; --muted: #CBD5E1; --border: #334155; }} }}
+body[data-theme='dark'] {{ --surface: #111827; --background: #020617; --text: #F8FAFC; --muted: #CBD5E1; --border: #334155; --chart-grid: rgba(203, 213, 225, .24); }}
+@media (prefers-color-scheme: dark) {{ body:not([data-theme='light']) {{ --surface: #111827; --background: #020617; --text: #F8FAFC; --muted: #CBD5E1; --border: #334155; --chart-grid: rgba(203, 213, 225, .24); }} }}
 @media (max-width: 1100px) {{ .metrics-grid {{ grid-template-columns: repeat(var(--metric-tablet-columns), minmax(0, 1fr)); }} }}
 @media (max-width: 700px) {{ .report-shell {{ width: calc(100% - 1rem); }} .report-hero {{ padding: 1.75rem 1.1rem; }} .metrics-grid {{ grid-template-columns: repeat(var(--metric-mobile-columns), minmax(0, 1fr)); }} .infographic.steps .infographic-item::after {{ display: none; }} .report-block {{ padding: 1.05rem; }} }}
 @media (max-width: 430px) {{ .metrics-grid {{ grid-template-columns: 1fr; }} body {{ font-size: 16px; }} .sql-query pre {{ padding: .8rem; font-size: .78rem; }} }}
@@ -552,17 +588,57 @@ def render_report(
         if spec.footer
         else ""
     )
-    interaction_script = """
+    interaction_script = r"""
 (() => {
   const button = document.getElementById('theme-toggle');
+  const body = document.body;
+  const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+
+  const activeTheme = () => body.dataset.theme || (systemTheme.matches ? 'dark' : 'light');
+
+  const syncPlotTheme = () => {
+    if (!window.Plotly) return;
+    const tokens = getComputedStyle(body);
+    const text = tokens.getPropertyValue('--text').trim();
+    const muted = tokens.getPropertyValue('--muted').trim();
+    const surface = tokens.getPropertyValue('--surface').trim();
+    const border = tokens.getPropertyValue('--chart-grid').trim();
+    document.querySelectorAll('.plotly-graph-div').forEach((chart) => {
+      const update = {
+        'font.color': text,
+        'legend.font.color': text,
+        'hoverlabel.bgcolor': surface,
+        'hoverlabel.bordercolor': border,
+        'hoverlabel.font.color': text,
+        'paper_bgcolor': 'rgba(0,0,0,0)',
+        'plot_bgcolor': 'rgba(0,0,0,0)'
+      };
+      Object.keys(chart.layout || {}).forEach((key) => {
+        if (/^[xy]axis\d*$/.test(key)) {
+          update[`${key}.color`] = muted;
+          update[`${key}.gridcolor`] = border;
+        }
+      });
+      window.Plotly.relayout(chart, update);
+    });
+  };
+
+  const syncThemeControl = () => {
+    const next = activeTheme() === 'dark' ? 'light' : 'dark';
+    button.setAttribute('aria-label', `Use ${next} theme`);
+    button.textContent = `${next[0].toUpperCase()}${next.slice(1)} theme`;
+    syncPlotTheme();
+  };
+
   button.addEventListener('click', () => {
-    const body = document.body;
-    const current = body.dataset.theme;
-    const next = current === 'dark' ? 'light' : 'dark';
+    const next = activeTheme() === 'dark' ? 'light' : 'dark';
     body.dataset.theme = next;
-    button.setAttribute('aria-label', `Use ${next === 'dark' ? 'light' : 'dark'} theme`);
-    button.textContent = next === 'dark' ? 'Light theme' : 'Dark theme';
+    syncThemeControl();
   });
+  systemTheme.addEventListener('change', () => {
+    if (!body.dataset.theme) syncThemeControl();
+  });
+  syncThemeControl();
 })();
 """.strip()
     content = (

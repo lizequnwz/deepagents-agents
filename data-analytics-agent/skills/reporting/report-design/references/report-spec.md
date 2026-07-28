@@ -128,6 +128,10 @@ Use the established `ChartSpec` rules. Common chart types are `bar`, `line`,
 reports are currently unsupported. Optional mappings include `color`, `size`,
 `value`, `secondary_y`, labels, sorting, category limit, bin count, palette,
 orientation, donut, and box-point behavior.
+Omit `palette` for normal report charts: the renderer replaces the generic
+Plotly default with its accessible blue/amber/teal report palette. An explicit
+non-default `palette` remains authoritative when a sequential, perceptual, or
+diverging scale has analytical meaning.
 Sorting uses `sort_by` and `sort_direction`; there is no `sort` field. A
 `category_limit` requires `sort_by` so the retained categories are
 deterministic.

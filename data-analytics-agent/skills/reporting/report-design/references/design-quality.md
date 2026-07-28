@@ -46,6 +46,13 @@ Apply these rules when constructing `ReportTheme` and choosing report blocks.
 - Label axes and units. Keep legends close to the chart and exact values
   reachable.
 - Do not overload one chart with unrelated measures or excessive categories.
+- Use a restrained, colorblind-conscious categorical sequence with at least
+  3:1 contrast against chart surfaces. Keep palette order consistent across a
+  report; use sequential or diverging scales only when the data semantics call
+  for them.
+- Let the renderer-owned default palette inherit the report's visual language.
+  Avoid Plotly defaults or ad hoc per-chart colors that make one document feel
+  assembled from unrelated dashboards.
 - Use tabular figures for numbers. Choose the smallest useful column set and
   preserve a logical column order.
 - A chart's summary should state the finding, not merely describe its geometry.

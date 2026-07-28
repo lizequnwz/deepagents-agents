@@ -7,7 +7,10 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from data_analytics_agent.agents.visualization.geocoding import GeoPoint
-from data_analytics_agent.agents.visualization.renderer import build_chart
+from data_analytics_agent.agents.visualization.renderer import (
+    ChartRenderStyle,
+    build_chart,
+)
 from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
     VisualizationOutcome,
@@ -256,6 +259,28 @@ def test_renderer_builds_chart_and_reports_excluded_invalid_values() -> None:
     assert len(rendered.figure.data) == 1
     assert any("incompatible" in warning for warning in rendered.warnings)
     assert any("missing bar point" in warning for warning in rendered.warnings)
+
+
+def test_surface_style_overrides_only_default_chart_palette() -> None:
+    style = ChartRenderStyle(
+        discrete_colors=("#2563EB", "#D97706", "#0F766E"),
+        continuous_colors=("#E0F2FE", "#0284C7", "#082F49"),
+        show_title=False,
+        font_family="Inter, sans-serif",
+    )
+
+    styled = build_chart(_bar_spec(), _saved_result().rows, style=style).figure
+    explicit = build_chart(
+        _bar_spec(palette="sunset"),
+        _saved_result().rows,
+        style=style,
+    ).figure
+
+    assert styled.data[0].marker.color == "#2563EB"
+    assert styled.layout.title.text is None
+    assert styled.layout.margin.t == 24
+    assert styled.layout.font.family == "Inter, sans-serif"
+    assert explicit.data[0].marker.color != "#2563EB"
 
 
 def test_heatmap_accepts_two_dimensions_and_one_numeric_value() -> None:

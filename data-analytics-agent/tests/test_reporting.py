@@ -288,6 +288,42 @@ def test_metric_grid_caps_columns_at_responsive_breakpoints() -> None:
     assert "SQL queries" not in html
 
 
+def test_report_chart_uses_coherent_default_palette() -> None:
+    results = ResultStore()
+    saved = _saved_result(results)
+    spec = ReportSpec.model_validate(
+        {
+            "title": "Chart report",
+            "blocks": [
+                {
+                    "type": "chart",
+                    "summary": "Category A has the larger amount.",
+                    "show_data_table": False,
+                    "chart": {
+                        "result_id": saved.result_id,
+                        "chart_type": "bar",
+                        "title": "Amount by category",
+                        "x": "category",
+                        "y": ["amount"],
+                    },
+                }
+            ],
+        }
+    )
+
+    html = render_report(
+        spec,
+        results={saved.result_id: saved},
+        analyses={},
+        generated_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+
+    assert "#2563EB" in html
+    assert html.count("Amount by category") == 1
+    assert "Plotly.relayout" in html
+    assert "hoverlabel.bgcolor" in html
+
+
 def test_report_tool_enforces_scope_and_versions_revisions() -> None:
     results = ResultStore()
     saved = _saved_result(results)
@@ -338,7 +374,7 @@ def test_report_tool_enforces_scope_and_versions_revisions() -> None:
         revised.report.report_id,
         "thread-1",
         source_id="source-1",
-    ).renderer_version == "1.1"
+    ).renderer_version == "1.2"
 
     wrong_thread = SimpleNamespace(
         state={
