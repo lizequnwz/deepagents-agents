@@ -105,12 +105,14 @@ The launcher runs `uv sync --locked`, validates the registry and source
 readiness, starts FastAPI and Streamlit, and supervises both processes. Press
 Ctrl+C to stop them.
 
-Development auto-reload is enabled by default. FastAPI reloads when Python,
-Markdown skill/policy, YAML configuration/semantic-model, or `.env` files
-change; Streamlit reruns when its watched source changes. Because all POC stores
-are process-local, a FastAPI reload clears conversations, saved SQL results,
-in-flight reviews, statistical analyses, and report versions. Disable reload
-when retaining a manual test session matters:
+Development auto-reload is enabled by default. FastAPI watches only Python
+source inside `data_analytics_agent/`, using Uvicorn's default `*.py` filter;
+the project `.venv` is outside the watched tree. Streamlit reruns independently
+when its watched source changes. Restart FastAPI manually after changing
+`.env`, Markdown policies/skills, source YAML, or semantic models. Because all
+POC stores are process-local, a FastAPI reload clears conversations, saved SQL
+results, in-flight reviews, statistical analyses, and report versions. Disable
+reload when retaining a manual test session matters:
 
 ```bash
 API_AUTO_RELOAD=false ./scripts/start.sh

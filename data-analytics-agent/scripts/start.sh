@@ -99,14 +99,7 @@ case "${API_AUTO_RELOAD}" in
   true|1|yes|on)
     API_RELOAD_ARGS=(
       --reload
-      --reload-dir "${PROJECT_ROOT}"
-      --reload-include '*.py'
-      --reload-include '*.md'
-      --reload-include '*.yaml'
-      --reload-include '*.yml'
-      --reload-include '.env'
-      --reload-exclude '.venv'
-      --reload-exclude '.git'
+      --reload-dir "${PROJECT_ROOT}/data_analytics_agent"
     )
     ;;
   false|0|no|off)

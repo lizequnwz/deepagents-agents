@@ -17,12 +17,12 @@ def test_start_script_is_valid_bash() -> None:
     )
 
 
-def test_start_script_enables_configurable_development_reload() -> None:
+def test_start_script_watches_only_application_python() -> None:
     script = START_SCRIPT.read_text(encoding="utf-8")
 
     assert 'API_AUTO_RELOAD="${API_AUTO_RELOAD:-true}"' in script
-    assert "--reload-include '*.py'" in script
-    assert "--reload-include '*.md'" in script
-    assert "--reload-include '*.yaml'" in script
-    assert "--reload-include '.env'" in script
+    assert '--reload-dir "${PROJECT_ROOT}/data_analytics_agent"' in script
+    assert '--reload-dir "${PROJECT_ROOT}"' not in script
+    assert "--reload-include" not in script
+    assert "--reload-exclude" not in script
     assert "--server.runOnSave=true" in script

@@ -125,11 +125,11 @@ The launcher:
 6. starts Streamlit and waits for its health endpoint;
 7. supervises both child processes.
 
-Development reload is enabled by default. The FastAPI watcher includes
-`*.py`, `*.md`, `*.yaml`, `*.yml`, and `.env`, so changes to application code,
-agent policies/skills, source configuration, and semantic models take effect
-without manually restarting the launcher. Streamlit also reruns on watched
-source changes.
+Development reload is enabled by default. The FastAPI watcher is rooted at
+`data_analytics_agent/` and uses Uvicorn's default `*.py` filter. The project
+`.venv` is therefore outside the watched tree entirely. Restart FastAPI
+manually after changing `.env`, Markdown agent policies/skills, source YAML, or
+semantic models. Streamlit also reruns on watched source changes.
 
 FastAPI reload creates a new process and therefore clears the POC's in-memory
 `ConversationStore`, `RunStore`, `ResultStore`, `StatisticalAnalysisStore`, and
@@ -150,9 +150,9 @@ uv run streamlit run streamlit_app.py \
   --server.address 127.0.0.1 --server.port 8501
 ```
 
-Registry and readiness summaries are cached. With auto-reload disabled,
-restart FastAPI after modifying the registry, semantic models, backend targets,
-or global limits.
+Registry and readiness summaries are cached. Restart FastAPI after modifying
+the registry, semantic models, backend targets, or global limits in `.env`.
+With auto-reload disabled, also restart it after changing Python source.
 
 ## Readiness
 
