@@ -1,6 +1,6 @@
 # Project handoff: Data Analytics Agent
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 ## Executive summary
 
@@ -322,10 +322,10 @@ Endpoints:
 
 ## Verification status
 
-Last verified on 2026-07-27:
+Last verified on 2026-07-28:
 
 ```text
-147 passed, 1 skipped
+149 passed, 1 skipped
 ```
 
 The skip is the opt-in live OpenAI smoke test. Python compilation also passes.
