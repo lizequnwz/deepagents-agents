@@ -56,15 +56,19 @@ runtime:
 
 | Agent | Model calls | All tool calls | Tool-specific calls |
 | --- | ---: | ---: | ---: |
-| Coordinator | `COORDINATOR_MODEL_CALL_LIMIT=12` | `COORDINATOR_TOOL_CALL_LIMIT=12` | `COORDINATOR_TASK_CALL_LIMIT=4` |
+| Coordinator | `COORDINATOR_MODEL_CALL_LIMIT=32` | `COORDINATOR_TOOL_CALL_LIMIT=24` | `COORDINATOR_TASK_CALL_LIMIT=12` |
 | Text-to-SQL | `SQL_AGENT_MODEL_CALL_LIMIT=24` | `SQL_AGENT_TOOL_CALL_LIMIT=30` | `SQL_EXECUTE_CALL_LIMIT=3` |
 | Visualization | `VISUALIZATION_AGENT_MODEL_CALL_LIMIT=12` | `VISUALIZATION_AGENT_TOOL_CALL_LIMIT=16` | — |
 | Statistical analysis | `STATISTICAL_AGENT_MODEL_CALL_LIMIT=24` | `STATISTICAL_AGENT_TOOL_CALL_LIMIT=24` | Three actual executions enforced separately |
 
-Each new user message starts a fresh budget. The same budget continues across
-approve, edit, and reject resumptions for that run. Exceeding a limit fails the
-run with `execution_budget_exceeded` rather than relying on a very high graph
-recursion limit.
+Each new user message starts a fresh coordinator budget. The same coordinator
+budget continues across approve, edit, and reject resumptions for that run.
+Each specialist assignment has its own budget, which continues across that
+assignment's review resumptions. The coordinator model allowance is larger
+than its all-tool allowance so it can still produce the final structured answer
+after the last permitted tool call. Exceeding a limit fails the run with
+`execution_budget_exceeded` rather than relying on a very high graph recursion
+limit.
 
 Failed runs always expose safe diagnostics: agent, budget type, limit,
 attempted count, run ID, and the specific tool when applicable. Set

@@ -141,20 +141,24 @@ def test_settings_use_confirmed_budget_defaults(
         "SQL_EXECUTE_CALL_LIMIT",
         "VISUALIZATION_AGENT_MODEL_CALL_LIMIT",
         "VISUALIZATION_AGENT_TOOL_CALL_LIMIT",
+        "STATISTICAL_AGENT_MODEL_CALL_LIMIT",
+        "STATISTICAL_AGENT_TOOL_CALL_LIMIT",
     ]
     for name in names:
         monkeypatch.delenv(name, raising=False)
 
     settings = Settings()
 
-    assert settings.coordinator_model_call_limit == 12
-    assert settings.coordinator_tool_call_limit == 12
-    assert settings.coordinator_task_call_limit == 4
+    assert settings.coordinator_model_call_limit == 32
+    assert settings.coordinator_tool_call_limit == 24
+    assert settings.coordinator_task_call_limit == 12
     assert settings.sql_agent_model_call_limit == 24
     assert settings.sql_agent_tool_call_limit == 30
     assert settings.sql_execute_call_limit == 3
     assert settings.visualization_agent_model_call_limit == 12
     assert settings.visualization_agent_tool_call_limit == 16
+    assert settings.statistical_agent_model_call_limit == 24
+    assert settings.statistical_agent_tool_call_limit == 24
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "invalid"])

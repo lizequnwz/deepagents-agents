@@ -121,10 +121,18 @@ Reporting is available for explicit requests for a report, infographic,
 briefing, findings document, data story, or downloadable HTML. Keep reporting
 in the coordinator; do not delegate it to another subagent. Load the
 report-design skill, reuse suitable same-conversation artifacts, and obtain new
-reviewed SQL or statistical evidence when necessary. Then call `create_report`
-with one declarative `ReportSpec`. Trusted application code owns HTML, CSS,
-JavaScript, artifact resolution, rendering, and storage. Never write or request
-arbitrary markup or scripts.
+reviewed SQL or statistical evidence when necessary. Then serialize one
+declarative `ReportSpec` as JSON and pass that string to `create_report` as
+`report_json`. Trusted application code owns HTML, CSS, JavaScript, artifact
+resolution, rendering, and storage. Never write or request arbitrary markup or
+scripts.
+
+`create_report` returns `ok=false` with compact field paths for expected
+specification, artifact-reference, or rendering errors. Correct those exact
+issues and retry once with a complete specification; never repeat the same
+payload. If the retry fails, explain the remaining limitation instead of
+looping. Omit optional fields and theme overrides that do not materially help
+the requested report.
 
 A report may combine multiple result and statistical-analysis artifacts from
 this conversation and source. Use `list_conversation_analyses` and

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
+from typing import Any
 
 from langchain.tools import ToolRuntime, tool
+from pydantic import ValidationError
 
 from data_analytics_agent.agents.statistical_analysis.schemas import (
     StatisticalAnalysisOutcome,
@@ -12,11 +15,12 @@ from data_analytics_agent.agents.statistical_analysis.schemas import (
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
 from data_analytics_agent.reporting.renderer import render_report
 from data_analytics_agent.reporting.schemas import (
-    CreateReportToolInput,
     ReportChartBlock,
     ReportSpec,
     ReportStatisticalBlock,
     ReportTableBlock,
+    ReportToolFailure,
+    ReportToolIssue,
     ReportToolResult,
     ResolvedStatisticalAnalysis,
 )
@@ -27,6 +31,92 @@ from data_analytics_agent.stores import (
     StatisticalAnalysisStore,
     StoreNotFound,
 )
+
+
+def _report_failure(
+    code: str,
+    message: str,
+    *,
+    issues: list[ReportToolIssue] | None = None,
+) -> str:
+    """Return an expected, compact failure as a successful tool result."""
+
+    return ReportToolFailure(
+        code=code,
+        message=message,
+        issues=issues or [],
+    ).model_dump_json()
+
+
+def _strip_json_fence(value: str) -> str:
+    """Accept an accidental Markdown JSON fence without weakening validation."""
+
+    stripped = value.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.splitlines()
+    if len(lines) >= 3 and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return stripped
+
+
+def _validation_issues(error: ValidationError) -> list[ReportToolIssue]:
+    issues: list[ReportToolIssue] = []
+    for item in error.errors(
+        include_input=False,
+        include_url=False,
+    )[:8]:
+        location = ".".join(str(part) for part in item.get("loc") or ())
+        issues.append(
+            ReportToolIssue(
+                path=location or "report",
+                message=str(item.get("msg") or "Invalid value."),
+            )
+        )
+    return issues
+
+
+def _parse_report_spec(report_json: str) -> ReportSpec | str:
+    """Parse common transport variations, then apply the strict internal model."""
+
+    candidate: Any = _strip_json_fence(report_json)
+    try:
+        candidate = json.loads(candidate)
+        # Be tolerant of one accidental extra JSON encoding layer.
+        if isinstance(candidate, str):
+            candidate = json.loads(candidate)
+    except (TypeError, json.JSONDecodeError) as exc:
+        return _report_failure(
+            "invalid_report_json",
+            "The report was not valid JSON. Correct the JSON and retry once.",
+            issues=[
+                ReportToolIssue(
+                    path="report_json",
+                    message=f"{exc.msg} at line {exc.lineno}, column {exc.colno}.",
+                )
+            ]
+            if isinstance(exc, json.JSONDecodeError)
+            else None,
+        )
+
+    # Accept the obsolete {"spec": {...}} wrapper used by the first prototype.
+    if (
+        isinstance(candidate, dict)
+        and "title" not in candidate
+        and "blocks" not in candidate
+        and isinstance(candidate.get("spec"), dict)
+    ):
+        candidate = candidate["spec"]
+
+    try:
+        return ReportSpec.model_validate(candidate)
+    except ValidationError as exc:
+        return _report_failure(
+            "invalid_report_spec",
+            "The report specification was invalid. Fix the listed fields "
+            "and retry once.",
+            issues=_validation_issues(exc),
+        )
 
 
 def create_list_conversation_analyses_tool(
@@ -103,16 +193,21 @@ def create_create_report_tool(
     *,
     source_id: str,
 ):
-    @tool(args_schema=CreateReportToolInput)
-    def create_report(spec: ReportSpec, runtime: ToolRuntime) -> str:
+    @tool
+    def create_report(report_json: str, runtime: ToolRuntime) -> str:
         """Create one validated, self-contained HTML report artifact.
 
         Use only after loading the report-design skill and obtaining every
-        required analysis artifact. The model supplies declarative content and
-        design choices; trusted application code resolves scoped data, renders
-        the HTML, and owns all JavaScript.
+        required analysis artifact. Pass a JSON-encoded ReportSpec string in
+        `report_json`; do not pass an object or HTML. Trusted application code
+        validates the JSON, resolves scoped data, renders the HTML, and owns all
+        JavaScript.
         """
 
+        parsed = _parse_report_spec(report_json)
+        if isinstance(parsed, str):
+            return parsed
+        spec = parsed
         context = _runtime_context(runtime)
         if context.source_id != source_id:
             raise ValueError(
@@ -136,17 +231,28 @@ def create_create_report_tool(
                             context.thread_id,
                             source_id=source_id,
                         )
-                    except StoreNotFound as exc:
-                        raise ValueError(
+                    except StoreNotFound:
+                        return _report_failure(
+                            "artifact_not_found",
                             "That statistical analysis does not exist in this "
-                            "data-source conversation."
-                        ) from exc
+                            "data-source conversation.",
+                            issues=[
+                                ReportToolIssue(
+                                    path="blocks.analysis_id",
+                                    message=(
+                                        "Use a listed analysis ID or run the "
+                                        "required analysis first."
+                                    ),
+                                )
+                            ],
+                        )
                     if (
                         saved.analysis.outcome
                         is not StatisticalAnalysisOutcome.ANALYSIS_COMPLETED
                     ):
-                        raise ValueError(
-                            "Only completed statistical analyses can be embedded."
+                        return _report_failure(
+                            "artifact_not_ready",
+                            "Only completed statistical analyses can be embedded.",
                         )
                     key = block.analysis_id
                     analyses[key] = ResolvedStatisticalAnalysis(
@@ -167,14 +273,25 @@ def create_create_report_tool(
                 else:
                     execution = run_store.get_statistical_execution(context.run_id)
                     if execution is None:
-                        raise ValueError(
-                            "The current run has no completed reviewed statistical "
-                            "execution to embed."
+                        return _report_failure(
+                            "artifact_not_ready",
+                            "The current run has no completed reviewed "
+                            "statistical execution to embed.",
                         )
                     if execution.parent_result_id != block.parent_result_id:
-                        raise ValueError(
-                            "The current statistical block references a different "
-                            "parent result."
+                        return _report_failure(
+                            "artifact_not_found",
+                            "The current statistical block references a "
+                            "different parent result.",
+                            issues=[
+                                ReportToolIssue(
+                                    path="blocks.parent_result_id",
+                                    message=(
+                                        "Use the exact result ID reviewed by "
+                                        "the statistical analysis."
+                                    ),
+                                )
+                            ],
                         )
                     key = f"current:{block.parent_result_id}"
                     analyses[key] = ResolvedStatisticalAnalysis(
@@ -199,11 +316,21 @@ def create_create_report_tool(
                         context.thread_id,
                         source_id=source_id,
                     )
-                except StoreNotFound as exc:
-                    raise ValueError(
+                except StoreNotFound:
+                    return _report_failure(
+                        "artifact_not_found",
                         "A report block references a result outside this "
-                        "data-source conversation."
-                    ) from exc
+                        "data-source conversation.",
+                        issues=[
+                            ReportToolIssue(
+                                path="blocks.result_id",
+                                message=(
+                                    "Use a listed result ID or obtain the "
+                                    "required result first."
+                                ),
+                            )
+                        ],
+                    )
 
         if spec.previous_report_id:
             try:
@@ -212,18 +339,38 @@ def create_create_report_tool(
                     context.thread_id,
                     source_id=source_id,
                 )
-            except StoreNotFound as exc:
-                raise ValueError(
-                    "The previous report does not exist in this conversation."
-                ) from exc
+            except StoreNotFound:
+                return _report_failure(
+                    "artifact_not_found",
+                    "The previous report does not exist in this conversation.",
+                    issues=[
+                        ReportToolIssue(
+                            path="previous_report_id",
+                            message=(
+                                "Use the exact prior report ID or omit this "
+                                "field for a new report."
+                            ),
+                        )
+                    ],
+                )
 
         generated_at = datetime.now(timezone.utc)
-        html = render_report(
-            spec,
-            results=results,
-            analyses=analyses,
-            generated_at=generated_at,
-        )
+        try:
+            html = render_report(
+                spec,
+                results=results,
+                analyses=analyses,
+                generated_at=generated_at,
+            )
+        except ValueError as exc:
+            return _report_failure(
+                "report_render_failed",
+                "The report could not be rendered from the supplied "
+                "specification. Correct it and retry once.",
+                issues=[
+                    ReportToolIssue(path="blocks", message=str(exc))
+                ],
+            )
         artifact = report_store.save(
             thread_id=context.thread_id,
             source_id=source_id,

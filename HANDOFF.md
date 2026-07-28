@@ -69,6 +69,11 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
   counters. Budget failure returns safe typed diagnostics naming the agent,
   budget, attempted count, and limit, with bounded secret-redacted tool
   payloads available only in opt-in debug mode.
+- Coordinator reporting budget defaults are 32 model calls, 24 total tool
+  calls, and 12 specialist `task` calls. The model allowance intentionally
+  exceeds the tool allowance so a complex report can still emit its final
+  structured answer after the last permitted tool call. Each specialist task
+  has a fresh specialist budget that persists through its own HITL resumptions.
 - SQL: one reviewed read-only query; exact edited SQL executes.
 - SQL limits: generated SQL has no default `LIMIT`; a limit appears only when
   the user explicitly requests a row count. The backend retrieval cap remains
@@ -127,6 +132,12 @@ Canonical Archify sources, interactive HTML, and dual-theme SVGs live in
   renderer owns markup assembly and any audited JavaScript; the model cannot
   inject arbitrary scripts. Every safe Streamlit preview is downloadable and
   conversationally revisable without mandatory approval or finalization.
+- Report reliability: the provider-facing `create_report` contract is one
+  string field with no nested unions. Trusted code parses the internal typed
+  spec and returns compact `ok=false` repair paths for expected validation,
+  artifact, or render problems; the coordinator makes at most one corrected
+  attempt. Streamlit uses a 900-pixel expanded-by-default collapsible preview,
+  and statistical caveats are deduplicated behind disclosure panels.
 - Report design: style remains open-ended. Infographic, statistical
   report, executive briefing, exploratory report, comparison, and appendix are
   examples rather than an allowlist. UI/UX Pro Max guidance supplies
@@ -200,7 +211,7 @@ Streamlit
      -> report-design skill (explicit document request + feature enabled)
         -> discover same-thread/same-source results and analyses
         -> invoke missing SQL, visualization, or statistical work as needed
-        -> validate strict declarative ReportSpec with no executable markup
+        -> validate strict declarative ReportSpec with one bounded repair attempt
         -> trusted renderer embeds required data/assets into standalone HTML
   -> provenance-checked FinalAnswer
   -> RunManager attaches authoritative statistical and report artifacts
@@ -314,7 +325,7 @@ Endpoints:
 Last verified on 2026-07-27:
 
 ```text
-146 passed, 1 skipped
+147 passed, 1 skipped
 ```
 
 The skip is the opt-in live OpenAI smoke test. Python compilation also passes.

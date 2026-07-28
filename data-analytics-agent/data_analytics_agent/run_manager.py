@@ -726,7 +726,12 @@ def _activity_arguments(tool_name: str, tool_input: Any) -> dict[str, Any]:
         analysis_id = str(data.get("analysis_id") or "")
         return {"analysis": analysis_id[:8]} if analysis_id else {}
     if tool_name == "create_report":
-        raw_spec = data.get("spec")
+        raw_spec = data.get("report_json")
+        if isinstance(raw_spec, str):
+            try:
+                raw_spec = json.loads(raw_spec)
+            except (TypeError, ValueError):
+                return {}
         if not isinstance(raw_spec, Mapping):
             return {}
         arguments = {

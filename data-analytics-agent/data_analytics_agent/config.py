@@ -165,17 +165,17 @@ class Settings:
     )
     coordinator_model_call_limit: int = field(
         default_factory=lambda: _env_positive_int(
-            "COORDINATOR_MODEL_CALL_LIMIT", 12
+            "COORDINATOR_MODEL_CALL_LIMIT", 32
         )
     )
     coordinator_tool_call_limit: int = field(
         default_factory=lambda: _env_positive_int(
-            "COORDINATOR_TOOL_CALL_LIMIT", 12
+            "COORDINATOR_TOOL_CALL_LIMIT", 24
         )
     )
     coordinator_task_call_limit: int = field(
         default_factory=lambda: _env_positive_int(
-            "COORDINATOR_TASK_CALL_LIMIT", 4
+            "COORDINATOR_TASK_CALL_LIMIT", 12
         )
     )
     sql_agent_model_call_limit: int = field(

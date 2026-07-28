@@ -9,6 +9,15 @@ Create an evidence-backed `ReportSpec`; never write HTML, CSS, JavaScript, data
 URLs, or event handlers. The trusted `create_report` tool validates artifact
 scope and renders the standalone document.
 
+## Required tool contract
+
+- Call `create_report` with exactly one model-supplied argument:
+  `report_json="<JSON-encoded ReportSpec>"`.
+- The decoded object requires `title` and `blocks`. Put result and analysis IDs
+  inside typed blocks; there is no top-level `artifact_ids`, `instructions`,
+  `output_format`, job, or status-polling contract.
+- Read [report-spec.md](references/report-spec.md) before composing the payload.
+
 ## Workflow
 
 1. Interpret the purpose, audience, key questions, evidence, and requested
@@ -22,11 +31,19 @@ scope and renders the standalone document.
 4. Choose an information hierarchy and coherent design system. Read
    [design-quality.md](references/design-quality.md) before selecting theme,
    layout, charts, or infographic composition.
-5. Build one declarative `ReportSpec`. Use typed blocks to express content and
-   composition; do not simulate unsupported markup.
-6. Call `create_report` once after the evidence and specification are ready.
-   Treat its returned report ID, version, hash, and message as authoritative.
-7. Tell the user the preview is ready and invite optional feedback or further
+5. Read [report-spec.md](references/report-spec.md), then build one declarative
+   `ReportSpec`. Use typed blocks to express content and composition; do not
+   simulate unsupported markup.
+6. Serialize the complete `ReportSpec` as a JSON string and pass it as the
+   single `report_json` argument to `create_report`. Do not pass a nested object
+   or HTML. Omit optional defaults and irrelevant theme fields to keep the call
+   compact. Treat a returned report ID, version, hash, and message as
+   authoritative.
+7. If `create_report` returns `ok=false`, correct the listed field paths and
+   retry once with a complete specification. Never repeat the same payload and
+   do not loop. If the correction still fails, explain the unsupported or
+   missing requirement to the user.
+8. Tell the user the preview is ready and invite optional feedback or further
    analysis. Do not require approval or finalization.
 
 ## Content and artifact rules

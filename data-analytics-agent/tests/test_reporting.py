@@ -18,6 +18,7 @@ from data_analytics_agent.reporting.renderer import render_report
 from data_analytics_agent.reporting.schemas import (
     ReportBrief,
     ReportSpec,
+    ReportToolFailure,
     ReportToolResult,
 )
 from data_analytics_agent.reporting.tools import create_create_report_tool
@@ -78,7 +79,7 @@ def test_report_spec_rejects_executable_markup_and_inaccessible_theme() -> None:
         )
 
 
-def test_create_report_exports_a_recursively_strict_openai_schema() -> None:
+def test_create_report_exports_a_simple_openai_schema() -> None:
     tool = create_create_report_tool(
         ResultStore(),
         StatisticalAnalysisStore(),
@@ -90,21 +91,84 @@ def test_create_report_exports_a_recursively_strict_openai_schema() -> None:
         "parameters"
     ]
 
-    def assert_strict_objects(value) -> None:
+    assert parameters["required"] == ["report_json"]
+    assert parameters["additionalProperties"] is False
+    assert parameters["properties"]["report_json"]["type"] == "string"
+    assert "runtime" in tool.args_schema.model_fields
+    assert "runtime" not in parameters["properties"]
+
+    def assert_no_schema_composition(value) -> None:
         if isinstance(value, dict):
-            properties = value.get("properties")
-            if isinstance(properties, dict):
-                assert value.get("additionalProperties") is False
-                assert value.get("required") == list(properties)
+            assert not ({"oneOf", "anyOf", "allOf", "$ref", "$defs"} & value.keys())
             for child in value.values():
-                assert_strict_objects(child)
+                assert_no_schema_composition(child)
         elif isinstance(value, list):
             for child in value:
-                assert_strict_objects(child)
+                assert_no_schema_composition(child)
 
-    assert_strict_objects(parameters)
-    theme = parameters["properties"]["spec"]["properties"]["theme"]
-    assert "primary_color" in theme["required"]
+    assert_no_schema_composition(parameters)
+
+
+def test_create_report_returns_compact_repair_guidance() -> None:
+    tool = create_create_report_tool(
+        ResultStore(),
+        StatisticalAnalysisStore(),
+        RunStore(),
+        ReportStore(),
+        source_id="source-1",
+    )
+    runtime = SimpleNamespace(
+        state={
+            "thread_id": "thread-1",
+            "run_id": "run-1",
+            "source_id": "source-1",
+        }
+    )
+
+    malformed = ReportToolFailure.model_validate_json(
+        tool.func('{"title": "Broken",', runtime)
+    )
+    invalid = ReportToolFailure.model_validate_json(
+        tool.func(
+            '{"title":"Broken","blocks":[{"type":"chart"}]}',
+            runtime,
+        )
+    )
+
+    assert malformed.code == "invalid_report_json"
+    assert malformed.issues[0].path == "report_json"
+    assert invalid.code == "invalid_report_spec"
+    assert any(issue.path.startswith("blocks.0") for issue in invalid.issues)
+
+
+def test_create_report_accepts_fenced_legacy_wrapper() -> None:
+    reports = ReportStore()
+    tool = create_create_report_tool(
+        ResultStore(),
+        StatisticalAnalysisStore(),
+        RunStore(),
+        reports,
+        source_id="source-1",
+    )
+    runtime = SimpleNamespace(
+        state={
+            "thread_id": "thread-1",
+            "run_id": "run-1",
+            "source_id": "source-1",
+        }
+    )
+    payload = '''```json
+{"spec":{"title":"Quoted \\"report\\"","blocks":[{"type":"narrative","body":"Line one\\nLine two"}]}}
+```'''
+
+    result = ReportToolResult.model_validate_json(tool.func(payload, runtime))
+
+    assert result.report.title == 'Quoted "report"'
+    assert "Line one<br>Line two" in reports.get(
+        result.report.report_id,
+        "thread-1",
+        source_id="source-1",
+    ).html
 
 
 def test_renderer_escapes_model_text_and_includes_all_requested_rows() -> None:
@@ -175,7 +239,9 @@ def test_report_tool_enforces_scope_and_versions_revisions() -> None:
             ],
         }
     )
-    first = ReportToolResult.model_validate_json(tool.func(first_spec, runtime))
+    first = ReportToolResult.model_validate_json(
+        tool.func(first_spec.model_dump_json(), runtime)
+    )
     revised_spec = first_spec.model_copy(
         update={
             "title": "Revised report",
@@ -183,7 +249,7 @@ def test_report_tool_enforces_scope_and_versions_revisions() -> None:
         }
     )
     revised = ReportToolResult.model_validate_json(
-        tool.func(revised_spec, runtime)
+        tool.func(revised_spec.model_dump_json(), runtime)
     )
 
     assert first.report.version == 1
@@ -202,8 +268,10 @@ def test_report_tool_enforces_scope_and_versions_revisions() -> None:
             "source_id": "source-1",
         }
     )
-    with pytest.raises(ValueError, match="outside this"):
-        tool.func(first_spec, wrong_thread)
+    wrong_scope = ReportToolFailure.model_validate_json(
+        tool.func(first_spec.model_dump_json(), wrong_thread)
+    )
+    assert wrong_scope.code == "artifact_not_found"
 
 
 def test_stored_statistical_analysis_can_be_embedded_with_figure() -> None:
@@ -218,6 +286,7 @@ def test_stored_statistical_analysis_can_be_embedded_with_figure() -> None:
             parent_result_id=saved.result_id,
             answer="The estimate is 8.5.",
             method="Arithmetic mean.",
+            warnings=["Small sample.", "Small sample.", "Check independence."],
             outputs=[
                 StatisticalOutput(name="Mean", kind="scalar", value=8.5),
                 StatisticalOutput(
@@ -258,7 +327,9 @@ def test_stored_statistical_analysis_can_be_embedded_with_figure() -> None:
         }
     )
 
-    result = ReportToolResult.model_validate_json(tool.func(spec, runtime))
+    result = ReportToolResult.model_validate_json(
+        tool.func(spec.model_dump_json(), runtime)
+    )
     artifact = reports.get(
         result.report.report_id,
         "thread-1",
@@ -268,6 +339,8 @@ def test_stored_statistical_analysis_can_be_embedded_with_figure() -> None:
     assert stored.analysis.analysis_id == stored.analysis_id
     assert "data:image/png;base64,aW1hZ2U=" in artifact.html
     assert "8.5" in artifact.html
+    assert "Analysis notes and limitations (2)" in artifact.html
+    assert artifact.html.count("Small sample.") == 1
 
 
 def test_authoritative_report_tool_result_overrides_coordinator_copy() -> None:
@@ -372,3 +445,4 @@ render_turn(
 
     assert not app.exception
     assert len(app.get("download_button")) == 1
+    assert [panel.label for panel in app.get("status")] == ["Report preview"]

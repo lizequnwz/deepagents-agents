@@ -222,8 +222,10 @@ while remaining open to any user-defined direction.
 Render dynamic report HTML in an isolated frame. Do not inject model-influenced
 report markup into the main Streamlit DOM with `st.html`: that API is not
 iframed, and JavaScript requires an explicitly unsafe mode. For the first
-implementation, use `st.iframe` with the trusted rendered HTML and content-aware
-height, plus `st.download_button` for the exact same HTML bytes.
+implementation, use a tall `st.iframe` with the trusted rendered HTML inside an
+expanded-by-default, collapsible preview, plus `st.download_button` for the
+exact same HTML bytes. Keep the download control available when the preview is
+collapsed.
 
 Keep review lightweight:
 
@@ -243,7 +245,13 @@ application code and is not a sandbox for model-authored JavaScript.
 - `data_analytics_agent/reporting/schemas.py` defines `ReportBrief`, versioned
   `ReportSpec`, strict typed blocks, themes, references, and stored artifacts.
 - `data_analytics_agent/reporting/tools.py` exposes scoped result/analysis
-  discovery and the coordinator-owned `create_report` terminal tool.
+  discovery and the coordinator-owned `create_report` terminal tool. The
+  provider-facing tool accepts one `report_json` string, avoiding unsupported
+  nested union schemas; trusted application code then parses and validates the
+  full `ReportSpec` while LangGraph injects `ToolRuntime` privately. Expected
+  validation, artifact-reference, and rendering problems return compact
+  `ok=false` repair guidance instead of failing the tool call; the coordinator
+  may make one corrected attempt.
 - `data_analytics_agent/reporting/renderer.py` escapes model text, resolves
   validated blocks, embeds Plotly and statistical figures, emits print and
   responsive CSS, hashes renderer-owned scripts into a restrictive CSP, and
@@ -252,8 +260,9 @@ application code and is not a sandbox for model-authored JavaScript.
   exact report bytes with source/thread provenance, version lineage, renderer
   version, and SHA-256 content hash.
 - FastAPI exposes report metadata/content and byte-identical download routes;
-  Streamlit verifies the hash, previews with `st.iframe`, and downloads those
-  exact bytes.
+  Streamlit verifies the hash, previews in a tall collapsible `st.iframe`, and
+  downloads those exact bytes. Statistical notes are deduplicated and grouped
+  in collapsed disclosure panels in both the chat result and report HTML.
 - `ENABLE_REPORTING=false` removes the reporting tools and skill namespace
   without changing SQL, visualization, or statistical behavior.
 

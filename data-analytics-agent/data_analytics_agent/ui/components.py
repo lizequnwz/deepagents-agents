@@ -35,6 +35,8 @@ FALLBACK_EXAMPLES = [
     },
 ]
 
+REPORT_PREVIEW_HEIGHT = 900
+
 _PHASE_ICONS = {
     "info": ":material/info:",
     "started": ":material/pending:",
@@ -579,12 +581,6 @@ def _render_report(
                 color="blue",
             )
             st.caption(str(report["title"]))
-        st.iframe(
-            html,
-            width="stretch",
-            height="content",
-            tab_index=0,
-        )
         st.download_button(
             "Download HTML report",
             data=html.encode("utf-8"),
@@ -597,6 +593,18 @@ def _render_report(
             width="content",
             key=f"download_report_{report_id}_{widget_key}",
         )
+        with st.expander(
+            "Report preview",
+            icon=":material/preview:",
+            expanded=True,
+            key=f"report_preview_{report_id}_{widget_key}",
+        ):
+            st.iframe(
+                html,
+                width="stretch",
+                height=REPORT_PREVIEW_HEIGHT,
+                tab_index=0,
+            )
 
 
 def render_turn(
@@ -714,9 +722,23 @@ def _render_statistical_analysis(
             st.markdown(f"**{name}**")
             st.markdown(str(output.get("text") or ""))
 
-    warnings = analysis.get("warnings") or []
-    for warning in warnings:
-        st.warning(str(warning), icon=":material/warning:")
+    warnings = list(
+        dict.fromkeys(
+            str(warning).strip()
+            for warning in analysis.get("warnings") or []
+            if str(warning).strip()
+        )
+    )
+    if warnings:
+        with st.expander(
+            f"Statistical notes and limitations ({len(warnings)})",
+            icon=":material/warning:",
+            expanded=False,
+            type="compact",
+            key=f"statistical_warnings_{widget_key}",
+        ):
+            for warning in warnings:
+                st.markdown(f"- {warning}")
 
     with st.expander(
         "Statistical method and assumptions",

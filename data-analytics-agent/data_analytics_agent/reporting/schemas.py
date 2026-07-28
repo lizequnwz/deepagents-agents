@@ -221,40 +221,6 @@ class ReportSpec(ReportingModel):
     previous_report_id: str | None = None
 
 
-def _make_openai_tool_schema_strict(value: Any) -> Any:
-    """Require every declared property in all nested tool-schema objects.
-
-    OpenAI strict function schemas require each object to declare a ``required``
-    array containing every property, including fields that are optional at the
-    application boundary. Nullable fields remain optional in meaning because
-    their JSON Schema accepts ``null``; Pydantic defaults still apply to direct
-    application calls.
-    """
-
-    if isinstance(value, dict):
-        properties = value.get("properties")
-        if isinstance(properties, dict):
-            value["required"] = list(properties)
-            value["additionalProperties"] = False
-        for child in value.values():
-            _make_openai_tool_schema_strict(child)
-    elif isinstance(value, list):
-        for child in value:
-            _make_openai_tool_schema_strict(child)
-    return value
-
-
-class CreateReportToolInput(ReportingModel):
-    """OpenAI-strict wrapper used only for the ``create_report`` tool."""
-
-    spec: ReportSpec
-
-    @classmethod
-    def model_json_schema(cls, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        schema = super().model_json_schema(*args, **kwargs)
-        return _make_openai_tool_schema_strict(schema)
-
-
 class ReportReference(ReportingModel):
     report_id: str
     title: str
@@ -308,6 +274,29 @@ class ReportToolResult(ReportingModel):
     ok: Literal[True] = True
     report: ReportReference
     message: str
+
+
+class ReportToolIssue(ReportingModel):
+    """One compact, model-actionable report validation issue."""
+
+    path: str
+    message: str
+
+
+class ReportToolFailure(ReportingModel):
+    """Expected report-spec failure returned without failing the tool call."""
+
+    ok: Literal[False] = False
+    code: Literal[
+        "invalid_report_json",
+        "invalid_report_spec",
+        "artifact_not_found",
+        "artifact_not_ready",
+        "report_render_failed",
+    ]
+    message: str
+    retryable: bool = True
+    issues: list[ReportToolIssue] = Field(default_factory=list, max_length=8)
 
 
 class ResolvedStatisticalAnalysis(ReportingModel):

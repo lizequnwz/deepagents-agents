@@ -272,9 +272,18 @@ def _statistical(
         )
     if interpretation:
         details.append(f"<h3>Interpretation</h3>{_rich_text(interpretation)}")
-    warnings = "".join(
-        f'<p class="analysis-warning">{escape(item)}</p>'
-        for item in analysis.warnings
+    warning_items = list(dict.fromkeys(analysis.warnings))
+    warnings = (
+        '<details class="analysis-warnings"><summary>'
+        f"Analysis notes and limitations ({len(warning_items)})"
+        "</summary><ul>"
+        + "".join(
+            f'<li class="analysis-warning">{escape(item)}</li>'
+            for item in warning_items
+        )
+        + "</ul></details>"
+        if warning_items
+        else ""
     )
     return (
         '<section class="report-block statistical-block">'
@@ -406,7 +415,8 @@ h1 {{ position: relative; z-index: 1; margin: 0; max-width: 18ch; font-size: cla
 table {{ width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .9rem; }}
 caption {{ padding: .8rem 1rem; color: var(--muted); text-align: left; }} th, td {{ padding: .7rem .85rem; text-align: left; border-top: 1px solid var(--border); vertical-align: top; }} th {{ position: sticky; top: 0; background: color-mix(in srgb, var(--primary) 8%, var(--surface)); font-weight: 720; }} tbody tr:nth-child(even) {{ background: color-mix(in srgb, var(--text) 2.5%, transparent); }}
 .chart-summary, figcaption {{ color: var(--muted); }} figure {{ margin: 0; }} figcaption {{ margin-top: .6rem; font-size: .88rem; }}
-.chart-warning, .analysis-warning {{ padding: .75rem 1rem; color: #7C2D12; background: #FFF7ED; border-radius: .65rem; }}
+.chart-warning {{ padding: .75rem 1rem; color: #7C2D12; background: #FFF7ED; border-radius: .65rem; }}
+.analysis-warnings {{ padding: .25rem .9rem; color: #7C2D12; background: #FFF7ED; border-radius: .65rem; }} .analysis-warnings ul {{ margin-top: 0; }} .analysis-warning {{ margin: .45rem 0; }}
 .stat-scalar {{ display: flex; justify-content: space-between; gap: 1rem; padding: .85rem 0; border-bottom: 1px solid var(--border); }} .stat-scalar strong {{ font-variant-numeric: tabular-nums; }}
 .stat-figure img {{ display: block; width: 100%; height: auto; border-radius: calc(var(--radius) * .65); }}
 details {{ margin-top: 1rem; }} summary {{ min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--primary); font-weight: 700; }} summary:focus-visible, .theme-toggle:focus-visible {{ outline: 3px solid var(--accent); outline-offset: 3px; }}

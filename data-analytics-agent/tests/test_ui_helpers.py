@@ -309,7 +309,11 @@ render_turn(
                 "method": "Arithmetic mean with a 95% confidence target.",
                 "assumptions": ["Two-sided alpha = 0.05."],
                 "interpretation": "The sample center is 1.5.",
-                "warnings": [],
+                "warnings": [
+                    "The largest market has a small sample.",
+                    "The largest market has a small sample.",
+                    "Treat the comparison as exploratory.",
+                ],
                 "outputs": [{"name": "Mean", "kind": "scalar", "value": 1.5}],
             },
         },
@@ -324,6 +328,15 @@ render_turn(
     assert not app.exception
     assert any("Mean:** 1.5" in markdown.value for markdown in app.markdown)
     assert len(app.get("code")) == 2
+    assert any(
+        panel.label == "Statistical notes and limitations (2)"
+        for panel in app.get("status")
+    )
+    assert not app.warning
+    assert sum(
+        "The largest market has a small sample." in markdown.value
+        for markdown in app.markdown
+    ) == 1
 
 
 def test_reused_result_has_unique_widgets_in_each_turn() -> None:
