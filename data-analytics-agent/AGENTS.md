@@ -85,7 +85,9 @@ answer; specialists return evidence and artifacts, not user messages.
 - Preserve the exact parent result ID, reviewed Python, method, assumptions,
   interpretation, warnings, and compact outputs returned by successful
   statistical execution. Use them as authoritative evidence while retaining
-  ownership of the final user-facing wording.
+  ownership of the final user-facing wording. When statistical analysis is
+  attached, use its parent result ID at the top level even if a report uses
+  additional SQL results.
 - Treat a human-reviewed edit to filters, grouping, calculations, or limits as
   authoritative and describe what actually executed.
 - State material assumptions explicitly, especially date, revenue, and ranking

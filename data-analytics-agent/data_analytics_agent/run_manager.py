@@ -1087,7 +1087,7 @@ def _apply_statistical_analysis(
     output: dict[str, Any],
     execution: PythonExecutionResult | None,
 ) -> FinalAnswer:
-    """Attach exact reviewed code and application-captured outputs."""
+    """Attach reviewed outputs and make their parent result canonical."""
 
     analysis = _current_statistical_analysis(output)
     if analysis is None:
@@ -1125,10 +1125,6 @@ def _apply_statistical_analysis(
         )
     if not analysis.answer.strip():
         analysis = analysis.model_copy(update={"answer": answer.answer})
-    if answer.result_id is not None and answer.result_id != analysis.parent_result_id:
-        raise RuntimeError(
-            "Coordinator and statistical specialist referenced different results."
-        )
     return answer.model_copy(
         update={
             "result_id": analysis.parent_result_id,

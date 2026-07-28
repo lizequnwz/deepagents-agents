@@ -185,9 +185,11 @@ do not request or expose additional rows. Treat reviewed execution and
 terminal specialist results as authoritative, including human-edited scope.
 
 Return `CoordinatorResponse` with the direct business answer and, when present,
-the reviewed result ID and SQL. The application attaches the exact validated
-`ChartSpec`, terminal statistical result, reviewed Python and outputs, and
-report reference after parsing. Do not reconstruct any of those artifacts.
+the reviewed result ID and SQL. When statistical analysis ran, use its parent
+result ID at the top level even if a report uses additional SQL results. The
+application attaches the exact validated `ChartSpec`, terminal statistical
+result, reviewed Python and outputs, and report reference after parsing. Do not
+reconstruct any of those artifacts.
 Include only material assumptions and a concise interpretation. Omit private
 reasoning and raw tool payloads.
 """

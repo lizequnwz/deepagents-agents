@@ -183,6 +183,10 @@ cannot paginate beyond `head(10)`.
 `RunManager` rejects a final result ID outside the current conversation/source
 and replaces model-paraphrased SQL with the saved executed SQL.
 
+When a run attaches statistical analysis, its reviewed execution parent is the
+canonical top-level result even if a report references additional SQL results.
+The report retains its complete input-result list independently.
+
 The HTTP result endpoint is unscoped by thread because this POC is explicitly
 single-user and local. That endpoint must be authenticated and authorized
 before any multi-user deployment.

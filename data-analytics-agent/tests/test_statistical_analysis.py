@@ -26,12 +26,16 @@ from data_analytics_agent.agents.statistical_analysis.tools import (
 )
 from data_analytics_agent.config import Settings
 from data_analytics_agent.run_manager import (
-    _extract_approval,
+    _apply_sql_analysis,
     _apply_statistical_analysis,
-    _current_statistical_analysis,
     _conversation_history_answer,
+    _current_statistical_analysis,
+    _extract_approval,
 )
-from data_analytics_agent.schemas import FinalAnswer
+from data_analytics_agent.schemas import (
+    FinalAnswer,
+    SQLAnalysisResponse,
+)
 from data_analytics_agent.stores import ResultStore, RunStore
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -309,6 +313,61 @@ def test_successful_execution_is_authoritative_in_final_result() -> None:
     )
     assert authoritative.statistical_analysis.outputs == execution.outputs
     assert _current_statistical_analysis(output) == model_result
+
+
+def test_statistical_parent_is_canonical_when_run_has_multiple_sql_results(
+) -> None:
+    statistical_result = StatisticalAnalysisResult(
+        outcome="analysis_completed",
+        parent_result_id="statistics-result",
+        answer="The groups differ.",
+        method="Welch's t-test.",
+    )
+    later_sql_result = SQLAnalysisResponse(
+        answer="A second dataset supports another report section.",
+        sql="SELECT category, total FROM report_summary",
+        result_id="report-result",
+    )
+    output = {
+        "messages": [
+            HumanMessage(content="Create a report with statistical analysis"),
+            ToolMessage(
+                content=statistical_result.model_dump_json(),
+                tool_call_id="statistics-task",
+            ),
+            ToolMessage(
+                content=later_sql_result.model_dump_json(),
+                tool_call_id="later-sql-task",
+            ),
+        ]
+    }
+    execution = PythonExecutionResult(
+        parent_result_id="statistics-result",
+        executed_python='analysis_outputs = {"p_value": 0.01}',
+        attempt=1,
+        outputs=[
+            StatisticalOutput(
+                name="p_value",
+                kind="scalar",
+                value=0.01,
+            )
+        ],
+        elapsed_ms=5,
+    )
+    answer = FinalAnswer(
+        answer="Coordinator report summary.",
+        result_id="report-result",
+    )
+
+    answer = _apply_sql_analysis(answer, output)
+    authoritative = _apply_statistical_analysis(answer, output, execution)
+
+    assert authoritative.result_id == "statistics-result"
+    assert authoritative.statistical_analysis is not None
+    assert (
+        authoritative.statistical_analysis.parent_result_id
+        == "statistics-result"
+    )
 
 
 def test_sparse_coordinator_statistical_result_is_tolerated_and_completed() -> None:
