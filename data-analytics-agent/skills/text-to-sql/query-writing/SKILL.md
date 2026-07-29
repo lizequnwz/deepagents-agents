@@ -22,9 +22,6 @@ description: Ground a database question in the OSI semantic model already loaded
 5. Use `list_tables` or `get_table_schema` only to fill a named OSI gap or
    verify suspected drift. These tools inspect metadata; do not use SQL to
    probe row values for schema discovery.
-6. Use `write_todos` only when the assignment has several dependent analysis
-   steps.
-
 When explaining schema, distinguish physical source or expression names from
 logical OSI dataset and field names.
 

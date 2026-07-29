@@ -118,6 +118,28 @@ def _format_tokens(value: int | None) -> str:
     return f"{int(value or 0):,}"
 
 
+def render_conversation_diagnostics_content(
+    diagnostics: dict[str, Any],
+) -> None:
+    """Render aggregate diagnostics inside an existing container."""
+
+    tokens = diagnostics.get("tokens") or {}
+    partial = bool(diagnostics.get("token_usage_partial"))
+    active = bool(diagnostics.get("has_active_run"))
+    qualifier = "partial" if partial else "reported"
+    state = " · active" if active else ""
+    st.caption(
+        f"{_format_tokens(tokens.get('total_tokens'))} tokens ({qualifier})"
+        f" · {_format_duration(diagnostics.get('elapsed_ms'))} elapsed"
+        f" · {int(diagnostics.get('run_count') or 0)} runs{state}"
+    )
+    st.caption(
+        f"Active {_format_duration(diagnostics.get('active_ms'))} · "
+        f"approval wait "
+        f"{_format_duration(diagnostics.get('approval_wait_ms'))}"
+    )
+
+
 def render_conversation_diagnostics(
     diagnostics: dict[str, Any],
     *,
@@ -125,27 +147,99 @@ def render_conversation_diagnostics(
 ) -> None:
     """Render compact aggregate diagnostics beside conversation metadata."""
 
-    tokens = diagnostics.get("tokens") or {}
-    partial = bool(diagnostics.get("token_usage_partial"))
-    active = bool(diagnostics.get("has_active_run"))
-    qualifier = "partial" if partial else "reported"
-    state = " · active" if active else ""
     with st.expander(
         "Conversation diagnostics",
         icon=":material/monitoring:",
         expanded=False,
         key=key,
     ):
-        st.caption(
-            f"{_format_tokens(tokens.get('total_tokens'))} tokens ({qualifier})"
-            f" · {_format_duration(diagnostics.get('elapsed_ms'))} elapsed"
-            f" · {int(diagnostics.get('run_count') or 0)} runs{state}"
+        render_conversation_diagnostics_content(diagnostics)
+
+
+def render_run_diagnostics_content(
+    diagnostics: dict[str, Any],
+    *,
+    activities: list[dict[str, Any]] | None = None,
+) -> None:
+    """Render one run's diagnostics inside an existing container."""
+
+    tokens = diagnostics.get("tokens") or {}
+    partial = bool(diagnostics.get("token_usage_partial"))
+    columns = st.columns(4)
+    columns[0].metric(
+        "Tokens",
+        _format_tokens(tokens.get("total_tokens")),
+        help="Provider-reported total across all model calls.",
+    )
+    columns[1].metric(
+        "Elapsed",
+        _format_duration(diagnostics.get("elapsed_ms")),
+    )
+    columns[2].metric(
+        "Active",
+        _format_duration(diagnostics.get("active_ms")),
+    )
+    columns[3].metric(
+        "Approval wait",
+        _format_duration(diagnostics.get("approval_wait_ms")),
+    )
+    details = [
+        f"input {_format_tokens(tokens.get('input_tokens'))}",
+        f"output {_format_tokens(tokens.get('output_tokens'))}",
+        f"{int(diagnostics.get('model_calls') or 0)} model calls",
+        f"{int(diagnostics.get('tool_calls') or 0)} tool calls",
+    ]
+    if tokens.get("cached_input_tokens") is not None:
+        details.append(
+            "cached input "
+            + _format_tokens(tokens.get("cached_input_tokens"))
         )
-        st.caption(
-            f"Active {_format_duration(diagnostics.get('active_ms'))} · "
-            f"approval wait "
-            f"{_format_duration(diagnostics.get('approval_wait_ms'))}"
+    if tokens.get("reasoning_output_tokens") is not None:
+        details.append(
+            "reasoning output "
+            + _format_tokens(tokens.get("reasoning_output_tokens"))
         )
+    if partial:
+        details.append("token total is partial")
+    st.caption(" · ".join(details))
+
+    agent_rows = []
+    for agent in diagnostics.get("agents") or []:
+        agent_tokens = agent.get("tokens") or {}
+        agent_rows.append(
+            {
+                "Agent": _agent_label(agent.get("agent")),
+                "Tokens": int(agent_tokens.get("total_tokens") or 0),
+                "Model calls": int(agent.get("model_calls") or 0),
+                "Model time": _format_duration(agent.get("model_ms")),
+                "Max model call": _format_duration(
+                    agent.get("max_model_call_ms")
+                ),
+                "Tool calls": int(agent.get("tool_calls") or 0),
+                "Tool time": _format_duration(agent.get("tool_ms")),
+            }
+        )
+    if agent_rows:
+        st.markdown("**By agent**")
+        st.dataframe(agent_rows, hide_index=True, width="stretch")
+
+    tool_rows = []
+    for event in consolidate_activity_events(activities or []):
+        tool = event.get("tool") or {}
+        duration_ms = event.get("duration_ms")
+        if not tool.get("name") or duration_ms is None:
+            continue
+        tool_rows.append(
+            {
+                "Tool": str(tool["name"]),
+                "Agent": _agent_label(event.get("agent")),
+                "Status": str(event.get("phase") or "completed"),
+                "Duration": _format_duration(duration_ms),
+            }
+        )
+    if tool_rows:
+        st.markdown("**Tool calls**")
+        st.dataframe(tool_rows, hide_index=True, width="stretch")
 
 
 def render_run_diagnostics(
@@ -156,89 +250,16 @@ def render_run_diagnostics(
 ) -> None:
     """Render one bounded operational summary for a run."""
 
-    tokens = diagnostics.get("tokens") or {}
-    partial = bool(diagnostics.get("token_usage_partial"))
     with st.expander(
         "Run diagnostics",
         icon=":material/monitoring:",
         expanded=False,
         key=key,
     ):
-        columns = st.columns(4)
-        columns[0].metric(
-            "Tokens",
-            _format_tokens(tokens.get("total_tokens")),
-            help="Provider-reported total across all model calls.",
+        render_run_diagnostics_content(
+            diagnostics,
+            activities=activities,
         )
-        columns[1].metric(
-            "Elapsed",
-            _format_duration(diagnostics.get("elapsed_ms")),
-        )
-        columns[2].metric(
-            "Active",
-            _format_duration(diagnostics.get("active_ms")),
-        )
-        columns[3].metric(
-            "Approval wait",
-            _format_duration(diagnostics.get("approval_wait_ms")),
-        )
-        details = [
-            f"input {_format_tokens(tokens.get('input_tokens'))}",
-            f"output {_format_tokens(tokens.get('output_tokens'))}",
-            f"{int(diagnostics.get('model_calls') or 0)} model calls",
-            f"{int(diagnostics.get('tool_calls') or 0)} tool calls",
-        ]
-        if tokens.get("cached_input_tokens") is not None:
-            details.append(
-                "cached input "
-                + _format_tokens(tokens.get("cached_input_tokens"))
-            )
-        if tokens.get("reasoning_output_tokens") is not None:
-            details.append(
-                "reasoning output "
-                + _format_tokens(tokens.get("reasoning_output_tokens"))
-            )
-        if partial:
-            details.append("token total is partial")
-        st.caption(" · ".join(details))
-
-        agent_rows = []
-        for agent in diagnostics.get("agents") or []:
-            agent_tokens = agent.get("tokens") or {}
-            agent_rows.append(
-                {
-                    "Agent": _agent_label(agent.get("agent")),
-                    "Tokens": int(agent_tokens.get("total_tokens") or 0),
-                    "Model calls": int(agent.get("model_calls") or 0),
-                    "Model time": _format_duration(agent.get("model_ms")),
-                    "Max model call": _format_duration(
-                        agent.get("max_model_call_ms")
-                    ),
-                    "Tool calls": int(agent.get("tool_calls") or 0),
-                    "Tool time": _format_duration(agent.get("tool_ms")),
-                }
-            )
-        if agent_rows:
-            st.markdown("**By agent**")
-            st.dataframe(agent_rows, hide_index=True, width="stretch")
-
-        tool_rows = []
-        for event in consolidate_activity_events(activities or []):
-            tool = event.get("tool") or {}
-            duration_ms = event.get("duration_ms")
-            if not tool.get("name") or duration_ms is None:
-                continue
-            tool_rows.append(
-                {
-                    "Tool": str(tool["name"]),
-                    "Agent": _agent_label(event.get("agent")),
-                    "Status": str(event.get("phase") or "completed"),
-                    "Duration": _format_duration(duration_ms),
-                }
-            )
-        if tool_rows:
-            st.markdown("**Tool calls**")
-            st.dataframe(tool_rows, hide_index=True, width="stretch")
 
 
 def render_debug_states(
@@ -525,12 +546,17 @@ def render_sidebar(
                     st.caption(warning)
 
         st.caption(f"Conversation · `{thread_id[:8]}`")
-        diagnostics_slot = st.empty()
-        with diagnostics_slot.container():
-            render_conversation_diagnostics(
-                diagnostics,
-                key=f"conversation_diagnostics_{thread_id}",
-            )
+        # Keep the shell mounted while polling replaces only its contents so
+        # an open diagnostics panel does not collapse on every update.
+        with st.expander(
+            "Conversation diagnostics",
+            icon=":material/monitoring:",
+            expanded=False,
+            key=f"conversation_diagnostics_{thread_id}",
+        ):
+            diagnostics_slot = st.empty()
+            with diagnostics_slot.container():
+                render_conversation_diagnostics_content(diagnostics)
         with st.expander(
             "Technical details",
             icon=":material/info:",

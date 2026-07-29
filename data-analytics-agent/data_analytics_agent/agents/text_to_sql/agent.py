@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain.agents.middleware import (
+    HumanInTheLoopMiddleware,
+    TodoListMiddleware,
+)
 from langchain.agents.structured_output import ToolStrategy
 
 from data_analytics_agent.agents.text_to_sql.tools import (
@@ -100,7 +103,11 @@ def build_text_to_sql_subagent(
         "permissions": permissions,
         # after_model hooks run in reverse registration order. Keep HITL first
         # so execution-budget checks run before an approval is presented.
-        "middleware": [review_middleware, *(middleware or [])],
+        "middleware": [
+            review_middleware,
+            TodoListMiddleware(),
+            *(middleware or []),
+        ],
         "response_format": ToolStrategy(
             SQLAnalysisResponse,
             handle_errors=SQL_OUTPUT_RETRY_MESSAGE,

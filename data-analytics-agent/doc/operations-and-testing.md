@@ -17,7 +17,7 @@ Choose one provider:
 
 ```text
 MODEL_PROVIDER=openai
-MODEL_ID=gpt-5.4-mini
+MODEL_ID=gpt-5.6-luna
 OPENAI_API_KEY=...
 ```
 
@@ -34,7 +34,7 @@ Application defaults:
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `MODEL_PROVIDER` | `openai` | `openai` or `bedrock_converse` |
-| `MODEL_ID` | `gpt-5.4-mini` | Provider-native agent model ID; falls back to legacy `OPENAI_MODEL` |
+| `MODEL_ID` | `gpt-5.6-luna` | Provider-native agent model ID; falls back to legacy `OPENAI_MODEL` |
 | `DATA_SOURCES_CONFIG` | `data_sources.yaml` | Trusted registry path |
 | `API_BASE_URL` | `http://127.0.0.1:8000` | Streamlit API target |
 | `APP_BASE_URL` | `http://127.0.0.1:8501` | Conversation-link base |

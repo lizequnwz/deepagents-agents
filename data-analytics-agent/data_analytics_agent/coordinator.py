@@ -14,6 +14,7 @@ from deepagents import (
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
 from deepagents.profiles import register_harness_profile
+from langchain.agents.middleware import TodoListMiddleware
 from langchain.agents.structured_output import ProviderStrategy
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import InMemorySaver
@@ -420,13 +421,16 @@ def build_agent(
         subagents=subagents,
         backend=_project_backend(settings.project_root),
         permissions=permissions,
-        middleware=execution_budget_middleware(
-            model_calls=settings.coordinator_model_call_limit,
-            tool_calls=settings.coordinator_tool_call_limit,
-            specific_tool_calls={
-                "task": settings.coordinator_task_call_limit,
-            },
-        ),
+        middleware=[
+            TodoListMiddleware(),
+            *execution_budget_middleware(
+                model_calls=settings.coordinator_model_call_limit,
+                tool_calls=settings.coordinator_tool_call_limit,
+                specific_tool_calls={
+                    "task": settings.coordinator_task_call_limit,
+                },
+            ),
+        ],
         response_format=_final_answer_response_format(),
         state_schema=AnalyticsAgentState,
         checkpointer=checkpointer or InMemorySaver(),

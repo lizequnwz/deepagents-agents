@@ -17,12 +17,13 @@ from data_analytics_agent.ui.api_client import (
 from data_analytics_agent.ui.components import (
     render_activity_timeline,
     render_approval,
-    render_conversation_diagnostics,
+    render_conversation_diagnostics_content,
     render_debug_states,
     render_empty_state,
     render_page_header,
     render_pending_user_message,
     render_run_diagnostics,
+    render_run_diagnostics_content,
     render_sidebar,
     render_turn,
 )
@@ -211,9 +212,16 @@ def poll_run(
         state="running",
     ) as status_panel:
         timeline_slot = st.empty()
-        diagnostics_slot = st.empty()
+        # Replacing this expander during polling resets its frontend open
+        # state. Mount it once and update only the content placeholder.
+        with st.expander(
+            "Run diagnostics",
+            icon=":material/monitoring:",
+            expanded=False,
+            key=f"live_run_diagnostics_{run_id}",
+        ):
+            diagnostics_slot = st.empty()
         render_version = 0
-        diagnostics_render_version = 0
 
         while True:
             timeline_changed = render_version == 0
@@ -237,25 +245,16 @@ def poll_run(
                         key_prefix=f"live_{run_id}_{render_version}",
                     )
             diagnostics_slot.empty()
-            diagnostics_render_version += 1
             with diagnostics_slot.container():
-                render_run_diagnostics(
+                render_run_diagnostics_content(
                     run.get("run_diagnostics") or {},
                     activities=activities,
-                    key=(
-                        f"live_run_diagnostics_{run_id}_"
-                        f"{diagnostics_render_version}"
-                    ),
                 )
             live_conversation = client.get_conversation(thread_id)
             conversation_diagnostics_slot.empty()
             with conversation_diagnostics_slot.container():
-                render_conversation_diagnostics(
-                    live_conversation.get("diagnostics") or {},
-                    key=(
-                        f"live_conversation_diagnostics_{run_id}_"
-                        f"{diagnostics_render_version}"
-                    ),
+                render_conversation_diagnostics_content(
+                    live_conversation.get("diagnostics") or {}
                 )
 
             cursor = int(run["next_event_id"])

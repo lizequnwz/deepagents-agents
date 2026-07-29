@@ -221,6 +221,31 @@ render_run_diagnostics({
     )
 
 
+def test_live_diagnostics_update_inside_one_persistent_expander() -> None:
+    app = AppTest.from_string(
+        '''
+import streamlit as st
+from data_analytics_agent.ui.components import render_run_diagnostics_content
+
+with st.expander("Run diagnostics", key="live_run"):
+    slot = st.empty()
+
+for total_tokens in (100, 125):
+    slot.empty()
+    with slot.container():
+        render_run_diagnostics_content({
+            "tokens": {"total_tokens": total_tokens},
+        })
+'''
+    ).run()
+
+    assert not app.exception
+    assert [panel.label for panel in app.get("expander")] == [
+        "Run diagnostics"
+    ]
+    assert app.metric[0].value == "125"
+
+
 def test_api_client_fetches_every_result_page() -> None:
     class Client(AgentAPIClient):
         paths: list[str] = []

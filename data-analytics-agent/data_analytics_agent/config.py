@@ -72,7 +72,7 @@ class Settings:
     model: str = field(
         default_factory=lambda: os.getenv(
             "MODEL_ID",
-            os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
+            os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
         )
     )
     data_sources_config_path: Path = field(
