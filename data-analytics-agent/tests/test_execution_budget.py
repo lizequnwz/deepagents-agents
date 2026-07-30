@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain.agents.middleware import (
+    HumanInTheLoopMiddleware,
+    TodoListMiddleware,
+)
 from langchain.agents.middleware.model_call_limit import (
     ModelCallLimitExceededError,
     ModelCallLimitMiddleware,
@@ -216,11 +219,12 @@ def test_sql_agent_checks_budgets_before_requesting_review(
 
     middleware = spec["middleware"]
     assert isinstance(middleware[0], HumanInTheLoopMiddleware)
-    assert isinstance(middleware[1], ModelCallLimitMiddleware)
-    assert isinstance(middleware[2], ToolCallLimitMiddleware)
-    assert middleware[2].tool_name is None
+    assert isinstance(middleware[1], TodoListMiddleware)
+    assert isinstance(middleware[2], ModelCallLimitMiddleware)
     assert isinstance(middleware[3], ToolCallLimitMiddleware)
-    assert middleware[3].tool_name == "execute_sql"
+    assert middleware[3].tool_name is None
+    assert isinstance(middleware[4], ToolCallLimitMiddleware)
+    assert middleware[4].tool_name == "execute_sql"
     assert "interrupt_on" not in spec
 
 
