@@ -1,7 +1,7 @@
 # General Agent
 
 General Agent is a trusted-local assistant built with DeepAgents,
-LangChain, FastAPI, and Streamlit. It can plan, delegate to DeepAgents' default
+LangChain, FastAPI, and Streamlit. It can plan, delegate to its configured
 `general-purpose` subagent, inspect common document formats, manage isolated
 chat files and explicitly shared files,
 run Python or shell commands, and preserve downloadable versions of every file
@@ -37,7 +37,10 @@ health, and the single-worker process model. `Ctrl-C` stops both services.
 ## What it includes
 
 - A named `general-agent` graph built with `init_chat_model` and DeepAgents 0.7.
-- DeepAgents filesystem, execution, planning/todo, and default subagent tools.
+- An additive harness profile that gives the auto-created `general-purpose`
+  subagent General Agent's prompt and description without discarding built-in
+  model-specific profile behavior.
+- DeepAgents filesystem, execution, planning/todo, and configured subagent tools.
 - Explicit model, tool, `task`, and provider-reported token limits.
 - Run-scoped process-group cancellation for shell commands.
 - Non-streaming model calls (`streaming=False`) observed exclusively through
@@ -52,7 +55,9 @@ health, and the single-worker process model. `Ctrl-C` stops both services.
   editing, and verification, including OOXML validation, presentation rendering,
   spreadsheet recalculation, PDF forms, and bounded PDF extraction. Generic file
   reads reject binary documents; scanned-PDF OCR is used only when a local OCR
-  engine is available.
+  engine is available. DeepAgents discovers skills generically from their
+  metadata under `/skills`, so adding a skill does not require a system-prompt
+  catalog change.
 - Immutable snapshots of created, modified, and deleted files for each turn.
 - A wide, single-current-chat Streamlit UI matching the data analytics agent,
   with an event activity panel, visible command/code execution, live todos,
@@ -96,14 +101,15 @@ current user in the sidebar. This is namespacing, not authentication: the
 default is intentionally fixed and hidden from editing while identity setup is
 deferred.
 
-When the agent needs an extra Python dependency, its prompt requires:
+When the user explicitly authorizes installing an extra Python dependency, the
+agent's prompt requires:
 
 ```bash
 python -m pip install --target "$GENERAL_AGENT_PACKAGE_DIR" PACKAGE_NAME
 ```
 
 The application virtual environment should never be modified by agent code.
-Missing Node dependencies are similarly isolated per user:
+Authorized missing Node dependencies are similarly isolated per user:
 
 ```bash
 npm install --prefix "$GENERAL_AGENT_NODE_PACKAGE_DIR" PACKAGE_NAME
@@ -116,6 +122,15 @@ npm install --prefix "$GENERAL_AGENT_NODE_PACKAGE_DIR" PACKAGE_NAME
 and credentials must match the configured model. OpenAI models default to the
 Responses API so reasoning models can use function tools; an explicit
 `use_responses_api` value in `MODEL_KWARGS_JSON` still takes precedence.
+
+Programmatic callers may instead pass a prebuilt LangChain `BaseChatModel` to
+`build_agent(model=...)`, including an `AzureChatOpenAI` or, when
+`langchain-aws` is installed, `ChatBedrockConverse` instance. Before graph
+construction, General Agent derives the same provider/model key DeepAgents uses
+and additively registers its harness profile. `harness_profile_key` can select
+the model's exact or provider-wide key, but it must be one DeepAgents can derive
+from that model. A custom integration therefore needs reliable LangSmith
+provider metadata or a provider-qualified model identifier.
 
 | Variable | Default |
 | --- | ---: |
