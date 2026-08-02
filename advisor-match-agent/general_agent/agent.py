@@ -16,7 +16,9 @@ from langchain.agents.middleware import (
     ModelCallLimitMiddleware,
     TodoListMiddleware,
     ToolCallLimitMiddleware,
+    ToolErrorMiddleware,
 )
+from langchain.agents.middleware.types import ToolCallRequest
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 
@@ -96,7 +98,9 @@ items; never request the full match session or master table.
 
 After matching, report status counts and review ambiguous/unmatched items with
 the user. Ask whether the user is happy with the results and wants any review
-or refinement. An unlisted advisor requires an exact user-supplied CRD, deterministic
+or refinement. If an expected tool input error is returned, correct the input
+and retry instead of ending the run. An unlisted advisor requires an exact
+user-supplied CRD, deterministic
 resolution, display of the resolved record, and confirmation in a later user
 turn. When the user approves results, offer profile building for Matched rows
 only and clearly state that profile building is not implemented yet.
@@ -143,6 +147,7 @@ def build_agent(
         middleware=[
             _filesystem_middleware(backend),
             TodoListMiddleware(system_prompt=""),
+            ToolErrorMiddleware(on_error=_recoverable_tool_error),
             ModelCallLimitMiddleware(
                 run_limit=settings.max_model_calls,
                 exit_behavior="error",
@@ -154,6 +159,18 @@ def build_agent(
         ],
         checkpointer=checkpointer,
     )
+
+
+def _recoverable_tool_error(
+    error: Exception, request: ToolCallRequest
+) -> str | None:
+    """Let the model correct expected PoC workflow/input errors and retry."""
+
+    if not isinstance(error, (ValueError, KeyError)):
+        return None
+    tool_name = request.tool.name if request.tool else request.tool_call["name"]
+    detail = (str(error).strip("'") or type(error).__name__).rstrip(".")
+    return f"{tool_name} could not complete: {detail}. Correct the input and retry."
 
 
 def configure_harness_profile(

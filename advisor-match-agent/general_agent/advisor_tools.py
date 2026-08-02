@@ -18,7 +18,8 @@ from general_agent.advisor_matching.policy import POLICY_VERSION
 from general_agent.advisor_matching.profiler import profile_advisor_file as profile_file
 from general_agent.advisor_matching.schemas import (
     AdvisorRecord, InputMapping, MASTER_COLUMNS, MatchCandidate, MatchCounts,
-    MatchDecision, MatchRunResult, ReferenceSnapshotManifest, ReviewDecision,
+    MatchDecision, MatchRunResult, MatchStatus, ReferenceSnapshotManifest,
+    ReviewDecision,
 )
 from general_agent.advisor_matching.source import AdvisorReferenceSource, sha256_file
 from general_agent.advisor_matching.workbook import write_match_workbook
@@ -116,6 +117,28 @@ def build_advisor_tools(
         ).model_dump(mode="json")
 
     @tool
+    def get_current_advisor_match_session() -> dict[str, Any]:
+        """Return the latest persisted match-session summary for this conversation."""
+        corp_id, conversation_id = current_context()
+        try:
+            session = store.get_latest_advisor_match_session(
+                conversation_id, corp_id=corp_id
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "No advisor match session exists for the current conversation."
+            ) from exc
+        return {
+            "match_session_id": session["id"],
+            "source_name": session["source_name"],
+            "counts": session["counts"],
+            "status": session["status"],
+            "revision": session["revision"],
+            "output_virtual_path": "/advisor_matches.xlsx",
+            "updated_at": session["updated_at"],
+        }
+
+    @tool
     def list_advisor_match_items(
         match_session_id: str,
         status: str | None = None,
@@ -124,16 +147,15 @@ def build_advisor_tools(
         cursor: int = 0,
         limit: int = 10,
     ) -> dict[str, Any]:
-        """List a bounded page of matched, ambiguous, or unmatched review items."""
+        """List review items; status accepts labels or snake_case count keys."""
         corp_id, _ = current_context()
         if cursor < 0 or limit < 1 or limit > 20:
             raise ValueError("cursor must be nonnegative and limit must be between 1 and 20.")
         session = store.get_advisor_match_session(match_session_id, corp_id=corp_id)
         items = [MatchDecision.model_validate(value) for value in session["decisions"]]
-        if status:
-            if status not in {"Matched", "Ambiguous Match", "No Match"}:
-                raise ValueError("Unsupported match status filter.")
-            items = [item for item in items if item.status == status]
+        normalized_status = _normalize_status_filter(status)
+        if normalized_status:
+            items = [item for item in items if item.status == normalized_status]
         if source_row_number is not None:
             items = [item for item in items if item.source_row_number == source_row_number]
         if name_query:
@@ -215,7 +237,34 @@ def build_advisor_tools(
         _write_session_workbook(workspace, store, corp_id, match_session_id)
         return {"match_session_id": match_session_id, "counts": counts.model_dump(), "status": "Approved" if approve_session else session["status"], "output_virtual_path": "/advisor_matches.xlsx", "profile_building_eligible": counts.matched, "profile_building_excluded": counts.ambiguous_match + counts.no_match}
 
-    return [profile_advisor_file, find_all_advisors_in_database, start_advisor_match, list_advisor_match_items, propose_manual_crd_override, apply_advisor_review_decisions]
+    return [
+        profile_advisor_file,
+        find_all_advisors_in_database,
+        start_advisor_match,
+        get_current_advisor_match_session,
+        list_advisor_match_items,
+        propose_manual_crd_override,
+        apply_advisor_review_decisions,
+    ]
+
+
+def _normalize_status_filter(status: str | None) -> MatchStatus | None:
+    if status is None or not status.strip():
+        return None
+    key = " ".join(status.replace("_", " ").replace("-", " ").split()).casefold()
+    aliases: dict[str, MatchStatus] = {
+        "matched": "Matched",
+        "ambiguous": "Ambiguous Match",
+        "ambiguous match": "Ambiguous Match",
+        "no match": "No Match",
+        "unmatched": "No Match",
+    }
+    normalized = aliases.get(key)
+    if normalized is None:
+        raise ValueError(
+            "Unsupported match status filter. Use matched, ambiguous_match, or no_match."
+        )
+    return normalized
 
 
 def _read_reference(path: Path) -> list[AdvisorRecord]:

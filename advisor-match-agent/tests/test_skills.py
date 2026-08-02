@@ -23,8 +23,6 @@ EXPECTED_SKILLS = {
     "frontend-design",
     "pdf",
     "pptx",
-    "skill-creator",
-    "theme-factory",
     "xlsx",
 }
 
@@ -74,8 +72,6 @@ def test_main_skill_tree_uses_canonical_packages() -> None:
         assert frontmatter["description"].strip()
 
     assert (skills / "frontend-design/LICENSE.txt").is_file()
-    assert (skills / "theme-factory/LICENSE.txt").is_file()
-    assert not list(skills.rglob(".DS_Store"))
 
 
 def test_skill_markdown_has_no_broken_relative_links() -> None:

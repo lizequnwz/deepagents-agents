@@ -50,6 +50,9 @@ async def test_persisted_review_session_can_be_listed_and_regenerated(settings) 
             "mapping": mapping,
         })
         assert result["counts"]["ambiguous_match"] == 1
+        current = await tools["get_current_advisor_match_session"].ainvoke({})
+        assert current["match_session_id"] == result["match_session_id"]
+        assert current["counts"] == result["counts"]
         page = await tools["list_advisor_match_items"].ainvoke({
             "match_session_id": result["match_session_id"], "status": "Ambiguous Match",
         })
@@ -98,7 +101,14 @@ async def test_unlisted_crd_requires_proposal_then_confirmation(settings) -> Non
             "snapshot_virtual_path": manifest["snapshot_virtual_path"],
             "mapping": {"full_name": {"columns": [{"index": 0, "header": "Name"}]}},
         })
-        page = await tools["list_advisor_match_items"].ainvoke({"match_session_id": result["match_session_id"]})
+        page = await tools["list_advisor_match_items"].ainvoke({
+            "match_session_id": result["match_session_id"], "status": "no_match",
+        })
+        assert page["total"] == 1
+        unmatched = await tools["list_advisor_match_items"].ainvoke({
+            "match_session_id": result["match_session_id"], "status": "unmatched",
+        })
+        assert unmatched["items"] == page["items"]
         proposal = await tools["propose_manual_crd_override"].ainvoke({
             "match_session_id": result["match_session_id"],
             "review_item_id": page["items"][0]["review_item_id"],

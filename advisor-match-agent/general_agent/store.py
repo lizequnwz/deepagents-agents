@@ -527,10 +527,24 @@ class Store:
             ).fetchone()
         if row is None:
             raise KeyError(session_id)
-        result = dict(row)
-        for field in ("mapping_json", "reference_json", "decisions_json", "counts_json"):
-            result[field.removesuffix("_json")] = json.loads(result.pop(field))
-        return result
+        return _advisor_match_session(row)
+
+    def get_latest_advisor_match_session(
+        self, conversation_id: str, *, corp_id: str
+    ) -> dict[str, Any]:
+        """Return the most recently updated match session in one conversation."""
+
+        corp_id = self._corp(corp_id)
+        with self._lock:
+            row = self._connection.execute(
+                """SELECT * FROM advisor_match_sessions
+                WHERE conversation_id=? AND corp_id=?
+                ORDER BY updated_at DESC, created_at DESC LIMIT 1""",
+                (conversation_id, corp_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(conversation_id)
+        return _advisor_match_session(row)
 
     def update_advisor_match_session(
         self,
@@ -1014,6 +1028,18 @@ class Store:
             elapsed_ms=int(run_row["elapsed_ms"]),
             agents=agents,
         )
+
+
+def _advisor_match_session(row: sqlite3.Row) -> dict[str, Any]:
+    result = dict(row)
+    for field in (
+        "mapping_json",
+        "reference_json",
+        "decisions_json",
+        "counts_json",
+    ):
+        result[field.removesuffix("_json")] = json.loads(result.pop(field))
+    return result
 
 
 def _agent_usage(row: sqlite3.Row) -> AgentUsage:

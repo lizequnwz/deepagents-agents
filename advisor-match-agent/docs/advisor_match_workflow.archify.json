@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Advisor Matching Workflow",
+    "subtitle": "How the Deep Agent uses the advisor-match skill and deterministic tools",
+    "animation": "none",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "docs/advisor_match_workflow.html",
+    "viewBox": [1300, 980]
+  },
+  "lanes": [
+    { "id": "interaction", "label": "User + Streamlit" },
+    { "id": "orchestration", "label": "Deep Agent Orchestration" },
+    { "id": "typed_tools", "label": "Typed Advisor Tools" },
+    { "id": "deterministic", "label": "Deterministic Matching" },
+    { "id": "storage", "label": "Reference + Persistence" },
+    { "id": "export", "label": "Verified Export" }
+  ],
+  "phases": [
+    { "id": "intake", "label": "Upload + understand", "fromCol": 0, "toCol": 2 },
+    { "id": "match", "label": "Profile + match", "fromCol": 3, "toCol": 4, "variant": "emphasis" },
+    { "id": "review_export", "label": "Review + export", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "agent_loop", "label": "Model chooses typed operations", "lane": "orchestration", "fromCol": 0, "toCol": 2, "variant": "emphasis" },
+    { "id": "business_logic", "label": "Code owns row decisions", "lane": "deterministic", "fromCol": 4, "toCol": 4, "variant": "security" }
+  ],
+  "mainPath": ["upload", "ui", "agent", "profile", "run_match", "review", "results"],
+  "nodes": [
+    { "id": "upload", "lane": "interaction", "col": 0, "type": "external", "label": "User + Upload", "sublabel": "one CSV or XLSX" },
+    { "id": "ui", "lane": "interaction", "col": 1, "type": "frontend", "label": "Streamlit UI", "sublabel": "message, file, progress" },
+    { "id": "results", "lane": "interaction", "col": 5, "type": "frontend", "label": "Results", "sublabel": "review + download" },
+    { "id": "skill", "lane": "orchestration", "col": 0, "type": "cloud", "label": "Match Skill", "sublabel": "workflow steps" },
+    { "id": "agent", "lane": "orchestration", "col": 3, "type": "backend", "label": "Deep Agent", "sublabel": "model + tool loop" },
+    { "id": "review", "lane": "orchestration", "col": 5, "type": "messagebus", "label": "Review", "sublabel": "small pages" },
+    { "id": "profile", "lane": "typed_tools", "col": 3, "type": "messagebus", "label": "Profile", "sublabel": "columns + samples" },
+    { "id": "run_match", "lane": "typed_tools", "col": 5, "type": "messagebus", "label": "Start Match", "sublabel": "snapshot + mapping" },
+    { "id": "matcher", "lane": "deterministic", "col": 4, "type": "backend", "label": "Matcher", "sublabel": "normalize + decide" },
+    { "id": "master", "lane": "storage", "col": 0, "type": "database", "label": "Advisor Master", "sublabel": "synthetic CSV" },
+    { "id": "session", "lane": "storage", "col": 5, "type": "database", "label": "Match Session", "sublabel": "decisions + counts" },
+    { "id": "workbook", "lane": "export", "col": 3, "type": "database", "label": "Workbook", "sublabel": "verified 4-sheet XLSX" }
+  ],
+  "edges": [
+    { "id": "upload_ui", "from": "upload", "to": "ui", "role": "main" },
+    { "id": "ui_agent", "from": "ui", "to": "agent", "role": "main", "variant": "emphasis" },
+    { "id": "skill_agent", "from": "skill", "to": "agent", "role": "branch", "variant": "dashed", "route": "straight" },
+    { "id": "agent_profile", "from": "agent", "to": "profile", "role": "main" },
+    { "id": "profile_run", "from": "profile", "to": "run_match", "role": "main", "route": "straight" },
+    { "id": "run_review", "from": "run_match", "to": "review", "role": "main", "variant": "emphasis" },
+    { "id": "run_matcher", "from": "run_match", "to": "matcher", "role": "main", "variant": "emphasis" },
+    { "id": "master_matcher", "from": "master", "to": "matcher", "role": "branch", "variant": "dashed" },
+    { "id": "matcher_session", "from": "matcher", "to": "session", "role": "main" },
+    { "id": "matcher_workbook", "from": "matcher", "to": "workbook", "role": "branch" },
+    { "id": "review_results", "from": "review", "to": "results", "role": "main", "variant": "emphasis" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Agent Responsibility",
+      "items": [
+        "Loads the advisor-match skill",
+        "Chooses tools and maps columns",
+        "Presents small review pages",
+        "Never decides identities row by row"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Deterministic Responsibility",
+      "items": [
+        "Normalizes fields and builds candidates",
+        "Applies exact and fuzzy evidence rules",
+        "Persists decisions and audit history",
+        "Regenerates and verifies the workbook"
+      ]
+    }
+  ]
+}

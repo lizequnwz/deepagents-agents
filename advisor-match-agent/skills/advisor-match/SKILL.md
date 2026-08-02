@@ -11,11 +11,13 @@ description: "Match financial-advisor rows from one uploaded CSV or XLSX against
 4. Call `find_all_advisors_in_database` once for the run.
 5. Call `start_advisor_match` with the validated mapping and returned snapshot path.
 6. Report the selected sheet, `Matched`, `Ambiguous Match`, and `No Match` counts, warnings, session ID, and `/advisor_matches.xlsx`.
-7. Call `list_advisor_match_items` with a small page to review results. Never request or reproduce the full session.
+7. Call `list_advisor_match_items` with a small page to review results. Status filters accept `matched`, `ambiguous_match`, or `no_match` as well as their display labels. Never request or reproduce the full session.
 8. Ask whether the user is happy with the results and which records they want to confirm, refine, or leave unmatched. If a name identifies multiple source rows or candidates, ask for the source row or CRD.
 9. Use `apply_advisor_review_decisions` only for an explicit user choice. Never choose a candidate yourself.
 10. For an advisor outside the presented candidates, require an exact user-supplied CRD, call `propose_manual_crd_override`, show the resolved record, and wait for confirmation in a later user turn before applying it.
 11. After approval, offer profile building for Matched rows only. Explain that profile building is not implemented yet.
+
+If a prior turn failed after matching or the user asks to continue, call `get_current_advisor_match_session` and resume the persisted review instead of rerunning matching.
 
 Never invent an advisor, treat a fuzzy name alone as identity proof, expose the complete master table, or edit the workbook directly. Deterministic tools own every row decision and workbook revision.
 

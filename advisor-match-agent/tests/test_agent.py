@@ -6,11 +6,19 @@ from unittest.mock import Mock, patch
 import pytest
 from deepagents import GeneralPurposeSubagentProfile, HarnessProfile
 from deepagents.middleware import FilesystemMiddleware
+from langchain.agents.middleware import ToolErrorMiddleware
 
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
 from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
 from general_agent.advisor_tools import build_advisor_tools
-from general_agent.agent import READ_FILE_TOOL_DESCRIPTION, SHARED_RUNTIME_GUIDANCE, SYSTEM_PROMPT, build_agent, configure_harness_profile
+from general_agent.agent import (
+    READ_FILE_TOOL_DESCRIPTION,
+    SHARED_RUNTIME_GUIDANCE,
+    SYSTEM_PROMPT,
+    _recoverable_tool_error,
+    build_agent,
+    configure_harness_profile,
+)
 from general_agent.store import Store
 from general_agent.workspace import Workspace
 
@@ -42,6 +50,7 @@ def test_agent_construction_is_advisor_only(settings) -> None:
     middleware = kwargs["middleware"]
     filesystem = next(item for item in middleware if isinstance(item, FilesystemMiddleware))
     assert {tool.name for tool in filesystem.tools} == {"ls", "read_file", "glob"}
+    assert any(isinstance(item, ToolErrorMiddleware) for item in middleware)
     assert "task" not in {getattr(item, "tool_name", None) for item in middleware}
 
 
@@ -58,13 +67,25 @@ def test_harness_profile_disables_general_purpose_subagent() -> None:
     assert profile.general_purpose_subagent.enabled is False
 
 
+def test_expected_tool_errors_are_returned_for_correction() -> None:
+    request = Mock()
+    request.tool.name = "list_advisor_match_items"
+    message = _recoverable_tool_error(ValueError("bad status"), request)
+    assert message == (
+        "list_advisor_match_items could not complete: bad status. "
+        "Correct the input and retry."
+    )
+    assert _recoverable_tool_error(RuntimeError("internal failure"), request) is None
+
+
 def test_prompt_enforces_matching_and_review_boundaries() -> None:
     normalized = " ".join(SYSTEM_PROMPT.split())
     assert SHARED_RUNTIME_GUIDANCE in SYSTEM_PROMPT
     for required in (
         "sole purpose", "advisor-match skill", "never decide identities row by row",
         "unlisted advisor requires an exact user-supplied CRD",
-        "profile building is not implemented", "Refuse unrelated",
+        "correct the input and retry", "profile building is not implemented",
+        "Refuse unrelated",
     ):
         assert required in normalized
     for unsupported in ("pip install", "Delegate only", "general-purpose subagent"):
