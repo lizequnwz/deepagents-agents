@@ -28,8 +28,11 @@ class SyntheticAdvisorReferenceSource:
     def iter_records(self) -> Iterator[AdvisorRecord]:
         with self.path.open(newline="", encoding="utf-8") as handle:
             reader = csv.DictReader(handle)
-            if tuple(reader.fieldnames or ()) != MASTER_COLUMNS:
-                raise ValueError("Synthetic advisor schema does not match the canonical column order.")
+            available = tuple(reader.fieldnames or ())
+            if any(column not in available for column in MASTER_COLUMNS):
+                raise ValueError(
+                    "Synthetic advisor schema is missing one or more canonical columns."
+                )
             seen: set[str] = set()
             for row in reader:
                 crd = str(row["CRD_NUMBER"] or "").strip()

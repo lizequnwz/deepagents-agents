@@ -17,10 +17,10 @@ FIXTURES = {
         ["99000005", "Elizabeth", "Hart", "elizabeth.hart@example.com"],
         ["99000009", "Maya", "Chen", "maya.chen@example.com"],
     ],
-    "address_variations.csv": [
-        ["First Name", "Last Name", "Firm Name", "Street Address", "City", "State", "ZIP"],
-        ["John", "Smith", "Northstar Wealth Partners LLC", "100 Beacon St Ste 400", "Boston", "Massachusetts", "02108-1200"],
-        ["Michael", "Chen", "Evergreen Capital Counsel", "901 Pine Street", "Seattle", "WA", "98101"],
+    "location_variations.csv": [
+        ["First Name", "Last Name", "Firm Name", "City", "State", "ZIP"],
+        ["John", "Smith", "Northstar Wealth Partners LLC", "Boston", "Massachusetts", "02108-1200"],
+        ["Michael", "Chen", "Evergreen Capital Counsel", "Seattle", "WA", "98101"],
     ],
     "partial_matches.csv": [
         ["Advisor Name", "Company", "City", "State"],
@@ -32,6 +32,10 @@ FIXTURES = {
         ["First Name", "Last Name", "Firm Name", "City", "State"],
         ["Quinn", "Example", "Imaginary Finance", "Albany", "NY"],
         ["Riley", "Sample", "Neverland Advisors", "Austin", "TX"],
+    ],
+    "headerless_advisors.csv": [
+        ["99000001", "Avery", "Stone", "Northstar Wealth Partners", "Boston", "MA"],
+        ["99000009", "Maya", "Chen", "Evergreen Capital Counsel", "Seattle", "WA"],
     ],
 }
 
@@ -57,6 +61,13 @@ XLSX_FIXTURES = {
         ["Rep Identifier", "Given", "Family", "Organization", "Electronic Mail", "Town", "Province"],
         ["99000018", "Amelia", "Patel", "Orchard Lane Advisors", "amelia.patel@example.com", "Edison", "NJ"],
         ["99000024", "Isabella", "Moore", "Queen City Planning", "isabella.moore@example.com", "Charlotte", "NC"],
+    ],
+    "preamble_and_header.xlsx": [
+        ["Quarterly advisor export"],
+        [],
+        ["Advisor Name", "Organization", "Town", "Province"],
+        ["John Smith", "Northstar Wealth Partners", "Boston", "MA"],
+        ["Robert Mercer", "Cedar Grove Advisory", "Richmond", "VA"],
     ],
 }
 

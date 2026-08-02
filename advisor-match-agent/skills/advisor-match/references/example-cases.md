@@ -5,4 +5,7 @@
 - Exact John Smith with Boston and Northstar evidence: match only the uniquely supported record.
 - Fuzzy name without firm/location support: do not auto-match.
 - Duplicate source rows: preserve each row and add duplicate-group metadata.
-- Firm and address without name, CRD, or email: `No Match / INSUFFICIENT_EVIDENCE`.
+- Firm and location without name, CRD, or email: `No Match / INSUFFICIENT_EVIDENCE`.
+- Exact name with `Morgan Stanley` versus `Morgan Stanley, LLC`: legal-suffix normalization makes the firm exact.
+- Fuzzy name plus merely close firm without exact city/state: `Ambiguous Match`.
+- Duplicate authoritative email: `Ambiguous Match / NON_UNIQUE_EMAIL`.

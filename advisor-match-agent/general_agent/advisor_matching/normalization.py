@@ -7,28 +7,59 @@ import unicodedata
 
 _HONORIFICS = {"mr", "mrs", "ms", "miss", "dr"}
 _SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "cfa", "cfp"}
-_FIRM_SUFFIXES = {"llc", "inc", "incorporated", "corp", "corporation", "ltd", "company", "co"}
-_STREET = {"street": "st", "avenue": "ave", "road": "rd", "boulevard": "blvd", "drive": "dr", "lane": "ln", "suite": "ste", "north": "n", "south": "s", "east": "e", "west": "w"}
+_FIRM_SUFFIXES = {
+    "llc",
+    "llp",
+    "lp",
+    "inc",
+    "incorporated",
+    "corp",
+    "corporation",
+    "ltd",
+    "limited",
+    "company",
+    "co",
+    "pllc",
+}
 _STATES = {
-    "massachusetts": "ma", "new york": "ny", "california": "ca", "texas": "tx",
-    "florida": "fl", "illinois": "il", "colorado": "co", "washington": "wa",
-    "pennsylvania": "pa", "new jersey": "nj", "virginia": "va", "ohio": "oh",
-    "georgia": "ga", "north carolina": "nc", "michigan": "mi", "arizona": "az",
+    "alabama": "al", "alaska": "ak", "arizona": "az", "arkansas": "ar",
+    "california": "ca", "colorado": "co", "connecticut": "ct",
+    "delaware": "de", "district of columbia": "dc", "florida": "fl",
+    "georgia": "ga", "hawaii": "hi", "idaho": "id", "illinois": "il",
+    "indiana": "in", "iowa": "ia", "kansas": "ks", "kentucky": "ky",
+    "louisiana": "la", "maine": "me", "maryland": "md",
+    "massachusetts": "ma", "michigan": "mi", "minnesota": "mn",
+    "mississippi": "ms", "missouri": "mo", "montana": "mt",
+    "nebraska": "ne", "nevada": "nv", "new hampshire": "nh",
+    "new jersey": "nj", "new mexico": "nm", "new york": "ny",
+    "north carolina": "nc", "north dakota": "nd", "ohio": "oh",
+    "oklahoma": "ok", "oregon": "or", "pennsylvania": "pa",
+    "rhode island": "ri", "south carolina": "sc", "south dakota": "sd",
+    "tennessee": "tn", "texas": "tx", "utah": "ut", "vermont": "vt",
+    "virginia": "va", "washington": "wa", "west virginia": "wv",
+    "wisconsin": "wi", "wyoming": "wy",
 }
 NICKNAMES = {
-    "bob": "robert", "rob": "robert", "bobby": "robert", "liz": "elizabeth",
-    "beth": "elizabeth", "bill": "william", "will": "william", "kate": "katherine",
-    "kathy": "katherine", "jim": "james", "jimmy": "james", "mike": "michael",
+    "bob": "robert", "rob": "robert", "bobby": "robert",
+    "liz": "elizabeth", "beth": "elizabeth", "bill": "william",
+    "will": "william", "kate": "katherine", "kathy": "katherine",
+    "jim": "james", "jimmy": "james", "mike": "michael",
 }
 
 
 def _ascii(value: object) -> str:
     text = unicodedata.normalize("NFKD", str(value or "").strip().casefold())
-    return "".join(character for character in text if not unicodedata.combining(character))
+    return "".join(
+        character for character in text if not unicodedata.combining(character)
+    )
 
 
 def words(value: object) -> list[str]:
-    return [part for part in re.sub(r"[^a-z0-9]+", " ", _ascii(value)).split() if part]
+    return [
+        part
+        for part in re.sub(r"[^a-z0-9]+", " ", _ascii(value)).split()
+        if part
+    ]
 
 
 def crd(value: object) -> str:
@@ -40,7 +71,11 @@ def crd(value: object) -> str:
 
 def email(value: object) -> str:
     normalized = _ascii(value).replace(" ", "")
-    return normalized if re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized) else ""
+    return (
+        normalized
+        if re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized)
+        else ""
+    )
 
 
 def person_name(value: object) -> str:
@@ -54,12 +89,11 @@ def first_name(value: object, *, aliases: bool = False) -> str:
 
 
 def firm(value: object) -> str:
-    parts = ["and" if part == "&" else part for part in words(str(value or "").replace("&", " and "))]
-    return " ".join(part for part in parts if part not in _FIRM_SUFFIXES)
-
-
-def street(value: object) -> str:
-    return " ".join(_STREET.get(part, part) for part in words(value))
+    parts = words(str(value or "").replace("&", " and "))
+    normalized = [part for part in parts if part not in _FIRM_SUFFIXES]
+    while normalized and normalized[-1] == "and":
+        normalized.pop()
+    return " ".join(normalized)
 
 
 def city(value: object) -> str:
@@ -68,7 +102,7 @@ def city(value: object) -> str:
 
 def state(value: object) -> str:
     normalized = " ".join(words(value))
-    return _STATES.get(normalized, normalized[:2] if len(normalized) == 2 else normalized)
+    return _STATES.get(normalized, normalized if len(normalized) == 2 else normalized)
 
 
 def zip_code(value: object) -> str:

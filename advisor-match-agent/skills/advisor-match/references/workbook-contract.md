@@ -2,9 +2,11 @@
 
 Always create `/advisor_matches.xlsx` with sheets in this order:
 
-1. `Matched`: one row per effective match, including authoritative advisor fields and decision provenance.
-2. `Review Required`: ambiguous candidate rows and no-match rows, with at most three candidates per source row.
-3. `Original Input`: selected source values in original row and column order.
-4. `Run Summary`: session, counts, mapping, source/reference hashes, policy version, warnings, and review state.
+1. `Matched`: one row per effective match with compact input/advisor identity, qualitative evidence, and decision provenance.
+2. `Review Required`: one row per presented candidate, or one row for a No Match with no candidates.
+3. `Original Input`: source values in original column order with physical row numbers.
+4. `Run Summary`: session/revision, interpreted mapping, input counts, status counts, source/reference hashes, snapshot ID, policy version, and review state.
 
-Write all user-controlled strings as text to prevent formula injection. Keep CRD and ZIP as text. The deterministic tool must reopen and reconcile the workbook before returning it.
+The default view is human-first. Combine readable names and locations, keep technical audit columns at the far right and hidden by default, freeze header rows, add filters, use styled headers, alternating fills and status colors, wrap text, and size columns to cover headers plus bounded content.
+
+Write every user-controlled string as text to prevent formula injection. Keep CRD and ZIP as text. After every creation or review change, reopen the workbook, verify the four sheets, reject formulas, and reconcile Matched plus unique Review Required items to Original Input.

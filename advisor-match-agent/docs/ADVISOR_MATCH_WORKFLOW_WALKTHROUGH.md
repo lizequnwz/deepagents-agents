@@ -1,176 +1,83 @@
-# Advisor Match Workflow Walkthrough
+# Advisor Match workflow walkthrough
 
-## The central idea
+## Central idea
 
-The agent orchestrates the conversation, but ordinary Python code decides every
-row-level identity match. The model profiles the upload, chooses a typed column
-mapping, calls the workflow tools, and presents bounded review pages. It does
-not receive the complete master table and does not calculate or select matches
-itself.
-
-## Agent and application workflow
+The Deep Agent adapts to inconsistent uploads and asks clarification questions. Ordinary Python code validates table structure, resolves identities, persists review state, and creates the workbook. The model never receives the full authoritative advisor table and never chooses a match row by row.
 
 ```mermaid
 flowchart TD
-    U[User uploads one CSV or XLSX] --> UI[Streamlit UI and FastAPI run]
-    UI --> A[Deep Agent]
-    S[advisor-match SKILL.md] -. workflow instructions .-> A
-
-    subgraph AgentLoop[Model-directed tool loop]
-        A --> P[profile_advisor_file]
-        P -->|bounded columns, samples, suggestions| A
-        A --> F[find_all_advisors_in_database]
-        F -->|snapshot manifest only| A
-        A --> M[start_advisor_match]
-        M -->|session ID, counts, warnings, workbook path| A
-        A --> L[list_advisor_match_items]
-        L -->|small review page| A
-        A --> Q{User confirms a review choice?}
-        Q -->|yes| R[apply_advisor_review_decisions]
-        Q -->|not yet| OUT[Explain results and ask what to review]
-        R --> OUT
-    end
-
-    subgraph DeterministicCode[Application-owned deterministic work]
-        P --> PROF[CSV/XLSX profiler]
-        F --> REF[(master_advisors.csv)]
-        REF --> SNAP[Run-local advisor_reference.csv]
-        SNAP --> M
-        M --> LOAD[Load mapped input rows]
-        LOAD --> MATCH[Normalize, generate candidates, score, decide]
-        MATCH --> DB[(SQLite match session)]
-        MATCH --> XLSX[Generate and verify advisor_matches.xlsx]
-        L --> DB
-        R --> DB
-        R --> XLSX
-    end
-
-    OUT --> UI
-    XLSX --> UI
+    U["Upload one CSV or XLSX"] --> P["Profile bounded raw rows"]
+    P --> I{"One clear sheet, header, and mapping?"}
+    I -->|No| Q["Ask the user"] --> I
+    I -->|Yes| V["Validate exact refs and fingerprint"]
+    V --> F{"Rows missing firm and strong IDs?"}
+    F -->|Yes| C["Corrected upload or explicit continue"] --> V
+    F -->|No| R["Find all advisors"]
+    V -->|Explicit continue| R
+    R --> S["Persist opaque immutable snapshot"]
+    S --> M["Run deterministic matcher"]
+    M --> DB[("Match session + audit")]
+    M --> W["Generate and verify workbook"]
+    DB --> E["Review ambiguous, then no-match pages"]
+    E -->|Explicit decision| DB
+    E -->|Explicit decision| W
+    W --> D["Download advisor_matches.xlsx"]
 ```
 
-## What happens in one matching run
+## One new matching run
 
-1. **Upload and context** — the UI stores the original file in the current
-   corporation and conversation. The run manager gives the agent a virtual
-   upload path such as `/uploads/advisors.csv`.
-2. **Skill loading** — the agent reads `skills/advisor-match/SKILL.md`. The
-   skill gives the model the required tool order, review behavior, and
-   explanation rules.
-3. **Profiling** — `profile_advisor_file` reads a bounded portion of the CSV or
-   XLSX. It returns sheet names, headers, basic patterns, three sample rows, and
-   mapping suggestions. The model uses this summary to create an
-   `InputMapping`.
-4. **Reference snapshot** — `find_all_advisors_in_database` reads the current
-   reference source. In this PoC the source is the checked-in 40-row synthetic
-   `master_advisors.csv`. The tool creates a run-local
-   `/tmp/advisor_reference.csv` and returns only its manifest to the model.
-5. **Deterministic matching** — `start_advisor_match` loads the mapped input and
-   reference rows inside the application process, calls `run_matching`, stores
-   the structured decisions in SQLite, and generates the workbook.
-6. **Summary to the model** — the model receives the session ID, policy version,
-   warnings, workbook path, and counts for `Matched`, `Ambiguous Match`, and
-   `No Match`—not the full decision table.
-7. **Conversational review** — `list_advisor_match_items` reads a small page from
-   the persisted session. The model explains the source row, candidate CRDs,
-   evidence, conflicts, and reason.
-8. **User-directed changes** — only an explicit user choice triggers
-   `apply_advisor_review_decisions`. The tool updates the session, writes an
-   audit entry, recomputes counts, and regenerates the workbook.
-9. **Recovery** — if a turn fails after matching,
-   `get_current_advisor_match_session` recovers the latest session in the same
-   conversation so the agent can continue rather than rerun the match.
+1. **Upload**—FastAPI and the workspace store exactly one CSV or XLSX under the active corporation and conversation. The original upload is never modified.
+2. **Load the skill**—the agent reads `skills/advisor-match/SKILL.md`, which defines tool order and clarification boundaries.
+3. **Profile raw rows**—`profile_advisor_file` returns bounded physical rows, plausible header interpretations, a headerless view, patterns, and samples.
+4. **Interpret**—the agent selects one worksheet and maps CRD, name, firm, email, city, state, and optional ZIP. It asks the user when the meaning is not clear.
+5. **Validate**—`validate_advisor_mapping` confirms exact indexes and headers before data loading, skips blank/preamble rows, reports the missing-firm checkpoint, and returns a source-and-mapping fingerprint.
+6. **Clarify if needed**—firm information is added only through a corrected upload. The user may explicitly continue with weaker evidence.
+7. **Retrieve the source**—`find_all_advisors_in_database` creates a fresh protected snapshot and returns only its opaque manifest.
+8. **Match**—`start_advisor_match` revalidates the fingerprint, verifies the reference snapshot, runs policy version 2, persists a session, and creates the workbook.
+9. **Report**—the agent shows the interpreted mapping, header mode, selected sheet, warnings, session ID, workbook path, and three status counts.
+10. **Review**—the agent pages ambiguous items first, then no-match items by reason. Candidate explanations use qualitative evidence only.
+11. **Apply explicit choices**—the application records before/after audit data, recalculates counts, increments the revision, and regenerates the workbook.
+12. **Recover**—a later turn calls `get_current_advisor_match_session`; it does not rerun matching merely to recover state.
 
-## Deterministic decision ladder
+## Input interpretations
+
+A headed mapping contains a one-based physical `header_row`. Each bound column contains its exact zero-based index and observed header. Indexes make duplicate headers safe.
+
+A headerless mapping uses `header_row=null` and `header=null` on each column reference. Generated labels such as `Column A` are for previews and Original Input only.
+
+Rows above a selected header are preamble. Entirely blank data rows are skipped. Physical row numbers remain stable so conversation and workbook always point to the source file correctly.
+
+Structural errors stop the run: unreadable input, missing worksheet, invalid mapping, missing mapped column, changed fingerprint, empty data table, or configured row-limit overflow. Malformed row values do not stop other records.
+
+## Decision ladder
 
 ```mermaid
 flowchart TD
-    ROW[One mapped input row] --> CRD{Exact valid CRD exists?}
-    CRD -->|yes| MC[Matched: EXACT_CRD]
-    CRD -->|no| EMAIL{Unique normalized email?}
-    EMAIL -->|yes| ME[Matched: UNIQUE_EXACT_EMAIL]
-    EMAIL -->|no| NAME{Exact normalized name plus independent support?}
-    NAME -->|yes, one safe candidate| MN[Matched: EXACT_NAME_SUPPORTED]
-    NAME -->|no| FUZZY{Top fuzzy candidate clears score, margin, support, and conflict rules?}
-    FUZZY -->|yes| MF[Matched: FUZZY_NAME_CORROBORATED]
-    FUZZY -->|no| PLAUSIBLE{Any plausible candidates?}
-    PLAUSIBLE -->|yes| AM[Ambiguous Match: show up to 3 candidates]
-    PLAUSIBLE -->|no| NM[No Match: no acceptable candidate]
+    ROW["Mapped nonblank row"] --> CRD{"Exact valid CRD?"}
+    CRD -->|Yes| MC["Matched / EXACT_CRD"]
+    CRD -->|No| EMAIL{"Normalized email result"}
+    EMAIL -->|Unique| ME["Matched / UNIQUE_EXACT_EMAIL"]
+    EMAIL -->|Multiple records| AE["Ambiguous / NON_UNIQUE_EMAIL"]
+    EMAIL -->|No result| NAME{"Usable name?"}
+    NAME -->|No| NM["No Match with row reason"]
+    NAME -->|Yes| EXACT{"Exact name + safe support?"}
+    EXACT -->|Unique| MN["Matched / EXACT_NAME_SUPPORTED"]
+    EXACT -->|No| FUZZY{"Fuzzy policy + margin + support?"}
+    FUZZY -->|Safe| MF["Matched / FUZZY_NAME_CORROBORATED"]
+    FUZZY -->|Plausible| AM["Ambiguous Match"]
+    FUZZY -->|None| NC["No Match / NO_ACCEPTABLE_CANDIDATE"]
 ```
 
-### Normalization
-
-The matcher compares normalized copies while preserving original values for the
-workbook. It normalizes CRD, email, person name, firm, street, city, state, and
-ZIP independently. Blank values do not match other blanks.
-
-### Candidate scoring
-
-For rows not resolved by exact CRD or unique email, every advisor in the current
-PoC reference is scored using the fields present on the input row:
-
-| Evidence | Weight |
-| --- | ---: |
-| Name | 0.50 |
-| Firm | 0.20 |
-| Street | 0.12 |
-| City | 0.06 |
-| State | 0.06 |
-| ZIP | 0.06 |
-
-The weighted score is normalized over only the fields present in the input.
-Important thresholds in policy version 1 are:
-
-- acceptance score: `0.92`;
-- plausible candidate score: `0.78`;
-- minimum winner-to-runner-up margin: `0.10`;
-- minimum name similarity: `0.92`;
-- maximum candidates shown for review: `3`.
-
-A fuzzy candidate is automatically matched only when it also has independent
-firm/location evidence and no strong conflict. A nickname alias may generate a
-candidate but is not automatically confirmed.
-
-## Responsibility boundary
-
-| Component | Owns |
-| --- | --- |
-| Deep Agent | Reads the skill, chooses the next tool, constructs the column mapping, summarizes counts, and conducts the conversation. |
-| Typed advisor tools | Validate workflow inputs, invoke deterministic modules, page review data, persist decisions, and regenerate exports. |
-| Matching engine | Normalization, candidate scoring, rule ordering, match status, duplicate groups, and deterministic explanations. |
-| SQLite store | Match sessions, decisions, review audit records, run events, and corporation/conversation scoping. |
-| Workbook generator | The fixed four-sheet export and structural/formula verification. |
+Exact/close firm and exact city/state are independent support. Strong firm or state conflicts block name-based automation. Same-state city differences are weaker conflicts. Legal firm suffixes normalize away. Nicknames generate candidates only. ZIP is displayed as context and never changes status.
 
 ## What the model sees
 
-The model sees:
+The model sees bounded raw previews, the validated mapping summary, reference manifest, match counts/warnings, and bounded review pages with at most three candidates per item.
 
-- bounded upload profiles and sample rows;
-- the advisor reference manifest;
-- match counts and warnings;
-- bounded review pages with at most three candidates per item;
-- results from explicit review operations.
+It does not see the complete upload, authoritative table, persisted decision collection, internal similarity scores, protected snapshot path, or workbook contents.
 
-The model does not see:
+## Output
 
-- the complete advisor master table;
-- the complete persisted match session;
-- every workbook row;
-- internal candidate scores in the workbook or review response.
+`advisor_matches.xlsx` contains `Matched`, `Review Required`, `Original Input`, and `Run Summary`. The first two sheets use a compact human-facing layout; technical audit fields are hidden by default. Every revision is generated from structured state, styled, reopened, checked for formulas, and reconciled before return.
 
-## Workbook result
-
-`advisor_matches.xlsx` is regenerated from persisted structured decisions and
-contains four sheets:
-
-1. `Matched` — confirmed deterministic or user-confirmed matches.
-2. `Review Required` — ambiguous candidates and true no-match rows.
-3. `Original Input` — preserved source values and row numbers.
-4. `Run Summary` — counts, mapping, hashes, policy version, and session state.
-
-## Current PoC limitations
-
-- The master is a synthetic 40-row CSV, not Snowflake.
-- Fuzzy matching currently scores an unresolved row against every advisor; it
-  is suitable for this PoC dataset but not the configured million-row ceiling.
-- Advisor profile building is intentionally not implemented yet.
+Current limitations are the synthetic reference, in-memory fuzzy candidate scan, and intentionally unimplemented profile builder.

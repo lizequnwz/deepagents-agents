@@ -83,6 +83,12 @@ def test_prompt_enforces_matching_and_review_boundaries() -> None:
     assert SHARED_RUNTIME_GUIDANCE in SYSTEM_PROMPT
     for required in (
         "sole purpose", "advisor-match skill", "never decide identities row by row",
+        "exact column indexes and observed headers",
+        "Always call the mapping-validation tool before retrieving",
+        "name rows without a firm, valid CRD, or valid email",
+        "authoritative database tool once for each new match run",
+        "snapshot ID is opaque",
+        "qualitative supporting and conflicting evidence",
         "unlisted advisor requires an exact user-supplied CRD",
         "correct the input and retry", "profile building is not implemented",
         "Refuse unrelated",

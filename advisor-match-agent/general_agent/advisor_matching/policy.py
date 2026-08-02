@@ -1,9 +1,11 @@
 """Versioned matching-policy defaults."""
 
-POLICY_VERSION = "1"
+POLICY_VERSION = "2"
 ACCEPTANCE_SCORE = 0.92
 PLAUSIBLE_SCORE = 0.78
 MINIMUM_MARGIN = 0.10
 MINIMUM_NAME_SIMILARITY = 0.92
+MINIMUM_FIRM_SIMILARITY = 0.88
+FIRM_CONFLICT_SIMILARITY = 0.45
 REVIEW_CANDIDATE_LIMIT = 3
-WEIGHTS = {"name": 0.50, "firm": 0.20, "street": 0.12, "city": 0.06, "state": 0.06, "zip": 0.06}
+WEIGHTS = {"name": 0.65, "firm": 0.25, "city": 0.05, "state": 0.05}

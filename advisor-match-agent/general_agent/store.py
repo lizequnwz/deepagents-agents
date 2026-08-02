@@ -148,6 +148,7 @@ class Store:
                     source_name TEXT NOT NULL,
                     source_sha256 TEXT NOT NULL,
                     mapping_json TEXT NOT NULL,
+                    input_summary_json TEXT NOT NULL DEFAULT '{}',
                     reference_json TEXT NOT NULL,
                     decisions_json TEXT NOT NULL,
                     counts_json TEXT NOT NULL,
@@ -182,6 +183,15 @@ class Store:
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS advisor_reference_snapshots (
+                    id TEXT PRIMARY KEY,
+                    corp_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                    manifest_json TEXT NOT NULL,
+                    snapshot_path TEXT NOT NULL,
+                    consumed_by_session_id TEXT,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
             for table in (
@@ -213,6 +223,28 @@ class Store:
                     "ALTER TABLE advisor_match_override_proposals "
                     "ADD COLUMN created_run_id TEXT NOT NULL DEFAULT ''"
                 )
+            session_columns = {
+                row["name"]
+                for row in self._connection.execute(
+                    "PRAGMA table_info(advisor_match_sessions)"
+                )
+            }
+            if "input_summary_json" not in session_columns:
+                self._connection.execute(
+                    "ALTER TABLE advisor_match_sessions "
+                    "ADD COLUMN input_summary_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            snapshot_columns = {
+                row["name"]
+                for row in self._connection.execute(
+                    "PRAGMA table_info(advisor_reference_snapshots)"
+                )
+            }
+            if "consumed_by_session_id" not in snapshot_columns:
+                self._connection.execute(
+                    "ALTER TABLE advisor_reference_snapshots "
+                    "ADD COLUMN consumed_by_session_id TEXT"
+                )
             self._connection.executescript(
                 """
                 CREATE INDEX IF NOT EXISTS conversations_corp_idx
@@ -229,6 +261,8 @@ class Store:
                     ON advisor_match_sessions(corp_id, conversation_id, updated_at);
                 CREATE INDEX IF NOT EXISTS advisor_review_decisions_corp_idx
                     ON advisor_match_review_decisions(corp_id, session_id, created_at);
+                CREATE INDEX IF NOT EXISTS advisor_reference_snapshots_corp_idx
+                    ON advisor_reference_snapshots(corp_id, conversation_id, created_at);
                 """
             )
 
@@ -480,6 +514,7 @@ class Store:
         source_name: str,
         source_sha256: str,
         mapping: Mapping[str, Any],
+        input_summary: Mapping[str, Any],
         reference: Mapping[str, Any],
         decisions: list[Mapping[str, Any]],
         counts: Mapping[str, Any],
@@ -497,17 +532,36 @@ class Store:
                 (conversation_id, corp_id),
             ).fetchone():
                 raise KeyError(conversation_id)
+            reference_snapshot_id = str(reference["reference_snapshot_id"])
+            snapshot_cursor = self._connection.execute(
+                "UPDATE advisor_reference_snapshots "
+                "SET consumed_by_session_id=? "
+                "WHERE id=? AND corp_id=? AND conversation_id=? "
+                "AND consumed_by_session_id IS NULL",
+                (
+                    session_id,
+                    reference_snapshot_id,
+                    corp_id,
+                    conversation_id,
+                ),
+            )
+            if snapshot_cursor.rowcount == 0:
+                raise ValueError(
+                    "The advisor reference snapshot is unknown or already used by "
+                    "another match session. Retrieve a fresh snapshot."
+                )
             self._connection.execute(
                 """INSERT INTO advisor_match_sessions(
                     id, corp_id, conversation_id, source_relative_path, source_name,
-                    source_sha256, mapping_json, reference_json, decisions_json,
+                    source_sha256, mapping_json, input_summary_json, reference_json, decisions_json,
                     counts_json, output_relative_path, policy_version, status,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Reviewing', ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Reviewing', ?, ?)""",
                 (
                     session_id, corp_id, conversation_id, source_relative_path,
                     source_name, source_sha256,
                     json.dumps(mapping, ensure_ascii=False, default=str),
+                    json.dumps(input_summary, ensure_ascii=False, default=str),
                     json.dumps(reference, ensure_ascii=False, default=str),
                     json.dumps(decisions, ensure_ascii=False, default=str),
                     json.dumps(counts, ensure_ascii=False, default=str),
@@ -554,6 +608,8 @@ class Store:
         decisions: list[Mapping[str, Any]],
         counts: Mapping[str, Any],
         status: str | None = None,
+        audits: list[Mapping[str, Any]] | None = None,
+        proposal_ids: list[str] | None = None,
     ) -> None:
         corp_id = self._corp(corp_id)
         assignments = "decisions_json=?, counts_json=?, updated_at=?, revision=revision+1"
@@ -573,6 +629,89 @@ class Store:
             )
             if cursor.rowcount == 0:
                 raise KeyError(session_id)
+            for audit in audits or []:
+                self._connection.execute(
+                    """INSERT INTO advisor_match_review_decisions(
+                        id, corp_id, session_id, review_item_id, action, crd_number,
+                        note, prior_decision_json, new_decision_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "amd_" + uuid.uuid4().hex,
+                        corp_id,
+                        session_id,
+                        audit["review_item_id"],
+                        audit["action"],
+                        audit.get("crd_number"),
+                        audit.get("note", ""),
+                        json.dumps(audit["prior"], ensure_ascii=False, default=str),
+                        json.dumps(audit["new"], ensure_ascii=False, default=str),
+                        _iso(utc_now()),
+                    ),
+                )
+            for proposal_id in proposal_ids or []:
+                proposal_cursor = self._connection.execute(
+                    "UPDATE advisor_match_override_proposals SET status='Applied' "
+                    "WHERE id=? AND corp_id=? AND status='Pending'",
+                    (proposal_id, corp_id),
+                )
+                if proposal_cursor.rowcount == 0:
+                    raise KeyError(proposal_id)
+
+    def create_advisor_reference_snapshot(
+        self,
+        *,
+        snapshot_id: str,
+        corp_id: str,
+        conversation_id: str,
+        manifest: Mapping[str, Any],
+        snapshot_path: Path,
+    ) -> None:
+        """Persist an opaque reference manifest and protected snapshot path."""
+
+        corp_id = self._corp(corp_id)
+        with self._lock, self._connection:
+            if not self._connection.execute(
+                "SELECT 1 FROM conversations WHERE id=? AND corp_id=?",
+                (conversation_id, corp_id),
+            ).fetchone():
+                raise KeyError(conversation_id)
+            self._connection.execute(
+                """INSERT INTO advisor_reference_snapshots(
+                    id, corp_id, conversation_id, manifest_json, snapshot_path,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    snapshot_id,
+                    corp_id,
+                    conversation_id,
+                    json.dumps(manifest, ensure_ascii=False, default=str),
+                    str(snapshot_path),
+                    _iso(utc_now()),
+                ),
+            )
+
+    def get_advisor_reference_snapshot(
+        self,
+        snapshot_id: str,
+        *,
+        corp_id: str,
+        conversation_id: str | None = None,
+    ) -> dict[str, Any]:
+        corp_id = self._corp(corp_id)
+        query = (
+            "SELECT * FROM advisor_reference_snapshots WHERE id=? AND corp_id=?"
+        )
+        parameters: list[Any] = [snapshot_id, corp_id]
+        if conversation_id is not None:
+            query += " AND conversation_id=?"
+            parameters.append(conversation_id)
+        with self._lock:
+            row = self._connection.execute(query, parameters).fetchone()
+        if row is None:
+            raise KeyError(snapshot_id)
+        result = dict(row)
+        result["manifest"] = json.loads(result.pop("manifest_json"))
+        return result
 
     def add_advisor_review_decision(
         self,
@@ -1034,6 +1173,7 @@ def _advisor_match_session(row: sqlite3.Row) -> dict[str, Any]:
     result = dict(row)
     for field in (
         "mapping_json",
+        "input_summary_json",
         "reference_json",
         "decisions_json",
         "counts_json",

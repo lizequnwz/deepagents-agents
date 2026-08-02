@@ -1,22 +1,9 @@
 # Advisor database tool contract
 
-`find_all_advisors_in_database` creates an authoritative, run-scoped snapshot for deterministic matching. The model receives only its manifest, never the advisor rows.
+`find_all_advisors_in_database` creates a complete authoritative snapshot only after input validation and user clarification are complete. Call it exactly once for each new match run.
 
-## Initial synthetic implementation
+The snapshot is an immutable protected file scoped to the active corporation and conversation. The model receives only an opaque `reference_snapshot_id`, row count, ordered columns, source kind, schema version, retrieval time, hash, and optional query ID. It never receives the advisor rows or a filesystem path.
 
-Input: none. The active corporation/run context is injected by the application.
+`start_advisor_match` and later exact-CRD proposals resolve the opaque ID internally, verify its path, hash, schema, and row count, and reuse the same session snapshot across turns. Errors are explicit for an empty or oversized source, invalid schema, malformed or duplicate master CRDs, missing snapshot, cross-corporation access, or integrity failure. Partial snapshots are never returned.
 
-Output:
-
-- `snapshot_virtual_path`: opaque `/tmp/advisor_reference.csv` token accepted by matching tools
-- `row_count` and ordered `columns`
-- `source_kind`, `schema_version`, `retrieved_at`, and `sha256`
-- optional production `query_id`
-
-Errors are explicit for a missing/empty source, invalid schema, malformed or duplicate CRDs, row-limit overflow, or unavailable run context. Partial snapshots are never returned.
-
-The synthetic adapter reads the canonical checked-in table. A Snowflake adapter should implement the same `AdvisorReferenceSource` boundary and produce the same manifest without changing the matching skill or review contracts.
-
-## Production retrieval
-
-Returning an entire million-row table is an initial mock convenience, not the preferred production API. The Snowflake version should use a stable snapshot/version and server-side candidate retrieval by exact CRD/email plus normalized name blocks, with pagination and query IDs. Candidate pages must be bounded and deterministic. The model must still receive only manifests and small review pages; application code may use the snapshot or candidate index internally.
+The synthetic adapter reads the checked-in development table. A production Snowflake adapter should implement the same `AdvisorReferenceSource` boundary. At scale, use a stable database snapshot and server-side exact lookup plus deterministic candidate blocking; bounded review pages and the opaque manifest contract remain unchanged.

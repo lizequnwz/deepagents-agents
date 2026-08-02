@@ -3,19 +3,31 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MASTER_COLUMNS = (
-    "CRD_NUMBER", "FIRST_NAME", "LAST_NAME", "FIRM_NAME", "EMAIL",
-    "STREET_ADDRESS", "CITY", "STATE", "ZIP_CODE",
+    "CRD_NUMBER",
+    "FIRST_NAME",
+    "LAST_NAME",
+    "FIRM_NAME",
+    "EMAIL",
+    "CITY",
+    "STATE",
+    "ZIP_CODE",
 )
 
 
 class ColumnRef(BaseModel):
+    """One exact physical column binding.
+
+    ``header`` is the observed header value for headed input and ``None`` for
+    headerless input. The zero-based index remains decisive when headers are
+    duplicated.
+    """
     index: int = Field(ge=0)
-    header: str = Field(min_length=1)
+    header: str | None = None
 
 
 class FieldBinding(BaseModel):
@@ -25,23 +37,76 @@ class FieldBinding(BaseModel):
 
 class InputMapping(BaseModel):
     sheet_name: str | None = None
-    header_row: int = Field(default=1, ge=1)
+    header_row: int | None = Field(default=1, ge=1)
     crd_number: FieldBinding | None = None
     first_name: FieldBinding | None = None
     last_name: FieldBinding | None = None
     full_name: FieldBinding | None = None
     firm_name: FieldBinding | None = None
     email: FieldBinding | None = None
-    street_address: FieldBinding | None = None
     city: FieldBinding | None = None
     state: FieldBinding | None = None
     zip_code: FieldBinding | None = None
 
     @model_validator(mode="after")
-    def require_identity_evidence(self) -> "InputMapping":
-        if not any((self.crd_number, self.email, self.first_name, self.last_name, self.full_name)):
-            raise ValueError("Map a CRD, email, or advisor name before matching.")
+    def validate_mapping(self) -> "InputMapping":
+        has_name = bool(self.full_name or (self.first_name and self.last_name))
+        if not any((self.crd_number, self.email, has_name)):
+            raise ValueError(
+                "Map a CRD, email, full name, or both first and last name "
+                "before matching."
+            )
+        for binding in self.field_bindings().values():
+            for reference in binding.columns:
+                if self.header_row is None and reference.header is not None:
+                    raise ValueError(
+                        "Headerless mappings must use null column headers."
+                    )
+                if self.header_row is not None and reference.header is None:
+                    raise ValueError(
+                        "Headed mappings must include every exact observed header."
+                    )
         return self
+
+    def field_bindings(self) -> dict[str, FieldBinding]:
+        fields = (
+            "crd_number",
+            "first_name",
+            "last_name",
+            "full_name",
+            "firm_name",
+            "email",
+            "city",
+            "state",
+            "zip_code",
+        )
+        return {
+            field: binding
+            for field in fields
+            if (binding := getattr(self, field)) is not None
+        }
+
+
+class InputSummary(BaseModel):
+    data_row_count: int = Field(ge=0)
+    blank_row_count: int = Field(ge=0)
+    preamble_row_count: int = Field(ge=0)
+    missing_firm_row_count: int = Field(ge=0)
+    missing_firm_confirmation_required: bool = False
+
+
+class MappingValidationResult(BaseModel):
+    input_virtual_path: str
+    source_sha256: str
+    selected_sheet: str | None
+    mapping: InputMapping
+    mapping_fingerprint: str
+    columns: list[dict[str, Any]]
+    input_summary: InputSummary
+    missing_firm_sample: list[dict[str, Any]] = Field(
+        default_factory=list, max_length=5
+    )
+    warnings: list[str] = Field(default_factory=list)
 
 
 class AdvisorRecord(BaseModel):
@@ -50,7 +115,6 @@ class AdvisorRecord(BaseModel):
     last_name: str
     firm_name: str = ""
     email: str = ""
-    street_address: str = ""
     city: str = ""
     state: str = ""
     zip_code: str = ""
@@ -69,13 +133,23 @@ class MatchCandidate(BaseModel):
     last_name: str
     firm_name: str = ""
     email: str = ""
-    street_address: str = ""
     city: str = ""
     state: str = ""
     zip_code: str = ""
-    matched_fields: list[str] = Field(default_factory=list)
-    conflicting_fields: list[str] = Field(default_factory=list)
+    supporting_evidence: list[str] = Field(default_factory=list)
+    conflicting_evidence: list[str] = Field(default_factory=list)
+    contextual_evidence: list[str] = Field(default_factory=list)
     internal_score: float = Field(default=0, ge=0, le=1, exclude=True)
+    internal_name_similarity: float = Field(default=0, ge=0, le=1, exclude=True)
+    internal_alias_name_similarity: float = Field(
+        default=0, ge=0, le=1, exclude=True
+    )
+    internal_firm_similarity: float = Field(default=0, ge=0, le=1, exclude=True)
+    internal_exact_firm: bool = Field(default=False, exclude=True)
+    internal_close_firm: bool = Field(default=False, exclude=True)
+    internal_location_match: bool = Field(default=False, exclude=True)
+    internal_state_conflict: bool = Field(default=False, exclude=True)
+    internal_firm_conflict: bool = Field(default=False, exclude=True)
 
 
 class MatchDecision(BaseModel):
@@ -102,13 +176,13 @@ class MatchCounts(BaseModel):
 
 
 class ReferenceSnapshotManifest(BaseModel):
-    snapshot_virtual_path: Literal["/tmp/advisor_reference.csv"]
+    reference_snapshot_id: str = Field(pattern=r"^ars_[a-f0-9]{32}$")
     row_count: int = Field(gt=0)
     columns: list[str]
     source_kind: Literal["synthetic", "snowflake"]
     schema_version: str
     retrieved_at: datetime
-    sha256: str
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     query_id: str | None = None
 
 
@@ -116,6 +190,9 @@ class MatchRunResult(BaseModel):
     match_session_id: str
     output_virtual_path: Literal["/advisor_matches.xlsx"]
     selected_sheet: str | None
+    interpreted_mapping: InputMapping
+    mapping_fingerprint: str
+    input_summary: InputSummary
     counts: MatchCounts
     warnings: list[str] = Field(default_factory=list)
     policy_version: str
@@ -123,7 +200,9 @@ class MatchRunResult(BaseModel):
 
 class ReviewDecision(BaseModel):
     review_item_id: str
-    action: Literal["confirm_candidate", "confirm_manual_crd", "confirm_no_match", "reopen"]
+    action: Literal[
+        "confirm_candidate", "confirm_manual_crd", "confirm_no_match"
+    ]
     crd_number: str | None = None
     proposal_id: str | None = None
     note: str = ""
@@ -140,5 +219,7 @@ class ManualOverrideProposal(BaseModel):
 
 class ProfileBuildRequest(BaseModel):
     """# TODO: register only when advisor profile building is implemented."""
+
     match_session_id: str
     matched_crd_numbers: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")

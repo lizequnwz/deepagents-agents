@@ -223,6 +223,7 @@ class Workspace:
             self.user_data_root(corp_id) / "attachments",
             self.user_data_root(corp_id) / "artifacts",
             self.user_data_root(corp_id) / "baselines",
+            self.user_data_root(corp_id) / "advisor_references",
         ):
             path.mkdir(parents=True, exist_ok=True)
         return root

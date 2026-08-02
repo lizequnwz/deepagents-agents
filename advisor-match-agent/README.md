@@ -11,11 +11,14 @@ The initial reference is a wholly synthetic development dataset. No Snowflake co
 
 1. Upload one `.csv` or `.xlsx` in the chat composer.
 2. Ask the agent to match its advisors.
-3. The model selects the sheet and typed column mapping; deterministic code performs every row decision.
-4. Review `Matched`, `Ambiguous Match`, and `No Match` records conversationally in bounded pages.
-5. Confirm a presented candidate, confirm no match, or supply an exact CRD for a separately reconfirmed override.
-6. Download the verified four-sheet `advisor_matches.xlsx` artifact.
-7. Approve the session. Profile building is a documented `# TODO` and is not exposed as a tool.
+3. The model inspects bounded raw rows, detects a header or headerless layout, selects one sheet, and asks when column meanings are ambiguous.
+4. Deterministic code validates exact indexes and headers. If name rows lack firm, valid CRD, and valid email, choose a corrected upload or explicitly continue.
+5. The agent retrieves an opaque authoritative snapshot; deterministic code performs every row decision.
+6. Review `Ambiguous Match` first and `No Match` second in bounded conversational pages. Automated matches are available on request.
+7. Confirm a presented candidate, confirm no match, or supply an exact CRD for a separately reconfirmed override.
+8. Download the styled, verified four-sheet `advisor_matches.xlsx` artifact and optionally approve with unresolved exceptions.
+
+Profile building is a documented `# TODO` and is not exposed as a tool.
 
 The model never reads or edits the whole workbook, receives the full master table, runs shell commands, installs packages, browses the web, or delegates to a general-purpose subagent.
 
@@ -26,7 +29,7 @@ The model never reads or edits the whole workbook, receives the full master tabl
 - `Original Input`: the selected source table in original order.
 - `Run Summary`: session, mapping, counts, hashes, policy versions, and approval state.
 
-Every revision is regenerated deterministically, reopened for validation, and captured through the existing immutable artifact mechanism.
+The first two sheets use a compact human-first layout with technical audit fields hidden by default. Headers are frozen and filtered; widths, fills, wrapping, status colors, and text-safe CRD/ZIP formats are applied. Every revision is regenerated deterministically, reopened for validation, and captured through the existing immutable artifact mechanism.
 
 ## Synthetic data and examples
 
