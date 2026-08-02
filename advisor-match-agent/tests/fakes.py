@@ -49,7 +49,7 @@ def completed_events() -> list[dict[str, Any]]:
                 "namespace": [],
                 "data": {
                     "event": "tool-started",
-                    "tool_name": "start_advisor_match",
+                    "tool_name": "create_advisor_match",
                     "tool_call_id": "tool-one",
                     "input": {"input_virtual_path": "/uploads/advisors.csv"},
                 },
@@ -61,7 +61,7 @@ def completed_events() -> list[dict[str, Any]]:
                 "namespace": [],
                 "data": {
                     "event": "tool-finished",
-                    "tool_name": "start_advisor_match",
+                    "tool_name": "create_advisor_match",
                     "tool_call_id": "tool-one",
                     "output": {"match_session_id": "ams_test"},
                 },

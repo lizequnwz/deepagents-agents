@@ -28,16 +28,16 @@ flowchart TD
 
 1. **Upload**—FastAPI and the workspace store exactly one CSV or XLSX under the active corporation and conversation. The original upload is never modified.
 2. **Load the skill**—the agent reads `skills/advisor-match/SKILL.md`, which defines tool order and clarification boundaries.
-3. **Profile raw rows**—`profile_advisor_file` returns bounded physical rows, plausible header interpretations, a headerless view, patterns, and samples.
+3. **Inspect raw rows**—`inspect_advisor_upload` returns bounded physical rows, plausible header interpretations, a headerless view, patterns, and samples.
 4. **Interpret**—the agent selects one worksheet and maps CRD, name, firm, email, city, state, and optional ZIP. It asks the user when the meaning is not clear.
-5. **Validate**—`validate_advisor_mapping` confirms exact indexes and headers before data loading, skips blank/preamble rows, reports the missing-firm checkpoint, and returns a source-and-mapping fingerprint.
+5. **Validate**—`validate_advisor_input` confirms exact indexes and headers before data loading, skips blank/preamble rows, reports the missing-firm checkpoint, and returns a source-and-mapping fingerprint.
 6. **Clarify if needed**—firm information is added only through a corrected upload. The user may explicitly continue with weaker evidence.
-7. **Retrieve the source**—`find_all_advisors_in_database` creates a fresh protected snapshot and returns only its opaque manifest.
-8. **Match**—`start_advisor_match` revalidates the fingerprint, verifies the reference snapshot, runs policy version 2, persists a session, and creates the workbook.
+7. **Retrieve the source**—`find_all_advisors` creates a fresh protected snapshot and returns only its opaque manifest.
+8. **Match**—`create_advisor_match` revalidates the fingerprint, verifies the reference snapshot, runs policy version 2, persists a session, and creates the workbook.
 9. **Report**—the agent shows the interpreted mapping, header mode, selected sheet, warnings, session ID, workbook path, and three status counts.
 10. **Review**—the agent pages ambiguous items first, then no-match items by reason. Candidate explanations use qualitative evidence only.
 11. **Apply explicit choices**—the application records before/after audit data, recalculates counts, increments the revision, and regenerates the workbook.
-12. **Recover**—a later turn calls `get_current_advisor_match_session`; it does not rerun matching merely to recover state.
+12. **Recover**—a later turn calls `get_current_advisor_match`; it does not rerun matching merely to recover state.
 
 ## Input interpretations
 

@@ -35,10 +35,10 @@
     { "id": "upload", "lane": "interaction", "col": 0, "type": "external", "label": "Upload", "sublabel": "CSV or XLSX" },
     { "id": "clarify", "lane": "interaction", "col": 2, "type": "security", "label": "Clarify", "sublabel": "ask user" },
     { "id": "results", "lane": "interaction", "col": 5, "type": "frontend", "label": "Results", "sublabel": "review + download" },
-    { "id": "interpret_upload", "lane": "orchestration", "col": 1, "type": "backend", "label": "Interpret", "sublabel": "profile + map" },
+    { "id": "interpret_upload", "lane": "orchestration", "col": 1, "type": "backend", "label": "Interpret", "sublabel": "inspect + map" },
     { "id": "review_items", "lane": "orchestration", "col": 4, "type": "messagebus", "label": "Review", "sublabel": "small pages" },
     { "id": "validate_mapping", "lane": "deterministic", "col": 2, "type": "security", "label": "Validate", "sublabel": "fingerprint", "width": 72 },
-    { "id": "match_rows", "lane": "deterministic", "col": 3, "type": "backend", "label": "Run Match", "sublabel": "snapshot first", "width": 72 },
+    { "id": "match_rows", "lane": "deterministic", "col": 3, "type": "backend", "label": "Create", "sublabel": "match session", "width": 72 },
     { "id": "reference_snapshot", "lane": "storage", "col": 3, "type": "database", "label": "Snapshot", "sublabel": "immutable", "width": 64 },
     { "id": "session", "lane": "audit", "col": 4, "type": "database", "label": "Session", "sublabel": "audit", "width": 64 },
     { "id": "workbook", "lane": "export", "col": 5, "type": "database", "label": "Workbook", "sublabel": "styled + verified" }
@@ -75,6 +75,26 @@
         "Applies the versioned match policy",
         "Stores snapshots, decisions, and audit",
         "Regenerates and verifies the workbook"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Core tools",
+      "items": [
+        "inspect_advisor_upload",
+        "validate_advisor_input",
+        "find_all_advisors",
+        "create_advisor_match"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Review tools",
+      "items": [
+        "get_current_advisor_match",
+        "list_advisor_match_results",
+        "propose_crd_match",
+        "apply_advisor_match_decisions"
       ]
     }
   ]

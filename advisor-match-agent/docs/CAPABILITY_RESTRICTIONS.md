@@ -5,7 +5,7 @@ This classification applies to the model-facing Advisor Match Agent. Operator AP
 | Inherited capability | Decision | Enforcement |
 | --- | --- | --- |
 | CSV/XLSX upload parsing | Keep with restrictions | One chat attachment; `.csv`/`.xlsx`; size, row, sheet, column, and sample bounds; typed upload resolver only. |
-| Advisor reference access | Replace with narrow tool | `find_all_advisors_in_database` returns a run-scoped manifest; the model never receives master rows. |
+| Advisor reference access | Replace with narrow tool | `find_all_advisors` returns an opaque manifest; the model never receives master rows. |
 | Matching/code execution | Replace with deterministic library | Versioned application functions perform normalization, matching, scoring, duplicates, and validation. No model-authored code runs. |
 | Result creation/modification | Replace with narrow tool | Only deterministic `advisor_matches.xlsx` regeneration from persisted decisions. Original uploads are immutable. |
 | Review-state access | Keep with restrictions | Corporation-scoped session ID; filters and cursor; maximum 20 records per tool page, skill default 10. |
@@ -20,4 +20,4 @@ This classification applies to the model-facing Advisor Match Agent. Operator AP
 | Human workspace upload/download | Keep with restrictions | Loopback UI/API, corporation scope, path/symlink defenses, supported types, and no corresponding model filesystem capability. |
 | Advisor profile building | Do not register | Typed contract and skill reference are `# TODO`; the agent only offers the future handoff after approval. |
 
-The sole model-facing tool set is `profile_advisor_file`, `find_all_advisors_in_database`, `start_advisor_match`, `list_advisor_match_items`, `propose_manual_crd_override`, `apply_advisor_review_decisions`, plus read-only installed-skill discovery.
+The sole model-facing tool set is `inspect_advisor_upload`, `validate_advisor_input`, `find_all_advisors`, `create_advisor_match`, `get_current_advisor_match`, `list_advisor_match_results`, `propose_crd_match`, `apply_advisor_match_decisions`, plus read-only installed-skill discovery.

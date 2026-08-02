@@ -60,14 +60,14 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
     }
 
     async with backend.run_scope("run-test", corp_id, conversation_id):
-        profile = await tools["profile_advisor_file"].ainvoke(
+        profile = await tools["inspect_advisor_upload"].ainvoke(
             {"input_virtual_path": "/uploads/advisors.csv"}
         )
         candidate = profile["sheets"][0]["header_candidates"][0]
         assert candidate["row_number"] == 1
         assert candidate["columns"][0]["header"] == "Advisor Name"
 
-        validation = await tools["validate_advisor_mapping"].ainvoke(
+        validation = await tools["validate_advisor_input"].ainvoke(
             {
                 "input_virtual_path": "/uploads/advisors.csv",
                 "mapping": mapping,
@@ -76,7 +76,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         assert validation["input_summary"]["data_row_count"] == 1
         assert validation["input_summary"]["missing_firm_confirmation_required"] is False
 
-        manifest = await tools["find_all_advisors_in_database"].ainvoke({})
+        manifest = await tools["find_all_advisors"].ainvoke({})
         assert manifest["row_count"] == 40
         assert manifest["reference_snapshot_id"].startswith("ars_")
         assert "snapshot_path" not in manifest
@@ -92,7 +92,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
                 manifest["reference_snapshot_id"], corp_id="B654321"
             )
 
-        result = await tools["start_advisor_match"].ainvoke(
+        result = await tools["create_advisor_match"].ainvoke(
             {
                 "input_virtual_path": "/uploads/advisors.csv",
                 "reference_snapshot_id": manifest["reference_snapshot_id"],
@@ -103,7 +103,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         assert result["counts"]["ambiguous_match"] == 1
         assert result["interpreted_mapping"] == validation["mapping"]
         with pytest.raises(ValueError, match="Retrieve a fresh snapshot"):
-            await tools["start_advisor_match"].ainvoke(
+            await tools["create_advisor_match"].ainvoke(
                 {
                     "input_virtual_path": "/uploads/advisors.csv",
                     "reference_snapshot_id": manifest["reference_snapshot_id"],
@@ -111,12 +111,12 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
                     "mapping_fingerprint": validation["mapping_fingerprint"],
                 }
             )
-        current = await tools["get_current_advisor_match_session"].ainvoke({})
+        current = await tools["get_current_advisor_match"].ainvoke({})
         assert current["match_session_id"] == result["match_session_id"]
         assert current["counts"] == result["counts"]
         assert current["interpreted_mapping"] == result["interpreted_mapping"]
 
-        page = await tools["list_advisor_match_items"].ainvoke(
+        page = await tools["list_advisor_match_results"].ainvoke(
             {
                 "match_session_id": result["match_session_id"],
                 "status": "Ambiguous Match",
@@ -126,7 +126,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         assert "internal_score" not in item["candidates"][0]
         assert item["candidates"][0]["supporting_evidence"]
         selected_crd = item["candidates"][0]["crd_number"]
-        updated = await tools["apply_advisor_review_decisions"].ainvoke(
+        updated = await tools["apply_advisor_match_decisions"].ainvoke(
             {
                 "match_session_id": result["match_session_id"],
                 "decisions": [
@@ -183,25 +183,25 @@ async def test_missing_firm_requires_explicit_continue_and_fingerprint(settings)
     tools = _tools(settings, workspace, backend, store)
     mapping = {"full_name": {"columns": [{"index": 0, "header": "Name"}]}}
     async with backend.run_scope("run-preflight", corp_id, conversation_id):
-        validation = await tools["validate_advisor_mapping"].ainvoke(
+        validation = await tools["validate_advisor_input"].ainvoke(
             {"input_virtual_path": "/uploads/name-only.csv", "mapping": mapping}
         )
         assert validation["input_summary"]["missing_firm_row_count"] == 1
-        manifest = await tools["find_all_advisors_in_database"].ainvoke({})
+        manifest = await tools["find_all_advisors"].ainvoke({})
         base = {
             "input_virtual_path": "/uploads/name-only.csv",
             "reference_snapshot_id": manifest["reference_snapshot_id"],
             "mapping": mapping,
         }
         with pytest.raises(ValueError, match="validate it again"):
-            await tools["start_advisor_match"].ainvoke(
+            await tools["create_advisor_match"].ainvoke(
                 {**base, "mapping_fingerprint": "0" * 64}
             )
         with pytest.raises(ValueError, match="explicitly wants to continue"):
-            await tools["start_advisor_match"].ainvoke(
+            await tools["create_advisor_match"].ainvoke(
                 {**base, "mapping_fingerprint": validation["mapping_fingerprint"]}
             )
-        result = await tools["start_advisor_match"].ainvoke(
+        result = await tools["create_advisor_match"].ainvoke(
             {
                 **base,
                 "mapping_fingerprint": validation["mapping_fingerprint"],
@@ -232,11 +232,11 @@ async def test_unlisted_crd_requires_proposal_then_later_turn_confirmation(
     tools = _tools(settings, workspace, backend, store)
     mapping = {"full_name": {"columns": [{"index": 0, "header": "Name"}]}}
     async with backend.run_scope("run-manual", corp_id, conversation_id):
-        validation = await tools["validate_advisor_mapping"].ainvoke(
+        validation = await tools["validate_advisor_input"].ainvoke(
             {"input_virtual_path": "/uploads/unknown.csv", "mapping": mapping}
         )
-        manifest = await tools["find_all_advisors_in_database"].ainvoke({})
-        result = await tools["start_advisor_match"].ainvoke(
+        manifest = await tools["find_all_advisors"].ainvoke({})
+        result = await tools["create_advisor_match"].ainvoke(
             {
                 "input_virtual_path": "/uploads/unknown.csv",
                 "reference_snapshot_id": manifest["reference_snapshot_id"],
@@ -245,15 +245,15 @@ async def test_unlisted_crd_requires_proposal_then_later_turn_confirmation(
                 "allow_missing_firm": True,
             }
         )
-        page = await tools["list_advisor_match_items"].ainvoke(
+        page = await tools["list_advisor_match_results"].ainvoke(
             {"match_session_id": result["match_session_id"], "status": "no_match"}
         )
         assert page["total"] == 1
-        unmatched = await tools["list_advisor_match_items"].ainvoke(
+        unmatched = await tools["list_advisor_match_results"].ainvoke(
             {"match_session_id": result["match_session_id"], "status": "unmatched"}
         )
         assert unmatched["items"] == page["items"]
-        proposal = await tools["propose_manual_crd_override"].ainvoke(
+        proposal = await tools["propose_crd_match"].ainvoke(
             {
                 "match_session_id": result["match_session_id"],
                 "review_item_id": page["items"][0]["review_item_id"],
@@ -262,7 +262,7 @@ async def test_unlisted_crd_requires_proposal_then_later_turn_confirmation(
         )
         assert proposal["requires_explicit_confirmation"] is True
         with pytest.raises(ValueError, match="later user turn"):
-            await tools["apply_advisor_review_decisions"].ainvoke(
+            await tools["apply_advisor_match_decisions"].ainvoke(
                 {
                     "match_session_id": result["match_session_id"],
                     "decisions": [
@@ -277,7 +277,7 @@ async def test_unlisted_crd_requires_proposal_then_later_turn_confirmation(
     async with backend.run_scope(
         "run-manual-confirm", corp_id, conversation_id
     ):
-        confirmed = await tools["apply_advisor_review_decisions"].ainvoke(
+        confirmed = await tools["apply_advisor_match_decisions"].ainvoke(
             {
                 "match_session_id": result["match_session_id"],
                 "decisions": [

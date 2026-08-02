@@ -20,7 +20,7 @@ def test_event_reduction_ignores_model_text_and_tracks_event_lifecycle() -> None
                 "id": 4,
                 "kind": "tool_started",
                 "phase": "started",
-                "data": {"call_id": "c1", "tool_name": "list_advisor_match_items", "input": {"match_session_id": "ams_test"}},
+                "data": {"call_id": "c1", "tool_name": "list_advisor_match_results", "input": {"match_session_id": "ams_test"}},
             },
             {
                 "id": 5,

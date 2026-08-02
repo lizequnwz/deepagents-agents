@@ -6,7 +6,7 @@ The interactive workflow is also available as [advisor_match_workflow.html](advi
 
 ## Stage 1: interpret and validate
 
-`profile_advisor_file` reads at most the configured preview bounds with `header=None`. It therefore does not assume the first row is a header. For each CSV or bounded workbook sheet it returns:
+`inspect_advisor_upload` reads at most the configured preview bounds with `header=None`. It therefore does not assume the first row is a header. For each CSV or bounded workbook sheet it returns:
 
 - physical raw-row previews;
 - several plausible header rows with exact header values, patterns, samples, and deterministic synonym suggestions;
@@ -15,7 +15,7 @@ The interactive workflow is also available as [advisor_match_workflow.html](advi
 
 The agent selects exactly one worksheet, a headed or headerless interpretation, and an `InputMapping`. It asks the user when more than one interpretation is plausible.
 
-`validate_advisor_mapping` then reopens the upload and validates the exact worksheet, physical header row, zero-based indexes, and observed headers. Duplicate headers remain safe because the index is decisive. Headerless references use `header=null`.
+`validate_advisor_input` then reopens the upload and validates the exact worksheet, physical header row, zero-based indexes, and observed headers. Duplicate headers remain safe because the index is decisive. Headerless references use `header=null`.
 
 Validation loads only after the structural references pass. It skips completely blank rows, excludes preamble rows above the selected header, preserves physical row numbers, enforces the input-row limit, and returns:
 
@@ -28,9 +28,9 @@ Rows with a usable name but no firm, valid CRD, or valid email require one conve
 
 ## Stage 2: retrieve and match
 
-Only after validation and clarification does the agent call `find_all_advisors_in_database`. The tool validates and projects the authoritative schema into a protected, immutable, corporation-and-conversation-scoped CSV. The model receives only an opaque snapshot ID and manifest—not a path or advisor rows.
+Only after validation and clarification does the agent call `find_all_advisors`. The tool validates and projects the authoritative schema into a protected, immutable, corporation-and-conversation-scoped CSV. The model receives only an opaque snapshot ID and manifest—not a path or advisor rows.
 
-`start_advisor_match` accepts the upload path, exact mapping, mapping fingerprint, opaque reference ID, and the explicit missing-firm continuation flag. It:
+`create_advisor_match` accepts the upload path, exact mapping, mapping fingerprint, opaque reference ID, and the explicit missing-firm continuation flag. It:
 
 1. revalidates the upload and mapping fingerprint;
 2. resolves the reference ID through the corporation-scoped store;

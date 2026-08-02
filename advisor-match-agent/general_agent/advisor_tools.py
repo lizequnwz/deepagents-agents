@@ -16,7 +16,7 @@ from general_agent.advisor_matching.input_loader import validate_and_load_input
 from general_agent.advisor_matching.matcher import run_matching
 from general_agent.advisor_matching.policy import POLICY_VERSION
 from general_agent.advisor_matching.profiler import (
-    profile_advisor_file as profile_file,
+    inspect_advisor_upload as inspect_upload,
 )
 from general_agent.advisor_matching.schemas import (
     AdvisorRecord,
@@ -76,13 +76,13 @@ def build_advisor_tools(
         return source
 
     @tool
-    def profile_advisor_file(input_virtual_path: str) -> dict[str, Any]:
+    def inspect_advisor_upload(input_virtual_path: str) -> dict[str, Any]:
         """Inspect bounded raw rows and plausible header interpretations."""
 
-        return profile_file(resolve_upload(input_virtual_path), settings)
+        return inspect_upload(resolve_upload(input_virtual_path), settings)
 
     @tool
-    def validate_advisor_mapping(
+    def validate_advisor_input(
         input_virtual_path: str,
         mapping: InputMapping,
     ) -> dict[str, Any]:
@@ -107,7 +107,7 @@ def build_advisor_tools(
         return result.model_dump(mode="json")
 
     @tool
-    def find_all_advisors_in_database() -> dict[str, Any]:
+    def find_all_advisors() -> dict[str, Any]:
         """Create an opaque, persisted authoritative advisor snapshot."""
 
         corp_id, conversation_id = current_context()
@@ -162,7 +162,7 @@ def build_advisor_tools(
         return manifest.model_dump(mode="json")
 
     @tool
-    def start_advisor_match(
+    def create_advisor_match(
         input_virtual_path: str,
         reference_snapshot_id: str,
         mapping: InputMapping,
@@ -234,7 +234,7 @@ def build_advisor_tools(
         ).model_dump(mode="json")
 
     @tool
-    def get_current_advisor_match_session() -> dict[str, Any]:
+    def get_current_advisor_match() -> dict[str, Any]:
         """Return the latest persisted match-session summary for this conversation."""
 
         corp_id, conversation_id = current_context()
@@ -259,7 +259,7 @@ def build_advisor_tools(
         }
 
     @tool
-    def list_advisor_match_items(
+    def list_advisor_match_results(
         match_session_id: str,
         status: str | None = None,
         source_row_number: int | None = None,
@@ -312,7 +312,7 @@ def build_advisor_tools(
         }
 
     @tool
-    def propose_manual_crd_override(
+    def propose_crd_match(
         match_session_id: str,
         review_item_id: str,
         crd_number: str,
@@ -361,7 +361,7 @@ def build_advisor_tools(
         }
 
     @tool
-    def apply_advisor_review_decisions(
+    def apply_advisor_match_decisions(
         match_session_id: str,
         decisions: list[ReviewDecision],
         approve_session: bool = False,
@@ -428,14 +428,14 @@ def build_advisor_tools(
         }
 
     return [
-        profile_advisor_file,
-        validate_advisor_mapping,
-        find_all_advisors_in_database,
-        start_advisor_match,
-        get_current_advisor_match_session,
-        list_advisor_match_items,
-        propose_manual_crd_override,
-        apply_advisor_review_decisions,
+        inspect_advisor_upload,
+        validate_advisor_input,
+        find_all_advisors,
+        create_advisor_match,
+        get_current_advisor_match,
+        list_advisor_match_results,
+        propose_crd_match,
+        apply_advisor_match_decisions,
     ]
 
 

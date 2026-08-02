@@ -33,7 +33,7 @@ _ALIASES = {
 }
 
 
-def profile_advisor_file(path: Path, settings: Settings) -> dict[str, Any]:
+def inspect_advisor_upload(path: Path, settings: Settings) -> dict[str, Any]:
     """Return bounded raw previews and plausible headed/headerless views."""
 
     suffix = path.suffix.lower()

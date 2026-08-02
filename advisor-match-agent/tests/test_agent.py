@@ -69,10 +69,10 @@ def test_harness_profile_disables_general_purpose_subagent() -> None:
 
 def test_expected_tool_errors_are_returned_for_correction() -> None:
     request = Mock()
-    request.tool.name = "list_advisor_match_items"
+    request.tool.name = "list_advisor_match_results"
     message = _recoverable_tool_error(ValueError("bad status"), request)
     assert message == (
-        "list_advisor_match_items could not complete: bad status. "
+        "list_advisor_match_results could not complete: bad status. "
         "Correct the input and retry."
     )
     assert _recoverable_tool_error(RuntimeError("internal failure"), request) is None
@@ -82,7 +82,7 @@ def test_prompt_enforces_matching_and_review_boundaries() -> None:
     normalized = " ".join(SYSTEM_PROMPT.split())
     assert SHARED_RUNTIME_GUIDANCE in SYSTEM_PROMPT
     for required in (
-        "sole purpose", "advisor-match skill", "never decide identities row by row",
+        "Your purpose", "advisor-match skill", "never decide identities row by row",
         "exact column indexes and observed headers",
         "Always call the mapping-validation tool before retrieving",
         "name rows without a firm, valid CRD, or valid email",
