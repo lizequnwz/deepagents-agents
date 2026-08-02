@@ -113,6 +113,16 @@ def test_advisor_tool_schemas_do_not_expose_runtime_or_host_paths(settings) -> N
         advisor_source=SyntheticAdvisorReferenceSource(Path("missing")),
     )
     store.close()
+    assert {item.name for item in tools} == {
+        "inspect_advisor_upload",
+        "validate_advisor_input",
+        "find_all_advisors",
+        "create_advisor_match",
+        "get_current_advisor_match",
+        "list_advisor_match_results",
+        "propose_crd_match",
+        "apply_advisor_match_decisions",
+    }
     for item in tools:
         fields = item.args_schema.model_fields
         assert "runtime" not in fields

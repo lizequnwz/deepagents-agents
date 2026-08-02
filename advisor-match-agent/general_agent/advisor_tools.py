@@ -86,7 +86,7 @@ def build_advisor_tools(
         input_virtual_path: str,
         mapping: InputMapping,
     ) -> dict[str, Any]:
-        """Validate an interpreted mapping and return its pre-match checkpoint."""
+        """Validate one interpreted advisor upload and return its pre-match checkpoint."""
 
         loaded = validate_and_load_input(
             resolve_upload(input_virtual_path),
@@ -108,7 +108,7 @@ def build_advisor_tools(
 
     @tool
     def find_all_advisors() -> dict[str, Any]:
-        """Create an opaque, persisted authoritative advisor snapshot."""
+        """Snapshot all authoritative advisors and return only the opaque manifest."""
 
         corp_id, conversation_id = current_context()
         snapshot_id = "ars_" + uuid.uuid4().hex
@@ -169,7 +169,7 @@ def build_advisor_tools(
         mapping_fingerprint: str,
         allow_missing_firm: bool = False,
     ) -> dict[str, Any]:
-        """Deterministically match a validated upload and persist review state."""
+        """Create a persisted deterministic advisor match and verified workbook."""
 
         corp_id, conversation_id = current_context()
         source = resolve_upload(input_virtual_path)
@@ -235,7 +235,7 @@ def build_advisor_tools(
 
     @tool
     def get_current_advisor_match() -> dict[str, Any]:
-        """Return the latest persisted match-session summary for this conversation."""
+        """Return this conversation's latest persisted advisor match summary."""
 
         corp_id, conversation_id = current_context()
         try:
@@ -267,7 +267,7 @@ def build_advisor_tools(
         cursor: int = 0,
         limit: int = 10,
     ) -> dict[str, Any]:
-        """List bounded review items with qualitative candidate evidence."""
+        """List bounded advisor match results with qualitative candidate evidence."""
 
         corp_id, _ = current_context()
         if cursor < 0 or limit < 1 or limit > 20:
@@ -317,7 +317,7 @@ def build_advisor_tools(
         review_item_id: str,
         crd_number: str,
     ) -> dict[str, Any]:
-        """Resolve a user-supplied CRD and create a later-turn proposal."""
+        """Resolve a user-supplied CRD and propose it for later-turn confirmation."""
 
         corp_id, _ = current_context()
         session = store.get_advisor_match_session(
@@ -366,7 +366,7 @@ def build_advisor_tools(
         decisions: list[ReviewDecision],
         approve_session: bool = False,
     ) -> dict[str, Any]:
-        """Apply explicit review choices and regenerate the verified workbook."""
+        """Apply explicit advisor match decisions and regenerate the verified workbook."""
 
         corp_id, _ = current_context()
         if len(decisions) > 20:

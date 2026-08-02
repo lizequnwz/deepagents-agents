@@ -26,16 +26,23 @@ class ColumnRef(BaseModel):
     headerless input. The zero-based index remains decisive when headers are
     duplicated.
     """
+
+    model_config = ConfigDict(extra="forbid")
+
     index: int = Field(ge=0)
     header: str | None = None
 
 
 class FieldBinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     columns: list[ColumnRef] = Field(min_length=1)
     combine: Literal["first", "join_space"] = "first"
 
 
 class InputMapping(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     sheet_name: str | None = None
     header_row: int | None = Field(default=1, ge=1)
     crd_number: FieldBinding | None = None
