@@ -113,6 +113,7 @@ class Store:
                     relative_path TEXT NOT NULL,
                     content_type TEXT,
                     size_bytes INTEGER NOT NULL,
+                    sha256 TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     protected_path TEXT NOT NULL
                 );
@@ -120,6 +121,8 @@ class Store:
                     id TEXT PRIMARY KEY,
                     corp_id TEXT NOT NULL,
                     run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+                    match_session_id TEXT,
+                    revision INTEGER,
                     relative_path TEXT NOT NULL,
                     change_type TEXT NOT NULL,
                     size_bytes INTEGER NOT NULL,
@@ -153,6 +156,7 @@ class Store:
                     decisions_json TEXT NOT NULL,
                     counts_json TEXT NOT NULL,
                     output_relative_path TEXT NOT NULL,
+                    output_artifact_id TEXT,
                     policy_version TEXT NOT NULL,
                     status TEXT NOT NULL,
                     revision INTEGER NOT NULL DEFAULT 1,
@@ -234,6 +238,31 @@ class Store:
                     "ALTER TABLE advisor_match_sessions "
                     "ADD COLUMN input_summary_json TEXT NOT NULL DEFAULT '{}'"
                 )
+            if "output_artifact_id" not in session_columns:
+                self._connection.execute(
+                    "ALTER TABLE advisor_match_sessions "
+                    "ADD COLUMN output_artifact_id TEXT"
+                )
+            attachment_columns = {
+                row["name"]
+                for row in self._connection.execute("PRAGMA table_info(attachments)")
+            }
+            if "sha256" not in attachment_columns:
+                self._connection.execute(
+                    "ALTER TABLE attachments ADD COLUMN sha256 TEXT NOT NULL DEFAULT ''"
+                )
+            artifact_columns = {
+                row["name"]
+                for row in self._connection.execute("PRAGMA table_info(artifacts)")
+            }
+            if "match_session_id" not in artifact_columns:
+                self._connection.execute(
+                    "ALTER TABLE artifacts ADD COLUMN match_session_id TEXT"
+                )
+            if "revision" not in artifact_columns:
+                self._connection.execute(
+                    "ALTER TABLE artifacts ADD COLUMN revision INTEGER"
+                )
             snapshot_columns = {
                 row["name"]
                 for row in self._connection.execute(
@@ -301,13 +330,6 @@ class Store:
                         f"UPDATE {table} SET {column}=? WHERE id=? AND corp_id=?",
                         (str(destination), row["id"], corp_id),
                     )
-            old_baselines = self.data_root / "baselines"
-            new_baselines = destination_root / "baselines"
-            if old_baselines.is_dir():
-                new_baselines.mkdir(parents=True, exist_ok=True)
-                for child in list(old_baselines.iterdir()):
-                    shutil.move(str(child), str(new_baselines / child.name))
-
     def recover_abandoned_runs(self) -> None:
         now = _iso(utc_now())
         message = "The backend restarted before this run finished."
@@ -392,8 +414,9 @@ class Store:
                     (conversation_id, corp_id),
                 )
             ]
-            protected_paths = [
-                Path(row["protected_path"])
+            protected_paths: list[tuple[str, Path]] = []
+            protected_paths.extend(
+                ("attachments", Path(row["protected_path"]))
                 for row in self._connection.execute(
                     """SELECT protected_path FROM attachments
                     WHERE run_id IN (
@@ -401,26 +424,40 @@ class Store:
                     )""",
                     (conversation_id, corp_id),
                 )
-            ]
+            )
+            protected_paths.extend(
+                ("artifacts", Path(row["snapshot_path"]))
+                for row in self._connection.execute(
+                    """SELECT snapshot_path FROM artifacts
+                    WHERE run_id IN (
+                        SELECT id FROM runs WHERE conversation_id=? AND corp_id=?
+                    )""",
+                    (conversation_id, corp_id),
+                )
+            )
+            protected_paths.extend(
+                ("advisor_references", Path(row["snapshot_path"]))
+                for row in self._connection.execute(
+                    "SELECT snapshot_path FROM advisor_reference_snapshots "
+                    "WHERE conversation_id=? AND corp_id=?",
+                    (conversation_id, corp_id),
+                )
+            )
             cursor = self._connection.execute(
                 "DELETE FROM conversations WHERE id=? AND corp_id=?",
                 (conversation_id, corp_id),
             )
             if cursor.rowcount == 0:
                 raise KeyError(conversation_id)
-        for run_id in run_ids:
-            for directory in (
-                self.data_root / "users" / corp_storage_key(corp_id) / "artifacts" / run_id,
-                self.data_root / "users" / corp_storage_key(corp_id) / "baselines" / run_id,
-            ):
-                if directory.exists():
-                    shutil.rmtree(directory)
-        for protected_path in protected_paths:
-            directory = protected_path.parent
-            attachment_root = (
-                self.data_root / "users" / corp_storage_key(corp_id) / "attachments"
-            )
-            if directory.is_relative_to(attachment_root) and directory.exists():
+        for category, protected_path in protected_paths:
+            root = (
+                self.data_root
+                / "users"
+                / corp_storage_key(corp_id)
+                / category
+            ).resolve()
+            directory = protected_path.parent.resolve(strict=False)
+            if directory.is_relative_to(root) and directory != root and directory.exists():
                 shutil.rmtree(directory)
         return run_ids
 
@@ -490,16 +527,17 @@ class Store:
             self._connection.execute(
                 """INSERT INTO attachments(
                     id, corp_id, run_id, original_name, relative_path, content_type,
-                    size_bytes, created_at, protected_path
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    size_bytes, sha256, created_at, protected_path
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     attachment.attachment_id,
                     corp_id,
                     run_id,
                     attachment.original_name,
-                    attachment.relative_path,
+                    attachment.attachment_id,
                     attachment.content_type,
                     attachment.size_bytes,
+                    attachment.sha256,
                     _iso(attachment.created_at),
                     str(protected_path),
                 ),
@@ -510,7 +548,7 @@ class Store:
         *,
         corp_id: str,
         conversation_id: str,
-        source_relative_path: str,
+        source_attachment_id: str,
         source_name: str,
         source_sha256: str,
         mapping: Mapping[str, Any],
@@ -518,7 +556,6 @@ class Store:
         reference: Mapping[str, Any],
         decisions: list[Mapping[str, Any]],
         counts: Mapping[str, Any],
-        output_relative_path: str,
         policy_version: str,
     ) -> str:
         """Persist structured decisions without placing the workbook in model state."""
@@ -558,17 +595,35 @@ class Store:
                     created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Reviewing', ?, ?)""",
                 (
-                    session_id, corp_id, conversation_id, source_relative_path,
+                    session_id, corp_id, conversation_id, source_attachment_id,
                     source_name, source_sha256,
                     json.dumps(mapping, ensure_ascii=False, default=str),
                     json.dumps(input_summary, ensure_ascii=False, default=str),
                     json.dumps(reference, ensure_ascii=False, default=str),
                     json.dumps(decisions, ensure_ascii=False, default=str),
                     json.dumps(counts, ensure_ascii=False, default=str),
-                    output_relative_path, policy_version, now, now,
+                    "", policy_version, now, now,
                 ),
             )
         return session_id
+
+    def set_advisor_match_artifact(
+        self,
+        session_id: str,
+        artifact_id: str,
+        *,
+        corp_id: str,
+    ) -> None:
+        corp_id = self._corp(corp_id)
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                "UPDATE advisor_match_sessions "
+                "SET output_artifact_id=?, output_relative_path=? "
+                "WHERE id=? AND corp_id=?",
+                (artifact_id, artifact_id, session_id, corp_id),
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(session_id)
 
     def get_advisor_match_session(
         self, session_id: str, *, corp_id: str
@@ -803,13 +858,15 @@ class Store:
                 raise KeyError(artifact.run_id)
             self._connection.execute(
                 """INSERT INTO artifacts(
-                    id, corp_id, run_id, relative_path, change_type, size_bytes,
-                    sha256, created_at, snapshot_path
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    id, corp_id, run_id, match_session_id, revision, relative_path,
+                    change_type, size_bytes, sha256, created_at, snapshot_path
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     artifact.artifact_id,
                     corp_id,
                     artifact.run_id,
+                    artifact.match_session_id,
+                    artifact.revision,
                     artifact.relative_path,
                     artifact.change_type,
                     artifact.size_bytes,
@@ -1040,17 +1097,28 @@ class Store:
             )
 
     def attachment_path(
-        self, attachment_id: str, *, corp_id: str | None = None
-    ) -> tuple[Path, str]:
+        self,
+        attachment_id: str,
+        *,
+        corp_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> tuple[Path, str, str]:
         corp_id = self._corp(corp_id)
+        query = (
+            "SELECT attachments.protected_path, attachments.original_name, "
+            "attachments.sha256 FROM attachments "
+            "JOIN runs ON runs.id=attachments.run_id AND runs.corp_id=attachments.corp_id "
+            "WHERE attachments.id=? AND attachments.corp_id=?"
+        )
+        parameters: list[Any] = [attachment_id, corp_id]
+        if conversation_id is not None:
+            query += " AND runs.conversation_id=?"
+            parameters.append(conversation_id)
         with self._lock:
-            row = self._connection.execute(
-                "SELECT protected_path, original_name FROM attachments WHERE id=? AND corp_id=?",
-                (attachment_id, corp_id),
-            ).fetchone()
+            row = self._connection.execute(query, parameters).fetchone()
             if row is None:
                 raise KeyError(attachment_id)
-            return Path(row["protected_path"]), row["original_name"]
+            return Path(row["protected_path"]), row["original_name"], row["sha256"]
 
     def artifact_path(
         self, artifact_id: str, *, corp_id: str | None = None
@@ -1089,9 +1157,9 @@ class Store:
             Attachment(
                 attachment_id=item["id"],
                 original_name=item["original_name"],
-                relative_path=item["relative_path"],
                 content_type=item["content_type"],
                 size_bytes=item["size_bytes"],
+                sha256=item["sha256"],
                 created_at=_datetime(item["created_at"]),
             )
             for item in self._connection.execute(
@@ -1103,6 +1171,8 @@ class Store:
             Artifact(
                 artifact_id=item["id"],
                 run_id=item["run_id"],
+                match_session_id=item["match_session_id"],
+                revision=item["revision"],
                 relative_path=item["relative_path"],
                 change_type=item["change_type"],
                 size_bytes=item["size_bytes"],
@@ -1179,6 +1249,7 @@ def _advisor_match_session(row: sqlite3.Row) -> dict[str, Any]:
         "counts_json",
     ):
         result[field.removesuffix("_json")] = json.loads(result.pop(field))
+    result["source_attachment_id"] = result["source_relative_path"]
     return result
 
 

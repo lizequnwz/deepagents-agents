@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 2.12.0">
-  <title>Advisor Matching Workflow Diagram</title>
+  <title>Advisor Match Agent Workflow Diagram</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -4496,9 +4496,9 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>Advisor Matching Workflow</h1>
+        <h1>Advisor Match Agent Workflow</h1>
       </div>
-      <p class="subtitle">Flexible interpretation, deterministic matching, and conversational exception review</p>
+      <p class="subtitle">Opaque IDs, deterministic matching, and explicitly published workbook revisions</p>
     </div>
 
     <script id="archify-guided-views-data" type="application/json">[]</script>
@@ -4544,9 +4544,9 @@
 
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read">
-      <svg viewBox="0 0 1200 900" role="img" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="signal-flow" data-quality-profile="showcase">
-        <title id="archify-diagram-title">Advisor Matching Workflow</title>
-        <desc id="archify-diagram-description">Flexible interpretation, deterministic matching, and conversational exception review</desc>
+      <svg viewBox="0 0 720 820" role="img" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="signal-flow" data-quality-profile="showcase">
+        <title id="archify-diagram-title">Advisor Match Agent Workflow</title>
+        <desc id="archify-diagram-description">Opaque IDs, deterministic matching, and explicitly published workbook revisions</desc>
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -4574,62 +4574,44 @@
         <text x="54" y="74" class="t-dim" font-size="10" font-weight="600">01 / User + Streamlit</text>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="176" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="198" class="t-dim" font-size="10" font-weight="600">02 / Deep Agent</text>
+        <text x="54" y="198" class="t-dim" font-size="10" font-weight="600">02 / Protected Storage + SQLite</text>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="300" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="322" class="t-dim" font-size="10" font-weight="600">03 / Typed Deterministic Code</text>
+        <text x="54" y="322" class="t-dim" font-size="10" font-weight="600">03 / Bounded Agent Reasoning</text>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-3" x="40" y="424" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="446" class="t-dim" font-size="10" font-weight="600">04 / Protected State</text>
-
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-4" x="40" y="548" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="570" class="t-dim" font-size="10" font-weight="600">05 / Session + Audit</text>
-
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-5" x="40" y="672" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="694" class="t-dim" font-size="10" font-weight="600">06 / Verified Export</text>
+        <text x="54" y="446" class="t-dim" font-size="10" font-weight="600">04 / Deterministic Application Code</text>
 
         <!-- Phase headers -->
-        <line x1="42" y1="35" x2="134" y2="35" class="a-default" stroke-width="1.1"/>
-        <rect x="42" y="27" width="92" height="16" rx="4" class="c-mask"/>
-        <text x="88" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">Upload</text>
-        <line x1="174" y1="35" x2="266" y2="35" class="a-emphasis" stroke-width="1.1"/>
-        <rect x="174" y="27" width="92" height="16" rx="4" class="c-mask"/>
-        <text x="220" y="39" class="t-backend" font-size="8" font-weight="600" text-anchor="middle">Interpret</text>
-        <line x1="254" y1="35" x2="346" y2="35" class="a-security" stroke-width="1.1"/>
+        <line x1="42" y1="35" x2="266" y2="35" class="a-security" stroke-width="1.1"/>
+        <rect x="42" y="27" width="224" height="16" rx="4" class="c-mask"/>
+        <text x="154" y="39" class="t-security" font-size="8" font-weight="600" text-anchor="middle">Immutable intake</text>
+        <line x1="254" y1="35" x2="346" y2="35" class="a-emphasis" stroke-width="1.1"/>
         <rect x="254" y="27" width="92" height="16" rx="4" class="c-mask"/>
-        <text x="300" y="39" class="t-security" font-size="8" font-weight="600" text-anchor="middle">Validate</text>
-        <line x1="384" y1="35" x2="476" y2="35" class="a-emphasis" stroke-width="1.1"/>
-        <rect x="384" y="27" width="92" height="16" rx="4" class="c-mask"/>
-        <text x="430" y="39" class="t-backend" font-size="8" font-weight="600" text-anchor="middle">Snapshot + match</text>
-        <line x1="454" y1="35" x2="546" y2="35" class="a-default" stroke-width="1.1"/>
-        <rect x="454" y="27" width="92" height="16" rx="4" class="c-mask"/>
-        <text x="500" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">Review</text>
+        <text x="300" y="39" class="t-backend" font-size="8" font-weight="600" text-anchor="middle">Map</text>
+        <line x1="384" y1="35" x2="546" y2="35" class="a-default" stroke-width="1.1"/>
+        <rect x="384" y="27" width="162" height="16" rx="4" class="c-mask"/>
+        <text x="465" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">Resolve + review</text>
         <line x1="579" y1="35" x2="671" y2="35" class="a-dashed" stroke-width="1.1"/>
         <rect x="579" y="27" width="92" height="16" rx="4" class="c-mask"/>
-        <text x="625" y="39" class="t-messagebus" font-size="8" font-weight="600" text-anchor="middle">Export</text>
+        <text x="625" y="39" class="t-messagebus" font-size="8" font-weight="600" text-anchor="middle">Verify + publish</text>
 
         <!-- Workflow groups -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="group" data-composition-frame-id="group-0" x="170" y="214" width="380" height="58" rx="9" class="c-lane" stroke-width="1"/>
-        <text x="180" y="228" class="t-backend" font-size="7" font-weight="600">Model interprets and explains</text>
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="group" data-composition-frame-id="group-1" x="250" y="338" width="230" height="58" rx="9" class="c-security-group" stroke-width="1"/>
-        <text x="260" y="352" class="t-security" font-size="7" font-weight="600">Code validates and decides</text>
+
 
         <!-- Edge paths -->
-        <path data-edge-from="upload" data-edge-to="interpret_upload" data-edge-key="0" data-edge-id="upload_interpret" data-composition-points="134,119;134,166;174,166;174,243" d="M 134 119 L 134 166 L 174 166 L 174 243" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="interpret_upload" data-edge-to="validate_mapping" data-edge-key="1" data-edge-id="interpret_validate" data-composition-points="220,269;220,290;300,290;300,341" d="M 220 269 L 220 290 L 300 290 L 300 341" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="validate_mapping" data-edge-to="clarify" data-edge-key="2" data-edge-id="validate_clarify" data-composition-points="300,341;300,145" d="M 300 341 L 300 145" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="clarify" data-edge-to="interpret_upload" data-edge-key="3" data-edge-id="clarify_interpret" data-composition-points="300,145;300,166;220,166;220,217" d="M 300 145 L 300 166 L 220 166 L 220 217" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="validate_mapping" data-edge-to="reference_snapshot" data-edge-key="4" data-edge-id="validate_snapshot" data-composition-points="336,367;336,414;398,414;398,491" d="M 336 367 L 336 414 L 398 414 L 398 491" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="reference_snapshot" data-edge-to="match_rows" data-edge-key="5" data-edge-id="snapshot_match" data-composition-points="430,465;430,393" d="M 430 465 L 430 393" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="match_rows" data-edge-to="review_items" data-edge-key="6" data-edge-id="match_review" data-composition-points="430,341;430,189;500,189;500,269" d="M 430 341 L 430 189 L 500 189 L 500 269" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="review_items" data-edge-to="session" data-edge-key="7" data-edge-id="review_session" data-composition-points="500,269;500,414;500,414;500,589" d="M 500 269 L 500 414 L 500 414 L 500 589" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="review_items" data-edge-to="workbook" data-edge-key="8" data-edge-id="review_workbook" data-composition-points="546,243;546,476;579,476;579,732" d="M 546 243 L 546 476 L 579 476 L 579 732" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="session" data-edge-to="workbook" data-edge-key="9" data-edge-id="session_workbook" data-composition-points="532,615;532,662;579,662;579,746" d="M 532 615 L 532 662 L 579 662 L 579 746" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="workbook" data-edge-to="results" data-edge-key="10" data-edge-id="workbook_results" data-composition-points="625,713;625,145" d="M 625 713 L 625 145" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="upload" data-edge-to="attachment" data-edge-key="0" data-edge-id="store_upload" data-composition-points="134,119;134,166;254,166;254,243" d="M 134 119 L 134 166 L 254 166 L 254 243" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="attachment" data-edge-to="interpret_input" data-edge-key="1" data-edge-id="profile_attachment" data-composition-points="300,217;300,401" d="M 300 217 L 300 401" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="interpret_input" data-edge-to="clarify" data-edge-key="2" data-edge-id="request_clarification" data-composition-points="346,367;430,367;430,145" d="M 346 367 L 430 367 L 430 145" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="interpret_input" data-edge-to="reference_snapshot" data-edge-key="3" data-edge-id="retrieve_reference" data-composition-points="300,401;300,414;300,414;300,465" d="M 300 401 L 300 414 L 300 414 L 300 465" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="reference_snapshot" data-edge-to="match_rows" data-edge-key="4" data-edge-id="run_match" data-composition-points="330,491;470,491" d="M 330 491 L 470 491" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="match_rows" data-edge-to="review" data-edge-key="5" data-edge-id="open_review" data-composition-points="500,457;500,414;500,414;500,393" d="M 500 457 L 500 414 L 500 414 L 500 393" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="match_rows" data-edge-to="publish_artifact" data-edge-key="6" data-edge-id="publish_initial" data-composition-points="530,491;625,491;625,277" d="M 530 491 L 625 491 L 625 277" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="publish_artifact" data-edge-to="download" data-edge-key="7" data-edge-id="deliver_artifact" data-composition-points="625,209;625,166;625,166;625,145" d="M 625 209 L 625 166 L 625 166 L 625 145" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
 
         <!-- Nodes -->
-        <g id="node-upload" data-node-id="upload" data-node-label="Upload" tabindex="0" role="button" aria-label="Focus Upload, CSV or XLSX, User + Streamlit › Upload" aria-pressed="false" data-node-kind="external" data-node-sublabel="CSV or XLSX" data-node-context="User + Streamlit › Upload">
-          <title>Upload · CSV or XLSX · User + Streamlit › Upload</title>
+        <g id="node-upload" data-node-id="upload" data-node-label="Upload" tabindex="0" role="button" aria-label="Focus Upload, one CSV or XLSX, User + Streamlit › Immutable intake" aria-pressed="false" data-node-kind="external" data-node-sublabel="one CSV or XLSX" data-node-context="User + Streamlit › Immutable intake">
+          <title>Upload · one CSV or XLSX · User + Streamlit › Immutable intake</title>
           <rect x="42" y="93" width="92" height="52" rx="6" class="c-mask"/>
           <rect x="42" y="93" width="92" height="52" rx="6" class="c-external" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(48 99) scale(0.6875)">
@@ -4637,23 +4619,11 @@
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
           <text data-detail-anchor x="88" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Upload</text>
-          <text data-detail="context" x="88" y="131" class="t-muted" font-size="8" text-anchor="middle">CSV or XLSX</text>
+          <text data-detail="context" x="88" y="131" class="t-muted" font-size="8" text-anchor="middle">one CSV or XLSX</text>
         </g>
 
-        <g id="node-clarify" data-node-id="clarify" data-node-label="Clarify" tabindex="0" role="button" aria-label="Focus Clarify, ask user, User + Streamlit › Validate" aria-pressed="false" data-node-kind="security" data-node-sublabel="ask user" data-node-context="User + Streamlit › Validate">
-          <title>Clarify · ask user · User + Streamlit › Validate</title>
-          <rect x="254" y="93" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="254" y="93" width="92" height="52" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(260 99) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-detail-anchor x="300" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Clarify</text>
-          <text data-detail="context" x="300" y="131" class="t-muted" font-size="8" text-anchor="middle">ask user</text>
-        </g>
-
-        <g id="node-results" data-node-id="results" data-node-label="Results" tabindex="0" role="button" aria-label="Focus Results, review + download, User + Streamlit › Export" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="review + download" data-node-context="User + Streamlit › Export">
-          <title>Results · review + download · User + Streamlit › Export</title>
+        <g id="node-download" data-node-id="download" data-node-label="Download" tabindex="0" role="button" aria-label="Focus Download, verified workbook, User + Streamlit › Verify + publish" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="verified workbook" data-node-context="User + Streamlit › Verify + publish">
+          <title>Download · verified workbook · User + Streamlit › Verify + publish</title>
           <rect x="579" y="93" width="92" height="52" rx="6" class="c-mask"/>
           <rect x="579" y="93" width="92" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(585 99) scale(0.6875)">
@@ -4662,92 +4632,91 @@
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-detail-anchor x="625" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Results</text>
-          <text data-detail="context" x="625" y="131" class="t-muted" font-size="8" text-anchor="middle">review + download</text>
+          <text data-detail-anchor x="625" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Download</text>
+          <text data-detail="context" x="625" y="131" class="t-muted" font-size="8" text-anchor="middle">verified workbook</text>
         </g>
 
-        <g id="node-interpret_upload" data-node-id="interpret_upload" data-node-label="Interpret" tabindex="0" role="button" aria-label="Focus Interpret, inspect + map, Deep Agent › Model interprets and explains › Interpret" aria-pressed="false" data-node-kind="backend" data-node-sublabel="inspect + map" data-node-context="Deep Agent › Model interprets and explains › Interpret">
-          <title>Interpret · inspect + map · Deep Agent › Model interprets and explains › Interpret</title>
-          <rect x="174" y="217" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="174" y="217" width="92" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(180 223) scale(0.6875)">
+        <g id="node-clarify" data-node-id="clarify" data-node-label="Clarify" tabindex="0" role="button" aria-label="Focus Clarify, mapping or evidence, User + Streamlit › Resolve + review" aria-pressed="false" data-node-kind="external" data-node-sublabel="mapping or evidence" data-node-context="User + Streamlit › Resolve + review">
+          <title>Clarify · mapping or evidence · User + Streamlit › Resolve + review</title>
+          <rect x="384" y="93" width="92" height="52" rx="6" class="c-mask"/>
+          <rect x="384" y="93" width="92" height="52" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(390 99) scale(0.6875)">
+            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+          </g>
+          <text data-detail-anchor x="430" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Clarify</text>
+          <text data-detail="context" x="430" y="131" class="t-muted" font-size="7.3" text-anchor="middle">mapping or evidence</text>
+        </g>
+
+        <g id="node-interpret_input" data-node-id="interpret_input" data-node-label="Interpret" tabindex="0" role="button" aria-label="Focus Interpret, profile + map, Bounded Agent Reasoning › Map" aria-pressed="false" data-node-kind="backend" data-node-sublabel="profile + map" data-node-tag="bounded samples" data-node-context="Bounded Agent Reasoning › Map">
+          <title>Interpret · profile + map · Bounded Agent Reasoning › Map · bounded samples</title>
+          <rect x="254" y="333" width="92" height="68" rx="6" class="c-mask"/>
+          <rect x="254" y="333" width="92" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(260 339) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="220" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Interpret</text>
-          <text data-detail="context" x="220" y="255" class="t-muted" font-size="8" text-anchor="middle">inspect + map</text>
+          <text data-detail-anchor x="300" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Interpret</text>
+          <text data-detail="context" x="300" y="371" class="t-muted" font-size="8" text-anchor="middle">profile + map</text>
+        <text data-detail="fine" x="300" y="389" class="t-backend" font-size="7" text-anchor="middle">bounded samples</text>
         </g>
 
-        <g id="node-review_items" data-node-id="review_items" data-node-label="Review" tabindex="0" role="button" aria-label="Focus Review, small pages, Deep Agent › Model interprets and explains › Review" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="small pages" data-node-context="Deep Agent › Model interprets and explains › Review">
-          <title>Review · small pages · Deep Agent › Model interprets and explains › Review</title>
-          <rect x="454" y="217" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="454" y="217" width="92" height="52" rx="6" class="c-messagebus" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(460 223) scale(0.6875)">
-            <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
-            <circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
-            <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
-            <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
-          </g>
-          <text data-detail-anchor x="500" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Review</text>
-          <text data-detail="context" x="500" y="255" class="t-muted" font-size="8" text-anchor="middle">small pages</text>
-        </g>
-
-        <g id="node-validate_mapping" data-node-id="validate_mapping" data-node-label="Validate" tabindex="0" role="button" aria-label="Focus Validate, fingerprint, Typed Deterministic Code › Code validates and decides › Validate" aria-pressed="false" data-node-kind="security" data-node-sublabel="fingerprint" data-node-context="Typed Deterministic Code › Code validates and decides › Validate">
-          <title>Validate · fingerprint · Typed Deterministic Code › Code validates and decides › Validate</title>
-          <rect x="264" y="341" width="72" height="52" rx="6" class="c-mask"/>
-          <rect x="264" y="341" width="72" height="52" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(270 347) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-detail-anchor x="300" y="362" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Validate</text>
-          <text data-detail="context" x="300" y="379" class="t-muted" font-size="8" text-anchor="middle">fingerprint</text>
-        </g>
-
-        <g id="node-match_rows" data-node-id="match_rows" data-node-label="Create" tabindex="0" role="button" aria-label="Focus Create, match session, Typed Deterministic Code › Code validates and decides › Snapshot + match" aria-pressed="false" data-node-kind="backend" data-node-sublabel="match session" data-node-context="Typed Deterministic Code › Code validates and decides › Snapshot + match">
-          <title>Create · match session · Typed Deterministic Code › Code validates and decides › Snapshot + match</title>
-          <rect x="394" y="341" width="72" height="52" rx="6" class="c-mask"/>
-          <rect x="394" y="341" width="72" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(400 347) scale(0.6875)">
+        <g id="node-review" data-node-id="review" data-node-label="Review" tabindex="0" role="button" aria-label="Focus Review, explicit choices, Bounded Agent Reasoning › Resolve + review" aria-pressed="false" data-node-kind="backend" data-node-sublabel="explicit choices" data-node-context="Bounded Agent Reasoning › Resolve + review">
+          <title>Review · explicit choices · Bounded Agent Reasoning › Resolve + review</title>
+          <rect x="454" y="341" width="92" height="52" rx="6" class="c-mask"/>
+          <rect x="454" y="341" width="92" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(460 347) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="430" y="362" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Create</text>
-          <text data-detail="context" x="430" y="379" class="t-muted" font-size="8" text-anchor="middle">match session</text>
+          <text data-detail-anchor x="500" y="362" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Review</text>
+          <text data-detail="context" x="500" y="379" class="t-muted" font-size="8" text-anchor="middle">explicit choices</text>
         </g>
 
-        <g id="node-reference_snapshot" data-node-id="reference_snapshot" data-node-label="Snapshot" tabindex="0" role="button" aria-label="Focus Snapshot, immutable, Protected State › Snapshot + match" aria-pressed="false" data-node-kind="database" data-node-sublabel="immutable" data-node-context="Protected State › Snapshot + match">
-          <title>Snapshot · immutable · Protected State › Snapshot + match</title>
-          <rect x="398" y="465" width="64" height="52" rx="6" class="c-mask"/>
-          <rect x="398" y="465" width="64" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(404 471) scale(0.6875)">
+        <g id="node-reference_snapshot" data-node-id="reference_snapshot" data-node-label="Snapshot" tabindex="0" role="button" aria-label="Focus Snapshot, ID + hash, Deterministic Application Code › Map" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="ID + hash" data-node-context="Deterministic Application Code › Map">
+          <title>Snapshot · ID + hash · Deterministic Application Code › Map</title>
+          <rect x="270" y="465" width="60" height="52" rx="6" class="c-mask"/>
+          <rect x="270" y="465" width="60" height="52" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(276 471) scale(0.6875)">
+            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+          </g>
+          <text data-detail-anchor x="300" y="486" class="t-primary" font-size="10.8" font-weight="600" text-anchor="middle">Snapshot</text>
+          <text data-detail="context" x="300" y="503" class="t-muted" font-size="8" text-anchor="middle">ID + hash</text>
+        </g>
+
+        <g id="node-match_rows" data-node-id="match_rows" data-node-label="Match" tabindex="0" role="button" aria-label="Focus Match, policy, Deterministic Application Code › Resolve + review" aria-pressed="false" data-node-kind="backend" data-node-sublabel="policy" data-node-tag="deterministic" data-node-context="Deterministic Application Code › Resolve + review">
+          <title>Match · policy · Deterministic Application Code › Resolve + review · deterministic</title>
+          <rect x="470" y="457" width="60" height="68" rx="6" class="c-mask"/>
+          <rect x="470" y="457" width="60" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(476 463) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-detail-anchor x="500" y="478" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Match</text>
+          <text data-detail="context" x="500" y="495" class="t-muted" font-size="8" text-anchor="middle">policy</text>
+        <text data-detail="fine" x="500" y="513" class="t-backend" font-size="7" text-anchor="middle">deterministic</text>
+        </g>
+
+        <g id="node-attachment" data-node-id="attachment" data-node-label="Attachment" tabindex="0" role="button" aria-label="Focus Attachment, ID + SHA-256, Protected Storage + SQLite › Map" aria-pressed="false" data-node-kind="database" data-node-sublabel="ID + SHA-256" data-node-context="Protected Storage + SQLite › Map">
+          <title>Attachment · ID + SHA-256 · Protected Storage + SQLite › Map</title>
+          <rect x="254" y="217" width="92" height="52" rx="6" class="c-mask"/>
+          <rect x="254" y="217" width="92" height="52" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(260 223) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-detail-anchor x="430" y="486" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Snapshot</text>
-          <text data-detail="context" x="430" y="503" class="t-muted" font-size="8" text-anchor="middle">immutable</text>
+          <text data-detail-anchor x="300" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Attachment</text>
+          <text data-detail="context" x="300" y="255" class="t-muted" font-size="8" text-anchor="middle">ID + SHA-256</text>
         </g>
 
-        <g id="node-session" data-node-id="session" data-node-label="Session" tabindex="0" role="button" aria-label="Focus Session, audit, Session + Audit › Review" aria-pressed="false" data-node-kind="database" data-node-sublabel="audit" data-node-context="Session + Audit › Review">
-          <title>Session · audit · Session + Audit › Review</title>
-          <rect x="468" y="589" width="64" height="52" rx="6" class="c-mask"/>
-          <rect x="468" y="589" width="64" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(474 595) scale(0.6875)">
+        <g id="node-publish_artifact" data-node-id="publish_artifact" data-node-label="Publish" tabindex="0" role="button" aria-label="Focus Publish, artifact + audit IDs, Protected Storage + SQLite › Verify + publish" aria-pressed="false" data-node-kind="database" data-node-sublabel="artifact + audit IDs" data-node-tag="explicit" data-node-context="Protected Storage + SQLite › Verify + publish">
+          <title>Publish · artifact + audit IDs · Protected Storage + SQLite › Verify + publish · explicit</title>
+          <rect x="579" y="209" width="92" height="68" rx="6" class="c-mask"/>
+          <rect x="579" y="209" width="92" height="68" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(585 215) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-detail-anchor x="500" y="610" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Session</text>
-          <text data-detail="context" x="500" y="627" class="t-muted" font-size="8" text-anchor="middle">audit</text>
-        </g>
-
-        <g id="node-workbook" data-node-id="workbook" data-node-label="Workbook" tabindex="0" role="button" aria-label="Focus Workbook, styled + verified, Verified Export › Export" aria-pressed="false" data-node-kind="database" data-node-sublabel="styled + verified" data-node-context="Verified Export › Export">
-          <title>Workbook · styled + verified · Verified Export › Export</title>
-          <rect x="579" y="713" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="579" y="713" width="92" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(585 719) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-detail-anchor x="625" y="734" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Workbook</text>
-          <text data-detail="context" x="625" y="751" class="t-muted" font-size="8" text-anchor="middle">styled + verified</text>
+          <text data-detail-anchor x="625" y="230" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Publish</text>
+          <text data-detail="context" x="625" y="247" class="t-muted" font-size="7" text-anchor="middle">artifact + audit IDs</text>
+        <text data-detail="fine" x="625" y="265" class="t-database" font-size="7" text-anchor="middle">explicit</text>
         </g>
 
         <!-- Edge labels -->
@@ -4760,31 +4729,28 @@
 
 
 
-
-
-
         <!-- Legend -->
         <g data-legend-bridge>
-          <text x="175" y="800" class="t-primary" font-size="10" font-weight="600">Legend</text>
+          <text x="175" y="552" class="t-primary" font-size="10" font-weight="600">Legend</text>
         <g data-legend-kind="frontend">
-          <rect x="175" y="812" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
-          <text x="195" y="820" class="t-muted" font-size="7">User UI</text>
+          <rect x="175" y="564" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
+          <text x="195" y="572" class="t-muted" font-size="7">User UI</text>
         </g>
         <g data-legend-kind="backend">
-          <rect x="260" y="812" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-          <text x="280" y="820" class="t-muted" font-size="7">Agent logic</text>
+          <rect x="260" y="564" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+          <text x="280" y="572" class="t-muted" font-size="7">Agent logic</text>
         </g>
         <g data-legend-kind="security">
-          <rect x="370" y="812" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
-          <text x="390" y="820" class="t-muted" font-size="7">Policy</text>
+          <rect x="370" y="564" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
+          <text x="390" y="572" class="t-muted" font-size="7">Policy</text>
         </g>
         <g data-legend-kind="messagebus">
-          <rect x="455" y="812" width="14" height="9" rx="2" class="c-messagebus" stroke-width="1"/>
-          <text x="475" y="820" class="t-muted" font-size="7">Tool action</text>
+          <rect x="455" y="564" width="14" height="9" rx="2" class="c-messagebus" stroke-width="1"/>
+          <text x="475" y="572" class="t-muted" font-size="7">Tool action</text>
         </g>
         <g data-legend-kind="database">
-          <rect x="565" y="812" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
-          <text x="585" y="820" class="t-muted" font-size="7">Context / trace</text>
+          <rect x="565" y="564" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
+          <text x="585" y="572" class="t-muted" font-size="7">Context / trace</text>
         </g>
         </g>
       </svg>
@@ -4972,53 +4938,27 @@
     <div class="cards">
       <div class="card">
         <div class="card-header">
-          <div class="card-dot cyan"></div>
-          <h3>Agent boundary</h3>
-        </div>
-        <ul>
-          <li>&bull; Interprets bounded raw rows</li>
-          <li>&bull; Asks when evidence is unclear</li>
-          <li>&bull; Explains qualitative review pages</li>
-          <li>&bull; Never decides identities row by row</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
           <div class="card-dot emerald"></div>
-          <h3>Code boundary</h3>
+          <h3>Minimal File Model</h3>
         </div>
         <ul>
-          <li>&bull; Validates exact column references</li>
-          <li>&bull; Applies the versioned match policy</li>
-          <li>&bull; Stores snapshots, decisions, and audit</li>
-          <li>&bull; Regenerates and verifies the workbook</li>
+          <li>&bull; Uploads exist once under an attachment ID</li>
+          <li>&bull; Reference rows stay behind a snapshot ID</li>
+          <li>&bull; Each workbook revision gets an artifact ID</li>
+          <li>&bull; No chat/shared workspace or baseline diff</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot violet"></div>
-          <h3>Core tools</h3>
+          <h3>Decision Boundary</h3>
         </div>
         <ul>
-          <li>&bull; inspect_advisor_upload</li>
-          <li>&bull; validate_advisor_input</li>
-          <li>&bull; find_all_advisors</li>
-          <li>&bull; create_advisor_match</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot amber"></div>
-          <h3>Review tools</h3>
-        </div>
-        <ul>
-          <li>&bull; get_current_advisor_match</li>
-          <li>&bull; list_advisor_match_results</li>
-          <li>&bull; propose_crd_match</li>
-          <li>&bull; apply_advisor_match_decisions</li>
+          <li>&bull; The model interprets bounded samples</li>
+          <li>&bull; Application code owns every row decision</li>
+          <li>&bull; Review mutations require explicit choices</li>
+          <li>&bull; SQLite stores decisions and before/after audit</li>
         </ul>
       </div>
     </div>

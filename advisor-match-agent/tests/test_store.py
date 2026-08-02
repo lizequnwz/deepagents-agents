@@ -34,7 +34,7 @@ def test_per_user_active_run_and_restart_recovery(settings) -> None:
 
 def test_completed_history_usage_and_conversation_cleanup(settings) -> None:
     store = Store(settings.application_db, settings.data_root)
-    workspace = Workspace(settings.workspace_root, settings.data_root)
+    workspace = Workspace(settings.data_root)
     conversation = store.create_conversation()
     run_id, _ = store.create_run(conversation.conversation_id, "remember only complete")
     attachment, protected = workspace.upload(
@@ -65,5 +65,4 @@ def test_completed_history_usage_and_conversation_cleanup(settings) -> None:
     assert diagnostics.token_usage_partial is False
     store.delete_conversation(conversation.conversation_id)
     assert not protected.parent.exists()
-    assert (workspace.user_root("A123456") / attachment.relative_path).exists()
     store.close()

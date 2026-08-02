@@ -14,9 +14,6 @@ import yaml
 from openpyxl import Workbook, load_workbook
 from reportlab.pdfgen import canvas
 
-from general_agent.workspace import Workspace
-
-
 EXPECTED_SKILLS = {
     "advisor-match",
     "docx",
@@ -27,14 +24,17 @@ EXPECTED_SKILLS = {
 }
 
 
-def _skill_env(settings, workspace: Workspace, chat_id: str) -> dict[str, str]:
-    chat = workspace.ensure_chat("A123456", chat_id)
-    temp = workspace.temp_root("A123456") / "skill-test"
+def _skill_env(root: Path) -> dict[str, str]:
+    chat = root / "chat"
+    shared = root / "shared"
+    temp = root / "temp"
+    chat.mkdir(parents=True)
+    shared.mkdir(parents=True)
     temp.mkdir(parents=True, exist_ok=True)
     return {
         **os.environ,
         "GENERAL_AGENT_CHAT_DIR": str(chat),
-        "GENERAL_AGENT_SHARED_DIR": str(workspace.shared_root("A123456")),
+        "GENERAL_AGENT_SHARED_DIR": str(shared),
         "GENERAL_AGENT_TEMP_DIR": str(temp),
     }
 
@@ -106,10 +106,9 @@ def test_prepare_directories_removes_retired_installed_skills(settings) -> None:
     assert not stale.exists()
 
 
-def test_pdf_skill_keeps_bounded_initial_inspection(settings) -> None:
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    chat = workspace.ensure_chat("A123456", "pdf-skill")
-    env = _skill_env(settings, workspace, "pdf-skill")
+def test_pdf_skill_keeps_bounded_initial_inspection(tmp_path: Path) -> None:
+    env = _skill_env(tmp_path)
+    chat = Path(env["GENERAL_AGENT_CHAT_DIR"])
     pdf = chat / "sample.pdf"
     drawing = canvas.Canvas(str(pdf))
     drawing.drawString(72, 720, "PDF bounded extraction")

@@ -8,7 +8,6 @@ import json
 import os
 import time
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Any, BinaryIO
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -19,7 +18,7 @@ from general_agent.advisor_backend import AdvisorWorkspaceBackend
 from general_agent.config import Settings
 from general_agent.schemas import Attachment, RunStatus
 from general_agent.store import Store
-from general_agent.workspace import FileStamp, Workspace, agent_virtual_path
+from general_agent.workspace import Workspace
 
 
 class TokenBudgetExceeded(RuntimeError):
@@ -203,22 +202,12 @@ class RunManager:
         message = _attachment_message(
             run.question,
             attachments,
-            conversation_id=run.conversation_id,
-            corp_id=corp_id,
-            workspace=self.workspace,
         )
         agent_input = {"messages": [*history, {"role": "user", "content": message}]}
-        before: dict[str, FileStamp] = {}
-        baseline = self.workspace.user_data_root(corp_id) / "baselines" / run_id
-        baseline_ready = False
         final_status = RunStatus.FAILED
         final_text = ""
         error: str | None = None
         try:
-            before, baseline = await asyncio.to_thread(
-                self.workspace.stage_baseline, corp_id, run_id
-            )
-            baseline_ready = True
             self.store.add_event(
                 run_id,
                 "run_status",
@@ -252,38 +241,6 @@ class RunManager:
                 with contextlib.suppress(Exception):
                     await stream.abort()
             await self.backend.cancel_run(run_id)
-            try:
-                await asyncio.to_thread(
-                    self.workspace.cleanup_temporary, corp_id, run.conversation_id
-                )
-                artifacts = (
-                    await asyncio.to_thread(
-                        self.workspace.snapshot_changes,
-                        corp_id=corp_id,
-                        run_id=run_id,
-                        conversation_id=run.conversation_id,
-                        before=before,
-                        baseline=baseline,
-                    )
-                    if baseline_ready
-                    else []
-                )
-                for artifact, snapshot_path in artifacts:
-                    self.store.add_artifact(
-                        artifact, snapshot_path, corp_id=corp_id
-                    )
-                    self.store.add_event(
-                        run_id,
-                        "artifact_changed",
-                        "completed",
-                        f"{artifact.change_type.capitalize()} file · {artifact.relative_path}",
-                        data=artifact.model_dump(mode="json"),
-                        corp_id=corp_id,
-                    )
-            except Exception as snapshot_error:
-                if error is None:
-                    error = f"Artifact snapshot failed: {self._redact(str(snapshot_error))}"
-                    final_status = RunStatus.FAILED
             self.store.finish_run(
                 run_id,
                 final_status,
@@ -459,30 +416,19 @@ class RunManager:
 def _attachment_message(
     question: str,
     attachments: list[Attachment],
-    *,
-    conversation_id: str,
-    corp_id: str,
-    workspace: Workspace,
 ) -> str:
     lines = [
         question or "Match the advisors in the attached file.",
         "",
         "Advisor match context:",
-        f"- Current chat ID: {conversation_id}",
         "- Use only typed advisor tools to inspect the upload, match rows, review decisions, and generate the export.",
     ]
     if not attachments:
         return "\n".join(lines)
     lines.extend(["", "Attached advisor file:"])
     for item in attachments:
-        physical = (
-            workspace.user_root(corp_id) / item.relative_path
-        ).relative_to(workspace.root).as_posix()
-        virtual_path = agent_virtual_path(
-            physical, conversation_id=conversation_id, corp_id=corp_id
-        )
         lines.append(
-            f"- {virtual_path} (original name: {item.original_name}; "
+            f"- Attachment ID: {item.attachment_id} (original name: {item.original_name}; "
             f"type: {item.content_type or 'unknown'}; bytes: {item.size_bytes})"
         )
     lines.append("Profile only bounded samples; never use generic filesystem tools on the upload.")

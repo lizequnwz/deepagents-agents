@@ -39,15 +39,17 @@ class AgentUsage(BaseModel):
 class Attachment(BaseModel):
     attachment_id: str
     original_name: str
-    relative_path: str
     content_type: str | None = None
     size_bytes: int = Field(ge=0)
+    sha256: str
     created_at: datetime
 
 
 class Artifact(BaseModel):
     artifact_id: str
     run_id: str
+    match_session_id: str | None = None
+    revision: int | None = Field(default=None, ge=1)
     relative_path: str
     change_type: Literal["created", "modified", "deleted"]
     size_bytes: int = Field(ge=0)
@@ -125,27 +127,6 @@ class Run(BaseModel):
     events: list[RunEvent] = Field(default_factory=list)
     next_event_id: int = 0
     diagnostics: RunDiagnostics = Field(default_factory=RunDiagnostics)
-
-
-class WorkspaceEntry(BaseModel):
-    path: str
-    name: str
-    kind: Literal["file", "directory"]
-    size_bytes: int = Field(default=0, ge=0)
-    modified_at: datetime
-    scope: Literal["chat", "shared"] = "shared"
-    origin: Literal["upload", "agent", "user", "migration", "system", "unknown"] = "unknown"
-    retention: Literal["temporary", "chat", "shared"] = "shared"
-    conversation_id: str | None = None
-    run_id: str | None = None
-    original_name: str | None = None
-    created_at: datetime | None = None
-    can_promote: bool = False
-    can_modify: bool = True
-
-
-class RenameRequest(BaseModel):
-    new_name: str = Field(min_length=1, max_length=255)
 
 
 class ConversationCreate(BaseModel):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import itertools
+import os
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +36,7 @@ from general_agent.advisor_matching.schemas import (
 from general_agent.advisor_matching.source import AdvisorReferenceSource, sha256_file
 from general_agent.advisor_matching.workbook import write_match_workbook
 from general_agent.config import Settings
+from general_agent.schemas import Artifact, utc_now
 from general_agent.store import Store
 from general_agent.workspace import (
     Workspace,
@@ -59,42 +61,46 @@ def build_advisor_tools(
             )
         return corp_id, conversation_id
 
-    def resolve_upload(virtual_path: str) -> Path:
+    def resolve_upload(attachment_id: str) -> tuple[Path, str]:
         corp_id, conversation_id = current_context()
-        source = workspace.resolve_agent(virtual_path, must_exist=True)
-        upload_root = (
-            workspace.chat_root(corp_id, conversation_id) / "uploads"
-        ).resolve()
-        if (
-            source.is_symlink()
-            or not source.is_file()
-            or not source.resolve().is_relative_to(upload_root)
-        ):
-            raise ValueError("Advisor input must be an upload in the current chat.")
+        try:
+            source, original_name, expected_sha256 = store.attachment_path(
+                attachment_id,
+                corp_id=corp_id,
+                conversation_id=conversation_id,
+            )
+        except KeyError as exc:
+            raise ValueError("Advisor attachment is unknown in the current chat.") from exc
+        try:
+            workspace.validate_file(corp_id, "attachments", source)
+        except ValueError as exc:
+            raise ValueError("The advisor attachment path is invalid.") from exc
         if source.suffix.lower() not in {".csv", ".xlsx"}:
             raise ValueError("Advisor matching accepts only CSV or XLSX uploads.")
-        return source
+        if expected_sha256 and sha256_file(source) != expected_sha256:
+            raise ValueError("The immutable advisor attachment failed integrity validation.")
+        return source, original_name
 
     @tool
-    def inspect_advisor_upload(input_virtual_path: str) -> dict[str, Any]:
+    def inspect_advisor_upload(attachment_id: str) -> dict[str, Any]:
         """Inspect bounded raw rows and plausible header interpretations."""
 
-        return inspect_upload(resolve_upload(input_virtual_path), settings)
+        source, _ = resolve_upload(attachment_id)
+        return {"attachment_id": attachment_id, **inspect_upload(source, settings)}
 
     @tool
     def validate_advisor_input(
-        input_virtual_path: str,
+        attachment_id: str,
         mapping: InputMapping,
     ) -> dict[str, Any]:
         """Validate one interpreted advisor upload and return its pre-match checkpoint."""
 
+        source, _ = resolve_upload(attachment_id)
         loaded = validate_and_load_input(
-            resolve_upload(input_virtual_path),
-            mapping,
-            max_rows=settings.advisor_max_input_rows,
+            source, mapping, max_rows=settings.advisor_max_input_rows
         )
         result = MappingValidationResult(
-            input_virtual_path=input_virtual_path,
+            attachment_id=attachment_id,
             source_sha256=loaded.source_sha256,
             selected_sheet=loaded.selected_sheet,
             mapping=mapping,
@@ -113,10 +119,7 @@ def build_advisor_tools(
         corp_id, conversation_id = current_context()
         snapshot_id = "ars_" + uuid.uuid4().hex
         target = (
-            workspace.user_data_root(corp_id)
-            / "advisor_references"
-            / snapshot_id
-            / "advisor_reference.csv"
+            workspace.reference_file(corp_id, snapshot_id)
         )
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_name(".advisor_reference.csv.building")
@@ -163,7 +166,7 @@ def build_advisor_tools(
 
     @tool
     def create_advisor_match(
-        input_virtual_path: str,
+        attachment_id: str,
         reference_snapshot_id: str,
         mapping: InputMapping,
         mapping_fingerprint: str,
@@ -172,7 +175,7 @@ def build_advisor_tools(
         """Create a persisted deterministic advisor match and verified workbook."""
 
         corp_id, conversation_id = current_context()
-        source = resolve_upload(input_virtual_path)
+        source, original_name = resolve_upload(attachment_id)
         loaded = validate_and_load_input(
             source,
             mapping,
@@ -205,25 +208,25 @@ def build_advisor_tools(
         warnings = _unique(
             [*_input_summary_warnings(loaded.summary), *match_warnings]
         )
-        relative = workspace.user_relative(corp_id, source)
         session_id = store.create_advisor_match_session(
             corp_id=corp_id,
             conversation_id=conversation_id,
-            source_relative_path=relative,
-            source_name=source.name,
+            source_attachment_id=attachment_id,
+            source_name=original_name,
             source_sha256=loaded.source_sha256,
             mapping=mapping.model_dump(mode="json"),
             input_summary=loaded.summary.model_dump(mode="json"),
             reference=reference.model_dump(mode="json"),
             decisions=[decision.model_dump(mode="json") for decision in decisions],
             counts=counts.model_dump(mode="json"),
-            output_relative_path="advisor_matches.xlsx",
             policy_version=POLICY_VERSION,
         )
-        _write_session_workbook(workspace, store, corp_id, session_id)
+        artifact = _write_session_workbook(
+            workspace, store, backend, corp_id, session_id
+        )
         return MatchRunResult(
             match_session_id=session_id,
-            output_virtual_path="/advisor_matches.xlsx",
+            output_artifact_id=artifact.artifact_id,
             selected_sheet=loaded.selected_sheet,
             interpreted_mapping=mapping,
             mapping_fingerprint=loaded.mapping_fingerprint,
@@ -254,7 +257,7 @@ def build_advisor_tools(
             "counts": session["counts"],
             "status": session["status"],
             "revision": session["revision"],
-            "output_virtual_path": "/advisor_matches.xlsx",
+            "output_artifact_id": session["output_artifact_id"],
             "updated_at": session["updated_at"],
         }
 
@@ -417,14 +420,14 @@ def build_advisor_tools(
             audits=audits,
             proposal_ids=proposal_ids,
         )
-        _write_session_workbook(workspace, store, corp_id, match_session_id)
+        artifact = _write_session_workbook(
+            workspace, store, backend, corp_id, match_session_id
+        )
         return {
             "match_session_id": match_session_id,
             "counts": counts.model_dump(),
             "status": status,
-            "output_virtual_path": "/advisor_matches.xlsx",
-            "profile_building_eligible": counts.matched,
-            "profile_building_excluded": counts.ambiguous_match + counts.no_match,
+            "output_artifact_id": artifact.artifact_id,
         }
 
     return [
@@ -481,14 +484,12 @@ def _resolve_reference_snapshot(
         ) from exc
     manifest = ReferenceSnapshotManifest.model_validate(stored["manifest"])
     path = Path(stored["snapshot_path"])
-    expected_root = (
-        workspace.user_data_root(corp_id) / "advisor_references" / snapshot_id
-    ).resolve()
-    if (
-        path.is_symlink()
-        or not path.is_file()
-        or not path.resolve().is_relative_to(expected_root)
-    ):
+    expected = workspace.reference_file(corp_id, snapshot_id)
+    try:
+        workspace.validate_file(corp_id, "advisor_references", path)
+    except ValueError as exc:
+        raise ValueError("The advisor reference snapshot path is invalid.") from exc
+    if path.resolve() != expected.resolve():
         raise ValueError("The advisor reference snapshot path is invalid.")
     if sha256_file(path) != manifest.sha256:
         raise ValueError("The advisor reference snapshot failed integrity validation.")
@@ -616,9 +617,13 @@ def _counts(items: list[MatchDecision]) -> MatchCounts:
 def _write_session_workbook(
     workspace: Workspace,
     store: Store,
+    backend: AdvisorWorkspaceBackend,
     corp_id: str,
     session_id: str,
-) -> None:
+) -> Artifact:
+    run_id = backend.active_run_id
+    if not run_id:
+        raise RuntimeError("The active run context is unavailable.")
     session = store.get_advisor_match_session(session_id, corp_id=corp_id)
     decisions = [
         MatchDecision.model_validate(value) for value in session["decisions"]
@@ -626,21 +631,58 @@ def _write_session_workbook(
     mapping = InputMapping.model_validate(session["mapping"])
     input_summary = InputSummary.model_validate(session["input_summary"])
     reference = ReferenceSnapshotManifest.model_validate(session["reference"])
-    output = workspace.resolve_agent("/advisor_matches.xlsx")
-    write_match_workbook(
-        output,
-        session_id=session_id,
-        decisions=decisions,
-        counts=MatchCounts.model_validate(session["counts"]),
-        mapping=mapping,
-        input_summary=input_summary,
-        source_name=session["source_name"],
-        source_sha256=session["source_sha256"],
-        reference=reference,
-        policy_version=session["policy_version"],
-        session_status=session["status"],
-        session_revision=session["revision"],
-    )
+    artifact_id = "art_" + uuid.uuid4().hex
+    output = workspace.artifact_file(corp_id, run_id, artifact_id)
+    output.parent.mkdir(parents=True, exist_ok=False)
+    temporary = output.with_name(".advisor_matches.building.xlsx")
+    try:
+        write_match_workbook(
+            temporary,
+            session_id=session_id,
+            decisions=decisions,
+            counts=MatchCounts.model_validate(session["counts"]),
+            mapping=mapping,
+            input_summary=input_summary,
+            source_name=session["source_name"],
+            source_sha256=session["source_sha256"],
+            reference=reference,
+            policy_version=session["policy_version"],
+            session_status=session["status"],
+            session_revision=session["revision"],
+        )
+        os.replace(temporary, output)
+        artifact = Artifact(
+            artifact_id=artifact_id,
+            run_id=run_id,
+            match_session_id=session_id,
+            revision=session["revision"],
+            relative_path="advisor_matches.xlsx",
+            change_type="created",
+            size_bytes=output.stat().st_size,
+            sha256=sha256_file(output),
+            created_at=utc_now(),
+        )
+        store.add_artifact(artifact, output, corp_id=corp_id)
+        store.set_advisor_match_artifact(
+            session_id, artifact_id, corp_id=corp_id
+        )
+        store.add_event(
+            run_id,
+            "artifact_changed",
+            "completed",
+            f"Published workbook revision {session['revision']}",
+            data=artifact.model_dump(mode="json"),
+            corp_id=corp_id,
+        )
+        return artifact
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        output.unlink(missing_ok=True)
+        try:
+            output.parent.rmdir()
+        except OSError:
+            pass
+        raise
 
 
 def _input_summary_warnings(summary: InputSummary) -> list[str]:

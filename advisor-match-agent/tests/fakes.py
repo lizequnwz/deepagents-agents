@@ -51,7 +51,7 @@ def completed_events() -> list[dict[str, Any]]:
                     "event": "tool-started",
                     "tool_name": "create_advisor_match",
                     "tool_call_id": "tool-one",
-                    "input": {"input_virtual_path": "/uploads/advisors.csv"},
+                    "input": {"attachment_id": "att_test"},
                 },
             },
         },

@@ -5,141 +5,82 @@ from pathlib import Path
 
 import pytest
 
-from general_agent.workspace import (
-    Workspace,
-    WorkspacePathError,
-    agent_physical_path,
-    agent_virtual_path,
-    corp_storage_key,
-    reset_current_workspace,
-    set_current_workspace,
-)
+from general_agent.workspace import Workspace, WorkspacePathError, corp_storage_key
 
 
-def test_paths_are_virtual_rooted_and_protected(settings, tmp_path: Path) -> None:
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    assert workspace.resolve("/notes.txt") == settings.workspace_root / "notes.txt"
-    for unsafe in ("../secret", "a/../../secret", ".packages/secret", ".tmp/x"):
-        with pytest.raises(WorkspacePathError):
-            workspace.resolve(unsafe, visible_only=True)
+def test_upload_is_single_immutable_corporation_scoped_copy(settings) -> None:
+    workspace = Workspace(settings.data_root)
+    attachment, protected = workspace.upload(
+        corp_id="A123456",
+        conversation_id="chat-one",
+        original_name="../advisor list.csv",
+        content_type="text/csv",
+        source=io.BytesIO(b"Name\nAvery Stone\n"),
+        max_bytes=100,
+    )
 
-    outside = tmp_path / "outside.txt"
-    outside.write_text("secret", encoding="utf-8")
-    link = settings.workspace_root / "escape"
+    assert protected.read_bytes() == b"Name\nAvery Stone\n"
+    assert protected == (
+        settings.data_root
+        / "users"
+        / corp_storage_key("A123456")
+        / "attachments"
+        / attachment.attachment_id
+        / "advisor list.csv"
+    )
+    assert attachment.sha256
+    assert not (settings.project_root / "workspace" / "users").exists()
+
+
+def test_protected_paths_reject_cross_corporation_and_symlink_files(
+    settings, tmp_path: Path
+) -> None:
+    workspace = Workspace(settings.data_root)
+    attachment, protected = workspace.upload(
+        corp_id="A123456",
+        conversation_id="chat-one",
+        original_name="advisors.csv",
+        content_type="text/csv",
+        source=io.BytesIO(b"Name\nAvery\n"),
+        max_bytes=100,
+    )
+    assert workspace.validate_file("A123456", "attachments", protected) == protected
+    with pytest.raises(WorkspacePathError):
+        workspace.validate_file("B654321", "attachments", protected)
+
+    outside = tmp_path / "outside.csv"
+    outside.write_bytes(b"secret")
+    link = protected.with_name("link.csv")
     link.symlink_to(outside)
     with pytest.raises(WorkspacePathError):
-        workspace.resolve("escape", must_exist=True)
-    assert all(
-        entry.name != "escape" for entry in workspace.list_entries("A123456")
+        workspace.validate_file("A123456", "attachments", link)
+    assert attachment.attachment_id in protected.parts
+
+
+def test_reference_and_artifact_paths_are_narrow_and_stable(settings) -> None:
+    workspace = Workspace(settings.data_root)
+    reference = workspace.reference_file("A123456", "ars_" + "a" * 32)
+    artifact = workspace.artifact_file(
+        "A123456", "run-one", "art_" + "b" * 32
     )
 
-
-def test_upload_collisions_and_immutable_snapshots(settings) -> None:
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    first, protected_first = workspace.upload(
-        corp_id="A123456",
-        conversation_id="chat",
-        original_name="report.csv",
-        content_type="text/csv",
-        source=io.BytesIO(b"a\n1\n"),
-        max_bytes=100,
-    )
-    second, protected_second = workspace.upload(
-        corp_id="A123456",
-        conversation_id="chat",
-        original_name="report.csv",
-        content_type="text/csv",
-        source=io.BytesIO(b"a\n2\n"),
-        max_bytes=100,
-    )
-    assert first.relative_path != second.relative_path
-    assert first.relative_path.startswith("chats/chat/uploads/")
-    assert first.original_name == second.original_name == "report.csv"
-    assert protected_first.read_bytes() == b"a\n1\n"
-    assert protected_second.read_bytes() == b"a\n2\n"
-
-    target = workspace.ensure_chat("A123456", "chat") / "answer.txt"
-    target.write_text("version one", encoding="utf-8")
-    before, baseline = workspace.stage_baseline("A123456", "run-one")
-    target.write_text("version two", encoding="utf-8")
-    artifacts = workspace.snapshot_changes(
-        corp_id="A123456", run_id="run-one", before=before, baseline=baseline
-    )
-    artifact, snapshot = artifacts[0]
-    assert artifact.change_type == "modified"
-    assert snapshot.read_text(encoding="utf-8") == "version two"
-    target.write_text("version three", encoding="utf-8")
-    assert snapshot.read_text(encoding="utf-8") == "version two"
+    assert reference.name == "advisor_reference.csv"
+    assert "advisor_references" in reference.parts
+    assert artifact.name == "advisor_matches.xlsx"
+    assert "artifacts" in artifact.parts
+    with pytest.raises(WorkspacePathError):
+        workspace.reference_file("A123456", "../escape")
 
 
-def test_deleted_file_snapshot_preserves_pre_run_bytes(settings) -> None:
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    target = workspace.shared_root("A123456") / "old.txt"
-    target.write_bytes(b"old bytes")
-    before, baseline = workspace.stage_baseline("A123456", "delete-run")
-    target.unlink()
-    artifacts = workspace.snapshot_changes(
-        corp_id="A123456", run_id="delete-run", before=before, baseline=baseline
-    )
-    artifact, snapshot = artifacts[0]
-    assert artifact.change_type == "deleted"
-    assert snapshot.read_bytes() == b"old bytes"
-
-
-def test_chat_scope_shared_promotion_metadata_and_cleanup(settings) -> None:
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    uploaded = workspace.manual_upload(
-        corp_id="A123456",
-        original_name="notes.txt",
-        source=io.BytesIO(b"keep me"),
-        max_bytes=100,
-        scope="chat",
-        conversation_id="chat-one",
-    )
-    assert uploaded.path == "chats/chat-one/uploads/notes.txt"
-    assert uploaded.origin == "upload"
-    assert uploaded.retention == "chat"
-    assert uploaded.can_promote is True
-
-    kept = workspace.promote("A123456", uploaded.path, "chat-one")
-    assert kept.path == "shared/notes.txt"
-    assert kept.retention == "shared"
-    assert kept.origin == "upload"
-    assert not (workspace.user_root("A123456") / uploaded.path).exists()
-
-    transient = workspace.chat_root("A123456", "chat-one") / "answer.txt"
-    transient.write_text("temporary chat output", encoding="utf-8")
-    workspace.cleanup_chat("A123456", "chat-one")
-    assert workspace.chat_root("A123456", "chat-one").is_dir()
-    assert list(workspace.chat_root("A123456", "chat-one").iterdir()) == []
-    assert (workspace.user_root("A123456") / kept.path).read_bytes() == b"keep me"
-
-
-def test_agent_paths_are_chat_rooted_with_stable_shared_routes(settings) -> None:
-    tokens = set_current_workspace("A123456", "chat-two")
-    try:
-        prefix = f"users/{corp_storage_key('A123456')}"
-        assert agent_physical_path("/report.docx") == f"{prefix}/chats/chat-two/report.docx"
-        assert agent_physical_path("/shared/reference.csv") == f"{prefix}/shared/reference.csv"
-        assert agent_physical_path("/skills/pdf/SKILL.md") == ".app/skills/pdf/SKILL.md"
-        assert agent_virtual_path(f"{prefix}/chats/chat-two/report.docx") == "/report.docx"
-        assert agent_virtual_path(f"{prefix}/shared/reference.csv") == "/shared/reference.csv"
-    finally:
-        reset_current_workspace(tokens)
-
-
-def test_legacy_root_files_migrate_once_without_losing_bytes(settings) -> None:
-    legacy = settings.workspace_root / "legacy.txt"
-    legacy.write_bytes(b"legacy bytes")
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    migrated = workspace.shared_root("A123456") / "legacy" / "legacy.txt"
-    assert migrated.read_bytes() == b"legacy bytes"
-    entry = next(
-        item
-        for item in workspace.list_scope(
-            corp_id="A123456", scope="shared", relative_path="legacy"
+def test_upload_limit_cleans_partial_directory(settings) -> None:
+    workspace = Workspace(settings.data_root)
+    with pytest.raises(ValueError, match="exceeds"):
+        workspace.upload(
+            corp_id="A123456",
+            conversation_id="chat-one",
+            original_name="large.csv",
+            content_type="text/csv",
+            source=io.BytesIO(b"too large"),
+            max_bytes=2,
         )
-        if item.name == "legacy.txt"
-    )
-    assert entry.origin == "migration"
-    assert entry.retention == "shared"
+    assert list(workspace.category_root("A123456", "attachments").iterdir()) == []

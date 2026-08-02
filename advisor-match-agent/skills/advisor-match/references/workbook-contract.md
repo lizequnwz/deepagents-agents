@@ -1,6 +1,6 @@
 # Workbook contract
 
-Always create `/advisor_matches.xlsx` with sheets in this order:
+Always generate and verify `advisor_matches.xlsx`, then publish it under an opaque artifact ID, with sheets in this order:
 
 1. `Matched`: one row per effective match with compact input/advisor identity, qualitative evidence, and decision provenance.
 2. `Review Required`: one row per presented candidate, or one row for a No Match with no candidates.
@@ -9,4 +9,4 @@ Always create `/advisor_matches.xlsx` with sheets in this order:
 
 The default view is human-first. Combine readable names and locations, keep technical audit columns at the far right and hidden by default, freeze header rows, add filters, use styled headers, alternating fills and status colors, wrap text, and size columns to cover headers plus bounded content.
 
-Write every user-controlled string as text to prevent formula injection. Keep CRD and ZIP as text. After every creation or review change, reopen the workbook, verify the four sheets, reject formulas, and reconcile Matched plus unique Review Required items to Original Input.
+Write every user-controlled string as text to prevent formula injection. Keep CRD and ZIP as text. After every creation or review change, reopen the workbook, verify the four sheets, reject formulas, and reconcile Matched plus unique Review Required items to Original Input. Only then atomically publish and register the immutable artifact with its run, session, revision, size, and hash.

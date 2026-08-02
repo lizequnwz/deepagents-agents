@@ -103,7 +103,7 @@ class InputSummary(BaseModel):
 
 
 class MappingValidationResult(BaseModel):
-    input_virtual_path: str
+    attachment_id: str
     source_sha256: str
     selected_sheet: str | None
     mapping: InputMapping
@@ -195,7 +195,7 @@ class ReferenceSnapshotManifest(BaseModel):
 
 class MatchRunResult(BaseModel):
     match_session_id: str
-    output_virtual_path: Literal["/advisor_matches.xlsx"]
+    output_artifact_id: str
     selected_sheet: str | None
     interpreted_mapping: InputMapping
     mapping_fingerprint: str

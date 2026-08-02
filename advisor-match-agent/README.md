@@ -1,6 +1,6 @@
 # Advisor Match Agent
 
-Advisor Match Agent is a trusted-local DeepAgents application that matches financial-advisor rows from one uploaded CSV or XLSX against an authoritative advisor reference, conducts a bounded conversational review, and creates `/advisor_matches.xlsx`.
+Advisor Match Agent is a trusted-local DeepAgents application that matches financial-advisor rows from one uploaded CSV or XLSX against an authoritative advisor reference, conducts a bounded conversational review, and publishes a verified `advisor_matches.xlsx` artifact.
 
 The initial reference is a wholly synthetic development dataset. No Snowflake connection or advisor profile builder is implemented yet.
 
@@ -16,7 +16,7 @@ The initial reference is a wholly synthetic development dataset. No Snowflake co
 5. The agent retrieves an opaque authoritative snapshot; deterministic code performs every row decision.
 6. Review `Ambiguous Match` first and `No Match` second in bounded conversational pages. Automated matches are available on request.
 7. Confirm a presented candidate, confirm no match, or supply an exact CRD for a separately reconfirmed override.
-8. Download the styled, verified four-sheet `advisor_matches.xlsx` artifact and optionally approve with unresolved exceptions.
+8. Download the styled, verified four-sheet workbook artifact and optionally approve with unresolved exceptions. Every successful revision has its own immutable artifact ID.
 
 Profile building is a documented `# TODO` and is not exposed as a tool.
 
@@ -29,7 +29,7 @@ The model never reads or edits the whole workbook, receives the full master tabl
 - `Original Input`: the selected source table in original order.
 - `Run Summary`: session, mapping, counts, hashes, policy versions, and approval state.
 
-The first two sheets use a compact human-first layout with technical audit fields hidden by default. Headers are frozen and filtered; widths, fills, wrapping, status colors, and text-safe CRD/ZIP formats are applied. Every revision is regenerated deterministically, reopened for validation, and captured through the existing immutable artifact mechanism.
+The first two sheets use a compact human-first layout with technical audit fields hidden by default. Headers are frozen and filtered; widths, fills, wrapping, status colors, and text-safe CRD/ZIP formats are applied. Every revision is regenerated deterministically, reopened for validation, and published under a new immutable artifact ID.
 
 ## Synthetic data and examples
 
@@ -68,7 +68,9 @@ LangSmith tracing is off by default because prompts and tool pages can contain a
 
 ## Storage and isolation
 
-The existing corporation-scoped conversations, attachments, artifacts, checkpoints, virtual paths, traversal/symlink defenses, restart recovery, usage accounting, and immutable artifact snapshots are preserved. Do not hand-edit `.data/` or `workspace/.app/`; installed skills are rebuilt from source at startup and only `advisor-match` is exposed to the runtime agent.
+Uploads are written once to protected corporation-scoped storage and referenced by opaque attachment ID. Reference snapshots and verified workbook revisions use the same pattern. SQLite stores conversations, sessions, decisions, audits, hashes, and file locations; there is no generic chat/shared workspace or model-visible upload path.
+
+Derived state lives under `.data/`. Do not hand-edit it. Installed skills are rebuilt under `.data/runtime/skills` at startup, and only `advisor-match` is exposed through the agent's read-only virtual filesystem.
 
 ## Development and tests
 

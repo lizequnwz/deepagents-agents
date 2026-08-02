@@ -10,11 +10,6 @@ from pathlib import Path
 from deepagents.backends import FilesystemBackend
 
 from general_agent.workspace import (
-    WorkspacePathError,
-    agent_physical_path,
-    agent_virtual_path,
-    corp_storage_key,
-    current_corp_id,
     reset_current_workspace,
     set_current_workspace,
 )
@@ -45,25 +40,12 @@ class AdvisorWorkspaceBackend(FilesystemBackend):
         normalized = "/" + str(key or "").strip().replace("\\", "/").lstrip("/")
         if normalized != "/skills" and not normalized.startswith("/skills/"):
             raise ValueError("Advisor filesystem tools may read installed skills only.")
-        try:
-            routed = agent_physical_path(normalized)
-        except WorkspacePathError as exc:
-            raise ValueError(str(exc)) from exc
-        return super()._resolve_path("/" + routed if routed else "/")
+        return super()._resolve_path(normalized)
 
     def _to_virtual_path(self, path: Path) -> str:
         relative = path.resolve().relative_to(self.cwd).as_posix()
-        return agent_virtual_path(relative)
+        return "/" + relative
 
     @property
     def active_run_id(self) -> str | None:
         return _RUN_ID.get()
-
-    def run_temp_path(self, name: str) -> Path:
-        run_id = _RUN_ID.get()
-        corp_id = current_corp_id()
-        if not run_id or not corp_id or not name or Path(name).name != name:
-            raise RuntimeError("Active run context is unavailable or invalid.")
-        root = self.cwd / "users" / corp_storage_key(corp_id) / ".tmp" / run_id
-        root.mkdir(parents=True, exist_ok=True)
-        return root / name

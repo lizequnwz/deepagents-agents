@@ -87,14 +87,17 @@ def render_turn(client: AgentAPIClient, turn: dict[str, Any]) -> None:
 def render_artifacts(client: AgentAPIClient, artifacts: list[dict[str, Any]], run_id: str) -> None:
     if not artifacts:
         return
-    with st.expander("Files from this turn", icon=":material/folder:", expanded=True):
+    with st.expander("Workbook exports", icon=":material/folder:", expanded=True):
         for artifact in artifacts:
             with st.container(horizontal=True, vertical_alignment="center"):
                 st.markdown(
                     f"**{Path(artifact['relative_path']).name}**  "
                     f":{_artifact_color(artifact['change_type'])}-badge[{artifact['change_type']}]"
                 )
-                st.caption(_format_bytes(artifact["size_bytes"]))
+                details = [_format_bytes(artifact["size_bytes"])]
+                if artifact.get("revision"):
+                    details.append(f"Revision {artifact['revision']}")
+                st.caption(" · ".join(details))
                 st.download_button(
                     "Download",
                     data=lambda item=artifact: client.download_artifact(item["artifact_id"]),

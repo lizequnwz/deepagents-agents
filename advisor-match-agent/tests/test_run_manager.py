@@ -14,9 +14,9 @@ from tests.fakes import FakeGraph
 
 
 def make_manager(settings, graph):
-    workspace = Workspace(settings.workspace_root, settings.data_root)
+    workspace = Workspace(settings.data_root)
     store = Store(settings.application_db, settings.data_root)
-    backend = AdvisorWorkspaceBackend(settings.workspace_root)
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
     return RunManager(
         settings=settings,
         store=store,
@@ -45,7 +45,7 @@ async def test_v3_events_project_root_tools_plans_and_usage(settings) -> None:
     assert "tool_started" in kinds and "tool_finished" in kinds
     tool_start = next(event for event in run.events if event.kind == "tool_started")
     assert tool_start.agent == "advisor-match-agent"
-    assert tool_start.data["input"]["input_virtual_path"] == "/uploads/advisors.csv"
+    assert tool_start.data["input"]["attachment_id"] == "att_test"
     tool_finish = next(event for event in run.events if event.kind == "tool_finished")
     assert tool_finish.data["output"]["match_session_id"] == "ams_test"
     assert run.diagnostics.tokens.total_tokens == 10

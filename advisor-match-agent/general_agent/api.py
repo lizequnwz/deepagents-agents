@@ -8,7 +8,7 @@ import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -18,32 +18,19 @@ from general_agent.agent import build_agent
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
 from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
 from general_agent.config import Settings, load_settings
-from general_agent.file_inspector import inspect_path
 from general_agent.run_manager import RunManager
 from general_agent.schemas import (
     Conversation,
     ConversationCreate,
     ConversationRename,
     ConversationSummary,
-    RenameRequest,
     Run,
     RunStatus,
-    WorkspaceEntry,
 )
 from general_agent.store import ActiveRunError, Store
 from general_agent.workspace import Workspace, WorkspacePathError, validate_corp_id
 
 logger = logging.getLogger("general_agent.api")
-
-SUPPORTED_UPLOAD_EXTENSIONS = {
-    ".pdf", ".docx", ".pptx", ".xls", ".xlsx", ".csv", ".tsv",
-    ".txt", ".md", ".rst", ".json", ".yaml", ".yml", ".toml",
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".c", ".cc",
-    ".cpp", ".h", ".hpp", ".go", ".rs", ".rb", ".php", ".sh",
-    ".zsh", ".fish", ".sql", ".ini", ".cfg", ".xml", ".html",
-    ".css", ".log",
-}
-
 
 def create_app(
     *,
@@ -54,19 +41,21 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        active_settings = configured_settings or load_settings()
-        active_settings.prepare_directories()
-        workspace = Workspace(
-            active_settings.workspace_root,
-            active_settings.data_root,
-            active_settings.default_corp_id,
-        )
+        if configured_settings is None:
+            active_settings = load_settings()
+        else:
+            active_settings = configured_settings
+            errors = active_settings.readiness_errors(require_model=False)
+            if errors:
+                raise ValueError(" ".join(errors))
+            active_settings.prepare_directories()
+        workspace = Workspace(active_settings.data_root)
         store = Store(
             active_settings.application_db,
             active_settings.data_root,
             active_settings.default_corp_id,
         )
-        backend = AdvisorWorkspaceBackend(active_settings.workspace_root)
+        backend = AdvisorWorkspaceBackend(active_settings.runtime_root)
         advisor_source = SyntheticAdvisorReferenceSource(
             active_settings.project_root
             / "general_agent/advisor_matching/data/master_advisors.csv"
@@ -131,10 +120,8 @@ def create_app(
             "status": "ok",
             "version": "0.1.0",
             "model": settings.model_name,
-            "workspace": str(settings.workspace_root),
             "trusted_host_execution": False,
             "active_run_id": active[0] if active else None,
-            "max_upload_files": settings.max_upload_files,
             "max_upload_mb": settings.max_upload_mb,
             "max_run_tokens": settings.max_run_tokens,
         }
@@ -145,7 +132,6 @@ def create_app(
         conversation = request.app.state.store.create_conversation(
             body.title, corp_id=corp_id
         )
-        request.app.state.workspace.ensure_chat(corp_id, conversation.conversation_id)
         return conversation
 
     @app.get("/conversations", response_model=list[ConversationSummary])
@@ -203,8 +189,6 @@ def create_app(
         settings = request.app.state.settings
         if not text.strip() and not files:
             raise HTTPException(400, "A message or at least one file is required.")
-        if len(files) > settings.max_upload_files:
-            raise HTTPException(400, f"At most {settings.max_upload_files} files may be attached.")
         if len(files) > 1:
             raise HTTPException(400, "Attach at most one advisor CSV or XLSX file.")
         for upload in files:
@@ -212,7 +196,6 @@ def create_app(
                 raise HTTPException(400, "Advisor matching accepts only CSV or XLSX attachments.")
         manager: RunManager = request.app.state.manager
         try:
-            request.app.state.workspace.ensure_chat(corp_id, conversation_id)
             run_id = manager.create_run(
                 corp_id,
                 conversation_id,
@@ -271,147 +254,16 @@ def create_app(
             raise HTTPException(409, "The run is no longer active.")
         return run
 
-    @app.get("/workspace", response_model=list[WorkspaceEntry])
-    async def list_workspace(
-        request: Request,
-        path: str = "",
-        scope: Literal["chat", "shared"] = "shared",
-        conversation_id: str | None = None,
-    ) -> list[WorkspaceEntry]:
-        corp_id = _request_corp(request)
-        _require_relative_api_path(path, allow_empty=True)
-        try:
-            return request.app.state.workspace.list_scope(
-                corp_id=corp_id,
-                scope=scope,
-                conversation_id=conversation_id,
-                relative_path=path,
-            )
-        except FileNotFoundError as exc:
-            raise HTTPException(404, "Workspace directory not found.") from exc
-
-    @app.post("/workspace/uploads", response_model=list[WorkspaceEntry])
-    async def upload_workspace_files(
-        request: Request,
-        files: Annotated[list[UploadFile], File()],
-        scope: Literal["chat", "shared"] = "shared",
-        conversation_id: str | None = None,
-    ) -> list[WorkspaceEntry]:
-        corp_id = _request_corp(request)
-        settings = request.app.state.settings
-        if not files:
-            raise HTTPException(400, "At least one file is required.")
-        if len(files) > settings.max_upload_files:
-            raise HTTPException(400, f"At most {settings.max_upload_files} files may be uploaded.")
-        entries: list[WorkspaceEntry] = []
-        try:
-            for upload in files:
-                if Path(upload.filename or "").suffix.lower() not in SUPPORTED_UPLOAD_EXTENSIONS:
-                    raise HTTPException(400, f"Unsupported upload type: {upload.filename!r}.")
-                entries.append(
-                    request.app.state.workspace.manual_upload(
-                        corp_id=corp_id,
-                        original_name=upload.filename or "upload",
-                        source=upload.file,
-                        max_bytes=settings.max_upload_mb * 1024 * 1024,
-                        scope=scope,
-                        conversation_id=conversation_id,
-                    )
-                )
-        finally:
-            for upload in files:
-                await upload.close()
-        return entries
-
-    @app.post("/workspace/promote", response_model=WorkspaceEntry)
-    async def promote_workspace_entry(
-        request: Request,
-        path: str,
-        conversation_id: str,
-    ) -> WorkspaceEntry:
-        corp_id = _request_corp(request)
-        _require_relative_api_path(path)
-        try:
-            return request.app.state.workspace.promote(
-                corp_id, path, conversation_id
-            )
-        except FileNotFoundError as exc:
-            raise HTTPException(404, "Workspace path not found.") from exc
-
-    @app.delete("/workspace/chats/{conversation_id}", status_code=204)
-    async def cleanup_chat_workspace(request: Request, conversation_id: str) -> None:
-        corp_id = _request_corp(request)
-        try:
-            conversation = request.app.state.store.get_conversation(
-                conversation_id, corp_id=corp_id
-            )
-        except KeyError as exc:
-            raise HTTPException(404, "Conversation not found.") from exc
-        if conversation.active_run_id:
-            raise HTTPException(409, "Stop the active run before cleaning up its files.")
-        request.app.state.workspace.cleanup_chat(corp_id, conversation_id)
-
-    @app.get("/workspace/inspect")
-    async def inspect_workspace_file(request: Request, path: str) -> dict[str, Any]:
-        corp_id = _request_corp(request)
-        _require_relative_api_path(path)
-        try:
-            target = request.app.state.workspace.resolve_user(
-                corp_id, path, must_exist=True
-            )
-            return inspect_path(target, request.app.state.settings)
-        except FileNotFoundError as exc:
-            raise HTTPException(404, "Workspace file not found.") from exc
-
-    @app.get("/workspace/download")
-    async def download_workspace_file(request: Request, path: str) -> FileResponse:
-        corp_id = _request_corp(request)
-        _require_relative_api_path(path)
-        try:
-            target = request.app.state.workspace.resolve_user(
-                corp_id, path, must_exist=True
-            )
-        except FileNotFoundError as exc:
-            raise HTTPException(404, "Workspace file not found.") from exc
-        if not target.is_file():
-            raise HTTPException(400, "Only regular files can be downloaded.")
-        return FileResponse(target, filename=target.name)
-
-    @app.patch("/workspace", response_model=dict[str, str])
-    async def rename_workspace_file(
-        request: Request, path: str, body: RenameRequest
-    ) -> dict[str, str]:
-        corp_id = _request_corp(request)
-        _require_relative_api_path(path)
-        try:
-            return {
-                "path": request.app.state.workspace.rename(
-                    corp_id, path, body.new_name
-                )
-            }
-        except FileNotFoundError as exc:
-            raise HTTPException(404, "Workspace path not found.") from exc
-        except FileExistsError as exc:
-            raise HTTPException(409, "A workspace entry already has that name.") from exc
-
-    @app.delete("/workspace", status_code=204)
-    async def delete_workspace_file(request: Request, path: str) -> None:
-        corp_id = _request_corp(request)
-        _require_relative_api_path(path)
-        try:
-            request.app.state.workspace.delete(corp_id, path)
-        except FileNotFoundError as exc:
-            raise HTTPException(404, "Workspace path not found.") from exc
-
     @app.get("/attachments/{attachment_id}/download")
     async def download_attachment(request: Request, attachment_id: str) -> FileResponse:
         corp_id = _request_corp(request)
         try:
-            path, name = request.app.state.store.attachment_path(
+            path, name, _sha256 = request.app.state.store.attachment_path(
                 attachment_id, corp_id=corp_id
             )
         except KeyError as exc:
             raise HTTPException(404, "Attachment not found.") from exc
+        request.app.state.workspace.validate_file(corp_id, "attachments", path)
         return FileResponse(path, filename=name)
 
     @app.get("/artifacts/{artifact_id}/download")
@@ -423,6 +275,7 @@ def create_app(
             )
         except KeyError as exc:
             raise HTTPException(404, "Artifact not found.") from exc
+        request.app.state.workspace.validate_file(corp_id, "artifacts", path)
         return FileResponse(path, filename=name)
 
     return app
@@ -461,16 +314,4 @@ def _migrate_checkpoint_threads(path: Path, default_corp_id: str) -> None:
                     "WHERE instr(thread_id, ':')=0",
                     (prefix,),
                 )
-
-
-def _require_relative_api_path(path: str, *, allow_empty: bool = False) -> None:
-    raw = str(path or "").strip().replace("\\", "/")
-    if not raw and allow_empty:
-        return
-    if not raw:
-        raise WorkspacePathError("A file or directory path is required.")
-    if raw.startswith("/"):
-        raise WorkspacePathError("API paths must be relative to the workspace.")
-
-
 app = create_app()

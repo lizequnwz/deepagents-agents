@@ -21,8 +21,8 @@
 - `general_agent/advisor_backend.py`: non-shell, skill-read-only backend and
   corporation/run context.
 - `general_agent/store.py`: application and advisor-review persistence.
-- `general_agent/workspace.py`: corporation-scoped storage and immutable turn
-  artifacts.
+- `general_agent/workspace.py`: minimal corporation-scoped protected attachment,
+  reference-snapshot, and workbook-artifact storage.
 - `skills/advisor-match/`: the only skill installed for the runtime agent.
 - `docs/SPECIALIZING_GENERAL_AGENT.md`: source architecture and specialization
   rationale; preserve its reusable-base boundaries.
@@ -34,9 +34,9 @@
   decision, proposal, workbook, and artifact by `corp_id`.
 - Keep both services loopback-only. Corporation IDs isolate storage but are not
   authentication; do not present this app as safe for untrusted users.
-- Keep `virtual_mode=True`, traversal/symlink rejection, protected hidden paths,
-  read-only installed skills, model/tool/token limits, cancellation, restart
-  recovery, and immutable artifact snapshots.
+- Keep `virtual_mode=True`, traversal/symlink rejection, protected storage roots,
+  attachment/reference/artifact IDs, read-only installed skills, model/tool/token
+  limits, cancellation, restart recovery, and immutable workbook artifacts.
 - The model may inspect bounded profiles and review pages. It must never receive
   the complete master table or full workbook and must never decide matches row
   by row.
@@ -50,7 +50,8 @@
 - Never modify the original upload. Always regenerate and verify the four-sheet
   `advisor_matches.xlsx` export from persisted structured decisions.
 - Profile building remains an unregistered `# TODO`; do not simulate it.
-- Do not hand-edit `.data/`, `workspace/.app/`, or other derived runtime state.
+- Do not hand-edit `.data/` or other derived runtime state. The generic
+  chat/shared workspace is intentionally unsupported.
 
 ## Agent prompt and skill
 

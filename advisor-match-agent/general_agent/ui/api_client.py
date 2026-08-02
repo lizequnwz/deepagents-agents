@@ -84,68 +84,6 @@ class AgentAPIClient:
     def stop_run(self, run_id: str) -> dict[str, Any]:
         return self._request("POST", f"/runs/{run_id}/stop")
 
-    def workspace(
-        self,
-        path: str = "",
-        *,
-        scope: str = "shared",
-        conversation_id: str | None = None,
-    ) -> list[dict[str, Any]]:
-        return self._request(
-            "GET",
-            "/workspace",
-            params={
-                "path": path,
-                "scope": scope,
-                "conversation_id": conversation_id,
-            },
-        )
-
-    def upload_workspace(
-        self,
-        uploads: list[Any],
-        *,
-        scope: str = "shared",
-        conversation_id: str | None = None,
-    ) -> list[dict[str, Any]]:
-        files = [
-            (
-                "files",
-                (upload.name, upload.getvalue(), getattr(upload, "type", None) or "application/octet-stream"),
-            )
-            for upload in uploads
-        ]
-        return self._request(
-            "POST",
-            "/workspace/uploads",
-            params={"scope": scope, "conversation_id": conversation_id},
-            files=files,
-            timeout=120.0,
-        )
-
-    def promote_workspace(self, path: str, conversation_id: str) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            "/workspace/promote",
-            params={"path": path, "conversation_id": conversation_id},
-        )
-
-    def cleanup_chat_workspace(self, conversation_id: str) -> None:
-        self._request("DELETE", f"/workspace/chats/{quote(conversation_id)}")
-
-    def inspect_workspace(self, path: str) -> dict[str, Any]:
-        return self._request("GET", "/workspace/inspect", params={"path": path})
-
-    def rename_workspace(self, path: str, new_name: str) -> str:
-        result = self._request("PATCH", "/workspace", params={"path": path}, json={"new_name": new_name})
-        return result["path"]
-
-    def delete_workspace(self, path: str) -> None:
-        self._request("DELETE", "/workspace", params={"path": path})
-
-    def download_workspace(self, path: str) -> bytes:
-        return self._download("/workspace/download", params={"path": path})
-
     def download_attachment(self, attachment_id: str) -> bytes:
         return self._download(f"/attachments/{quote(attachment_id)}/download")
 

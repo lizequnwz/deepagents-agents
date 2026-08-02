@@ -2,99 +2,67 @@
   "schema_version": 1,
   "diagram_type": "workflow",
   "meta": {
-    "title": "Advisor Matching Workflow",
-    "subtitle": "Flexible interpretation, deterministic matching, and conversational exception review",
+    "title": "Advisor Match Agent Workflow",
+    "subtitle": "Opaque IDs, deterministic matching, and explicitly published workbook revisions",
+    "output": "docs/advisor_match_workflow.html",
     "animation": "none",
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
-    "output": "docs/advisor_match_workflow.html",
-    "viewBox": [1200, 900]
+    "viewBox": [720, 820]
   },
   "lanes": [
     { "id": "interaction", "label": "User + Streamlit" },
-    { "id": "orchestration", "label": "Deep Agent" },
-    { "id": "deterministic", "label": "Typed Deterministic Code" },
-    { "id": "storage", "label": "Protected State" },
-    { "id": "audit", "label": "Session + Audit" },
-    { "id": "export", "label": "Verified Export" }
+    { "id": "storage", "label": "Protected Storage + SQLite" },
+    { "id": "agent", "label": "Bounded Agent Reasoning" },
+    { "id": "deterministic", "label": "Deterministic Application Code" }
   ],
   "phases": [
-    { "id": "intake", "label": "Upload", "fromCol": 0, "toCol": 0 },
-    { "id": "interpret", "label": "Interpret", "fromCol": 1, "toCol": 1, "variant": "emphasis" },
-    { "id": "preflight", "label": "Validate", "fromCol": 2, "toCol": 2, "variant": "security" },
-    { "id": "matching", "label": "Snapshot + match", "fromCol": 3, "toCol": 3, "variant": "emphasis" },
-    { "id": "review", "label": "Review", "fromCol": 4, "toCol": 4 },
-    { "id": "deliver", "label": "Export", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+    { "id": "intake", "label": "Immutable intake", "fromCol": 0, "toCol": 1, "variant": "security" },
+    { "id": "interpret", "label": "Map", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
+    { "id": "resolve", "label": "Resolve + review", "fromCol": 3, "toCol": 4 },
+    { "id": "deliver", "label": "Verify + publish", "fromCol": 5, "toCol": 5, "variant": "dashed" }
   ],
-  "groups": [
-    { "id": "agent_work", "label": "Model interprets and explains", "lane": "orchestration", "fromCol": 1, "toCol": 4, "variant": "emphasis" },
-    { "id": "code_work", "label": "Code validates and decides", "lane": "deterministic", "fromCol": 2, "toCol": 3, "variant": "security" }
-  ],
-  "mainPath": ["upload", "interpret_upload", "validate_mapping", "reference_snapshot", "match_rows", "review_items", "workbook", "results"],
+  "mainPath": ["upload", "attachment", "interpret_input", "reference_snapshot", "match_rows", "publish_artifact", "download"],
   "nodes": [
-    { "id": "upload", "lane": "interaction", "col": 0, "type": "external", "label": "Upload", "sublabel": "CSV or XLSX" },
-    { "id": "clarify", "lane": "interaction", "col": 2, "type": "security", "label": "Clarify", "sublabel": "ask user" },
-    { "id": "results", "lane": "interaction", "col": 5, "type": "frontend", "label": "Results", "sublabel": "review + download" },
-    { "id": "interpret_upload", "lane": "orchestration", "col": 1, "type": "backend", "label": "Interpret", "sublabel": "inspect + map" },
-    { "id": "review_items", "lane": "orchestration", "col": 4, "type": "messagebus", "label": "Review", "sublabel": "small pages" },
-    { "id": "validate_mapping", "lane": "deterministic", "col": 2, "type": "security", "label": "Validate", "sublabel": "fingerprint", "width": 72 },
-    { "id": "match_rows", "lane": "deterministic", "col": 3, "type": "backend", "label": "Create", "sublabel": "match session", "width": 72 },
-    { "id": "reference_snapshot", "lane": "storage", "col": 3, "type": "database", "label": "Snapshot", "sublabel": "immutable", "width": 64 },
-    { "id": "session", "lane": "audit", "col": 4, "type": "database", "label": "Session", "sublabel": "audit", "width": 64 },
-    { "id": "workbook", "lane": "export", "col": 5, "type": "database", "label": "Workbook", "sublabel": "styled + verified" }
+    { "id": "upload", "lane": "interaction", "col": 0, "type": "external", "label": "Upload", "sublabel": "one CSV or XLSX" },
+    { "id": "download", "lane": "interaction", "col": 5, "type": "frontend", "label": "Download", "sublabel": "verified workbook" },
+    { "id": "clarify", "lane": "interaction", "col": 3, "type": "external", "label": "Clarify", "sublabel": "mapping or evidence" },
+    { "id": "interpret_input", "lane": "agent", "col": 2, "type": "backend", "label": "Interpret", "sublabel": "profile + map", "tag": "bounded samples" },
+    { "id": "review", "lane": "agent", "col": 4, "type": "backend", "label": "Review", "sublabel": "explicit choices" },
+    { "id": "reference_snapshot", "lane": "deterministic", "col": 2, "type": "cloud", "label": "Snapshot", "sublabel": "ID + hash", "width": 60 },
+    { "id": "match_rows", "lane": "deterministic", "col": 4, "type": "backend", "label": "Match", "sublabel": "policy", "tag": "deterministic", "width": 60 },
+    { "id": "attachment", "lane": "storage", "col": 2, "type": "database", "label": "Attachment", "sublabel": "ID + SHA-256" },
+    { "id": "publish_artifact", "lane": "storage", "col": 5, "type": "database", "label": "Publish", "sublabel": "artifact + audit IDs", "tag": "explicit" }
   ],
   "edges": [
-    { "id": "upload_interpret", "from": "upload", "to": "interpret_upload", "role": "main" },
-    { "id": "interpret_validate", "from": "interpret_upload", "to": "validate_mapping", "role": "main", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "route": "drop" },
-    { "id": "validate_clarify", "from": "validate_mapping", "to": "clarify", "role": "error", "variant": "security", "route": "straight" },
-    { "id": "clarify_interpret", "from": "clarify", "to": "interpret_upload", "role": "return", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "route": "drop" },
-    { "id": "validate_snapshot", "from": "validate_mapping", "to": "reference_snapshot", "role": "main" },
-    { "id": "snapshot_match", "from": "reference_snapshot", "to": "match_rows", "role": "main", "variant": "emphasis", "route": "straight" },
-    { "id": "match_review", "from": "match_rows", "to": "review_items", "role": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom", "route": "up-channel" },
-    { "id": "review_session", "from": "review_items", "to": "session", "role": "branch", "variant": "dashed" },
-    { "id": "review_workbook", "from": "review_items", "to": "workbook", "role": "main" },
-    { "id": "session_workbook", "from": "session", "to": "workbook", "role": "branch", "variant": "dashed" },
-    { "id": "workbook_results", "from": "workbook", "to": "results", "role": "main", "variant": "emphasis", "route": "straight" }
+    { "id": "store_upload", "from": "upload", "to": "attachment", "role": "main", "variant": "security" },
+    { "id": "profile_attachment", "from": "attachment", "to": "interpret_input", "role": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom", "route": "straight" },
+    { "id": "request_clarification", "from": "interpret_input", "to": "clarify", "role": "branch", "variant": "dashed", "fromSide": "right", "toSide": "bottom", "via": [[430, 367]] },
+    { "id": "retrieve_reference", "from": "interpret_input", "to": "reference_snapshot", "role": "main", "fromSide": "bottom", "toSide": "top", "route": "drop" },
+    { "id": "run_match", "from": "reference_snapshot", "to": "match_rows", "role": "main", "variant": "emphasis" },
+    { "id": "open_review", "from": "match_rows", "to": "review", "role": "branch", "fromSide": "top", "toSide": "bottom", "route": "drop" },
+    { "id": "publish_initial", "from": "match_rows", "to": "publish_artifact", "role": "main", "variant": "security", "fromSide": "right", "toSide": "bottom", "via": [[625, 491]] },
+    { "id": "deliver_artifact", "from": "publish_artifact", "to": "download", "role": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom", "route": "drop" }
   ],
   "cards": [
     {
-      "dot": "cyan",
-      "title": "Agent boundary",
-      "items": [
-        "Interprets bounded raw rows",
-        "Asks when evidence is unclear",
-        "Explains qualitative review pages",
-        "Never decides identities row by row"
-      ]
-    },
-    {
       "dot": "emerald",
-      "title": "Code boundary",
+      "title": "Minimal File Model",
       "items": [
-        "Validates exact column references",
-        "Applies the versioned match policy",
-        "Stores snapshots, decisions, and audit",
-        "Regenerates and verifies the workbook"
+        "Uploads exist once under an attachment ID",
+        "Reference rows stay behind a snapshot ID",
+        "Each workbook revision gets an artifact ID",
+        "No chat/shared workspace or baseline diff"
       ]
     },
     {
       "dot": "violet",
-      "title": "Core tools",
+      "title": "Decision Boundary",
       "items": [
-        "inspect_advisor_upload",
-        "validate_advisor_input",
-        "find_all_advisors",
-        "create_advisor_match"
-      ]
-    },
-    {
-      "dot": "amber",
-      "title": "Review tools",
-      "items": [
-        "get_current_advisor_match",
-        "list_advisor_match_results",
-        "propose_crd_match",
-        "apply_advisor_match_decisions"
+        "The model interprets bounded samples",
+        "Application code owns every row decision",
+        "Review mutations require explicit choices",
+        "SQLite stores decisions and before/after audit"
       ]
     }
   ]

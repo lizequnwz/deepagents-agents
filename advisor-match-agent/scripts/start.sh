@@ -32,8 +32,8 @@ if ! .venv/bin/python -c \
   exit 1
 fi
 
-if [[ ! -w workspace || ! -w .data ]]; then
-  echo "workspace/ and .data/ must be writable." >&2
+if [[ ! -w .data ]]; then
+  echo ".data/ must be writable." >&2
   exit 1
 fi
 

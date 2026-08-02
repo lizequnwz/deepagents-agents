@@ -10,7 +10,7 @@ The reusable lesson is to place adaptability and decisions in different componen
 | --- | --- | --- |
 | Agent | Bounded interpretation, clarification, tool order, summaries, and review conversation | Row-level identity decisions or unrestricted data access |
 | Skill | Procedural workflow and links to policy/contracts | Credentials or duplicate business logic |
-| Typed tools | Context/path validation, workflow gates, deterministic service calls, bounded results | Open-ended code execution |
+| Typed tools | Context/ID validation, workflow gates, deterministic service calls, bounded results | Open-ended code execution |
 | Domain package | Schemas, normalization, candidate ranking, decision policy, and workbook projection | Conversation or model prompts |
 | Source adapter | Read-only authoritative records and schema validation | Fuzzy policy |
 | SQLite/store | Corporation-scoped sessions, manifests, decisions, and audit | User-visible spreadsheet editing |
@@ -21,7 +21,7 @@ The agent needs flexible reasoning because sheet names, header positions, and co
 
 ### 1. Interpret and validate
 
-Expose bounded raw evidence rather than forcing an early parser assumption. The domain profiler should show physical rows, plausible headers, headerless columns, patterns, and small samples. The agent chooses one typed mapping only when clear and asks when multiple interpretations are plausible.
+Expose bounded raw evidence from an immutable attachment ID rather than forcing an early parser assumption. The domain profiler should show physical rows, plausible headers, headerless columns, patterns, and small samples. The agent chooses one typed mapping only when clear and asks when multiple interpretations are plausible.
 
 End interpretation with deterministic validation. Bind headed fields by exact zero-based index and observed header, or headerless fields by exact index and null header. Return a fingerprint over source bytes and the canonical mapping so the execution tool can reject drift.
 
@@ -35,7 +35,7 @@ Malformed individual values belong to row-level results when other rows remain p
 
 ### 3. Review bounded exceptions
 
-Persist typed decisions and expose filters/pages rather than the whole session. The agent explains qualitative evidence and applies only explicit user choices. Record complete before/after audit JSON in the same transaction as the effective decision update. Regenerate derived artifacts from structured state after every change.
+Persist typed decisions and expose filters/pages rather than the whole session. The agent explains qualitative evidence and applies only explicit user choices. Record complete before/after audit JSON in the same transaction as the effective decision update. Regenerate the workbook from structured state after every change, verify it, and explicitly register that revision as an immutable artifact. Do not infer artifacts from a filesystem-wide before/after diff.
 
 ## Repository extension points
 
@@ -43,7 +43,7 @@ Persist typed decisions and expose filters/pages rather than the whole session. 
 - `general_agent/advisor_tools.py`: the agent-facing workflow boundary.
 - `general_agent/advisor_matching/`: schemas, profiling/loading, normalization, policy, matcher, source adapter, and workbook generator.
 - `general_agent/store.py`: session, snapshot, proposal, and review persistence.
-- `general_agent/workspace.py`: corporation-scoped uploads, protected data roots, and immutable turn artifacts.
+- `general_agent/workspace.py`: minimal corporation-scoped attachment, reference-snapshot, and workbook-artifact paths and validation.
 - `skills/advisor-match/`: runtime playbook and policy/contracts.
 
 Keep domain models under the domain package unless they are public FastAPI contracts. Keep skill scripts as thin developer drivers that import production logic rather than maintaining a second implementation.
@@ -53,9 +53,9 @@ Keep domain models under the domain package unless they are public FastAPI contr
 General Agent is trusted-local, not a multi-user authentication system. Corporation IDs isolate storage but do not authenticate callers. Preserve:
 
 - loopback-only FastAPI and Streamlit hosts;
-- `virtual_mode=True`, traversal and symlink rejection;
-- corporation scope on conversations, runs, uploads, snapshots, sessions, reviews, workbooks, and artifacts;
-- protected hidden paths and read-only installed skills;
+- `virtual_mode=True` for the installed-skill filesystem, plus traversal and symlink rejection for protected files;
+- corporation scope on conversations, runs, attachment IDs, snapshots, sessions, reviews, workbooks, and artifact IDs;
+- protected `.data` paths and read-only installed skills;
 - no shell, arbitrary Python, network browsing, package installation, general writes, or subagents in the runtime agent;
 - model/tool/token limits, cancellation, restart recovery, and immutable artifacts;
 - bounded model views of sensitive uploads and reference data.

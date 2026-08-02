@@ -19,9 +19,9 @@ async def test_live_model_smoke() -> None:
     if os.getenv("GENERAL_AGENT_LIVE_TEST") != "1":
         pytest.skip("Set GENERAL_AGENT_LIVE_TEST=1 to make a provider model call.")
     settings = load_settings()
-    workspace = Workspace(settings.workspace_root, settings.data_root)
+    workspace = Workspace(settings.data_root)
     store = Store(settings.application_db, settings.data_root)
-    backend = AdvisorWorkspaceBackend(settings.workspace_root)
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
     advisor_source = SyntheticAdvisorReferenceSource(
         settings.project_root / "general_agent" / "advisor_matching" / "data" / "master_advisors.csv"
     )

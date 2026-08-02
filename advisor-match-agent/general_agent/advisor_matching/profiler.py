@@ -73,7 +73,6 @@ def inspect_advisor_upload(path: Path, settings: Settings) -> dict[str, Any]:
             f"Only the first {settings.max_inspect_sheets} worksheets were profiled."
         )
     return {
-        "input_virtual_path": f"/uploads/{path.name}",
         "format": suffix[1:],
         "source_sha256": sha256_file(path),
         "sheets": sheets,

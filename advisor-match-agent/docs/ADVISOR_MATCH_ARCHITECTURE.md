@@ -6,7 +6,7 @@ The interactive workflow is also available as [advisor_match_workflow.html](advi
 
 ## Stage 1: interpret and validate
 
-`inspect_advisor_upload` reads at most the configured preview bounds with `header=None`. It therefore does not assume the first row is a header. For each CSV or bounded workbook sheet it returns:
+FastAPI stores the uploaded CSV or XLSX once in protected storage and gives it an opaque, corporation-and-conversation-scoped attachment ID. `inspect_advisor_upload` resolves that ID and reads at most the configured preview bounds with `header=None`. It therefore does not assume the first row is a header. For each CSV or bounded workbook sheet it returns:
 
 - physical raw-row previews;
 - several plausible header rows with exact header values, patterns, samples, and deterministic synonym suggestions;
@@ -30,14 +30,15 @@ Rows with a usable name but no firm, valid CRD, or valid email require one conve
 
 Only after validation and clarification does the agent call `find_all_advisors`. The tool validates and projects the authoritative schema into a protected, immutable, corporation-and-conversation-scoped CSV. The model receives only an opaque snapshot ID and manifest—not a path or advisor rows.
 
-`create_advisor_match` accepts the upload path, exact mapping, mapping fingerprint, opaque reference ID, and the explicit missing-firm continuation flag. It:
+`create_advisor_match` accepts the attachment ID, exact mapping, mapping fingerprint, opaque reference ID, and the explicit missing-firm continuation flag. It:
 
-1. revalidates the upload and mapping fingerprint;
+1. resolves the attachment in the current corporation and conversation, verifies its protected path and hash, and revalidates the mapping fingerprint;
 2. resolves the reference ID through the corporation-scoped store;
 3. validates the protected path, hash, schema, and row count;
 4. runs deterministic matching;
 5. persists the structured session;
-6. generates and reopens `advisor_matches.xlsx` for verification.
+6. generates and reopens `advisor_matches.xlsx` for verification;
+7. atomically publishes the verified workbook under an opaque artifact ID tied to the active run, match session, and revision.
 
 The reference snapshot is fresh for every new match session and remains fixed throughout later review turns.
 
@@ -83,9 +84,24 @@ SQLite stores:
 - before/after review audit records;
 - two-turn manual-CRD proposals.
 
-Protected reference files live outside the agent-visible workspace. Every lookup includes `corp_id`; snapshots also belong to one conversation. The agent cannot read uploads, snapshots, sessions, or workbooks through generic filesystem tools.
+Protected attachments, reference files, and workbook artifacts live under `.data/users/<corp-key>/`. Every lookup includes `corp_id`; attachments and snapshots also belong to one conversation. The agent cannot read uploads, snapshots, sessions, or workbooks through generic filesystem tools.
 
-The existing loopback-only services, `virtual_mode=True`, symlink/traversal rejection, skill-only filesystem access, disabled general-purpose subagent, limits, cancellation, recovery, and immutable turn artifacts remain unchanged.
+There is no generic chat/shared workspace, file browser, arbitrary file upload, or filesystem-wide artifact diff. The only virtual filesystem is the read-only installed-skill tree under `.data/runtime/skills`. Loopback-only services, `virtual_mode=True`, symlink/traversal rejection, disabled general-purpose subagent, limits, cancellation, and restart recovery remain in force.
+
+The protected file layout is deliberately small:
+
+```text
+.data/
+├── application.sqlite3
+├── checkpoints.sqlite3
+├── runtime/skills/advisor-match/
+└── users/<corp-key>/
+    ├── attachments/<attachment-id>/<original-name>
+    ├── advisor_references/<snapshot-id>/advisor_reference.csv
+    └── artifacts/<run-id>/<artifact-id>/advisor_matches.xlsx
+```
+
+SQLite is the source of truth for ownership, hashes, sessions, decisions, audits, and artifact revisions. Files are never discovered by comparing a before/after directory manifest.
 
 ## Workbook projection
 
@@ -96,7 +112,7 @@ The workbook remains a deterministic four-sheet projection:
 3. `Original Input`—physical row number plus source columns in original order.
 4. `Run Summary`—mapping, row counts, status counts, hashes, snapshot ID, policy, and revision.
 
-Names and locations are combined for readability. Headers are styled and frozen; filters, bounded widths, alternating fills, status colors, wrapping, and text-safe CRD/ZIP values are applied. User-controlled strings are forced to text to prevent formula injection. Verification rejects formulas and reconciles effective decision rows to Original Input before the file is published.
+Names and locations are combined for readability. Headers are styled and frozen; filters, bounded widths, alternating fills, status colors, wrapping, and text-safe CRD/ZIP values are applied. User-controlled strings are forced to text to prevent formula injection. Verification rejects formulas and reconciles effective decision rows to Original Input before the file is atomically published and registered in SQLite.
 
 ## Production source replacement
 

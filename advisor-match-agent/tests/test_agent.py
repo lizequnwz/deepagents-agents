@@ -24,8 +24,8 @@ from general_agent.workspace import Workspace
 
 
 def test_agent_construction_is_advisor_only(settings) -> None:
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    backend = AdvisorWorkspaceBackend(settings.workspace_root)
+    workspace = Workspace(settings.data_root)
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
     store = Store(settings.application_db, settings.data_root)
     source_path = settings.project_root / "master.csv"
     source = SyntheticAdvisorReferenceSource(source_path)
@@ -105,8 +105,8 @@ def test_read_file_description_is_skill_only() -> None:
 
 
 def test_advisor_tool_schemas_do_not_expose_runtime_or_host_paths(settings) -> None:
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    backend = AdvisorWorkspaceBackend(settings.workspace_root)
+    workspace = Workspace(settings.data_root)
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
     store = Store(settings.application_db, settings.data_root)
     tools = build_advisor_tools(
         settings=settings, workspace=workspace, backend=backend, store=store,
@@ -131,17 +131,17 @@ def test_advisor_tool_schemas_do_not_expose_runtime_or_host_paths(settings) -> N
 
 @pytest.mark.asyncio
 async def test_backend_has_no_shell_and_rejects_non_skill_paths(settings) -> None:
-    backend = AdvisorWorkspaceBackend(settings.workspace_root)
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
     assert not hasattr(backend, "execute")
     async with backend.run_scope("run-test", "A123456", "chat-test"):
         with pytest.raises(ValueError, match="installed skills only"):
-            backend._resolve_path("/uploads/advisors.csv")
+            backend._resolve_path("/attachments/advisors.csv")
 
 
 def test_openai_model_uses_responses_api(settings) -> None:
     configured = type(settings)(project_root=settings.project_root, model_name="openai:gpt-test")
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    backend = AdvisorWorkspaceBackend(settings.workspace_root)
+    workspace = Workspace(settings.data_root)
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
     store = Store(settings.application_db, settings.data_root)
     with (
         patch("general_agent.agent.init_chat_model", return_value=Mock()) as init,

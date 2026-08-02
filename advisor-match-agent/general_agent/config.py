@@ -61,9 +61,6 @@ class Settings:
     max_run_tokens: int = field(
         default_factory=lambda: _positive_int("MAX_RUN_TOKENS", 1_000_000)
     )
-    max_file_read_chars: int = field(
-        default_factory=lambda: _positive_int("MAX_FILE_READ_CHARS", 20_000)
-    )
     max_event_output_chars: int = field(
         default_factory=lambda: _positive_int("MAX_EVENT_OUTPUT_CHARS", 12_000)
     )
@@ -71,14 +68,8 @@ class Settings:
         default_factory=lambda: os.getenv("DEFAULT_CORP_ID", "A123456").strip()
         or "A123456"
     )
-    max_upload_files: int = field(
-        default_factory=lambda: _positive_int("MAX_UPLOAD_FILES", 10)
-    )
     max_upload_mb: int = field(
         default_factory=lambda: _positive_int("MAX_UPLOAD_MB", 100)
-    )
-    max_inspect_pages: int = field(
-        default_factory=lambda: _positive_int("MAX_INSPECT_PAGES", 20)
     )
     max_inspect_sheets: int = field(
         default_factory=lambda: _positive_int("MAX_INSPECT_SHEETS", 20)
@@ -89,19 +80,12 @@ class Settings:
     max_inspect_columns: int = field(
         default_factory=lambda: _positive_int("MAX_INSPECT_COLUMNS", 20)
     )
-    max_inspect_chars: int = field(
-        default_factory=lambda: _positive_int("MAX_INSPECT_CHARS", 50_000)
-    )
     advisor_max_input_rows: int = field(
         default_factory=lambda: _positive_int("ADVISOR_MAX_INPUT_ROWS", 50_000)
     )
     advisor_max_reference_rows: int = field(
         default_factory=lambda: _positive_int("ADVISOR_MAX_REFERENCE_ROWS", 1_000_000)
     )
-
-    @property
-    def workspace_root(self) -> Path:
-        return self.project_root / "workspace"
 
     @property
     def data_root(self) -> Path:
@@ -116,12 +100,12 @@ class Settings:
         return self.data_root / "checkpoints.sqlite3"
 
     @property
-    def app_root(self) -> Path:
-        return self.workspace_root / ".app"
+    def runtime_root(self) -> Path:
+        return self.data_root / "runtime"
 
     @property
     def installed_skills_root(self) -> Path:
-        return self.app_root / "skills"
+        return self.runtime_root / "skills"
 
     @property
     def skills_source_root(self) -> Path:
@@ -129,13 +113,8 @@ class Settings:
 
     def prepare_directories(self) -> None:
         for path in (
-            self.workspace_root,
             self.data_root,
-            self.workspace_root / "users",
-            self.app_root,
-            self.data_root / "attachments",
-            self.data_root / "artifacts",
-            self.data_root / "baselines",
+            self.runtime_root,
             self.data_root / "users",
         ):
             path.mkdir(parents=True, exist_ok=True)
@@ -168,8 +147,8 @@ def load_settings(*, require_model: bool = True) -> Settings:
     project_root = Path(__file__).resolve().parents[1]
     load_dotenv(project_root / ".env")
     settings = Settings(project_root=project_root)
-    settings.prepare_directories()
     errors = settings.readiness_errors(require_model=require_model)
     if errors:
         raise ValueError(" ".join(errors))
+    settings.prepare_directories()
     return settings

@@ -33,24 +33,50 @@ def _tools(settings, workspace, backend, store):
     }
 
 
+def _upload(
+    workspace: Workspace,
+    store: Store,
+    *,
+    corp_id: str,
+    conversation_id: str,
+    run_id: str,
+    name: str,
+    content: bytes,
+) -> str:
+    attachment, protected = workspace.upload(
+        corp_id=corp_id,
+        conversation_id=conversation_id,
+        original_name=name,
+        content_type="text/csv",
+        source=BytesIO(content),
+        max_bytes=1024 * 1024,
+    )
+    store.add_attachment(run_id, attachment, protected, corp_id=corp_id)
+    return attachment.attachment_id
+
+
 @pytest.mark.asyncio
 async def test_three_stage_match_review_and_regeneration(settings) -> None:
     corp_id = "A123456"
-    workspace = Workspace(settings.workspace_root, settings.data_root)
+    workspace = Workspace(settings.data_root)
     store = Store(settings.application_db, settings.data_root)
     conversation_id = store.create_conversation(corp_id=corp_id).conversation_id
-    workspace.upload(
+    run_id, _ = store.create_run(
+        conversation_id, "match", corp_id=corp_id
+    )
+    attachment_id = _upload(
+        workspace,
+        store,
         corp_id=corp_id,
         conversation_id=conversation_id,
-        original_name="advisors.csv",
-        content_type="text/csv",
-        source=BytesIO(
+        run_id=run_id,
+        name="advisors.csv",
+        content=(
             b"Advisor Name,Firm,City,State\n"
             b"John Smith,Northstar Wealth Partners,Boston,MA\n"
         ),
-        max_bytes=settings.max_upload_mb * 1024 * 1024,
     )
-    backend = AdvisorWorkspaceBackend(settings.workspace_root)
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
     tools = _tools(settings, workspace, backend, store)
     mapping = {
         "full_name": {"columns": [{"index": 0, "header": "Advisor Name"}]},
@@ -59,9 +85,9 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         "state": {"columns": [{"index": 3, "header": "State"}]},
     }
 
-    async with backend.run_scope("run-test", corp_id, conversation_id):
+    async with backend.run_scope(run_id, corp_id, conversation_id):
         profile = await tools["inspect_advisor_upload"].ainvoke(
-            {"input_virtual_path": "/uploads/advisors.csv"}
+            {"attachment_id": attachment_id}
         )
         candidate = profile["sheets"][0]["header_candidates"][0]
         assert candidate["row_number"] == 1
@@ -69,7 +95,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
 
         validation = await tools["validate_advisor_input"].ainvoke(
             {
-                "input_virtual_path": "/uploads/advisors.csv",
+                "attachment_id": attachment_id,
                 "mapping": mapping,
             }
         )
@@ -94,7 +120,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
 
         result = await tools["create_advisor_match"].ainvoke(
             {
-                "input_virtual_path": "/uploads/advisors.csv",
+                "attachment_id": attachment_id,
                 "reference_snapshot_id": manifest["reference_snapshot_id"],
                 "mapping": mapping,
                 "mapping_fingerprint": validation["mapping_fingerprint"],
@@ -105,7 +131,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         with pytest.raises(ValueError, match="Retrieve a fresh snapshot"):
             await tools["create_advisor_match"].ainvoke(
                 {
-                    "input_virtual_path": "/uploads/advisors.csv",
+                    "attachment_id": attachment_id,
                     "reference_snapshot_id": manifest["reference_snapshot_id"],
                     "mapping": mapping,
                     "mapping_fingerprint": validation["mapping_fingerprint"],
@@ -160,36 +186,42 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         store.get_advisor_match_session(
             result["match_session_id"], corp_id="B654321"
         )
-    output = workspace.chat_root(corp_id, conversation_id) / "advisor_matches.xlsx"
+    output, _ = store.artifact_path(updated["output_artifact_id"], corp_id=corp_id)
     assert verify_match_workbook(output, expected_rows=1)["matched"] == 1
+    artifacts = store.get_conversation(conversation_id, corp_id=corp_id).turns[0].artifacts
+    assert [artifact.revision for artifact in artifacts] == [1, 2]
     store.close()
 
 
 @pytest.mark.asyncio
 async def test_missing_firm_requires_explicit_continue_and_fingerprint(settings) -> None:
     corp_id = "A123456"
-    workspace = Workspace(settings.workspace_root, settings.data_root)
+    workspace = Workspace(settings.data_root)
     store = Store(settings.application_db, settings.data_root)
     conversation_id = store.create_conversation(corp_id=corp_id).conversation_id
-    workspace.upload(
+    run_id, _ = store.create_run(
+        conversation_id, "match", corp_id=corp_id
+    )
+    attachment_id = _upload(
+        workspace,
+        store,
         corp_id=corp_id,
         conversation_id=conversation_id,
-        original_name="name-only.csv",
-        content_type="text/csv",
-        source=BytesIO(b"Name\nRobert Mercer\n"),
-        max_bytes=1024,
+        run_id=run_id,
+        name="name-only.csv",
+        content=b"Name\nRobert Mercer\n",
     )
-    backend = AdvisorWorkspaceBackend(settings.workspace_root)
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
     tools = _tools(settings, workspace, backend, store)
     mapping = {"full_name": {"columns": [{"index": 0, "header": "Name"}]}}
-    async with backend.run_scope("run-preflight", corp_id, conversation_id):
+    async with backend.run_scope(run_id, corp_id, conversation_id):
         validation = await tools["validate_advisor_input"].ainvoke(
-            {"input_virtual_path": "/uploads/name-only.csv", "mapping": mapping}
+            {"attachment_id": attachment_id, "mapping": mapping}
         )
         assert validation["input_summary"]["missing_firm_row_count"] == 1
         manifest = await tools["find_all_advisors"].ainvoke({})
         base = {
-            "input_virtual_path": "/uploads/name-only.csv",
+            "attachment_id": attachment_id,
             "reference_snapshot_id": manifest["reference_snapshot_id"],
             "mapping": mapping,
         }
@@ -213,32 +245,70 @@ async def test_missing_firm_requires_explicit_continue_and_fingerprint(settings)
 
 
 @pytest.mark.asyncio
+async def test_attachment_id_cannot_cross_conversations(settings) -> None:
+    corp_id = "A123456"
+    workspace = Workspace(settings.data_root)
+    store = Store(settings.application_db, settings.data_root)
+    first = store.create_conversation(corp_id=corp_id)
+    first_run_id, _ = store.create_run(
+        first.conversation_id, "upload", corp_id=corp_id
+    )
+    attachment_id = _upload(
+        workspace,
+        store,
+        corp_id=corp_id,
+        conversation_id=first.conversation_id,
+        run_id=first_run_id,
+        name="private.csv",
+        content=b"Name\nPrivate Person\n",
+    )
+    store.finish_run(first_run_id, "completed", corp_id=corp_id)
+
+    second = store.create_conversation(corp_id=corp_id)
+    second_run_id, _ = store.create_run(
+        second.conversation_id, "inspect", corp_id=corp_id
+    )
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
+    tools = _tools(settings, workspace, backend, store)
+    async with backend.run_scope(second_run_id, corp_id, second.conversation_id):
+        with pytest.raises(ValueError, match="unknown in the current chat"):
+            await tools["inspect_advisor_upload"].ainvoke(
+                {"attachment_id": attachment_id}
+            )
+    store.close()
+
+
+@pytest.mark.asyncio
 async def test_unlisted_crd_requires_proposal_then_later_turn_confirmation(
     settings,
 ) -> None:
     corp_id = "A123456"
-    workspace = Workspace(settings.workspace_root, settings.data_root)
+    workspace = Workspace(settings.data_root)
     store = Store(settings.application_db, settings.data_root)
     conversation_id = store.create_conversation(corp_id=corp_id).conversation_id
-    workspace.upload(
+    first_run_id, _ = store.create_run(
+        conversation_id, "match", corp_id=corp_id
+    )
+    attachment_id = _upload(
+        workspace,
+        store,
         corp_id=corp_id,
         conversation_id=conversation_id,
-        original_name="unknown.csv",
-        content_type="text/csv",
-        source=BytesIO(b"Name\nUnknown Person\n"),
-        max_bytes=1024,
+        run_id=first_run_id,
+        name="unknown.csv",
+        content=b"Name\nUnknown Person\n",
     )
-    backend = AdvisorWorkspaceBackend(settings.workspace_root)
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
     tools = _tools(settings, workspace, backend, store)
     mapping = {"full_name": {"columns": [{"index": 0, "header": "Name"}]}}
-    async with backend.run_scope("run-manual", corp_id, conversation_id):
+    async with backend.run_scope(first_run_id, corp_id, conversation_id):
         validation = await tools["validate_advisor_input"].ainvoke(
-            {"input_virtual_path": "/uploads/unknown.csv", "mapping": mapping}
+            {"attachment_id": attachment_id, "mapping": mapping}
         )
         manifest = await tools["find_all_advisors"].ainvoke({})
         result = await tools["create_advisor_match"].ainvoke(
             {
-                "input_virtual_path": "/uploads/unknown.csv",
+                "attachment_id": attachment_id,
                 "reference_snapshot_id": manifest["reference_snapshot_id"],
                 "mapping": mapping,
                 "mapping_fingerprint": validation["mapping_fingerprint"],
@@ -274,9 +344,11 @@ async def test_unlisted_crd_requires_proposal_then_later_turn_confirmation(
                     ],
                 }
             )
-    async with backend.run_scope(
-        "run-manual-confirm", corp_id, conversation_id
-    ):
+    store.finish_run(first_run_id, "completed", corp_id=corp_id)
+    confirm_run_id, _ = store.create_run(
+        conversation_id, "confirm", corp_id=corp_id
+    )
+    async with backend.run_scope(confirm_run_id, corp_id, conversation_id):
         confirmed = await tools["apply_advisor_match_decisions"].ainvoke(
             {
                 "match_session_id": result["match_session_id"],

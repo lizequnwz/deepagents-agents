@@ -5,7 +5,6 @@ import time
 from fastapi.testclient import TestClient
 
 from general_agent.api import create_app
-from general_agent.workspace import Workspace
 from tests.fakes import FakeGraph
 
 
@@ -16,7 +15,7 @@ def test_api_persists_chat_and_enforces_single_active_run(settings) -> None:
         health = client.get("/health")
         assert health.status_code == 200
         assert health.json()["trusted_host_execution"] is False
-        assert health.json()["max_upload_files"] == settings.max_upload_files
+        assert "workspace" not in health.json()
 
         first = client.post("/conversations", json={"title": "First"}).json()
         second = client.post("/conversations", json={"title": "Second"}).json()
@@ -65,24 +64,7 @@ def test_chat_rejects_non_advisor_and_multiple_attachments(settings) -> None:
         assert multiple.status_code == 400
 
 
-def test_api_rejects_absolute_traversal_protected_and_escaping_symlinks(settings, tmp_path) -> None:
-    app = create_app(settings=settings, graph_override=FakeGraph())
-    outside = tmp_path / "outside.txt"
-    outside.write_text("secret", encoding="utf-8")
-    workspace = Workspace(settings.workspace_root, settings.data_root)
-    (workspace.shared_root("A123456") / "escape").symlink_to(outside)
-    with TestClient(app) as client:
-        for unsafe in (
-            "/etc/passwd",
-            "../outside.txt",
-            ".packages/hidden",
-            "shared/escape",
-        ):
-            response = client.get("/workspace/download", params={"path": unsafe})
-            assert response.status_code == 400
-
-
-def test_api_corp_header_isolates_chats_and_workspace(settings) -> None:
+def test_api_corp_header_isolates_chats_and_attachments(settings) -> None:
     app = create_app(settings=settings, graph_override=FakeGraph())
     alice = {"X-Corp-ID": "A123456"}
     bob = {"X-Corp-ID": "B654321"}
@@ -93,63 +75,32 @@ def test_api_corp_header_isolates_chats_and_workspace(settings) -> None:
         assert client.get(
             f"/conversations/{conversation['conversation_id']}", headers=bob
         ).status_code == 404
-        uploaded = client.post(
-            "/workspace/uploads",
-            files=[("files", ("private.txt", b"alice", "text/plain"))],
+        sent = client.post(
+            f"/conversations/{conversation['conversation_id']}/messages",
+            data={"text": "match"},
+            files=[("files", ("private.csv", b"Name\nAlice\n", "text/csv"))],
             headers=alice,
-        ).json()[0]
+        )
+        assert sent.status_code == 200
+        for _ in range(100):
+            current = client.get(
+                f"/conversations/{conversation['conversation_id']}", headers=alice
+            ).json()
+            if current["turns"][0]["status"] != "running":
+                break
+            time.sleep(0.01)
+        attachment_id = current["turns"][0]["attachments"][0]["attachment_id"]
         assert client.get(
-            "/workspace/download", params={"path": uploaded["path"]}, headers=bob
+            f"/attachments/{attachment_id}/download", headers=bob
         ).status_code == 404
-        assert client.get("/workspace", headers=bob).json() == []
+        assert client.get(
+            f"/attachments/{attachment_id}/download", headers=alice
+        ).content == b"Name\nAlice\n"
 
 
-def test_upload_inspect_and_download_workspace(settings) -> None:
+def test_generic_workspace_routes_are_not_exposed(settings) -> None:
     app = create_app(settings=settings, graph_override=FakeGraph())
     with TestClient(app) as client:
-        upload = client.post(
-            "/workspace/uploads",
-            files=[("files", ("sample.csv", b"name,value\na,1\n", "text/csv"))],
-        )
-        assert upload.status_code == 200
-        path = upload.json()[0]["path"]
-        preview = client.get("/workspace/inspect", params={"path": path})
-        assert preview.status_code == 200
-        assert preview.json()["rows"][0]["name"] == "a"
-        download = client.get("/workspace/download", params={"path": path})
-        assert download.content == b"name,value\na,1\n"
-
-
-def test_chat_workspace_upload_promote_and_cleanup(settings) -> None:
-    app = create_app(settings=settings, graph_override=FakeGraph())
-    with TestClient(app) as client:
-        conversation = client.post("/conversations", json={}).json()
-        conversation_id = conversation["conversation_id"]
-        upload = client.post(
-            "/workspace/uploads",
-            params={"scope": "chat", "conversation_id": conversation_id},
-            files=[("files", ("brief.txt", b"brief", "text/plain"))],
-        )
-        assert upload.status_code == 200
-        entry = upload.json()[0]
-        assert entry["scope"] == "chat"
-        assert entry["origin"] == "upload"
-
-        listed = client.get(
-            "/workspace",
-            params={"scope": "chat", "conversation_id": conversation_id},
-        )
-        assert listed.status_code == 200
-        assert listed.json()[0]["name"] == "uploads"
-
-        promoted = client.post(
-            "/workspace/promote",
-            params={"path": entry["path"], "conversation_id": conversation_id},
-        )
-        assert promoted.status_code == 200
-        assert promoted.json()["path"] == "shared/brief.txt"
-
-        cleanup = client.delete(f"/workspace/chats/{conversation_id}")
-        assert cleanup.status_code == 204
-        shared = client.get("/workspace", params={"scope": "shared"}).json()
-        assert any(item["name"] == "brief.txt" for item in shared)
+        assert client.get("/workspace").status_code == 404
+        assert client.post("/workspace/uploads").status_code == 404
+        assert client.get("/workspace/inspect").status_code == 404
