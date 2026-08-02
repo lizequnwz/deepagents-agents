@@ -1,0 +1,84 @@
+# Advisor Match Agent
+
+Advisor Match Agent is a trusted-local DeepAgents application that matches financial-advisor rows from one uploaded CSV or XLSX against an authoritative advisor reference, conducts a bounded conversational review, and creates `/advisor_matches.xlsx`.
+
+The initial reference is a wholly synthetic development dataset. No Snowflake connection or advisor profile builder is implemented yet.
+
+> [!CAUTION]
+> Keep both services loopback-only. Corporation IDs provide storage isolation, not authentication. Uploaded advisor information is sensitive and bounded samples/review pages are sent to the configured model provider.
+
+## Workflow
+
+1. Upload one `.csv` or `.xlsx` in the chat composer.
+2. Ask the agent to match its advisors.
+3. The model selects the sheet and typed column mapping; deterministic code performs every row decision.
+4. Review `Matched`, `Ambiguous Match`, and `No Match` records conversationally in bounded pages.
+5. Confirm a presented candidate, confirm no match, or supply an exact CRD for a separately reconfirmed override.
+6. Download the verified four-sheet `advisor_matches.xlsx` artifact.
+7. Approve the session. Profile building is a documented `# TODO` and is not exposed as a tool.
+
+The model never reads or edits the whole workbook, receives the full master table, runs shell commands, installs packages, browses the web, or delegates to a general-purpose subagent.
+
+## Output workbook
+
+- `Matched`: effective automatic and user-confirmed matches.
+- `Review Required`: ambiguous candidates and no-match rows.
+- `Original Input`: the selected source table in original order.
+- `Run Summary`: session, mapping, counts, hashes, policy versions, and approval state.
+
+Every revision is regenerated deterministically, reopened for validation, and captured through the existing immutable artifact mechanism.
+
+## Synthetic data and examples
+
+- Master source: `general_agent/advisor_matching/data/master_advisors.csv`
+- Example uploads: `examples/advisor-match/`
+- Generator: `scripts/generate_advisor_match_fixtures.py`
+- Matching policy: `skills/advisor-match/references/matching-policy.yaml`
+
+All fixture identities are invented and use reserved example email domains.
+
+## Quick start
+
+Requirements: macOS or Linux, Python 3.11+, `uv`, and credentials for a LangChain chat model with reliable tool calling.
+
+```bash
+cp .env.example .env
+# Set MODEL_NAME and the required provider credential.
+./scripts/start.sh
+```
+
+Open <http://127.0.0.1:8502>. The loopback API is at <http://127.0.0.1:8001/docs>.
+
+## Configuration
+
+Important defaults:
+
+| Variable | Default |
+| --- | ---: |
+| `API_HOST` / `APP_HOST` | `127.0.0.1` |
+| `ADVISOR_MAX_INPUT_ROWS` | `50000` |
+| `ADVISOR_MAX_REFERENCE_ROWS` | `1000000` |
+| `MAX_UPLOAD_MB` | `100` |
+| `MAX_MODEL_CALLS` / `MAX_TOOL_CALLS` | `32` / `64` |
+
+LangSmith tracing is off by default because prompts and tool pages can contain advisor information.
+
+## Storage and isolation
+
+The existing corporation-scoped conversations, attachments, artifacts, checkpoints, virtual paths, traversal/symlink defenses, restart recovery, usage accounting, and immutable artifact snapshots are preserved. Do not hand-edit `.data/` or `workspace/.app/`; installed skills are rebuilt from source at startup and only `advisor-match` is exposed to the runtime agent.
+
+## Development and tests
+
+```bash
+uv sync --locked --all-groups
+uv run python scripts/generate_advisor_match_fixtures.py
+uv run pytest
+git diff --check
+```
+
+The deterministic suite does not require model credentials. Provider-backed smoke tests remain opt-in.
+
+The general specialization rationale remains in `docs/SPECIALIZING_GENERAL_AGENT.md`; this project implements its deterministic matching boundary with a synthetic source and persisted review sessions.
+
+The concrete state and conversational-review design is documented in `docs/ADVISOR_MATCH_ARCHITECTURE.md`.
+The inherited-capability disposition is documented in `docs/CAPABILITY_RESTRICTIONS.md`.

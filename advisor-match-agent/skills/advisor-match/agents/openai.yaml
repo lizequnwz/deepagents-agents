@@ -1,0 +1,4 @@
+interface:
+  display_name: "Advisor Match"
+  short_description: "Match and review financial advisor records"
+  default_prompt: "Use $advisor-match to match the advisors in my uploaded file and review ambiguous results."

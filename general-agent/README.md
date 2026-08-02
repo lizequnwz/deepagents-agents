@@ -13,6 +13,9 @@ changed by a turn.
 > commands run with the current local user's host permissions. The services bind
 > only to loopback and must not be exposed to a network or untrusted users.
 
+To replace the general-purpose behavior with a domain-specific workflow, see
+[Specializing General Agent](docs/SPECIALIZING_GENERAL_AGENT.md).
+
 ## Quick start
 
 Requirements: macOS or Linux, Python 3.11+, [`uv`](https://docs.astral.sh/uv/),
