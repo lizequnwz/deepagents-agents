@@ -89,7 +89,7 @@ def get_or_create_current_conversation(
 
 
 def render_page_header() -> None:
-    st.caption(":material/manage_search: TRUSTED-LOCAL ADVISOR MATCH AGENT")
+    st.caption(":material/manage_search: TRUSTED ADVISOR MATCH AGENT")
     st.title("Match and review financial advisors", anchor=False)
     st.caption(
         "Upload one CSV or XLSX, match its advisor rows against the master "
@@ -124,7 +124,7 @@ with st.sidebar:
         f":material/corporate_fare: Corporation scope {st.session_state['corp_id']}"
     )
     st.caption(
-        "A trusted-local workflow for deterministic advisor matching and review."
+        "A trusted workflow for deterministic advisor matching and review."
     )
     new_chat = st.button(
         "New chat",
@@ -198,7 +198,7 @@ if not conversation["turns"]:
             "Example tasks",
             list(suggestions),
             label_visibility="collapsed",
-            width="stretch",
+            width="content",
             key=starter_key,
             on_change=load_starter_prompt,
             args=(starter_key, suggestions),

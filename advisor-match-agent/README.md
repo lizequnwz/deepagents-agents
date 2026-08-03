@@ -1,6 +1,6 @@
 # Advisor Match Agent
 
-Advisor Match Agent is a trusted-local DeepAgents application that matches financial-advisor rows from one uploaded CSV or XLSX against an authoritative advisor reference, conducts a bounded conversational review, and publishes a verified `advisor_matches.xlsx` artifact.
+Advisor Match Agent is a trusted DeepAgents application that matches financial-advisor rows from one uploaded CSV or XLSX against an authoritative advisor reference, conducts a bounded conversational review, and publishes a verified `advisor_matches.xlsx` artifact.
 
 The initial reference is a wholly synthetic development dataset. No Snowflake connection or advisor profile builder is implemented yet.
 

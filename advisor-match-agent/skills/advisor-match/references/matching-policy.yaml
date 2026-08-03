@@ -1,5 +1,8 @@
-version: "2"
+version: "3"
 review_candidate_limit: 3
+firm_wildcard:
+  anchored: true
+  minimum_length: 4
 fuzzy:
   acceptance_score: 0.92
   plausible_score: 0.78

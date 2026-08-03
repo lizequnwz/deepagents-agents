@@ -10,6 +10,7 @@ from general_agent.advisor_matching import normalization as norm
 from general_agent.advisor_matching.policy import (
     ACCEPTANCE_SCORE,
     FIRM_CONFLICT_SIMILARITY,
+    FIRM_WILDCARD_MIN_LENGTH,
     MINIMUM_FIRM_SIMILARITY,
     MINIMUM_MARGIN,
     MINIMUM_NAME_SIMILARITY,
@@ -328,15 +329,22 @@ def _candidate(mapped: dict[str, str], record: AdvisorRecord) -> MatchCandidate:
     master_firm = norm.firm(record.firm_name)
     firm_similarity = _firm_ratio(input_firm, master_firm)
     exact_firm = bool(input_firm and master_firm and input_firm == master_firm)
+    wildcard_firm = bool(
+        input_firm
+        and master_firm
+        and not exact_firm
+        and _firm_wildcard_match(input_firm, master_firm)
+    )
     close_firm = bool(
         input_firm
         and master_firm
         and not exact_firm
-        and firm_similarity >= MINIMUM_FIRM_SIMILARITY
+        and (wildcard_firm or firm_similarity >= MINIMUM_FIRM_SIMILARITY)
     )
     firm_conflict = bool(
         input_firm
         and master_firm
+        and not wildcard_firm
         and firm_similarity < FIRM_CONFLICT_SIMILARITY
     )
 
@@ -366,6 +374,11 @@ def _candidate(mapped: dict[str, str], record: AdvisorRecord) -> MatchCandidate:
         supporting.append("Close advisor name")
     if exact_firm:
         supporting.append("Exact normalized firm")
+    elif wildcard_firm:
+        supporting.append(
+            "Anchored firm wildcard matched: "
+            f"{mapped.get('firm_name', '')!r} and {record.firm_name!r}"
+        )
     elif close_firm:
         supporting.append(
             f"Close firm name: {mapped.get('firm_name', '')!r} and {record.firm_name!r}"
@@ -498,6 +511,21 @@ def _firm_ratio(left: str, right: str) -> float:
     direct = _ratio(left, right)
     token_sorted = _ratio(" ".join(sorted(left.split())), " ".join(sorted(right.split())))
     return max(direct, token_sorted)
+
+
+def _firm_wildcard_match(left: str, right: str) -> bool:
+    """Match ``Ed Jones`` as the anchored pattern ``Ed%Jones%``."""
+    tokens = left.split()
+    if sum(len(token) for token in tokens) < FIRM_WILDCARD_MIN_LENGTH:
+        return False
+
+    cursor = 0
+    for index, token in enumerate(tokens):
+        found = right.find(token, cursor)
+        if found < 0 or (index == 0 and found != 0):
+            return False
+        cursor = found + len(token)
+    return True
 
 
 def _duplicate_signature(mapped: dict[str, str]) -> str:

@@ -1,7 +1,7 @@
 [project]
 name = "advisor-match-agent"
 version = "0.1.0"
-description = "Trusted-local deterministic financial-advisor matching agent"
+description = "Trusted deterministic financial-advisor matching agent"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

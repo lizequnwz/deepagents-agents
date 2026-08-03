@@ -217,6 +217,141 @@ def test_close_firm_can_support_exact_name() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("input_firm", "master_firm"),
+    [
+        ("Ed Jones", "Edward D. Jones Financial LLC"),
+        ("North Star", "Northstar Financial Group"),
+    ],
+)
+def test_anchored_firm_wildcard_can_support_exact_name(
+    input_firm: str, master_firm: str
+) -> None:
+    advisors = [
+        AdvisorRecord(
+            crd_number="2001",
+            first_name="Alice",
+            last_name="Brown",
+            firm_name=master_firm,
+        )
+    ]
+    decisions, counts, _ = run_matching(
+        [_row(2, first_name="Alice", last_name="Brown", firm_name=input_firm)],
+        advisors,
+    )
+
+    assert counts.matched == 1
+    assert decisions[0].rule_id == "EXACT_NAME_SUPPORTED"
+    assert any(
+        "Anchored firm wildcard matched" in evidence
+        for evidence in decisions[0].matched_advisor.supporting_evidence
+    )
+
+
+def test_generic_firm_wildcard_can_support_exact_name() -> None:
+    advisors = [
+        AdvisorRecord(
+            crd_number="2001",
+            first_name="Alice",
+            last_name="Brown",
+            firm_name="Financial Group Advisors",
+        )
+    ]
+    decisions, counts, _ = run_matching(
+        [
+            _row(
+                2,
+                first_name="Alice",
+                last_name="Brown",
+                firm_name="Financial Group",
+            )
+        ],
+        advisors,
+    )
+
+    assert counts.matched == 1
+    assert decisions[0].rule_id == "EXACT_NAME_SUPPORTED"
+
+
+def test_short_firm_wildcard_cannot_support_exact_name() -> None:
+    advisors = [
+        AdvisorRecord(
+            crd_number="2001",
+            first_name="Alice",
+            last_name="Brown",
+            firm_name="Edward Financial",
+        )
+    ]
+    decisions, counts, _ = run_matching(
+        [_row(2, first_name="Alice", last_name="Brown", firm_name="Ed")],
+        advisors,
+    )
+
+    assert counts.matched == 0
+    assert decisions[0].status == "Ambiguous Match"
+
+
+def test_firm_wildcard_does_not_override_state_conflict() -> None:
+    advisors = [
+        AdvisorRecord(
+            crd_number="2001",
+            first_name="Alice",
+            last_name="Brown",
+            firm_name="Edward D. Jones Financial LLC",
+            state="VA",
+        )
+    ]
+    decisions, counts, _ = run_matching(
+        [
+            _row(
+                2,
+                first_name="Alice",
+                last_name="Brown",
+                firm_name="Ed Jones",
+                state="CA",
+            )
+        ],
+        advisors,
+    )
+
+    assert counts.matched == 0
+    assert decisions[0].status == "Ambiguous Match"
+
+
+def test_firm_wildcard_does_not_choose_between_duplicate_names() -> None:
+    advisors = [
+        AdvisorRecord(
+            crd_number="2001",
+            first_name="Alice",
+            last_name="Brown",
+            firm_name="Edward D. Jones Financial LLC",
+        ),
+        AdvisorRecord(
+            crd_number="2002",
+            first_name="Alice",
+            last_name="Brown",
+            firm_name="Edwin Jones Wealth LLC",
+        ),
+    ]
+    decisions, counts, _ = run_matching(
+        [
+            _row(
+                2,
+                first_name="Alice",
+                last_name="Brown",
+                firm_name="Ed Jones",
+            )
+        ],
+        advisors,
+    )
+
+    assert counts.ambiguous_match == 1
+    assert {candidate.crd_number for candidate in decisions[0].candidates} == {
+        "2001",
+        "2002",
+    }
+
+
 def test_fuzzy_name_plus_fuzzy_firm_needs_exact_location() -> None:
     without_location, counts, _ = run_matching(
         [
@@ -622,3 +757,6 @@ def test_skill_policy_reference_matches_executable_policy() -> None:
     assert fuzzy["minimum_firm_similarity"] == policy.MINIMUM_FIRM_SIMILARITY
     assert fuzzy["firm_conflict_similarity"] == policy.FIRM_CONFLICT_SIMILARITY
     assert fuzzy["weights"] == policy.WEIGHTS
+    wildcard = documented["firm_wildcard"]
+    assert wildcard["anchored"] is True
+    assert wildcard["minimum_length"] == policy.FIRM_WILDCARD_MIN_LENGTH
