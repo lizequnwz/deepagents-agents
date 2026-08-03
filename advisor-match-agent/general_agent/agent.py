@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -21,12 +23,15 @@ from langchain.agents.middleware.types import ToolCallRequest
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 
-from general_agent.config import Settings
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
 from general_agent.advisor_matching.source import AdvisorReferenceSource
 from general_agent.advisor_tools import build_advisor_tools
-from general_agent.workspace import Workspace
+from general_agent.config import Settings
+from general_agent.observability import log_event
 from general_agent.store import Store
+from general_agent.workspace import Workspace
+
+logger = logging.getLogger("general_agent.agent")
 
 READ_FILE_TOOL_DESCRIPTION = """Reads Advisor Match Agent's installed skill and
 reference files through a read-only virtual filesystem.
@@ -143,40 +148,75 @@ def build_agent(
 ) -> Any:
     """Create Advisor Match Agent with an application-configured harness profile."""
 
-    chat_model = (
-        model
-        if model is not None
-        else init_chat_model(
-            settings.model_name,
-            **_model_init_kwargs(settings),
+    started_at = time.monotonic()
+    log_event(
+        logger,
+        logging.INFO,
+        "agent.build.started",
+        model=settings.model_name,
+    )
+    try:
+        chat_model = (
+            model
+            if model is not None
+            else init_chat_model(
+                settings.model_name,
+                **_model_init_kwargs(settings),
+            )
         )
+        configure_harness_profile(chat_model, key=harness_profile_key)
+        advisor_tools = build_advisor_tools(
+            settings=settings, workspace=workspace, backend=backend,
+            store=store, advisor_source=advisor_source,
+        )
+        graph = create_deep_agent(
+            name="advisor-match-agent",
+            model=chat_model,
+            tools=advisor_tools,
+            system_prompt=SYSTEM_PROMPT,
+            skills=["/skills/"],
+            backend=backend,
+            middleware=[
+                _filesystem_middleware(backend),
+                ToolErrorMiddleware(on_error=_recoverable_tool_error),
+                ModelCallLimitMiddleware(
+                    run_limit=settings.max_model_calls,
+                    exit_behavior="error",
+                ),
+                ToolCallLimitMiddleware(
+                    run_limit=settings.max_tool_calls,
+                    exit_behavior="error",
+                ),
+            ],
+            checkpointer=checkpointer,
+        )
+    except Exception:
+        log_event(
+            logger,
+            logging.ERROR,
+            "agent.build.failed",
+            model=settings.model_name,
+            duration_ms=int((time.monotonic() - started_at) * 1000),
+            exception_type=_current_exception_type(),
+            exc_info=True,
+        )
+        raise
+    log_event(
+        logger,
+        logging.INFO,
+        "agent.build.completed",
+        model=settings.model_name,
+        tools=len(advisor_tools),
+        duration_ms=int((time.monotonic() - started_at) * 1000),
     )
-    configure_harness_profile(chat_model, key=harness_profile_key)
-    advisor_tools = build_advisor_tools(
-        settings=settings, workspace=workspace, backend=backend,
-        store=store, advisor_source=advisor_source,
-    )
-    return create_deep_agent(
-        name="advisor-match-agent",
-        model=chat_model,
-        tools=advisor_tools,
-        system_prompt=SYSTEM_PROMPT,
-        skills=["/skills/"],
-        backend=backend,
-        middleware=[
-            _filesystem_middleware(backend),
-            ToolErrorMiddleware(on_error=_recoverable_tool_error),
-            ModelCallLimitMiddleware(
-                run_limit=settings.max_model_calls,
-                exit_behavior="error",
-            ),
-            ToolCallLimitMiddleware(
-                run_limit=settings.max_tool_calls,
-                exit_behavior="error",
-            ),
-        ],
-        checkpointer=checkpointer,
-    )
+    return graph
+
+
+def _current_exception_type() -> str:
+    import sys
+
+    exception = sys.exc_info()[1]
+    return type(exception).__name__ if exception is not None else "Exception"
 
 
 def _recoverable_tool_error(

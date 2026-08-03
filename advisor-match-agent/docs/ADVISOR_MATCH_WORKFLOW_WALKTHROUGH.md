@@ -35,7 +35,7 @@ flowchart TD
 4. **Interpret**—the agent selects one worksheet and maps CRD, name, firm, email, city, state, and optional ZIP. It asks the user when the meaning is not clear.
 5. **Validate**—`validate_advisor_input` confirms exact indexes and headers before data loading, skips blank/preamble rows, reports the missing-firm checkpoint, and returns a source-and-mapping fingerprint.
 6. **Clarify if needed**—always ask whether one firm applies to every advisor. If supplied, `apply_firm_to_advisor_upload` creates an audited immutable derived input and returns its exact mapping; validate it before continuing. If unavailable, the user may explicitly continue with weaker evidence.
-7. **Retrieve and match**—`create_advisor_match` revalidates the attachment and fingerprint, retrieves or reuses its protected snapshot, builds compact exact indexes, runs policy version 4, persists a session, creates and verifies the workbook, and publishes revision 1 under an artifact ID.
+7. **Retrieve and match**—`create_advisor_match` revalidates the attachment and fingerprint, retrieves or reuses its protected snapshot, builds compact exact indexes, runs policy version 5, persists a session, creates and verifies the workbook, and publishes revision 1 under an artifact ID.
 8. **Release the index**—the temporary in-memory index is discarded after decisions persist; the immutable CSV remains for integrity checks, retries, and exact-CRD proposals.
 9. **Report**—the agent shows the interpreted mapping, header mode, selected sheet, warnings, session ID, workbook artifact ID, and three status counts.
 10. **Review**—the agent pages ambiguous items first, then no-match items by reason. Candidate explanations use qualitative evidence only.

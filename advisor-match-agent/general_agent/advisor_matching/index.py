@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from general_agent.advisor_matching import normalization as norm
 from general_agent.advisor_matching.schemas import AdvisorRecord
@@ -46,11 +46,12 @@ class AdvisorIndex:
         for record in records:
             advisor = IndexedAdvisor.from_record(record)
             crd = norm.crd(advisor.crd_number)
+            advisor = replace(advisor, crd_number=crd)
             first = norm.first_name(advisor.first_name)
             last = norm.person_name(advisor.last_name)
             if not crd or crd in by_crd:
                 raise ValueError(
-                    "Master advisor CRD is missing, malformed, or duplicated: "
+                    "Master advisor CRD is missing or duplicated: "
                     f"{advisor.crd_number!r}."
                 )
             if not first or not last:

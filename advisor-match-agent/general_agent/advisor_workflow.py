@@ -5,8 +5,10 @@ from __future__ import annotations
 import contextlib
 import csv
 import itertools
+import logging
 import os
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -43,6 +45,7 @@ from general_agent.advisor_matching.schemas import (
 from general_agent.advisor_matching.source import AdvisorReferenceSource, sha256_file
 from general_agent.advisor_matching.workbook import write_match_workbook
 from general_agent.config import Settings
+from general_agent.observability import log_event
 from general_agent.schemas import Artifact, utc_now
 from general_agent.store import Store
 from general_agent.workspace import (
@@ -50,6 +53,8 @@ from general_agent.workspace import (
     current_conversation_id,
     current_corp_id,
 )
+
+logger = logging.getLogger("general_agent.advisor_workflow")
 
 
 @dataclass(frozen=True, slots=True)
@@ -481,6 +486,9 @@ def _build_workflow_tools(
             conversation_id=session["conversation_id"],
             snapshot_id=session["reference"]["reference_snapshot_id"],
         )
+        crd_number = norm.crd(crd_number)
+        if not crd_number:
+            raise ValueError("The supplied CRD is blank.")
         record = next(
             (
                 candidate
@@ -762,6 +770,9 @@ def _load_or_create_reference(
                         raise ValueError(
                             "Advisor reference source exceeds the configured row limit."
                         )
+                    record = record.model_copy(
+                        update={"crd_number": norm.crd(record.crd_number)}
+                    )
                     writer.writerow(record.master_dict())
                     yield record
 
@@ -845,11 +856,12 @@ def _apply_review(store, backend, corp_id, session, item, requested):
     if item.automated_status is None:
         item.automated_status = item.status
     if requested.action == "confirm_candidate":
+        requested_crd = norm.crd(requested.crd_number)
         candidate = next(
             (
                 candidate
                 for candidate in item.candidates
-                if candidate.crd_number == requested.crd_number
+                if candidate.crd_number == requested_crd
             ),
             None,
         )
@@ -919,6 +931,7 @@ def _write_session_workbook(
     corp_id: str,
     session_id: str,
 ) -> Artifact:
+    started_at = time.monotonic()
     run_id = backend.active_run_id
     if not run_id:
         raise RuntimeError("The active run context is unavailable.")
@@ -933,6 +946,16 @@ def _write_session_workbook(
     output = workspace.artifact_file(corp_id, run_id, artifact_id)
     output.parent.mkdir(parents=True, exist_ok=False)
     temporary = output.with_name(".advisor_matches.building.xlsx")
+    log_event(
+        logger,
+        logging.INFO,
+        "agent.artifact.build_started",
+        run_id=run_id,
+        corp_id=corp_id,
+        match_session_id=session_id,
+        artifact_id=artifact_id,
+        revision=session["revision"],
+    )
     try:
         write_match_workbook(
             temporary,
@@ -973,8 +996,33 @@ def _write_session_workbook(
             data=artifact.model_dump(mode="json"),
             corp_id=corp_id,
         )
+        log_event(
+            logger,
+            logging.INFO,
+            "agent.artifact.published",
+            run_id=run_id,
+            corp_id=corp_id,
+            match_session_id=session_id,
+            artifact_id=artifact_id,
+            revision=session["revision"],
+            size_bytes=artifact.size_bytes,
+            duration_ms=int((time.monotonic() - started_at) * 1000),
+        )
         return artifact
-    except Exception:
+    except Exception as exc:
+        log_event(
+            logger,
+            logging.ERROR,
+            "agent.artifact.build_failed",
+            run_id=run_id,
+            corp_id=corp_id,
+            match_session_id=session_id,
+            artifact_id=artifact_id,
+            revision=session["revision"],
+            duration_ms=int((time.monotonic() - started_at) * 1000),
+            exception_type=type(exc).__name__,
+            exc_info=True,
+        )
         temporary.unlink(missing_ok=True)
         output.unlink(missing_ok=True)
         try:

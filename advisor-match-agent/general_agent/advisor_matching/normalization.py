@@ -63,10 +63,9 @@ def words(value: object) -> list[str]:
 
 
 def crd(value: object) -> str:
-    text = str(value or "").strip()
-    if re.fullmatch(r"\d+\.0", text):
-        text = text[:-2]
-    return text if re.fullmatch(r"\d+", text) else ""
+    """Return the opaque CRD identifier with surrounding whitespace removed."""
+
+    return str(value or "").strip()
 
 
 def email(value: object) -> str:

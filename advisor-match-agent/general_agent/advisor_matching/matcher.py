@@ -294,9 +294,6 @@ def _insufficient_identity_decision(
     if raw_name:
         rule = "INSUFFICIENT_NAME"
         explanation = "A usable full name or both first and last name are required."
-    elif raw_crd and not input_crd and not raw_email:
-        rule = "MALFORMED_CRD"
-        explanation = "The supplied CRD is malformed and no other identity field is usable."
     elif raw_email and not input_email and not raw_crd:
         rule = "MALFORMED_EMAIL"
         explanation = "The supplied email is malformed and no other identity field is usable."
@@ -525,10 +522,7 @@ def _raw_name(mapped: dict[str, str]) -> str:
 
 def _input_warnings(mapped: dict[str, str]) -> list[str]:
     warnings: list[str] = []
-    raw_crd = str(mapped.get("crd_number") or "").strip()
     raw_email = str(mapped.get("email") or "").strip()
-    if raw_crd and not norm.crd(raw_crd):
-        warnings.append("The supplied CRD is malformed.")
     if raw_email and not norm.email(raw_email):
         warnings.append("The supplied email is malformed.")
     if _raw_name(mapped) and _input_name_key(mapped) is None:

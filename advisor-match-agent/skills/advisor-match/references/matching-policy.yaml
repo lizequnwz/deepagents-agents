@@ -1,5 +1,9 @@
-version: "4"
+version: "5"
 review_candidate_limit: 3
+crd_matching:
+  opaque_trimmed_identifier: true
+  numeric_extraction: false
+  exact: true
 name_matching:
   exact_normalized_first_last: true
   ignore_middle_tokens: true

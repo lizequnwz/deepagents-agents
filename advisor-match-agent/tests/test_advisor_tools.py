@@ -11,6 +11,7 @@ from general_agent.advisor_backend import AdvisorWorkspaceBackend
 from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
 from general_agent.advisor_matching.workbook import verify_match_workbook
 from general_agent.advisor_tools import build_advisor_tools
+from general_agent.observability import configure_logging, shutdown_logging
 from general_agent.store import Store
 from general_agent.workspace import Workspace
 
@@ -47,6 +48,15 @@ def _tools(settings, workspace, backend, store, *, source=None):
     }
 
 
+@pytest.fixture
+def operational_log(settings):
+    configure_logging(settings)
+    try:
+        yield settings.api_log
+    finally:
+        shutdown_logging()
+
+
 def _upload(
     workspace: Workspace,
     store: Store,
@@ -70,7 +80,9 @@ def _upload(
 
 
 @pytest.mark.asyncio
-async def test_three_stage_match_review_and_regeneration(settings) -> None:
+async def test_three_stage_match_review_and_regeneration(
+    settings, operational_log
+) -> None:
     corp_id = "A123456"
     workspace = Workspace(settings.data_root)
     store = Store(settings.application_db, settings.data_root)
@@ -178,7 +190,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
                     {
                         "review_item_id": item["review_item_id"],
                         "action": "confirm_candidate",
-                        "crd_number": selected_crd,
+                        "crd_number": f"  {selected_crd}  ",
                     }
                 ],
                 "approve_session": True,
@@ -209,6 +221,70 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
     assert verify_match_workbook(output, expected_rows=1)["matched"] == 1
     artifacts = store.get_conversation(conversation_id, corp_id=corp_id).turns[0].artifacts
     assert [artifact.revision for artifact in artifacts] == [1, 1, 2]
+    store.close()
+    log_contents = operational_log.read_text(encoding="utf-8")
+    assert "agent.artifact.build_started" in log_contents
+    assert "agent.artifact.published" in log_contents
+    assert f"match_session_id={result['match_session_id']}" in log_contents
+    assert "John Smith" not in log_contents
+
+
+@pytest.mark.asyncio
+async def test_create_match_accepts_opaque_master_and_input_crd(settings) -> None:
+    corp_id = "A123456"
+    workspace = Workspace(settings.data_root)
+    store = Store(settings.application_db, settings.data_root)
+    conversation_id = store.create_conversation(corp_id=corp_id).conversation_id
+    run_id, _ = store.create_run(conversation_id, "match", corp_id=corp_id)
+    attachment_id = _upload(
+        workspace,
+        store,
+        corp_id=corp_id,
+        conversation_id=conversation_id,
+        run_id=run_id,
+        name="opaque-crd.csv",
+        content=b"CRD,Firm\n FSA_ID:111 ,Example Advisory\n",
+    )
+    master = settings.data_root / "opaque-master.csv"
+    master.write_text(
+        "CRD_NUMBER,FIRST_NAME,LAST_NAME,FIRM_NAME,EMAIL,CITY,STATE,ZIP_CODE\n"
+        " FSA_ID:111 ,Jane,Doe,Example Advisory,,,,\n",
+        encoding="utf-8",
+    )
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
+    tools = _tools(
+        settings,
+        workspace,
+        backend,
+        store,
+        source=SyntheticAdvisorReferenceSource(master),
+    )
+    mapping = {
+        "crd_number": {"columns": [{"index": 0, "header": "CRD"}]},
+        "firm_name": {"columns": [{"index": 1, "header": "Firm"}]},
+    }
+
+    async with backend.run_scope(run_id, corp_id, conversation_id):
+        validation = await tools["validate_advisor_input"].ainvoke(
+            {"attachment_id": attachment_id, "mapping": mapping}
+        )
+        result = await tools["create_advisor_match"].ainvoke(
+            {
+                "attachment_id": attachment_id,
+                "mapping": mapping,
+                "mapping_fingerprint": validation["mapping_fingerprint"],
+            }
+        )
+        page = await tools["list_advisor_match_results"].ainvoke(
+            {"match_session_id": result["match_session_id"], "status": "matched"}
+        )
+
+    assert result["counts"] == {
+        "matched": 1,
+        "ambiguous_match": 0,
+        "no_match": 0,
+    }
+    assert page["items"][0]["matched_advisor"]["crd_number"] == "FSA_ID:111"
     store.close()
 
 
@@ -611,10 +687,11 @@ async def test_unlisted_crd_requires_proposal_then_later_turn_confirmation(
             {
                 "match_session_id": result["match_session_id"],
                 "review_item_id": page["items"][0]["review_item_id"],
-                "crd_number": "99000001",
+                "crd_number": "  99000001  ",
             }
         )
         assert proposal["requires_explicit_confirmation"] is True
+        assert proposal["resolved_advisor"]["crd_number"] == "99000001"
         with pytest.raises(ValueError, match="later user turn"):
             await tools["apply_advisor_match_decisions"].ainvoke(
                 {

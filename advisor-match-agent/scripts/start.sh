@@ -78,6 +78,7 @@ fi
 
 echo "Advisor Match Agent UI: http://${APP_HOST}:${APP_PORT}"
 echo "Advisor Match Agent API: http://${API_HOST}:${API_PORT}"
+echo "Advisor Match Agent log: ${PROJECT_DIR}/.data/logs/api.log"
 
 .venv/bin/streamlit run streamlit_app.py \
   --server.address "$APP_HOST" \

@@ -35,6 +35,15 @@ def _boolean(name: str, default: bool = False) -> bool:
     raise ValueError(f"{name} must be a boolean (true/false), got {raw!r}.")
 
 
+def _log_level() -> str:
+    value = os.getenv("LOG_LEVEL", "INFO").strip().upper()
+    allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    if value not in allowed:
+        choices = ", ".join(sorted(allowed))
+        raise ValueError(f"LOG_LEVEL must be one of {choices}, got {value!r}.")
+    return value
+
+
 def _model_kwargs() -> dict[str, Any]:
     raw = os.getenv("MODEL_KWARGS_JSON", "{}")
     try:
@@ -63,6 +72,13 @@ class Settings:
     app_port: int = field(default_factory=lambda: _positive_int("APP_PORT", 8502))
     ui_debug_mode: bool = field(
         default_factory=lambda: _boolean("UI_DEBUG_MODE", False)
+    )
+    log_level: str = field(default_factory=_log_level)
+    log_max_bytes: int = field(
+        default_factory=lambda: _positive_int("LOG_MAX_BYTES", 10 * 1024 * 1024)
+    )
+    log_backup_count: int = field(
+        default_factory=lambda: _positive_int("LOG_BACKUP_COUNT", 5)
     )
     run_timeout_seconds: int = field(
         default_factory=lambda: _positive_int("RUN_TIMEOUT_SECONDS", 900)
@@ -119,6 +135,14 @@ class Settings:
         return self.data_root / "runtime"
 
     @property
+    def logs_root(self) -> Path:
+        return self.data_root / "logs"
+
+    @property
+    def api_log(self) -> Path:
+        return self.logs_root / "api.log"
+
+    @property
     def installed_skills_root(self) -> Path:
         return self.runtime_root / "skills"
 
@@ -130,6 +154,7 @@ class Settings:
         for path in (
             self.data_root,
             self.runtime_root,
+            self.logs_root,
             self.data_root / "users",
         ):
             path.mkdir(parents=True, exist_ok=True)

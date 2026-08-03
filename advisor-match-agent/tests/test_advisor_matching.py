@@ -78,6 +78,70 @@ def test_firm_normalization_removes_legal_suffix_variations() -> None:
     assert norm.firm("Morgan Stanley") == norm.firm("Morgan Stanley & Co., LLC")
 
 
+def test_crd_is_an_opaque_trimmed_identifier() -> None:
+    assert norm.crd("  FSA_ID:111  ") == "FSA_ID:111"
+    assert norm.crd("1001.0") == "1001.0"
+    assert norm.crd("  ") == ""
+
+
+def test_exact_opaque_crd_is_decisive() -> None:
+    advisors = [
+        AdvisorRecord(
+            crd_number="FSA_ID:111",
+            first_name="Jane",
+            last_name="Doe",
+            firm_name="",
+            email="",
+            city="",
+            state="",
+            zip_code="",
+        )
+    ]
+
+    decisions, counts, _ = run_matching(
+        [_row(2, crd_number="  FSA_ID:111  ")], advisors
+    )
+
+    assert counts.matched == 1
+    assert decisions[0].rule_id == "EXACT_CRD"
+    assert decisions[0].matched_advisor.crd_number == "FSA_ID:111"
+
+
+def test_numeric_looking_crd_is_not_transformed() -> None:
+    decisions, counts, _ = run_matching(
+        [_row(2, crd_number="1001.0")], ADVISORS
+    )
+
+    assert counts.no_match == 1
+    assert decisions[0].rule_id == "CRD_NOT_FOUND"
+
+
+def test_synthetic_source_accepts_opaque_crd(tmp_path) -> None:
+    source = tmp_path / "opaque-crd.csv"
+    source.write_text(
+        "CRD_NUMBER,FIRST_NAME,LAST_NAME,FIRM_NAME,EMAIL,CITY,STATE,ZIP_CODE\n"
+        " FSA_ID:111 ,Jane,Doe,,,,,\n",
+        encoding="utf-8",
+    )
+
+    records = list(SyntheticAdvisorReferenceSource(source).iter_records())
+
+    assert records[0].crd_number == "FSA_ID:111"
+
+
+def test_synthetic_source_rejects_duplicate_trimmed_crds(tmp_path) -> None:
+    source = tmp_path / "duplicate-opaque-crd.csv"
+    source.write_text(
+        "CRD_NUMBER,FIRST_NAME,LAST_NAME,FIRM_NAME,EMAIL,CITY,STATE,ZIP_CODE\n"
+        " FSA_ID:111 ,Jane,Doe,,,,,\n"
+        "FSA_ID:111,Janet,Doe,,,,,\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="missing or duplicated"):
+        list(SyntheticAdvisorReferenceSource(source).iter_records())
+
+
 def test_exact_crd_is_decisive_and_reports_conflicts() -> None:
     decisions, counts, _ = run_matching(
         [
@@ -130,7 +194,7 @@ def test_non_unique_email_is_ambiguous_even_with_other_evidence() -> None:
 @pytest.mark.parametrize(
     ("mapped", "rule_id"),
     [
-        ({"crd_number": "12-34"}, "MALFORMED_CRD"),
+        ({"crd_number": "12-34"}, "CRD_NOT_FOUND"),
         ({"crd_number": "9999"}, "CRD_NOT_FOUND"),
         ({"email": "not-an-email"}, "MALFORMED_EMAIL"),
         ({"full_name": "Smith"}, "INSUFFICIENT_NAME"),

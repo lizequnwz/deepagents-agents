@@ -47,9 +47,9 @@ The reference snapshot is created once per immutable attachment. Mapping correct
 
 ## Deterministic policy
 
-The matching engine applies policy version 4 in order:
+The matching engine applies policy version 5 in order:
 
-1. Exact CRD is decisive; other conflicts become warnings.
+1. Exact trimmed CRD is decisive; CRDs are opaque strings with no digit validation or numeric extraction. Other conflicts become warnings.
 2. Unique normalized email is decisive after CRD. A non-unique authoritative email is ambiguous.
 3. A usable name produces an exact normalized first/last key; middle tokens are ignored, and uncommaed full names use their first and last tokens.
 4. Exact indexed name requires exact/wildcard/close firm or exact city and state.
@@ -59,7 +59,7 @@ The matching engine applies policy version 4 in order:
 8. ZIP is contextual only; street address is outside the workflow.
 9. Unresolved indexed candidates are `Ambiguous Match`; missing-name-key, invalid, or unsupported rows are `No Match` with a row-level reason.
 
-Malformed individual CRD, email, or name values become warnings or row-level results. They do not abort other rows. Completely blank rows are not advisor records. Duplicate input rows remain separate decisions and receive a duplicate-group marker.
+Malformed individual email or name values become warnings or row-level results. Any nonblank trimmed input CRD is usable as an opaque identifier. Completely blank rows are not advisor records. Duplicate input rows remain separate decisions and receive a duplicate-group marker.
 
 Explicit evidence precedence ranks candidates. Close-firm similarity remains bounded within the small exact-name candidate group and its numeric value is never returned to the model or workbook.
 

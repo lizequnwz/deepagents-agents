@@ -36,8 +36,10 @@ class SyntheticAdvisorReferenceSource:
             seen: set[str] = set()
             for row in reader:
                 crd = str(row["CRD_NUMBER"] or "").strip()
-                if not crd or not crd.isdigit() or crd in seen:
-                    raise ValueError(f"Master advisor CRD is missing, malformed, or duplicated: {crd!r}.")
+                if not crd or crd in seen:
+                    raise ValueError(
+                        f"Master advisor CRD is missing or duplicated: {crd!r}."
+                    )
                 if not str(row["FIRST_NAME"] or "").strip() or not str(row["LAST_NAME"] or "").strip():
                     raise ValueError(f"Master advisor {crd} is missing a required first or last name.")
                 seen.add(crd)

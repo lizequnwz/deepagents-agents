@@ -4,6 +4,6 @@
 
 The snapshot is an immutable protected file scoped to the active corporation and conversation. The model receives only an opaque `reference_snapshot_id`, row count, ordered columns, source kind, schema version, retrieval time, hash, and optional query ID. It never receives the advisor rows or a filesystem path.
 
-The match tool and later exact-CRD proposals resolve the opaque ID internally, verify its path, hash, schema, and row count, and reuse the same attachment snapshot across turns. Errors are explicit for an empty or oversized source, invalid schema, malformed or duplicate master CRDs, missing snapshot, cross-corporation access, or integrity failure. Partial `.building` snapshots are never registered or returned.
+The match tool and later exact-CRD proposals resolve the opaque ID internally, verify its path, hash, schema, and row count, and reuse the same attachment snapshot across turns. Errors are explicit for an empty or oversized source, invalid schema, blank or duplicate trimmed master CRDs, missing snapshot, cross-corporation access, or integrity failure. Partial `.building` snapshots are never registered or returned.
 
 The synthetic adapter reads the checked-in development table. A production Snowflake adapter should implement the same streaming `AdvisorReferenceSource` boundary. The application builds exact CRD, email, and normalized first/last-name indexes during that single retrieval; bounded review pages and the opaque manifest contract remain unchanged.

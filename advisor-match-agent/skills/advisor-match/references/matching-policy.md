@@ -2,7 +2,7 @@
 
 Apply rules in order:
 
-1. Exact master CRD is decisive; record other conflicts as warnings.
+1. Exact trimmed CRD is decisive. Treat CRDs as opaque strings without digit validation or numeric extraction; record other conflicts as warnings.
 2. A unique exact normalized email matches; CRD still takes precedence. A non-unique authoritative email is `Ambiguous Match`.
 3. A usable name is indexed by exact normalized first and last name. Separate fields preserve the complete last-name field. Uncommaed full names use the first and last tokens, ignoring middle tokens; therefore an uncommaed compound surname may require CRD, email, split columns, or review correction.
 4. Exact normalized first and last name requires independent firm or exact city-and-state support.

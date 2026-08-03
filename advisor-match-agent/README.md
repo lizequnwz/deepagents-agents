@@ -60,6 +60,9 @@ Important defaults:
 | --- | ---: |
 | `API_HOST` / `APP_HOST` | `127.0.0.1` |
 | `UI_DEBUG_MODE` | `false` |
+| `LOG_LEVEL` | `INFO` |
+| `LOG_MAX_BYTES` | `10485760` |
+| `LOG_BACKUP_COUNT` | `5` |
 | `ADVISOR_MAX_INPUT_ROWS` | `50000` |
 | `ADVISOR_MAX_REFERENCE_ROWS` | `1000000` |
 | `MAX_UPLOAD_MB` | `100` |
@@ -69,6 +72,26 @@ LangSmith tracing is off by default because prompts and tool pages can contain a
 The normal UI shows concise plan and tool lifecycle progress without tool arguments,
 tool results, token diagnostics, chat IDs, or technical error details. Set
 `UI_DEBUG_MODE=true` and restart the UI to display those debugging details.
+
+## Operational logs
+
+The API process writes a combined, human-readable API and agent timeline to
+`.data/logs/api.log`. It includes request IDs, run/model/tool lifecycle events,
+durations, status codes, token counts, and artifact metadata. It does not log
+prompts, advisor values, filenames, uploaded content, tool payloads, model
+responses, reasoning, credentials, headers, query values, or response bodies.
+
+Follow the active log or open the current file with:
+
+```bash
+tail -f .data/logs/api.log
+less .data/logs/api.log
+```
+
+The file rotates at 10 MiB by default and retains `api.log.1` through
+`api.log.5`. Set `LOG_LEVEL=DEBUG` for additional safe lifecycle records such
+as health checks, run polling, and plan item counts. Rotation size and retention
+are controlled by `LOG_MAX_BYTES` and `LOG_BACKUP_COUNT`.
 
 ## Storage and isolation
 

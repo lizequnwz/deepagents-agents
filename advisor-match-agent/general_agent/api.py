@@ -5,6 +5,8 @@ from __future__ import annotations
 import contextlib
 import logging
 import sqlite3
+import time
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,6 +20,13 @@ from general_agent.agent import build_agent
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
 from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
 from general_agent.config import Settings, load_settings
+from general_agent.observability import (
+    configure_logging,
+    log_event,
+    reset_request_id,
+    set_request_id,
+    shutdown_logging,
+)
 from general_agent.run_manager import RunManager
 from general_agent.schemas import (
     Conversation,
@@ -49,52 +58,93 @@ def create_app(
             if errors:
                 raise ValueError(" ".join(errors))
             active_settings.prepare_directories()
-        workspace = Workspace(active_settings.data_root)
-        store = Store(
-            active_settings.application_db,
-            active_settings.data_root,
-            active_settings.default_corp_id,
+        log_path = configure_logging(active_settings)
+        log_event(
+            logger,
+            logging.INFO,
+            "api.service.starting",
+            host=active_settings.api_host,
+            port=active_settings.api_port,
+            model=active_settings.model_name,
+            log_file=log_path,
         )
-        backend = AdvisorWorkspaceBackend(active_settings.runtime_root)
-        advisor_source = SyntheticAdvisorReferenceSource(
-            active_settings.project_root
-            / "general_agent/advisor_matching/data/master_advisors.csv"
-        )
-        _migrate_checkpoint_threads(
-            active_settings.checkpoint_db, active_settings.default_corp_id
-        )
-        checkpoint_context = AsyncSqliteSaver.from_conn_string(
-            str(active_settings.checkpoint_db)
-        )
-        checkpointer = await checkpoint_context.__aenter__()
-        await checkpointer.setup()
-        graph = graph_override or build_agent(
-            active_settings,
-            workspace=workspace,
-            backend=backend,
-            store=store,
-            advisor_source=advisor_source,
-            checkpointer=checkpointer,
-        )
-        manager = RunManager(
-            settings=active_settings,
-            store=store,
-            workspace=workspace,
-            backend=backend,
-            graph=graph,
-        )
-        app.state.settings = active_settings
-        app.state.workspace = workspace
-        app.state.store = store
-        app.state.backend = backend
-        app.state.checkpointer = checkpointer
-        app.state.manager = manager
+        try:
+            workspace = Workspace(active_settings.data_root)
+            store = Store(
+                active_settings.application_db,
+                active_settings.data_root,
+                active_settings.default_corp_id,
+            )
+            backend = AdvisorWorkspaceBackend(active_settings.runtime_root)
+            advisor_source = SyntheticAdvisorReferenceSource(
+                active_settings.project_root
+                / "general_agent/advisor_matching/data/master_advisors.csv"
+            )
+            _migrate_checkpoint_threads(
+                active_settings.checkpoint_db, active_settings.default_corp_id
+            )
+            checkpoint_context = AsyncSqliteSaver.from_conn_string(
+                str(active_settings.checkpoint_db)
+            )
+            checkpointer = await checkpoint_context.__aenter__()
+            await checkpointer.setup()
+            graph = graph_override or build_agent(
+                active_settings,
+                workspace=workspace,
+                backend=backend,
+                store=store,
+                advisor_source=advisor_source,
+                checkpointer=checkpointer,
+            )
+            manager = RunManager(
+                settings=active_settings,
+                store=store,
+                workspace=workspace,
+                backend=backend,
+                graph=graph,
+            )
+            app.state.settings = active_settings
+            app.state.workspace = workspace
+            app.state.store = store
+            app.state.backend = backend
+            app.state.checkpointer = checkpointer
+            app.state.manager = manager
+        except Exception:
+            log_event(
+                logger,
+                logging.ERROR,
+                "api.service.startup_failed",
+                exception_type=_current_exception_type(),
+                exc_info=True,
+            )
+            shutdown_logging()
+            raise
+        log_event(logger, logging.INFO, "api.service.ready")
         try:
             yield
         finally:
-            await manager.shutdown()
-            store.close()
-            await checkpoint_context.__aexit__(None, None, None)
+            log_event(
+                logger,
+                logging.INFO,
+                "api.service.stopping",
+                active_runs=manager.active_run_count,
+            )
+            try:
+                await manager.shutdown()
+                store.close()
+                await checkpoint_context.__aexit__(None, None, None)
+                log_event(logger, logging.INFO, "api.service.stopped")
+            except Exception:
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "api.service.shutdown_failed",
+                    exception_type=_current_exception_type(),
+                    exc_info=True,
+                )
+                raise
+            finally:
+                shutdown_logging()
 
     app = FastAPI(
         title="Advisor Match Agent API",
@@ -103,6 +153,54 @@ def create_app(
         docs_url="/docs",
         redoc_url=None,
     )
+
+    @app.middleware("http")
+    async def operational_request_log(request: Request, call_next):
+        request_id = "req_" + uuid.uuid4().hex[:16]
+        token = set_request_id(request_id)
+        request.state.request_id = request_id
+        started_at = time.monotonic()
+        response = None
+        logged_failure = False
+        try:
+            response = await call_next(request)
+        except Exception:
+            logged_failure = True
+            duration_ms = int((time.monotonic() - started_at) * 1000)
+            route = _request_route(request)
+            log_event(
+                logger,
+                logging.ERROR,
+                "api.request.failed",
+                method=request.method,
+                route=route,
+                status=500,
+                duration_ms=duration_ms,
+                corp_id=getattr(request.state, "corp_id", "unresolved"),
+                exception_type=_current_exception_type(),
+                exc_info=True,
+            )
+            response = _http_error(500, "The API encountered an unexpected error.")
+        finally:
+            reset_request_id(token)
+        response.headers["X-Request-ID"] = request_id
+        if not logged_failure:
+            duration_ms = int((time.monotonic() - started_at) * 1000)
+            level = _request_log_level(
+                request.method, _request_route(request), response.status_code
+            )
+            log_event(
+                logger,
+                level,
+                "api.request.completed",
+                request_id=request_id,
+                method=request.method,
+                route=_request_route(request),
+                status=response.status_code,
+                duration_ms=duration_ms,
+                corp_id=getattr(request.state, "corp_id", "unresolved"),
+            )
+        return response
 
     @app.exception_handler(WorkspacePathError)
     async def workspace_error(_request: Request, exc: WorkspacePathError):
@@ -131,6 +229,13 @@ def create_app(
         corp_id = _request_corp(request)
         conversation = request.app.state.store.create_conversation(
             body.title, corp_id=corp_id
+        )
+        log_event(
+            logger,
+            logging.INFO,
+            "api.conversation.created",
+            conversation_id=conversation.conversation_id,
+            corp_id=corp_id,
         )
         return conversation
 
@@ -176,6 +281,14 @@ def create_app(
                 await request.app.state.checkpointer.adelete_thread(
                     f"{corp_id}:{run_id}"
                 )
+        log_event(
+            logger,
+            logging.INFO,
+            "api.conversation.deleted",
+            conversation_id=conversation_id,
+            corp_id=corp_id,
+            runs=len(run_ids),
+        )
 
     @app.post("/conversations/{conversation_id}/messages", response_model=Run)
     async def send_message(
@@ -264,6 +377,13 @@ def create_app(
         except KeyError as exc:
             raise HTTPException(404, "Attachment not found.") from exc
         request.app.state.workspace.validate_file(corp_id, "attachments", path)
+        log_event(
+            logger,
+            logging.INFO,
+            "api.attachment.download_ready",
+            attachment_id=attachment_id,
+            corp_id=corp_id,
+        )
         return FileResponse(path, filename=name)
 
     @app.get("/artifacts/{artifact_id}/download")
@@ -276,6 +396,13 @@ def create_app(
         except KeyError as exc:
             raise HTTPException(404, "Artifact not found.") from exc
         request.app.state.workspace.validate_file(corp_id, "artifacts", path)
+        log_event(
+            logger,
+            logging.INFO,
+            "api.artifact.download_ready",
+            artifact_id=artifact_id,
+            corp_id=corp_id,
+        )
         return FileResponse(path, filename=name)
 
     return app
@@ -291,7 +418,34 @@ def _request_corp(request: Request) -> str:
     """Resolve the lightweight user namespace supplied by the Streamlit UI."""
 
     configured_default = request.app.state.settings.default_corp_id
-    return validate_corp_id(request.headers.get("X-Corp-ID") or configured_default)
+    corp_id = validate_corp_id(
+        request.headers.get("X-Corp-ID") or configured_default
+    )
+    request.state.corp_id = corp_id
+    return corp_id
+
+
+def _request_route(request: Request) -> str:
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    return str(path) if path else "unmatched"
+
+
+def _request_log_level(method: str, route: str, status: int) -> int:
+    if status >= 500:
+        return logging.ERROR
+    if status >= 400:
+        return logging.WARNING
+    if method == "GET" and route in {"/health", "/runs/{run_id}"}:
+        return logging.DEBUG
+    return logging.INFO
+
+
+def _current_exception_type() -> str:
+    import sys
+
+    exception = sys.exc_info()[1]
+    return type(exception).__name__ if exception is not None else "Exception"
 
 
 def _migrate_checkpoint_threads(path: Path, default_corp_id: str) -> None:
