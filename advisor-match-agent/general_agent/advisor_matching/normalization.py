@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
-_HONORIFICS = {"mr", "mrs", "ms", "miss", "dr"}
-_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "cfa", "cfp"}
+_HONORIFICS = {}
+_SUFFIXES = {}
 _FIRM_SUFFIXES = {
     "llc",
     "llp",
