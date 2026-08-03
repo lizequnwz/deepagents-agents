@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import filecmp
 import json
 import shutil
 import sqlite3
@@ -380,32 +379,18 @@ class Store:
 
     @staticmethod
     def _move_directory_contents(source: Path, destination: Path) -> None:
-        """Merge a protected directory tree without overwriting distinct data."""
+        """Move one protected directory tree without overwriting existing data."""
 
         if source.is_symlink() or (source.exists() and not source.is_dir()):
             raise ValueError(f"Unsafe legacy storage directory: {source}")
         if not source.exists():
             return
-        if destination.is_symlink():
-            raise ValueError(f"Unsafe storage migration destination: {destination}")
         destination.mkdir(parents=True, exist_ok=True)
         for child in source.iterdir():
             if child.is_symlink():
                 raise ValueError(f"Unsafe legacy storage entry: {child}")
-            if not child.is_file() and not child.is_dir():
-                raise ValueError(f"Unsupported legacy storage entry: {child}")
             target = destination / child.name
-            if target.is_symlink():
-                raise ValueError(f"Unsafe storage migration destination: {target}")
             if target.exists():
-                if child.is_dir() and target.is_dir():
-                    Store._move_directory_contents(child, target)
-                    continue
-                if child.is_file() and target.is_file() and filecmp.cmp(
-                    child, target, shallow=False
-                ):
-                    child.unlink()
-                    continue
                 raise ValueError(
                     f"Storage migration collision at {target}; resolve it before "
                     "starting the application."
@@ -447,14 +432,8 @@ class Store:
                         source=source,
                         category=category,
                         layouts=layouts,
-                        legacy_directory=legacy_corp_storage_key(corp_id),
-                        destination_root=destination_root,
                     )
-                    if (
-                        destination is None
-                        or not destination.is_file()
-                        or destination.is_symlink()
-                    ):
+                    if destination is None or not destination.exists():
                         continue
                     self._connection.execute(
                         f"UPDATE {table} SET {column}=? WHERE id=? AND corp_id=?",
@@ -467,25 +446,15 @@ class Store:
         source: Path,
         category: str,
         layouts: list[tuple[Path, Path]],
-        legacy_directory: str,
-        destination_root: Path,
     ) -> Path | None:
         source_resolved = source.resolve(strict=False)
-        for old_root, layout_destination_root in layouts:
+        for old_root, destination_root in layouts:
             old_category = (old_root / category).resolve(strict=False)
             try:
                 relative = source_resolved.relative_to(old_category)
             except ValueError:
                 continue
-            return layout_destination_root / category / relative
-        parts = source_resolved.parts
-        for index in range(len(parts) - 3):
-            if (
-                parts[index] == "users"
-                and parts[index + 1] == legacy_directory
-                and parts[index + 2] == category
-            ):
-                return destination_root / category / Path(*parts[index + 3 :])
+            return destination_root / category / relative
         return None
 
     def recover_abandoned_runs(self) -> None:

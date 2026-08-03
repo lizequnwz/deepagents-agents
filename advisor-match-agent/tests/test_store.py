@@ -121,18 +121,8 @@ def test_startup_migrates_hashed_corporation_storage_and_paths(settings) -> None
     readable_root = settings.data_root / "users" / corp_id
     hashed_root = settings.data_root / "users" / legacy_corp_storage_key(corp_id)
     shutil.move(str(readable_root), str(hashed_root))
-    (settings.data_root / "attachments" / attachment.attachment_id).mkdir(
-        parents=True
-    )
-    historical_root = (
-        settings.project_root.parent
-        / "general-agent"
-        / ".data"
-        / "users"
-        / legacy_corp_storage_key(corp_id)
-    )
     _replace_stored_path_prefix(
-        settings.application_db, readable_root, historical_root
+        settings.application_db, readable_root, hashed_root
     )
 
     migrated = Store(settings.application_db, settings.data_root)
