@@ -33,16 +33,14 @@ class SyntheticAdvisorReferenceSource:
                 raise ValueError(
                     "Synthetic advisor schema is missing one or more canonical columns."
                 )
-            seen: set[str] = set()
             for row in reader:
                 crd = str(row["CRD_NUMBER"] or "").strip()
-                if not crd or crd in seen:
+                if not crd:
                     raise ValueError(
-                        f"Master advisor CRD is missing or duplicated: {crd!r}."
+                        f"Master advisor CRD is missing: {crd!r}."
                     )
                 if not str(row["FIRST_NAME"] or "").strip() or not str(row["LAST_NAME"] or "").strip():
                     raise ValueError(f"Master advisor {crd} is missing a required first or last name.")
-                seen.add(crd)
                 yield AdvisorRecord(**{column.lower(): str(row[column] or "").strip() for column in MASTER_COLUMNS})
 
 

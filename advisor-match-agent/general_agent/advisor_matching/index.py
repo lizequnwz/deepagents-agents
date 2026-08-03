@@ -10,6 +10,19 @@ from general_agent.advisor_matching import normalization as norm
 from general_agent.advisor_matching.schemas import AdvisorRecord
 
 
+class ReferenceDataQualityError(ValueError):
+    """Authoritative-source data is unsafe for deterministic identity matching."""
+
+    def __init__(self, duplicate_crds: dict[str, int]) -> None:
+        self.code = "DUPLICATE_REFERENCE_CRD"
+        self.duplicate_crds = dict(sorted(duplicate_crds.items()))
+        details = ", ".join(
+            f"{crd!r} ({count} occurrences)"
+            for crd, count in self.duplicate_crds.items()
+        )
+        super().__init__(f"Master advisor CRD is duplicated: {details}.")
+
+
 @dataclass(frozen=True, slots=True)
 class IndexedAdvisor:
     """Memory-conscious canonical advisor data retained during one match call."""
@@ -25,7 +38,13 @@ class IndexedAdvisor:
 
     @classmethod
     def from_record(cls, record: AdvisorRecord) -> IndexedAdvisor:
-        return cls(**record.model_dump())
+        return cls(
+            **{
+                key: str(value or "")
+                for key, value in record.model_dump().items()
+            }
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class AdvisorIndex:
@@ -42,6 +61,7 @@ class AdvisorIndex:
         by_crd: dict[str, int] = {}
         email_postings: dict[str, list[int]] = defaultdict(list)
         name_postings: dict[tuple[str, str], list[int]] = defaultdict(list)
+        crd_counts: dict[str, int] = defaultdict(int)
 
         for record in records:
             advisor = IndexedAdvisor.from_record(record)
@@ -49,16 +69,19 @@ class AdvisorIndex:
             advisor = replace(advisor, crd_number=crd)
             first = norm.first_name(advisor.first_name)
             last = norm.person_name(advisor.last_name)
-            if not crd or crd in by_crd:
+            if not crd:
                 raise ValueError(
-                    "Master advisor CRD is missing or duplicated: "
-                    f"{advisor.crd_number!r}."
+                    f"Master advisor CRD is missing: {advisor.crd_number!r}."
                 )
             if not first or not last:
                 raise ValueError(
                     f"Master advisor {advisor.crd_number} is missing a required "
                     "first or last name."
                 )
+
+            crd_counts[crd] += 1
+            if crd_counts[crd] > 1:
+                continue
 
             position = len(compact)
             compact.append(advisor)
@@ -67,6 +90,11 @@ class AdvisorIndex:
                 email_postings[email].append(position)
             name_postings[(first, last)].append(position)
 
+        duplicates = {
+            crd: count for crd, count in crd_counts.items() if count > 1
+        }
+        if duplicates:
+            raise ReferenceDataQualityError(duplicates)
         if not compact:
             raise ValueError("Advisor reference source is empty.")
         return cls(

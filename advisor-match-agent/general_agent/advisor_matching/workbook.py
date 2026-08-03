@@ -321,13 +321,34 @@ def _write_summary(
         ("Generated At", datetime.now(UTC).isoformat()),
     ]
     if source_transformation:
-        values.extend(
-            [
-                ("Input Transformation", "User-confirmed bulk firm augmentation"),
+        transformation_type = source_transformation.get("type")
+        transformation_label = (
+            "User-confirmed session firm override"
+            if transformation_type == "session_firm_override"
+            else "User-confirmed bulk firm augmentation"
+        )
+        values.append(("Input Transformation", transformation_label))
+        if transformation_type == "session_firm_override":
+            values.append(
+                (
+                    "Source Attachment ID",
+                    source_transformation.get("source_attachment_id", ""),
+                )
+            )
+        else:
+            values.append(
                 (
                     "Derived From Attachment ID",
                     source_transformation.get("source_attachment_id", ""),
-                ),
+                )
+            )
+        affected_rows_label = (
+            "Rows With Firm Override"
+            if transformation_type == "session_firm_override"
+            else "Rows Augmented With Firm"
+        )
+        values.extend(
+            [
                 (
                     "Original Source SHA-256",
                     source_transformation.get("source_sha256", ""),
@@ -337,7 +358,7 @@ def _write_summary(
                     source_transformation.get("firm_name", ""),
                 ),
                 (
-                    "Rows Augmented With Firm",
+                    affected_rows_label,
                     source_transformation.get("rows_updated", ""),
                 ),
             ]

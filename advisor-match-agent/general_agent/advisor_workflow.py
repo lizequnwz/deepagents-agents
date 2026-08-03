@@ -13,15 +13,14 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.tools import BaseTool, tool
 
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
 from general_agent.advisor_matching import normalization as norm
-from general_agent.advisor_matching.augmentation import augment_input_with_firm
 from general_agent.advisor_matching.input_loader import validate_and_load_input
-from general_agent.advisor_matching.index import AdvisorIndex
+from general_agent.advisor_matching.index import AdvisorIndex, ReferenceDataQualityError
 from general_agent.advisor_matching.matcher import run_matching
 from general_agent.advisor_matching.policy import POLICY_VERSION
 from general_agent.advisor_matching.profiler import (
@@ -29,7 +28,8 @@ from general_agent.advisor_matching.profiler import (
 )
 from general_agent.advisor_matching.schemas import (
     AdvisorRecord,
-    FirmAugmentationResult,
+    FirmClarificationResult,
+    FirmResolution,
     InputMapping,
     InputSummary,
     MASTER_COLUMNS,
@@ -40,6 +40,7 @@ from general_agent.advisor_matching.schemas import (
     MatchRunResult,
     MatchStatus,
     ReferenceSnapshotManifest,
+    ReferenceBlockerResult,
     ReviewDecision,
 )
 from general_agent.advisor_matching.source import AdvisorReferenceSource, sha256_file
@@ -180,123 +181,14 @@ def _build_workflow_tools(
         return checkpoint["validation"]
 
     @tool
-    def apply_firm_to_advisor_upload(
-        firm_name: str,
-        attachment_id: str | None = None,
-        mapping: InputMapping | None = None,
-    ) -> dict[str, Any]:
-        """Create an immutable derived upload with one user-confirmed firm on all rows."""
-
-        corp_id, conversation_id = current_context()
-        run_id = backend.active_run_id
-        if not run_id:
-            raise RuntimeError("The active run context is unavailable.")
-        try:
-            stored_checkpoint = store.get_advisor_input_checkpoint(
-                conversation_id, corp_id=corp_id
-            )
-        except KeyError as exc:
-            raise ValueError(
-                "Validate an advisor input before applying an all-rows firm."
-            ) from exc
-        if stored_checkpoint["validated_run_id"] == run_id:
-            raise ValueError(
-                "Ask for and receive the all-rows firm confirmation in a later "
-                "user turn before applying it."
-            )
-        checkpoint = stored_checkpoint["validation"]
-        checkpoint_attachment_id = str(checkpoint["attachment_id"])
-        if attachment_id is not None and attachment_id != checkpoint_attachment_id:
-            raise ValueError(
-                "The supplied attachment is not the current validated input."
-            )
-        attachment_id = checkpoint_attachment_id
-        checkpoint_mapping = InputMapping.model_validate(checkpoint["mapping"])
-        if (
-            mapping is not None
-            and mapping.model_dump(mode="json")
-            != checkpoint_mapping.model_dump(mode="json")
-        ):
-            raise ValueError(
-                "The supplied mapping is not the current validated mapping."
-            )
-        mapping = checkpoint_mapping
-        source, original_name = resolve_upload(attachment_id)
-        current_question = store.get_run(run_id, corp_id=corp_id).question
-        if not _contains_explicit_firm(current_question, firm_name):
-            raise ValueError(
-                "The firm name must appear explicitly in the current user message "
-                "before it can be applied to every advisor."
-            )
-        suffix = source.suffix.lower()
-        derived_name = f"{Path(original_name).stem}_with_firm{suffix}"
-        with tempfile.TemporaryDirectory(prefix="advisor-firm-") as temporary:
-            staged = Path(temporary) / derived_name
-            augmentation = augment_input_with_firm(
-                source,
-                staged,
-                mapping,
-                firm_name,
-                max_rows=settings.advisor_max_input_rows,
-            )
-            transformation = {
-                "type": "bulk_firm_augmentation",
-                "source_attachment_id": attachment_id,
-                "source_sha256": augmentation.source_sha256,
-                "firm_name": augmentation.firm_name,
-                "rows_updated": augmentation.rows_updated,
-                "selected_sheet": augmentation.selected_sheet,
-                "firm_column_index": augmentation.firm_column_index,
-                "firm_column_header": augmentation.firm_column_header,
-            }
-            content_type = (
-                "text/csv"
-                if suffix == ".csv"
-                else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            with staged.open("rb") as handle:
-                attachment, protected = workspace.upload(
-                    corp_id=corp_id,
-                    conversation_id=conversation_id,
-                    original_name=derived_name,
-                    content_type=content_type,
-                    source=handle,
-                    max_bytes=settings.max_upload_mb * 1024 * 1024,
-                )
-        try:
-            store.add_attachment(
-                run_id,
-                attachment,
-                protected,
-                corp_id=corp_id,
-                derived_from_attachment_id=attachment_id,
-                transformation=transformation,
-            )
-        except Exception:
-            protected.unlink(missing_ok=True)
-            with contextlib.suppress(OSError):
-                protected.parent.rmdir()
-            raise
-        return FirmAugmentationResult(
-            source_attachment_id=attachment_id,
-            attachment_id=attachment.attachment_id,
-            original_name=attachment.original_name,
-            source_sha256=augmentation.source_sha256,
-            derived_sha256=attachment.sha256,
-            firm_name=augmentation.firm_name,
-            rows_updated=augmentation.rows_updated,
-            selected_sheet=augmentation.selected_sheet,
-            mapping=augmentation.mapping,
-        ).model_dump(mode="json")
-
-    @tool
     def create_advisor_match(
         attachment_id: str,
         mapping: InputMapping,
         mapping_fingerprint: str,
-        allow_missing_firm: bool = False,
+        all_rows_firm: str | None = None,
+        firm_resolution: FirmResolution = "auto",
     ) -> dict[str, Any]:
-        """Create a persisted deterministic advisor match and verified workbook."""
+        """Resolve firm handling, match deterministically, and publish a workbook."""
 
         corp_id, conversation_id = current_context()
         source, original_name = resolve_upload(attachment_id)
@@ -324,34 +216,92 @@ def _build_workflow_tools(
         )
         transformation = metadata["transformation"]
         _validate_source_transformation(loaded.rows, mapping, transformation)
-        if (
-            loaded.summary.missing_firm_confirmation_required
-            and not allow_missing_firm
-        ):
-            if loaded.summary.firm_column_missing:
+        firm = _validated_firm_name(all_rows_firm) if all_rows_firm else None
+        if firm is not None:
+            run_id = backend.active_run_id
+            if not run_id:
+                raise RuntimeError("The active run context is unavailable.")
+            current_question = store.get_run(run_id, corp_id=corp_id).question
+            if not _contains_explicit_firm(current_question, firm):
                 raise ValueError(
-                    "The selected input has no mapped firm column. Ask whether "
-                    "one firm applies to every advisor; otherwise require explicit "
-                    "permission to continue with weaker evidence."
+                    "The all-rows firm must appear explicitly in the current user "
+                    "message."
                 )
-            raise ValueError(
-                f"{loaded.summary.missing_firm_row_count} rows have a usable name "
-                "but no firm, valid CRD, or valid email. Ask whether one firm "
-                "applies to every advisor; otherwise require explicit permission "
-                "to continue with weaker evidence."
-            )
-        reference, advisor_index = _load_or_create_reference(
-            store=store,
-            workspace=workspace,
-            advisor_source=advisor_source,
-            settings=settings,
-            corp_id=corp_id,
-            conversation_id=conversation_id,
-            attachment_id=attachment_id,
+        resolved = _resolve_firm_rows(
+            rows=loaded.rows,
+            mapping=mapping,
+            input_summary=loaded.summary,
+            missing_firm_sample=loaded.missing_firm_sample,
+            all_rows_firm=firm,
+            firm_resolution=firm_resolution,
+            source_attachment_id=attachment_id,
+            source_sha256=loaded.source_sha256,
+            selected_sheet=loaded.selected_sheet,
+            source_transformation=transformation,
         )
+        if isinstance(resolved, FirmClarificationResult):
+            return resolved.model_dump(mode="json")
+        match_rows, session_transformation = resolved
+        try:
+            reference, advisor_index = _load_or_create_reference(
+                store=store,
+                workspace=workspace,
+                advisor_source=advisor_source,
+                settings=settings,
+                corp_id=corp_id,
+                conversation_id=conversation_id,
+                attachment_id=attachment_id,
+            )
+        except ReferenceDataQualityError as exc:
+            log_event(
+                logger,
+                logging.ERROR,
+                "agent.reference.blocked",
+                run_id=backend.active_run_id,
+                corp_id=corp_id,
+                blocker_code=exc.code,
+                duplicate_crds=exc.duplicate_crds,
+            )
+            visible = list(exc.duplicate_crds.items())[:10]
+            message = (
+                "The authoritative advisor source contains duplicate trimmed "
+                "CRDs and must be corrected before matching: "
+                + ", ".join(
+                    f"{crd} ({count} occurrences)" for crd, count in visible
+                )
+                + "."
+            )
+            return ReferenceBlockerResult(
+                blocker_code="DUPLICATE_REFERENCE_CRD",
+                message=message,
+                duplicate_crd_count=len(exc.duplicate_crds),
+                duplicate_crds=[
+                    {"crd_number": crd, "occurrences": count}
+                    for crd, count in visible
+                ],
+            ).model_dump(mode="json")
+        except ValueError as exc:
+            log_event(
+                logger,
+                logging.ERROR,
+                "agent.reference.blocked",
+                run_id=backend.active_run_id,
+                corp_id=corp_id,
+                blocker_code="REFERENCE_DATA_INVALID",
+                exception_type=type(exc).__name__,
+                exception_message=str(exc),
+                exc_info=True,
+            )
+            return ReferenceBlockerResult(
+                blocker_code="REFERENCE_DATA_INVALID",
+                message=(
+                    "The authoritative advisor source failed validation and must "
+                    "be corrected before matching."
+                ),
+            ).model_dump(mode="json")
         if len(advisor_index.records) != reference.row_count:
             raise ValueError("The advisor reference snapshot row count changed.")
-        decisions, counts, match_warnings = run_matching(loaded.rows, advisor_index)
+        decisions, counts, match_warnings = run_matching(match_rows, advisor_index)
         warnings = _unique(
             [*_input_summary_warnings(loaded.summary), *match_warnings]
         )
@@ -363,7 +313,7 @@ def _build_workflow_tools(
             source_sha256=loaded.source_sha256,
             mapping=mapping.model_dump(mode="json"),
             input_summary=loaded.summary.model_dump(mode="json"),
-            source_transformation=transformation,
+            source_transformation=session_transformation,
             reference=reference.model_dump(mode="json"),
             decisions=[decision.model_dump(mode="json") for decision in decisions],
             counts=counts.model_dump(mode="json"),
@@ -381,7 +331,7 @@ def _build_workflow_tools(
             mapping_fingerprint=loaded.mapping_fingerprint,
             input_summary=loaded.summary,
             counts=counts,
-            source_transformation=transformation,
+            source_transformation=session_transformation,
             reference=reference,
             warnings=warnings,
             policy_version=POLICY_VERSION,
@@ -589,7 +539,6 @@ def _build_workflow_tools(
         inspect_advisor_upload,
         validate_advisor_input,
         get_current_advisor_input,
-        apply_firm_to_advisor_upload,
         create_advisor_match,
         get_current_advisor_match,
         list_advisor_match_results,
@@ -627,6 +576,201 @@ def _validate_source_transformation(
         raise ValueError(
             "The derived upload no longer contains the confirmed firm on every row."
         )
+
+
+def _resolve_firm_rows(
+    *,
+    rows: list[tuple[int, dict[str, object], dict[str, str]]],
+    mapping: InputMapping,
+    input_summary: InputSummary,
+    missing_firm_sample: list[dict[str, Any]],
+    all_rows_firm: str | None,
+    firm_resolution: FirmResolution,
+    source_attachment_id: str,
+    source_sha256: str,
+    selected_sheet: str | None,
+    source_transformation: dict[str, Any],
+) -> (
+    tuple[
+        list[tuple[int, dict[str, object], dict[str, str]]],
+        dict[str, Any],
+    ]
+    | FirmClarificationResult
+):
+    """Resolve firm intent before any authoritative-reference retrieval."""
+
+    if firm_resolution in {"use_source", "continue_without_firm"}:
+        if all_rows_firm is not None:
+            raise ValueError(
+                f"firm_resolution={firm_resolution!r} cannot include all_rows_firm."
+            )
+    elif firm_resolution == "override_all" and all_rows_firm is None:
+        raise ValueError("override_all requires an explicit all_rows_firm.")
+
+    if firm_resolution == "use_source":
+        if mapping.firm_name is None:
+            raise ValueError("use_source requires a mapped firm column.")
+        return rows, source_transformation
+    if firm_resolution == "continue_without_firm":
+        return rows, source_transformation
+    if firm_resolution == "override_all":
+        return _override_firm_rows(
+            rows=rows,
+            firm_name=all_rows_firm or "",
+            source_attachment_id=source_attachment_id,
+            source_sha256=source_sha256,
+            selected_sheet=selected_sheet,
+            source_transformation=source_transformation,
+        )
+
+    if all_rows_firm is None:
+        if not input_summary.missing_firm_confirmation_required:
+            return rows, source_transformation
+        profile = _firm_profile(rows)
+        return FirmClarificationResult(
+            reason="missing_firm",
+            data_row_count=len(rows),
+            populated_firm_row_count=profile["populated_row_count"],
+            blank_firm_row_count=profile["blank_row_count"],
+            distinct_source_firm_count=profile["distinct_count"],
+            source_firm_sample=profile["display_sample"],
+            affected_row_sample=missing_firm_sample,
+            allowed_resolutions=["override_all", "continue_without_firm"],
+        )
+
+    if mapping.firm_name is None:
+        return _override_firm_rows(
+            rows=rows,
+            firm_name=all_rows_firm,
+            source_attachment_id=source_attachment_id,
+            source_sha256=source_sha256,
+            selected_sheet=selected_sheet,
+            source_transformation=source_transformation,
+        )
+
+    profile = _firm_profile(rows)
+    target = norm.firm(all_rows_firm)
+    normalized_values = profile["normalized_values"]
+    if profile["blank_row_count"] == 0 and normalized_values == {target}:
+        return rows, source_transformation
+
+    affected_rows = []
+    for row_number, _, mapped in rows:
+        source_firm = str(mapped.get("firm_name") or "").strip()
+        if not source_firm or norm.firm(source_firm) != target:
+            affected_rows.append(
+                {
+                    "source_row_number": row_number,
+                    "name": _mapped_display_name(mapped),
+                    "source_firm": source_firm,
+                }
+            )
+        if len(affected_rows) == 5:
+            break
+    return FirmClarificationResult(
+        reason=_firm_clarification_reason(
+            blank_count=profile["blank_row_count"],
+            normalized_values=normalized_values,
+            target=target,
+        ),
+        stated_firm=all_rows_firm,
+        data_row_count=len(rows),
+        populated_firm_row_count=profile["populated_row_count"],
+        blank_firm_row_count=profile["blank_row_count"],
+        distinct_source_firm_count=profile["distinct_count"],
+        source_firm_sample=profile["display_sample"],
+        affected_row_sample=affected_rows,
+        allowed_resolutions=["use_source", "override_all"],
+    )
+
+
+def _override_firm_rows(
+    *,
+    rows: list[tuple[int, dict[str, object], dict[str, str]]],
+    firm_name: str,
+    source_attachment_id: str,
+    source_sha256: str,
+    selected_sheet: str | None,
+    source_transformation: dict[str, Any],
+) -> tuple[
+    list[tuple[int, dict[str, object], dict[str, str]]],
+    dict[str, Any],
+]:
+    overridden = [
+        (row_number, source_values, {**mapped, "firm_name": firm_name})
+        for row_number, source_values, mapped in rows
+    ]
+    transformation: dict[str, Any] = {
+        "type": "session_firm_override",
+        "source_attachment_id": source_attachment_id,
+        "source_sha256": source_sha256,
+        "firm_name": firm_name,
+        "rows_updated": len(overridden),
+        "selected_sheet": selected_sheet,
+    }
+    if source_transformation:
+        transformation["prior_source_transformation"] = source_transformation
+    return overridden, transformation
+
+
+def _firm_profile(
+    rows: list[tuple[int, dict[str, object], dict[str, str]]],
+) -> dict[str, Any]:
+    normalized_values: set[str] = set()
+    display_values: list[str] = []
+    blank_count = 0
+    populated_count = 0
+    for _, _, mapped in rows:
+        display = str(mapped.get("firm_name") or "").strip()
+        normalized = norm.firm(display)
+        if not normalized:
+            blank_count += 1
+            continue
+        populated_count += 1
+        normalized_values.add(normalized)
+        if display not in display_values and len(display_values) < 5:
+            display_values.append(display)
+    return {
+        "blank_row_count": blank_count,
+        "populated_row_count": populated_count,
+        "distinct_count": len(normalized_values),
+        "normalized_values": normalized_values,
+        "display_sample": display_values,
+    }
+
+
+def _firm_clarification_reason(
+    *, blank_count: int, normalized_values: set[str], target: str
+) -> Literal["blank_source_firms", "mixed_source_firms", "firm_conflict"]:
+    if len(normalized_values) > 1:
+        return "mixed_source_firms"
+    if normalized_values and normalized_values != {target}:
+        return "firm_conflict"
+    if blank_count:
+        return "blank_source_firms"
+    return "firm_conflict"
+
+
+def _mapped_display_name(mapped: dict[str, str]) -> str:
+    return str(mapped.get("full_name") or "").strip() or " ".join(
+        value
+        for value in (
+            str(mapped.get("first_name") or "").strip(),
+            str(mapped.get("last_name") or "").strip(),
+        )
+        if value
+    )
+
+
+def _validated_firm_name(value: str) -> str:
+    firm = " ".join(str(value or "").split())
+    if not firm or not norm.firm(firm):
+        raise ValueError("Provide a nonblank, meaningful all-rows firm.")
+    if len(firm) > 200:
+        raise ValueError("Firm name must be 200 characters or fewer.")
+    if firm.startswith(("=", "+", "-", "@")):
+        raise ValueError("Firm name cannot begin with a spreadsheet formula prefix.")
+    return firm
 
 
 def _require_current_validation(

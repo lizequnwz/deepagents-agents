@@ -9,6 +9,7 @@ from deepagents.middleware import FilesystemMiddleware
 from langchain.agents.middleware import ToolErrorMiddleware
 
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
+from general_agent.advisor_matching.index import ReferenceDataQualityError
 from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
 from general_agent.advisor_tools import build_advisor_tools
 from general_agent.agent import (
@@ -76,6 +77,12 @@ def test_expected_tool_errors_are_returned_for_correction() -> None:
         "Correct the input and retry."
     )
     assert _recoverable_tool_error(RuntimeError("internal failure"), request) is None
+    blocker = _recoverable_tool_error(
+        ReferenceDataQualityError({"DUP-1": 2}), request
+    )
+    assert "authoritative advisor source" in blocker
+    assert "do not change the uploaded input" in blocker
+    assert "Correct the input and retry" not in blocker
 
 
 def test_prompt_enforces_matching_and_review_boundaries() -> None:
@@ -85,7 +92,10 @@ def test_prompt_enforces_matching_and_review_boundaries() -> None:
         "Your purpose", "advisor-match skill", "never decide identities row by row",
         "exact column indexes and observed headers",
         "Always call the mapping-validation tool before matching",
-        "no mapped firm column, always ask whether one firm applies",
+        "pass that exact text as `all_rows_firm` in the same turn",
+        "Do not ask the user to repeat it",
+        "firm_clarification_required",
+        "authoritative source must be corrected",
         "get_current_advisor_input",
         "Never overwrite the original upload",
         "retrieves or reuses the attachment's authoritative snapshot internally",
@@ -119,7 +129,6 @@ def test_advisor_tool_schemas_do_not_expose_runtime_or_host_paths(settings) -> N
         "inspect_advisor_upload",
         "validate_advisor_input",
         "get_current_advisor_input",
-        "apply_firm_to_advisor_upload",
         "create_advisor_match",
         "get_current_advisor_match",
         "list_advisor_match_results",
@@ -132,6 +141,9 @@ def test_advisor_tool_schemas_do_not_expose_runtime_or_host_paths(settings) -> N
         assert "host_path" not in fields
     create_match = next(item for item in tools if item.name == "create_advisor_match")
     assert "reference_snapshot_id" not in create_match.args_schema.model_fields
+    assert {"all_rows_firm", "firm_resolution"} <= set(
+        create_match.args_schema.model_fields
+    )
 
 
 @pytest.mark.asyncio

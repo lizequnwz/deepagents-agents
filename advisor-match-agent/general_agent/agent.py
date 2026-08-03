@@ -24,6 +24,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
+from general_agent.advisor_matching.index import ReferenceDataQualityError
 from general_agent.advisor_matching.source import AdvisorReferenceSource
 from general_agent.advisor_tools import build_advisor_tools
 from general_agent.config import Settings
@@ -93,23 +94,33 @@ Interpret the upload like an analyst: inspect bounded raw rows, select exactly
 one worksheet, decide whether and where a header exists, and construct a typed
 mapping from exact column indexes and observed headers. Ask the user when more
 than one interpretation is plausible. Always call the mapping-validation tool
-before matching. If validation reports no
-mapped firm column, always ask whether one firm applies to every advisor row,
-even when CRD or email evidence is available. Also flag individual name rows
-that lack firm, valid CRD, and valid email. If the user explicitly supplies that firm, call
-the bulk-firm augmentation tool and validate its immutable derived attachment
-before matching. If no firm is available, ask whether to continue with weaker
-evidence. Never overwrite the original upload.
+before matching. Then call `create_advisor_match`, which owns firm resolution,
+deterministic matching, and verified workbook publication as one workflow. If
+the current user message explicitly states that one firm applies to every
+advisor, pass that exact text as `all_rows_firm` in the same turn. Do not ask the
+user to repeat it or require an imperative command. The tool applies an all-rows
+firm only to copied mapped values and never overwrites or derives another upload.
+If no firm is supplied, matching proceeds without a firm whenever all rows have
+CRD or valid email evidence; otherwise the tool returns a bounded firm
+clarification result. If a mapped firm column agrees after normalization, use
+the source values. If it is blank, mixed, or conflicting, show the bounded
+discrepancy and wait for the user to choose source values or an all-rows
+override. Use `firm_resolution="override_all"` only when the exact firm is
+restated in that current message; use `continue_without_firm` only after the
+user explicitly accepts weaker evidence. Never overwrite the original upload.
 On a later clarification turn, call `get_current_advisor_input` to recover the
 persisted validated attachment, mapping, fingerprint, and bounded checkpoint;
 do not guess them from prose history.
 
 The model must never decide identities row by row. Use deterministic tools for
-profiling, mapping validation, matching, review listing, user-confirmed
-decisions, and workbook generation. Call `create_advisor_match` once after
-upload clarification is complete; it retrieves or reuses the attachment's
-authoritative snapshot internally. Treat the returned manifest and snapshot ID
-as opaque; never request or reproduce the complete advisor table.
+profiling, mapping validation, firm resolution, matching, review listing,
+user-confirmed decisions, and workbook generation. Treat returned workflow
+statuses explicitly: `match_created` is the only successful match outcome;
+`firm_clarification_required` means ask the requested question and stop;
+`blocked` means the authoritative source must be corrected and must not be
+blamed on the upload or retried. A successful match retrieves or reuses the
+attachment's authoritative snapshot internally. Treat the returned manifest
+and snapshot ID as opaque; never request or reproduce the complete advisor table.
 
 Never invent advisor records, infer a typo-based name candidate, or confirm a
 candidate without explicit user direction. When a name identifies multiple
@@ -121,7 +132,7 @@ Ambiguous Match pages first, then offer No Match pages grouped by reason. Show
 automated Matched rows only when requested. Explain qualitative supporting and
 conflicting evidence; never present internal firm-similarity values. Apply only an
 explicit candidate, exact-CRD, or No Match choice. Source-data corrections
-require a new upload except for the explicit all-rows firm augmentation. If an
+require a new upload except for the audited session-level all-rows firm override. If an
 expected tool input error is returned, correct the input and retry instead of
 ending the run. An unlisted advisor requires an
 exact user-supplied CRD, deterministic resolution, display of the resolved
@@ -224,6 +235,13 @@ def _recoverable_tool_error(
 ) -> str | None:
     """Let the model correct expected PoC workflow/input errors and retry."""
 
+    if isinstance(error, ReferenceDataQualityError):
+        tool_name = request.tool.name if request.tool else request.tool_call["name"]
+        return (
+            f"{tool_name} is blocked because the authoritative advisor source "
+            f"is invalid: {error} Correct the authoritative source; do not change "
+            "the uploaded input or retry this match."
+        )
     if not isinstance(error, (ValueError, KeyError)):
         return None
     tool_name = request.tool.name if request.tool else request.tool_call["name"]

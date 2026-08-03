@@ -24,24 +24,24 @@ Validation loads only after the structural references pass. It skips completely 
 - the missing-firm checkpoint count and a bounded sample;
 - a fingerprint over the source SHA-256 and canonical mapping.
 
-An input with no mapped firm column requires one conversational checkpoint, even when CRD or email evidence is available. Validation separately counts usable-name rows that lack firm, valid CRD, and valid email. The agent always asks whether one firm applies to every advisor. If the user supplies one in a later turn, `apply_firm_to_advisor_upload` requires the exact firm value to appear in that current user message and operates only on the latest persisted validation checkpoint from an earlier run. It deterministically creates a same-format immutable derived attachment, appends a firm column, fills only validated nonblank advisor rows, and returns an updated exact mapping. The original upload remains unchanged. The derived attachment must pass `validate_advisor_input` before reference retrieval or matching; `create_advisor_match` enforces that exact checkpoint. If no firm is available, the user may explicitly continue with weaker evidence.
+Validation separately counts usable-name rows that lack firm, valid CRD, and valid email. A missing firm column is not itself a checkpoint when every row has CRD or valid email evidence. `create_advisor_match` owns firm resolution: an exact user-stated all-rows firm may be supplied in the same turn, is verified against the current user message, and is applied only to copied mapped row values. The attachment, source hash, mapping, and fingerprint remain unchanged. If a mapped firm column agrees after normalization, source display values are preserved. Blank, mixed, or conflicting source values return a bounded clarification result before reference retrieval. A later override requires the exact firm to be restated; the user may instead retain source values or explicitly continue without firm evidence.
 
 `get_current_advisor_input` returns the latest persisted bounded validation checkpoint so a later clarification turn can resume with exact attachment and mapping identifiers rather than reconstructing them from model prose.
 
 ## Stage 2: retrieve and match
 
-Only after validation and clarification does the agent call `create_advisor_match`. The tool retrieves or reuses the authoritative source for that immutable attachment, validates and projects it into a protected corporation-and-conversation-scoped CSV, and builds temporary exact CRD, email, and normalized-name indexes during the same stream. The model receives only an opaque manifest—not a path or advisor rows.
+After validation the agent calls `create_advisor_match`. The tool first resolves firm handling and either returns a bounded clarification outcome or continues through matching and workbook publication. It then retrieves or reuses the authoritative source for that immutable attachment, validates and projects it into a protected corporation-and-conversation-scoped CSV, and builds temporary exact CRD, email, and normalized-name indexes during the same stream. The model receives only an opaque manifest—not a path or advisor rows.
 
-`create_advisor_match` accepts the attachment ID, exact mapping, mapping fingerprint, and the explicit missing-firm continuation flag. It:
+`create_advisor_match` accepts the attachment ID, exact mapping, mapping fingerprint, optional `all_rows_firm`, and a typed firm resolution. It:
 
 1. resolves the attachment in the current corporation and conversation, verifies its protected path and hash, and revalidates the mapping fingerprint;
-2. reuses the attachment's completed snapshot or atomically creates it from one authoritative-source iteration;
-3. validates the protected path, hash, schema, row count, required names, and unique CRDs;
-4. runs deterministic indexed matching;
-5. persists the structured session;
-6. releases the temporary index;
-7. generates and reopens `advisor_matches.xlsx` for verification;
-8. atomically publishes the verified workbook under an opaque artifact ID tied to the active run, match session, and revision.
+2. resolves source-firm agreement, missing-firm continuation, or an audited session override before reference retrieval;
+3. reuses the attachment's completed snapshot or atomically creates it from one authoritative-source iteration;
+4. validates the protected path, hash, schema, row count, required names, and unique CRDs;
+5. returns a controlled blocker with CRD occurrence counts if the authoritative source is duplicated;
+6. runs deterministic indexed matching and persists the structured session;
+7. releases the temporary index;
+8. generates, reopens, verifies, and atomically publishes `advisor_matches.xlsx` under an opaque artifact ID.
 
 The reference snapshot is created once per immutable attachment. Mapping corrections, match retries, and later review turns reuse it.
 
@@ -73,7 +73,7 @@ The only review mutations are:
 - confirm No Match;
 - propose an exact unlisted CRD and confirm it in a later user turn.
 
-The effective decision remains stored on each row. Before/after decision JSON is appended to the audit table in the same SQLite transaction as the session update. The original automated status remains on overridden rows. The unused `reopen` action and general conversational input editing are not supported. The one exception is pre-match all-rows firm augmentation through the typed deterministic tool; all other corrections require a new upload and session.
+The effective decision remains stored on each row. Before/after decision JSON is appended to the audit table in the same SQLite transaction as the session update. The original automated status remains on overridden rows. The unused `reopen` action and general conversational input editing are not supported. The one exception is the audited pre-match all-rows firm override inside `create_advisor_match`; all other corrections require a new upload and session.
 
 Approval may retain unresolved exceptions. A later explicit review choice creates another session revision and regenerates the workbook.
 

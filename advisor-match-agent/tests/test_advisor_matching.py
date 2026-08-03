@@ -8,8 +8,8 @@ from openpyxl import Workbook, load_workbook
 
 from general_agent.advisor_matching import normalization as norm
 from general_agent.advisor_matching import policy
-from general_agent.advisor_matching.augmentation import augment_input_with_firm
 from general_agent.advisor_matching.input_loader import validate_and_load_input
+from general_agent.advisor_matching.index import AdvisorIndex, ReferenceDataQualityError
 from general_agent.advisor_matching.matcher import run_matching
 from general_agent.advisor_matching.schemas import (
     AdvisorRecord,
@@ -138,8 +138,12 @@ def test_synthetic_source_rejects_duplicate_trimmed_crds(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="missing or duplicated"):
-        list(SyntheticAdvisorReferenceSource(source).iter_records())
+    with pytest.raises(ReferenceDataQualityError) as raised:
+        AdvisorIndex.from_records(
+            SyntheticAdvisorReferenceSource(source).iter_records()
+        )
+
+    assert raised.value.duplicate_crds == {"FSA_ID:111": 2}
 
 
 def test_exact_crd_is_decisive_and_reports_conflicts() -> None:
@@ -692,73 +696,6 @@ def test_loader_supports_headerless_input(tmp_path) -> None:
     assert loaded.columns[0] == {"index": 0, "header": None, "label": "Column A"}
 
 
-def test_firm_augmentation_preserves_xlsx_sheets_preamble_and_blank_rows(
-    tmp_path,
-) -> None:
-    source = tmp_path / "advisors.xlsx"
-    workbook = Workbook()
-    cover = workbook.active
-    cover.title = "Cover"
-    cover["A1"] = "Do not modify"
-    advisors = workbook.create_sheet("Advisors")
-    advisors.append(["Advisor export"])
-    advisors.append([])
-    advisors.append(["Name", "State"])
-    advisors.append(["Robert Mercer", "VA"])
-    advisors.append([])
-    advisors.append(["John Smith", "MA"])
-    workbook.save(source)
-    original_bytes = source.read_bytes()
-    output = tmp_path / "advisors_with_firm.xlsx"
-    mapping = InputMapping.model_validate(
-        {
-            "sheet_name": "Advisors",
-            "header_row": 3,
-            "full_name": {"columns": [{"index": 0, "header": "Name"}]},
-            "state": {"columns": [{"index": 1, "header": "State"}]},
-        }
-    )
-
-    result = augment_input_with_firm(
-        source,
-        output,
-        mapping,
-        "Cedar Grove Advisory",
-        max_rows=100,
-    )
-
-    assert source.read_bytes() == original_bytes
-    assert result.rows_updated == 2
-    assert result.mapping.firm_name.columns[0].index == 2
-    derived = load_workbook(output, data_only=False)
-    try:
-        assert derived["Cover"]["A1"].value == "Do not modify"
-        sheet = derived["Advisors"]
-        assert sheet["C3"].value == "Firm Name"
-        assert sheet["C4"].value == "Cedar Grove Advisory"
-        assert sheet["C5"].value is None
-        assert sheet["C6"].value == "Cedar Grove Advisory"
-    finally:
-        derived.close()
-
-
-def test_firm_augmentation_rejects_an_existing_firm_header(tmp_path) -> None:
-    source = tmp_path / "advisors.csv"
-    source.write_text("Name,Firm\nRobert Mercer,Cedar Grove\n", encoding="utf-8")
-    mapping = InputMapping(
-        full_name={"columns": [{"index": 0, "header": "Name"}]}
-    )
-
-    with pytest.raises(ValueError, match="already has a recognized firm column"):
-        augment_input_with_firm(
-            source,
-            tmp_path / "derived.csv",
-            mapping,
-            "Different Firm",
-            max_rows=100,
-        )
-
-
 def test_loader_rejects_changed_exact_header(tmp_path) -> None:
     source = tmp_path / "changed.csv"
     source.write_text("Advisor\nRobert Mercer\n", encoding="utf-8")
@@ -787,7 +724,7 @@ def test_missing_firm_checkpoint_is_row_based(tmp_path) -> None:
     assert loaded.missing_firm_sample[0]["source_row_number"] == 2
 
 
-def test_missing_firm_column_requires_confirmation_even_with_email(tmp_path) -> None:
+def test_missing_firm_column_does_not_require_confirmation_with_email(tmp_path) -> None:
     source = tmp_path / "email-only.csv"
     source.write_text(
         "Name,Email\nRobert Mercer,robert@example.com\n",
@@ -802,7 +739,7 @@ def test_missing_firm_column_requires_confirmation_even_with_email(tmp_path) -> 
 
     assert loaded.summary.firm_column_missing is True
     assert loaded.summary.missing_firm_row_count == 0
-    assert loaded.summary.missing_firm_confirmation_required is True
+    assert loaded.summary.missing_firm_confirmation_required is False
 
 
 def test_input_loader_stops_at_configured_row_limit(tmp_path) -> None:

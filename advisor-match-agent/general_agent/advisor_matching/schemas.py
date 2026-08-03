@@ -134,6 +134,9 @@ class AdvisorRecord(BaseModel):
 
 MatchStatus = Literal["Matched", "Ambiguous Match", "No Match"]
 MatchConfidence = Literal["High", "Uncertain", "None", "User Confirmed"]
+FirmResolution = Literal[
+    "auto", "use_source", "override_all", "continue_without_firm"
+]
 
 
 class MatchCandidate(BaseModel):
@@ -198,6 +201,7 @@ class ReferenceSnapshotManifest(BaseModel):
 
 
 class MatchRunResult(BaseModel):
+    workflow_status: Literal["match_created"] = "match_created"
     match_session_id: str
     output_artifact_id: str
     selected_sheet: str | None
@@ -211,17 +215,62 @@ class MatchRunResult(BaseModel):
     policy_version: str
 
 
-class FirmAugmentationResult(BaseModel):
-    source_attachment_id: str
-    attachment_id: str
-    original_name: str
-    source_sha256: str
-    derived_sha256: str
-    firm_name: str
-    rows_updated: int = Field(gt=0)
-    selected_sheet: str | None
-    mapping: InputMapping
-    requires_validation: Literal[True] = True
+class FirmClarificationResult(BaseModel):
+    workflow_status: Literal["firm_clarification_required"] = (
+        "firm_clarification_required"
+    )
+    reason: Literal[
+        "missing_firm",
+        "blank_source_firms",
+        "mixed_source_firms",
+        "firm_conflict",
+    ]
+    stated_firm: str | None = None
+    data_row_count: int = Field(ge=1)
+    populated_firm_row_count: int = Field(ge=0)
+    blank_firm_row_count: int = Field(ge=0)
+    distinct_source_firm_count: int = Field(ge=0)
+    source_firm_sample: list[str] = Field(default_factory=list, max_length=5)
+    affected_row_sample: list[dict[str, Any]] = Field(
+        default_factory=list, max_length=5
+    )
+    allowed_resolutions: list[
+        Literal["use_source", "override_all", "continue_without_firm"]
+    ]
+    next_action: Literal["ask_user"] = "ask_user"
+
+
+class DuplicateCrdDiagnostic(BaseModel):
+    crd_number: str
+    occurrences: int = Field(ge=2)
+
+
+class ReferenceBlockerResult(BaseModel):
+    workflow_status: Literal["blocked"] = "blocked"
+    blocker_code: Literal[
+        "DUPLICATE_REFERENCE_CRD", "REFERENCE_DATA_INVALID"
+    ]
+    message: str
+    duplicate_crd_count: int = Field(default=0, ge=0)
+    duplicate_crds: list[DuplicateCrdDiagnostic] = Field(
+        default_factory=list, max_length=10
+    )
+    next_action: Literal["correct_authoritative_source"] = (
+        "correct_authoritative_source"
+    )
+
+    @model_validator(mode="after")
+    def validate_duplicate_diagnostics(self) -> ReferenceBlockerResult:
+        if self.blocker_code == "DUPLICATE_REFERENCE_CRD":
+            if self.duplicate_crd_count < 1 or not self.duplicate_crds:
+                raise ValueError(
+                    "Duplicate-reference blockers require bounded diagnostics."
+                )
+        elif self.duplicate_crd_count or self.duplicate_crds:
+            raise ValueError(
+                "Only duplicate-reference blockers may include CRD diagnostics."
+            )
+        return self
 
 
 class ReviewDecision(BaseModel):

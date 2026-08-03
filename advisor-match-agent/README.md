@@ -12,8 +12,8 @@ The initial reference is a wholly synthetic development dataset. No Snowflake co
 1. Upload one `.csv` or `.xlsx` in the chat composer.
 2. Ask the agent to match its advisors.
 3. The model inspects bounded raw rows, detects a header or headerless layout, selects one sheet, and asks when column meanings are ambiguous.
-4. Deterministic code validates exact indexes and headers. If no firm column is mapped, the agent asks whether one firm applies to every advisor, even when CRD or email is present. A supplied firm creates an immutable derived input; otherwise the user may explicitly continue with weaker evidence.
-5. The agent retrieves an opaque authoritative snapshot; deterministic code performs every row decision.
+4. Deterministic code validates exact indexes and headers. A same-turn all-rows firm is applied to copied mapped values inside the match call; the upload is never changed or derived. Missing firm data asks for clarification only on name-bearing rows without CRD or valid email evidence.
+5. The agent retrieves an opaque authoritative snapshot; deterministic code performs every row decision. Duplicate master CRDs return a controlled authoritative-source blocker.
 6. Review `Ambiguous Match` first and `No Match` second in bounded conversational pages. Automated matches are available on request.
 7. Confirm a presented candidate, confirm no match, or supply an exact CRD for a separately reconfirmed override.
 8. Download the styled, verified four-sheet workbook artifact and optionally approve with unresolved exceptions. Every successful revision has its own immutable artifact ID.

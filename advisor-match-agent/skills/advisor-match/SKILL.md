@@ -11,14 +11,14 @@ description: "Interpret one advisor CSV or XLSX flexibly, match its rows determi
 2. Call `inspect_advisor_upload` with that opaque attachment ID. Inspect its bounded raw rows, plausible header rows, headerless view, patterns, and samples. Do not use generic file tools on the upload.
 3. Select exactly one worksheet. Choose a headed or headerless interpretation only when the evidence is clear. Ask the user when multiple sheets, header rows, or field meanings are plausible.
 4. Construct `InputMapping` using exact zero-based column indexes and exact observed headers. Use `header_row=null` and `header=null` for headerless input. Map only CRD, full name or both first/last name, firm, email, city, state, and optional ZIP.
-5. Call `validate_advisor_input`. If it reports that no firm column is mapped, always ask whether one firm applies to every advisor in the selected table, even when CRD or email evidence is available. Also report the count and bounded sample of usable-name rows that lack firm, valid CRD, and valid email.
-6. If the user answers on a later turn, call `get_current_advisor_input` to recover the corporation-scoped validated checkpoint. If the user explicitly supplies one firm for every advisor, call `apply_firm_to_advisor_upload` with the exact user-supplied firm; it can securely resolve the latest validated attachment and mapping. The exact firm text must appear in that current user message—if the user only says “yes” or refers to an earlier name, ask them to restate it. This is the only supported conversational source augmentation. It creates an immutable derived attachment and never overwrites the original. Call `validate_advisor_input` on the returned attachment and mapping before proceeding. If no firm is available, use the recovered checkpoint and ask whether to continue with weaker evidence.
+5. Call `validate_advisor_input`. Report the bounded count and sample of usable-name rows that lack firm, valid CRD, and valid email. A missing firm column alone is not a blocker when every row has CRD or valid email evidence.
+6. Call `create_advisor_match` with the exact validated attachment, mapping, and fingerprint. If the current user message explicitly states one firm for every advisor, pass the exact firm as `all_rows_firm` in this same call and same turn. The firm text must appear in the current user message, but the user need not repeat it or say “apply.” The tool never changes or derives the upload; it applies an audited session override only to copied mapped values.
+7. Treat `firm_clarification_required` as a bounded checkpoint. When source firm values are blank, mixed, or conflict with the stated firm, show the discrepancy and ask whether to use source values or override all rows. On a later turn call `get_current_advisor_input`, then call `create_advisor_match` with `firm_resolution="use_source"` or with `firm_resolution="override_all"` plus the exact firm restated in that current message. Use `continue_without_firm` only after explicit permission to continue with weaker evidence.
 
 ## 2. Match deterministically
 
-7. After all clarification and any derived-input validation, call `create_advisor_match` with the exact validated attachment, mapping, and mapping fingerprint. The tool retrieves or reuses the attachment-scoped authoritative snapshot internally. Use `allow_missing_firm=true` only after the user explicitly chooses to continue without firm data.
-8. Treat the returned reference manifest and snapshot ID as opaque. Never request the master rows or a protected path.
-9. Report the interpreted mapping, selected sheet/header mode, any bulk-firm augmentation, `Matched`, `Ambiguous Match`, and `No Match` counts, warnings, session ID, and workbook artifact ID.
+8. `match_created` is the only successful match outcome. It retrieves or reuses the attachment-scoped authoritative snapshot, runs deterministic matching, and publishes the verified workbook. Treat the returned reference manifest and snapshot ID as opaque. Never request the master rows or a protected path.
+9. Treat `blocked` as an authoritative-source problem. Report the blocker and stop without blaming the upload or retrying. For `match_created`, report the interpreted mapping, selected sheet/header mode, any session firm override, `Matched`, `Ambiguous Match`, and `No Match` counts, warnings, session ID, and workbook artifact ID.
 
 ## 3. Review exceptions conversationally
 
@@ -30,7 +30,7 @@ description: "Interpret one advisor CSV or XLSX flexibly, match its rows determi
 
 If a prior turn failed after matching or the user asks to continue, call `get_current_advisor_match` and resume the latest persisted session instead of rerunning matching.
 
-Never invent an advisor, treat name-only or nickname-only evidence as proof, expose the complete master table, overwrite an uploaded file, or edit the workbook directly. Only `apply_firm_to_advisor_upload` may add one explicitly user-supplied firm to every validated advisor row in a derived attachment. Deterministic tools own every row decision and publish every verified workbook revision as an immutable artifact.
+Never invent an advisor, treat name-only or nickname-only evidence as proof, expose the complete master table, overwrite or derive an uploaded file, or edit the workbook directly. Only `create_advisor_match` may apply one explicitly user-supplied firm to every validated advisor row as an audited session override. Deterministic tools own every row decision and publish every verified workbook revision as an immutable artifact.
 
 Read when needed:
 

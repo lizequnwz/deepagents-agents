@@ -155,9 +155,7 @@ def validate_and_load_input(
         else 0,
         firm_column_missing=mapping.firm_name is None,
         missing_firm_row_count=missing_firm_count,
-        missing_firm_confirmation_required=(
-            mapping.firm_name is None or missing_firm_count > 0
-        ),
+        missing_firm_confirmation_required=missing_firm_count > 0,
     )
     return LoadedInput(
         rows=results,
