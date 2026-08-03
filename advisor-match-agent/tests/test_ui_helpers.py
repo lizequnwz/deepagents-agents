@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from general_agent.ui import components
 from general_agent.ui.components import _markdown_text, reduce_live_events
 
 
@@ -41,3 +42,32 @@ def test_currency_markdown_does_not_turn_into_math() -> None:
     rendered = _markdown_text("Assets are **$28.2 million**; formula is $x+y$.")
     assert "**\\$28.2 million**" in rendered
     assert "$x+y$" in rendered
+
+
+def test_tool_arguments_and_results_render_only_in_debug_mode(monkeypatch) -> None:
+    rendered = []
+    monkeypatch.setattr(components.st, "caption", lambda *args, **kwargs: None)
+    monkeypatch.setattr(components, "_render_tool", rendered.append)
+    state = {
+        "activities": [("tool", "c1")],
+        "tools": {
+            "c1": {
+                "id": 1,
+                "kind": "tool_finished",
+                "phase": "completed",
+                "label": "Completed tool · inspect_advisor_upload",
+                "data": {
+                    "call_id": "c1",
+                    "tool_name": "inspect_advisor_upload",
+                    "input": {"attachment_id": "att_test"},
+                    "output": {"format": "csv"},
+                },
+            }
+        },
+    }
+
+    components.render_activity_timeline(state)
+    assert rendered == []
+
+    components.render_activity_timeline(state, debug_mode=True)
+    assert rendered == [state["tools"]["c1"]]

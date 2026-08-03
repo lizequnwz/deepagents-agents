@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from openpyxl import load_workbook
 
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
 from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
@@ -61,7 +62,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
     workspace = Workspace(settings.data_root)
     store = Store(settings.application_db, settings.data_root)
     conversation_id = store.create_conversation(corp_id=corp_id).conversation_id
-    run_id, _ = store.create_run(
+    first_run_id, _ = store.create_run(
         conversation_id, "match", corp_id=corp_id
     )
     attachment_id = _upload(
@@ -69,7 +70,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         store,
         corp_id=corp_id,
         conversation_id=conversation_id,
-        run_id=run_id,
+        run_id=first_run_id,
         name="advisors.csv",
         content=(
             b"Advisor Name,Firm,City,State\n"
@@ -85,7 +86,7 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         "state": {"columns": [{"index": 3, "header": "State"}]},
     }
 
-    async with backend.run_scope(run_id, corp_id, conversation_id):
+    async with backend.run_scope(first_run_id, corp_id, conversation_id):
         profile = await tools["inspect_advisor_upload"].ainvoke(
             {"attachment_id": attachment_id}
         )
@@ -199,7 +200,7 @@ async def test_missing_firm_requires_explicit_continue_and_fingerprint(settings)
     workspace = Workspace(settings.data_root)
     store = Store(settings.application_db, settings.data_root)
     conversation_id = store.create_conversation(corp_id=corp_id).conversation_id
-    run_id, _ = store.create_run(
+    first_run_id, _ = store.create_run(
         conversation_id, "match", corp_id=corp_id
     )
     attachment_id = _upload(
@@ -207,18 +208,30 @@ async def test_missing_firm_requires_explicit_continue_and_fingerprint(settings)
         store,
         corp_id=corp_id,
         conversation_id=conversation_id,
-        run_id=run_id,
+        run_id=first_run_id,
         name="name-only.csv",
         content=b"Name\nRobert Mercer\n",
     )
     backend = AdvisorWorkspaceBackend(settings.runtime_root)
     tools = _tools(settings, workspace, backend, store)
     mapping = {"full_name": {"columns": [{"index": 0, "header": "Name"}]}}
-    async with backend.run_scope(run_id, corp_id, conversation_id):
+    async with backend.run_scope(first_run_id, corp_id, conversation_id):
         validation = await tools["validate_advisor_input"].ainvoke(
             {"attachment_id": attachment_id, "mapping": mapping}
         )
         assert validation["input_summary"]["missing_firm_row_count"] == 1
+        with pytest.raises(ValueError, match="later user turn"):
+            await tools["apply_firm_to_advisor_upload"].ainvoke(
+                {"firm_name": "Cedar Grove Advisory"}
+            )
+
+    store.finish_run(first_run_id, "completed", corp_id=corp_id)
+    second_run_id, _ = store.create_run(
+        conversation_id, "No firm is available; continue", corp_id=corp_id
+    )
+    async with backend.run_scope(second_run_id, corp_id, conversation_id):
+        checkpoint = await tools["get_current_advisor_input"].ainvoke({})
+        assert checkpoint["mapping_fingerprint"] == validation["mapping_fingerprint"]
         manifest = await tools["find_all_advisors"].ainvoke({})
         base = {
             "attachment_id": attachment_id,
@@ -229,7 +242,7 @@ async def test_missing_firm_requires_explicit_continue_and_fingerprint(settings)
             await tools["create_advisor_match"].ainvoke(
                 {**base, "mapping_fingerprint": "0" * 64}
             )
-        with pytest.raises(ValueError, match="explicitly wants to continue"):
+        with pytest.raises(ValueError, match="explicit permission"):
             await tools["create_advisor_match"].ainvoke(
                 {**base, "mapping_fingerprint": validation["mapping_fingerprint"]}
             )
@@ -241,6 +254,130 @@ async def test_missing_firm_requires_explicit_continue_and_fingerprint(settings)
             }
         )
         assert result["counts"]["ambiguous_match"] == 1
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_user_confirmed_firm_creates_derived_input_and_audited_match(
+    settings,
+) -> None:
+    corp_id = "A123456"
+    workspace = Workspace(settings.data_root)
+    store = Store(settings.application_db, settings.data_root)
+    conversation_id = store.create_conversation(corp_id=corp_id).conversation_id
+    first_run_id, _ = store.create_run(
+        conversation_id, "match this file", corp_id=corp_id
+    )
+    original = b"Name,City,State\nRobert Mercer,Richmond,VA\n"
+    attachment_id = _upload(
+        workspace,
+        store,
+        corp_id=corp_id,
+        conversation_id=conversation_id,
+        run_id=first_run_id,
+        name="name-and-location.csv",
+        content=original,
+    )
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
+    tools = _tools(settings, workspace, backend, store)
+    mapping = {
+        "full_name": {"columns": [{"index": 0, "header": "Name"}]},
+        "city": {"columns": [{"index": 1, "header": "City"}]},
+        "state": {"columns": [{"index": 2, "header": "State"}]},
+    }
+
+    async with backend.run_scope(first_run_id, corp_id, conversation_id):
+        initial = await tools["validate_advisor_input"].ainvoke(
+            {"attachment_id": attachment_id, "mapping": mapping}
+        )
+        assert initial["input_summary"]["missing_firm_confirmation_required"] is True
+
+    store.finish_run(first_run_id, "completed", corp_id=corp_id)
+    second_run_id, _ = store.create_run(
+        conversation_id,
+        "all advisors are with Cedar Grove Advisory",
+        corp_id=corp_id,
+    )
+    async with backend.run_scope(second_run_id, corp_id, conversation_id):
+        checkpoint = await tools["get_current_advisor_input"].ainvoke({})
+        assert checkpoint["attachment_id"] == attachment_id
+        assert checkpoint["mapping"] == initial["mapping"]
+
+        augmented = await tools["apply_firm_to_advisor_upload"].ainvoke(
+            {
+                "firm_name": "Cedar Grove Advisory",
+            }
+        )
+        assert augmented["source_attachment_id"] == attachment_id
+        assert augmented["rows_updated"] == 1
+        assert augmented["mapping"]["firm_name"]["columns"] == [
+            {"index": 3, "header": "Firm Name"}
+        ]
+
+        derived_id = augmented["attachment_id"]
+        derived_path, derived_name, derived_sha256 = store.attachment_path(
+            derived_id,
+            corp_id=corp_id,
+            conversation_id=conversation_id,
+        )
+        assert derived_name == "name-and-location_with_firm.csv"
+        assert derived_sha256 == augmented["derived_sha256"]
+        assert "Cedar Grove Advisory" in derived_path.read_text(encoding="utf-8-sig")
+        original_path, _, _ = store.attachment_path(
+            attachment_id,
+            corp_id=corp_id,
+            conversation_id=conversation_id,
+        )
+        assert original_path.read_bytes() == original
+
+        validation = await tools["validate_advisor_input"].ainvoke(
+            {
+                "attachment_id": derived_id,
+                "mapping": augmented["mapping"],
+            }
+        )
+        assert validation["input_summary"]["missing_firm_row_count"] == 0
+        assert validation["source_transformation"]["firm_name"] == (
+            "Cedar Grove Advisory"
+        )
+        manifest = await tools["find_all_advisors"].ainvoke({})
+        result = await tools["create_advisor_match"].ainvoke(
+            {
+                "attachment_id": derived_id,
+                "reference_snapshot_id": manifest["reference_snapshot_id"],
+                "mapping": augmented["mapping"],
+                "mapping_fingerprint": validation["mapping_fingerprint"],
+            }
+        )
+        assert result["counts"] == {
+            "matched": 1,
+            "ambiguous_match": 0,
+            "no_match": 0,
+        }
+        assert result["source_transformation"]["rows_updated"] == 1
+
+    session = store.get_advisor_match_session(result["match_session_id"], corp_id=corp_id)
+    assert session["source_attachment_id"] == derived_id
+    assert session["source_transformation"]["source_attachment_id"] == attachment_id
+    workbook_path, _ = store.artifact_path(result["output_artifact_id"], corp_id=corp_id)
+    workbook = load_workbook(workbook_path, read_only=True, data_only=True)
+    try:
+        summary = dict(workbook["Run Summary"].iter_rows(min_row=2, values_only=True))
+        assert summary["Input Transformation"] == (
+            "User-confirmed bulk firm augmentation"
+        )
+        assert summary["User-Supplied Firm"] == "Cedar Grove Advisory"
+        assert summary["Rows Augmented With Firm"] == 1
+    finally:
+        workbook.close()
+    turn_attachments = store.get_conversation(
+        conversation_id, corp_id=corp_id
+    ).turns[1].attachments
+    derived_attachment = next(
+        item for item in turn_attachments if item.attachment_id == derived_id
+    )
+    assert derived_attachment.derived_from_attachment_id == attachment_id
+    assert derived_attachment.transformation["type"] == "bulk_firm_augmentation"
     store.close()
 
 
@@ -271,9 +408,23 @@ async def test_attachment_id_cannot_cross_conversations(settings) -> None:
     backend = AdvisorWorkspaceBackend(settings.runtime_root)
     tools = _tools(settings, workspace, backend, store)
     async with backend.run_scope(second_run_id, corp_id, second.conversation_id):
+        with pytest.raises(ValueError, match="No validated advisor input"):
+            await tools["get_current_advisor_input"].ainvoke({})
         with pytest.raises(ValueError, match="unknown in the current chat"):
             await tools["inspect_advisor_upload"].ainvoke(
                 {"attachment_id": attachment_id}
+            )
+        with pytest.raises(ValueError, match="Validate an advisor input"):
+            await tools["apply_firm_to_advisor_upload"].ainvoke(
+                {
+                    "attachment_id": attachment_id,
+                    "mapping": {
+                        "full_name": {
+                            "columns": [{"index": 0, "header": "Name"}]
+                        }
+                    },
+                    "firm_name": "Private Firm",
+                }
             )
     store.close()
 

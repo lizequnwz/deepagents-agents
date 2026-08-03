@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -56,6 +56,7 @@ def write_match_workbook(
     policy_version: str,
     session_status: str = "Reviewing",
     session_revision: int = 1,
+    source_transformation: Mapping[str, object] | None = None,
 ) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(f".{output.stem}.building{output.suffix}")
@@ -76,6 +77,7 @@ def write_match_workbook(
         policy_version=policy_version,
         session_status=session_status,
         session_revision=session_revision,
+        source_transformation=source_transformation,
     )
     workbook.save(temporary)
     verify_match_workbook(
@@ -280,6 +282,7 @@ def _write_summary(
     policy_version: str,
     session_status: str,
     session_revision: int,
+    source_transformation: Mapping[str, object] | None,
 ) -> None:
     mapping_fingerprint = input_mapping_fingerprint(
         source_sha256=source_sha256, mapping=mapping
@@ -295,6 +298,7 @@ def _write_summary(
         ("Data Rows", input_summary.data_row_count),
         ("Skipped Blank Rows", input_summary.blank_row_count),
         ("Skipped Preamble Rows", input_summary.preamble_row_count),
+        ("Firm Column Missing", input_summary.firm_column_missing),
         ("Rows Missing Firm and Strong IDs", input_summary.missing_firm_row_count),
         ("Matched", counts.matched),
         ("Ambiguous Match", counts.ambiguous_match),
@@ -314,6 +318,28 @@ def _write_summary(
         ),
         ("Generated At", datetime.now(UTC).isoformat()),
     ]
+    if source_transformation:
+        values.extend(
+            [
+                ("Input Transformation", "User-confirmed bulk firm augmentation"),
+                (
+                    "Derived From Attachment ID",
+                    source_transformation.get("source_attachment_id", ""),
+                ),
+                (
+                    "Original Source SHA-256",
+                    source_transformation.get("source_sha256", ""),
+                ),
+                (
+                    "User-Supplied Firm",
+                    source_transformation.get("firm_name", ""),
+                ),
+                (
+                    "Rows Augmented With Firm",
+                    source_transformation.get("rows_updated", ""),
+                ),
+            ]
+        )
     for field, binding in mapping.field_bindings().items():
         values.append(
             (

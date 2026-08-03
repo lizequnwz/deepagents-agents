@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+import pytest
+
+from general_agent.config import Settings
+
+
+def test_ui_debug_mode_defaults_off_and_accepts_true(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("UI_DEBUG_MODE", raising=False)
+    assert Settings(project_root=tmp_path, model_name="test:model").ui_debug_mode is False
+
+    monkeypatch.setenv("UI_DEBUG_MODE", "true")
+    assert Settings(project_root=tmp_path, model_name="test:model").ui_debug_mode is True
+
+
+def test_ui_debug_mode_rejects_invalid_value(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("UI_DEBUG_MODE", "sometimes")
+    with pytest.raises(ValueError, match="UI_DEBUG_MODE must be a boolean"):
+        Settings(project_root=tmp_path, model_name="test:model")

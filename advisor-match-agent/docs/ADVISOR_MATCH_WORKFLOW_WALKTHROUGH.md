@@ -11,10 +11,11 @@ flowchart TD
     P --> I{"One clear sheet, header, and mapping?"}
     I -->|No| Q["Ask the user"] --> I
     I -->|Yes| V["Validate exact refs and fingerprint"]
-    V --> F{"Rows missing firm and strong IDs?"}
-    F -->|Yes| C["Corrected upload or explicit continue"] --> V
+    V --> F{"Firm column missing or rows lack firm and strong IDs?"}
+    F -->|Yes| C{"One firm for every advisor?"}
+    C -->|Firm supplied| A2["Create immutable derived input"] --> V
+    C -->|No firm| W2["Explicitly continue with weaker evidence"] --> R
     F -->|No| R["Find all advisors"]
-    V -->|Explicit continue| R
     R --> S["Persist opaque immutable snapshot"]
     S --> M["Run deterministic matcher"]
     M --> DB[("Match session + audit")]
@@ -33,7 +34,7 @@ flowchart TD
 3. **Inspect raw rows**—`inspect_advisor_upload` resolves the attachment ID, verifies its protected path and hash, and returns bounded physical rows, plausible header interpretations, a headerless view, patterns, and samples.
 4. **Interpret**—the agent selects one worksheet and maps CRD, name, firm, email, city, state, and optional ZIP. It asks the user when the meaning is not clear.
 5. **Validate**—`validate_advisor_input` confirms exact indexes and headers before data loading, skips blank/preamble rows, reports the missing-firm checkpoint, and returns a source-and-mapping fingerprint.
-6. **Clarify if needed**—firm information is added only through a corrected upload. The user may explicitly continue with weaker evidence.
+6. **Clarify if needed**—always ask whether one firm applies to every advisor. If supplied, `apply_firm_to_advisor_upload` creates an audited immutable derived input and returns its exact mapping; validate it before continuing. If unavailable, the user may explicitly continue with weaker evidence.
 7. **Retrieve the source**—`find_all_advisors` creates a fresh protected snapshot and returns only its opaque manifest.
 8. **Match**—`create_advisor_match` revalidates the attachment and fingerprint, verifies the reference snapshot, runs policy version 2, persists a session, creates and verifies the workbook, and publishes revision 1 under an artifact ID.
 9. **Report**—the agent shows the interpreted mapping, header mode, selected sheet, warnings, session ID, workbook artifact ID, and three status counts.
@@ -80,6 +81,6 @@ It does not see the complete upload, authoritative table, persisted decision col
 
 ## Output
 
-`advisor_matches.xlsx` contains `Matched`, `Review Required`, `Original Input`, and `Run Summary`. The first two sheets use a compact human-facing layout; technical audit fields are hidden by default. Every revision is generated from structured state, styled, reopened, checked for formulas, reconciled, and explicitly registered as an immutable artifact before return.
+`advisor_matches.xlsx` contains `Matched`, `Review Required`, `Original Input`, and `Run Summary`. For a bulk-firm augmentation, `Original Input` reflects the derived table and `Run Summary` records the original attachment/hash, supplied firm, and affected-row count. The first two sheets use a compact human-facing layout; technical audit fields are hidden by default. Every revision is generated from structured state, styled, reopened, checked for formulas, reconciled, and explicitly registered as an immutable artifact before return.
 
 Current limitations are the synthetic reference, in-memory fuzzy candidate scan, and intentionally unimplemented profile builder.

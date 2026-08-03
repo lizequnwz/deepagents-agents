@@ -12,7 +12,7 @@ The initial reference is a wholly synthetic development dataset. No Snowflake co
 1. Upload one `.csv` or `.xlsx` in the chat composer.
 2. Ask the agent to match its advisors.
 3. The model inspects bounded raw rows, detects a header or headerless layout, selects one sheet, and asks when column meanings are ambiguous.
-4. Deterministic code validates exact indexes and headers. If name rows lack firm, valid CRD, and valid email, choose a corrected upload or explicitly continue.
+4. Deterministic code validates exact indexes and headers. If no firm column is mapped, the agent asks whether one firm applies to every advisor, even when CRD or email is present. A supplied firm creates an immutable derived input; otherwise the user may explicitly continue with weaker evidence.
 5. The agent retrieves an opaque authoritative snapshot; deterministic code performs every row decision.
 6. Review `Ambiguous Match` first and `No Match` second in bounded conversational pages. Automated matches are available on request.
 7. Confirm a presented candidate, confirm no match, or supply an exact CRD for a separately reconfirmed override.
@@ -59,12 +59,16 @@ Important defaults:
 | Variable | Default |
 | --- | ---: |
 | `API_HOST` / `APP_HOST` | `127.0.0.1` |
+| `UI_DEBUG_MODE` | `false` |
 | `ADVISOR_MAX_INPUT_ROWS` | `50000` |
 | `ADVISOR_MAX_REFERENCE_ROWS` | `1000000` |
 | `MAX_UPLOAD_MB` | `100` |
 | `MAX_MODEL_CALLS` / `MAX_TOOL_CALLS` | `32` / `64` |
 
 LangSmith tracing is off by default because prompts and tool pages can contain advisor information.
+The normal UI shows concise plan and tool lifecycle progress without tool arguments,
+tool results, token diagnostics, chat IDs, or technical error details. Set
+`UI_DEBUG_MODE=true` and restart the UI to display those debugging details.
 
 ## Storage and isolation
 

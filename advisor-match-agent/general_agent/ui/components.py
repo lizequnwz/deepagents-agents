@@ -45,14 +45,22 @@ def reduce_live_events(state: dict[str, Any], events: list[dict[str, Any]]) -> d
     return state
 
 
-def render_turn(client: AgentAPIClient, turn: dict[str, Any]) -> None:
+def render_turn(
+    client: AgentAPIClient, turn: dict[str, Any], *, debug_mode: bool = False
+) -> None:
     with st.chat_message("user"):
         st.markdown(_markdown_text(turn["user_message"]))
         for attachment in turn.get("attachments") or []:
+            is_derived = bool(attachment.get("derived_from_attachment_id"))
+            attachment_label = "Derived input" if is_derived else "Original upload"
             with st.container(horizontal=True, vertical_alignment="center"):
-                st.caption(f":material/attach_file: {attachment['original_name']} · {_format_bytes(attachment['size_bytes'])}")
+                st.caption(
+                    f":material/attach_file: {attachment_label} · "
+                    f"{attachment['original_name']} · "
+                    f"{_format_bytes(attachment['size_bytes'])}"
+                )
                 st.download_button(
-                    "Download original",
+                    "Download derived" if is_derived else "Download original",
                     data=lambda item=attachment: client.download_attachment(item["attachment_id"]),
                     file_name=attachment["original_name"],
                     icon=":material/download:",
@@ -70,8 +78,9 @@ def render_turn(client: AgentAPIClient, turn: dict[str, Any]) -> None:
             st.warning("This run was stopped before a final answer was produced.", icon=":material/stop_circle:")
         elif turn.get("error"):
             st.error(_friendly_error(turn["error"]), icon=":material/error:")
-            with st.expander("Technical details", icon=":material/bug_report:"):
-                st.code(turn["error"], language="text")
+            if debug_mode:
+                with st.expander("Technical details", icon=":material/bug_report:"):
+                    st.code(turn["error"], language="text")
         render_artifacts(client, turn.get("artifacts") or [], turn["run_id"])
         activity_state = reduce_live_events({}, turn.get("events") or [])
         if activity_state.get("activities") or activity_state.get("todos"):
@@ -80,8 +89,11 @@ def render_turn(client: AgentAPIClient, turn: dict[str, Any]) -> None:
                 expanded=False,
                 state="complete" if turn["status"] == "completed" else "error",
             ):
-                render_activity_timeline(activity_state)
-        render_diagnostics(turn.get("diagnostics") or {}, key=f"turn_{turn['run_id']}")
+                render_activity_timeline(activity_state, debug_mode=debug_mode)
+        if debug_mode:
+            render_diagnostics(
+                turn.get("diagnostics") or {}, key=f"turn_{turn['run_id']}"
+            )
 
 
 def render_artifacts(client: AgentAPIClient, artifacts: list[dict[str, Any]], run_id: str) -> None:
@@ -109,10 +121,16 @@ def render_artifacts(client: AgentAPIClient, artifacts: list[dict[str, Any]], ru
                 )
 
 
-def render_live_run(client: AgentAPIClient, run: dict[str, Any], state: dict[str, Any]) -> None:
+def render_live_run(
+    client: AgentAPIClient,
+    run: dict[str, Any],
+    state: dict[str, Any],
+    *,
+    debug_mode: bool = False,
+) -> None:
     label = _latest_activity_label(state) or "Advisor Match Agent is working…"
     with st.status(label, expanded=True, state="running"):
-        render_activity_timeline(state)
+        render_activity_timeline(state, debug_mode=debug_mode)
     with st.container(horizontal=True, vertical_alignment="center"):
         st.button(
             "Stop",
@@ -121,15 +139,19 @@ def render_live_run(client: AgentAPIClient, run: dict[str, Any], state: dict[str
             on_click=lambda: client.stop_run(run["run_id"]),
             key=f"stop_{run['run_id']}",
         )
-        diagnostics = run.get("diagnostics") or {}
-        tokens = diagnostics.get("tokens") or {}
-        st.caption(f"{int(tokens.get('total_tokens') or 0):,} tokens so far")
-    render_diagnostics(
-        run.get("diagnostics") or {}, key=f"live_{run['run_id']}"
-    )
+        if debug_mode:
+            diagnostics = run.get("diagnostics") or {}
+            tokens = diagnostics.get("tokens") or {}
+            st.caption(f"{int(tokens.get('total_tokens') or 0):,} tokens so far")
+    if debug_mode:
+        render_diagnostics(
+            run.get("diagnostics") or {}, key=f"live_{run['run_id']}"
+        )
 
 
-def render_activity_timeline(state: dict[str, Any]) -> None:
+def render_activity_timeline(
+    state: dict[str, Any], *, debug_mode: bool = False
+) -> None:
     """Render plans and consolidated v3 lifecycle events like the analyst UI."""
 
     todos = state.get("todos") or []
@@ -162,7 +184,8 @@ def render_activity_timeline(state: dict[str, Any]) -> None:
                 f"{event.get('label') or data.get('tool_name') or 'Tool activity'} · "
                 f"{_agent_label(event.get('agent'))}{duration}"
             )
-            _render_tool(event)
+            if debug_mode:
+                _render_tool(event)
             continue
         event = item
         duration = _duration_suffix((event.get("data") or {}).get("duration_ms"))

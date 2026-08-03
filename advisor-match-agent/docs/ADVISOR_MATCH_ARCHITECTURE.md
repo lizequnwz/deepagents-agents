@@ -17,14 +17,16 @@ The agent selects exactly one worksheet, a headed or headerless interpretation, 
 
 `validate_advisor_input` then reopens the upload and validates the exact worksheet, physical header row, zero-based indexes, and observed headers. Duplicate headers remain safe because the index is decisive. Headerless references use `header=null`.
 
-Validation loads only after the structural references pass. It skips completely blank rows, excludes preamble rows above the selected header, preserves physical row numbers, enforces the input-row limit, and returns:
+Validation loads only after the structural references pass. It skips completely blank rows, excludes preamble rows above the selected header, preserves physical row numbers, enforces the input-row limit, persists a corporation-and-conversation-scoped continuation checkpoint, and returns:
 
 - the canonical mapping and exact selected columns;
 - data, blank, and preamble counts;
 - the missing-firm checkpoint count and a bounded sample;
 - a fingerprint over the source SHA-256 and canonical mapping.
 
-Rows with a usable name but no firm, valid CRD, or valid email require one conversational checkpoint. The user can provide a corrected upload or explicitly continue. The agent cannot edit source values conversationally.
+An input with no mapped firm column requires one conversational checkpoint, even when CRD or email evidence is available. Validation separately counts usable-name rows that lack firm, valid CRD, and valid email. The agent always asks whether one firm applies to every advisor. If the user supplies one in a later turn, `apply_firm_to_advisor_upload` requires the exact firm value to appear in that current user message and operates only on the latest persisted validation checkpoint from an earlier run. It deterministically creates a same-format immutable derived attachment, appends a firm column, fills only validated nonblank advisor rows, and returns an updated exact mapping. The original upload remains unchanged. The derived attachment must pass `validate_advisor_input` before reference retrieval or matching; `create_advisor_match` enforces that exact checkpoint. If no firm is available, the user may explicitly continue with weaker evidence.
+
+`get_current_advisor_input` returns the latest persisted bounded validation checkpoint so a later clarification turn can resume with exact attachment and mapping identifiers rather than reconstructing them from model prose.
 
 ## Stage 2: retrieve and match
 
@@ -71,7 +73,7 @@ The only review mutations are:
 - confirm No Match;
 - propose an exact unlisted CRD and confirm it in a later user turn.
 
-The effective decision remains stored on each row. Before/after decision JSON is appended to the audit table in the same SQLite transaction as the session update. The original automated status remains on overridden rows. The unused `reopen` action and conversational input editing are not supported. A corrected upload creates a new session.
+The effective decision remains stored on each row. Before/after decision JSON is appended to the audit table in the same SQLite transaction as the session update. The original automated status remains on overridden rows. The unused `reopen` action and general conversational input editing are not supported. The one exception is pre-match all-rows firm augmentation through the typed deterministic tool; all other corrections require a new upload and session.
 
 Approval may retain unresolved exceptions. A later explicit review choice creates another session revision and regenerates the workbook.
 
@@ -80,6 +82,7 @@ Approval may retain unresolved exceptions. A later explicit review choice create
 SQLite stores:
 
 - corporation-scoped match sessions and input summaries;
+- derived-input provenance, including the source attachment/hash, user-supplied firm, affected-row count, and appended column;
 - opaque reference manifests and protected snapshot paths;
 - before/after review audit records;
 - two-turn manual-CRD proposals.
@@ -96,7 +99,7 @@ The protected file layout is deliberately small:
 ├── checkpoints.sqlite3
 ├── runtime/skills/advisor-match/
 └── users/<corp-id>/
-    ├── attachments/<attachment-id>/<original-name>
+    ├── attachments/<attachment-id>/<original-or-derived-name>
     ├── advisor_references/<snapshot-id>/advisor_reference.csv
     └── artifacts/<run-id>/<artifact-id>/advisor_matches.xlsx
 ```
@@ -110,7 +113,7 @@ The workbook remains a deterministic four-sheet projection:
 1. `Matched`—17 human-facing columns by default, with technical audit fields hidden at the right.
 2. `Review Required`—18 human-facing columns and one row per candidate or no-match item.
 3. `Original Input`—physical row number plus source columns in original order.
-4. `Run Summary`—mapping, row counts, status counts, hashes, snapshot ID, policy, and revision.
+4. `Run Summary`—mapping, row counts, status counts, hashes, source-transformation provenance, snapshot ID, policy, and revision.
 
 Names and locations are combined for readability. Headers are styled and frozen; filters, bounded widths, alternating fills, status colors, wrapping, and text-safe CRD/ZIP values are applied. User-controlled strings are forced to text to prevent formula injection. Verification rejects formulas and reconciles effective decision rows to Original Input before the file is atomically published and registered in SQLite.
 

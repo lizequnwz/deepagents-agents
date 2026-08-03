@@ -42,6 +42,8 @@ class Attachment(BaseModel):
     content_type: str | None = None
     size_bytes: int = Field(ge=0)
     sha256: str
+    derived_from_attachment_id: str | None = None
+    transformation: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
 

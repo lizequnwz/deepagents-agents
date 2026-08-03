@@ -118,8 +118,19 @@ class Store:
                     content_type TEXT,
                     size_bytes INTEGER NOT NULL,
                     sha256 TEXT NOT NULL DEFAULT '',
+                    derived_from_attachment_id TEXT,
+                    transformation_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL,
                     protected_path TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS advisor_input_checkpoints (
+                    corp_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                    attachment_id TEXT NOT NULL,
+                    validated_run_id TEXT NOT NULL,
+                    validation_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(corp_id, conversation_id)
                 );
                 CREATE TABLE IF NOT EXISTS artifacts (
                     id TEXT PRIMARY KEY,
@@ -156,6 +167,7 @@ class Store:
                     source_sha256 TEXT NOT NULL,
                     mapping_json TEXT NOT NULL,
                     input_summary_json TEXT NOT NULL DEFAULT '{}',
+                    source_transformation_json TEXT NOT NULL DEFAULT '{}',
                     reference_json TEXT NOT NULL,
                     decisions_json TEXT NOT NULL,
                     counts_json TEXT NOT NULL,
@@ -247,6 +259,11 @@ class Store:
                     "ALTER TABLE advisor_match_sessions "
                     "ADD COLUMN output_artifact_id TEXT"
                 )
+            if "source_transformation_json" not in session_columns:
+                self._connection.execute(
+                    "ALTER TABLE advisor_match_sessions "
+                    "ADD COLUMN source_transformation_json TEXT NOT NULL DEFAULT '{}'"
+                )
             attachment_columns = {
                 row["name"]
                 for row in self._connection.execute("PRAGMA table_info(attachments)")
@@ -254,6 +271,26 @@ class Store:
             if "sha256" not in attachment_columns:
                 self._connection.execute(
                     "ALTER TABLE attachments ADD COLUMN sha256 TEXT NOT NULL DEFAULT ''"
+                )
+            if "derived_from_attachment_id" not in attachment_columns:
+                self._connection.execute(
+                    "ALTER TABLE attachments ADD COLUMN derived_from_attachment_id TEXT"
+                )
+            if "transformation_json" not in attachment_columns:
+                self._connection.execute(
+                    "ALTER TABLE attachments "
+                    "ADD COLUMN transformation_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            checkpoint_columns = {
+                row["name"]
+                for row in self._connection.execute(
+                    "PRAGMA table_info(advisor_input_checkpoints)"
+                )
+            }
+            if "validated_run_id" not in checkpoint_columns:
+                self._connection.execute(
+                    "ALTER TABLE advisor_input_checkpoints "
+                    "ADD COLUMN validated_run_id TEXT NOT NULL DEFAULT ''"
                 )
             artifact_columns = {
                 row["name"]
@@ -644,6 +681,8 @@ class Store:
         protected_path: Path,
         *,
         corp_id: str | None = None,
+        derived_from_attachment_id: str | None = None,
+        transformation: Mapping[str, Any] | None = None,
     ) -> None:
         corp_id = self._corp(corp_id)
         with self._lock, self._connection:
@@ -654,8 +693,9 @@ class Store:
             self._connection.execute(
                 """INSERT INTO attachments(
                     id, corp_id, run_id, original_name, relative_path, content_type,
-                    size_bytes, sha256, created_at, protected_path
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    size_bytes, sha256, derived_from_attachment_id,
+                    transformation_json, created_at, protected_path
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     attachment.attachment_id,
                     corp_id,
@@ -665,6 +705,8 @@ class Store:
                     attachment.content_type,
                     attachment.size_bytes,
                     attachment.sha256,
+                    derived_from_attachment_id,
+                    json.dumps(transformation or {}, ensure_ascii=False, default=str),
                     _iso(attachment.created_at),
                     str(protected_path),
                 ),
@@ -680,6 +722,7 @@ class Store:
         source_sha256: str,
         mapping: Mapping[str, Any],
         input_summary: Mapping[str, Any],
+        source_transformation: Mapping[str, Any],
         reference: Mapping[str, Any],
         decisions: list[Mapping[str, Any]],
         counts: Mapping[str, Any],
@@ -717,15 +760,19 @@ class Store:
             self._connection.execute(
                 """INSERT INTO advisor_match_sessions(
                     id, corp_id, conversation_id, source_relative_path, source_name,
-                    source_sha256, mapping_json, input_summary_json, reference_json, decisions_json,
+                    source_sha256, mapping_json, input_summary_json,
+                    source_transformation_json, reference_json, decisions_json,
                     counts_json, output_relative_path, policy_version, status,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Reviewing', ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Reviewing', ?, ?)""",
                 (
                     session_id, corp_id, conversation_id, source_attachment_id,
                     source_name, source_sha256,
                     json.dumps(mapping, ensure_ascii=False, default=str),
                     json.dumps(input_summary, ensure_ascii=False, default=str),
+                    json.dumps(
+                        source_transformation, ensure_ascii=False, default=str
+                    ),
                     json.dumps(reference, ensure_ascii=False, default=str),
                     json.dumps(decisions, ensure_ascii=False, default=str),
                     json.dumps(counts, ensure_ascii=False, default=str),
@@ -733,6 +780,73 @@ class Store:
                 ),
             )
         return session_id
+
+    def set_advisor_input_checkpoint(
+        self,
+        *,
+        corp_id: str,
+        conversation_id: str,
+        attachment_id: str,
+        validated_run_id: str,
+        validation: Mapping[str, Any],
+    ) -> None:
+        corp_id = self._corp(corp_id)
+        with self._lock, self._connection:
+            if not self._connection.execute(
+                "SELECT 1 FROM conversations WHERE id=? AND corp_id=?",
+                (conversation_id, corp_id),
+            ).fetchone():
+                raise KeyError(conversation_id)
+            if not self._connection.execute(
+                """SELECT 1 FROM runs
+                WHERE id=? AND corp_id=? AND conversation_id=?""",
+                (validated_run_id, corp_id, conversation_id),
+            ).fetchone():
+                raise KeyError(validated_run_id)
+            if not self._connection.execute(
+                """SELECT 1 FROM attachments
+                JOIN runs ON runs.id=attachments.run_id
+                    AND runs.corp_id=attachments.corp_id
+                WHERE attachments.id=? AND attachments.corp_id=?
+                    AND runs.conversation_id=?""",
+                (attachment_id, corp_id, conversation_id),
+            ).fetchone():
+                raise KeyError(attachment_id)
+            self._connection.execute(
+                """INSERT INTO advisor_input_checkpoints(
+                    corp_id, conversation_id, attachment_id, validated_run_id,
+                    validation_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(corp_id, conversation_id) DO UPDATE SET
+                    attachment_id=excluded.attachment_id,
+                    validated_run_id=excluded.validated_run_id,
+                    validation_json=excluded.validation_json,
+                    updated_at=excluded.updated_at""",
+                (
+                    corp_id,
+                    conversation_id,
+                    attachment_id,
+                    validated_run_id,
+                    json.dumps(validation, ensure_ascii=False, default=str),
+                    _iso(utc_now()),
+                ),
+            )
+
+    def get_advisor_input_checkpoint(
+        self, conversation_id: str, *, corp_id: str
+    ) -> dict[str, Any]:
+        corp_id = self._corp(corp_id)
+        with self._lock:
+            row = self._connection.execute(
+                """SELECT * FROM advisor_input_checkpoints
+                WHERE conversation_id=? AND corp_id=?""",
+                (conversation_id, corp_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(conversation_id)
+        result = dict(row)
+        result["validation"] = json.loads(result.pop("validation_json"))
+        return result
 
     def set_advisor_match_artifact(
         self,
@@ -1247,6 +1361,34 @@ class Store:
                 raise KeyError(attachment_id)
             return Path(row["protected_path"]), row["original_name"], row["sha256"]
 
+    def attachment_metadata(
+        self,
+        attachment_id: str,
+        *,
+        corp_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> dict[str, Any]:
+        corp_id = self._corp(corp_id)
+        query = (
+            "SELECT attachments.* FROM attachments "
+            "JOIN runs ON runs.id=attachments.run_id "
+            "AND runs.corp_id=attachments.corp_id "
+            "WHERE attachments.id=? AND attachments.corp_id=?"
+        )
+        parameters: list[Any] = [attachment_id, corp_id]
+        if conversation_id is not None:
+            query += " AND runs.conversation_id=?"
+            parameters.append(conversation_id)
+        with self._lock:
+            row = self._connection.execute(query, parameters).fetchone()
+        if row is None:
+            raise KeyError(attachment_id)
+        result = dict(row)
+        result["transformation"] = json.loads(
+            result.pop("transformation_json") or "{}"
+        )
+        return result
+
     def artifact_path(
         self, artifact_id: str, *, corp_id: str | None = None
     ) -> tuple[Path, str]:
@@ -1287,6 +1429,8 @@ class Store:
                 content_type=item["content_type"],
                 size_bytes=item["size_bytes"],
                 sha256=item["sha256"],
+                derived_from_attachment_id=item["derived_from_attachment_id"],
+                transformation=json.loads(item["transformation_json"] or "{}"),
                 created_at=_datetime(item["created_at"]),
             )
             for item in self._connection.execute(
@@ -1371,6 +1515,7 @@ def _advisor_match_session(row: sqlite3.Row) -> dict[str, Any]:
     for field in (
         "mapping_json",
         "input_summary_json",
+        "source_transformation_json",
         "reference_json",
         "decisions_json",
         "counts_json",

@@ -8,6 +8,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
+from general_agent.config import Settings
 from general_agent.ui.api_client import APIError, AgentAPIClient
 from general_agent.ui.components import (
     reduce_live_events,
@@ -19,6 +20,7 @@ from general_agent.ui.components import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 load_dotenv(PROJECT_ROOT / ".env")
+UI_DEBUG_MODE = Settings(project_root=PROJECT_ROOT).ui_debug_mode
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
 APP_BASE_URL = os.getenv(
     "APP_BASE_URL",
@@ -137,32 +139,37 @@ with st.sidebar:
         icon=":material/check_circle:",
         color="green",
     )
-    diagnostics = conversation.get("diagnostics") or {}
-    st.caption(f"Chat · `{conversation_id[:8]}`")
-    with st.expander(
-        "Conversation diagnostics",
-        icon=":material/monitoring:",
-        expanded=False,
-        key=f"conversation_diagnostics_{conversation_id}",
-    ):
-        render_conversation_diagnostics_content(
-            diagnostics,
-            run_count=len(conversation.get("turns") or []),
-            active=bool(conversation.get("active_run_id")),
-        )
-    with st.expander(
-        "Technical details",
-        icon=":material/info:",
-        expanded=False,
-    ):
-        st.info("The advisor agent has no shell or arbitrary code-execution tool.", icon=":material/security:")
-        st.markdown("**Chat ID**")
-        st.code(conversation_id, language=None)
-        st.markdown("**Refresh-safe link**")
-        st.code(
-            f"{APP_BASE_URL}/?conversation_id={conversation_id}",
-            language=None,
-        )
+    if UI_DEBUG_MODE:
+        diagnostics = conversation.get("diagnostics") or {}
+        st.caption(f"Chat · `{conversation_id[:8]}`")
+        st.caption(":material/bug_report: UI debug mode enabled")
+        with st.expander(
+            "Conversation diagnostics",
+            icon=":material/monitoring:",
+            expanded=False,
+            key=f"conversation_diagnostics_{conversation_id}",
+        ):
+            render_conversation_diagnostics_content(
+                diagnostics,
+                run_count=len(conversation.get("turns") or []),
+                active=bool(conversation.get("active_run_id")),
+            )
+        with st.expander(
+            "Technical details",
+            icon=":material/info:",
+            expanded=False,
+        ):
+            st.info(
+                "The advisor agent has no shell or arbitrary code-execution tool.",
+                icon=":material/security:",
+            )
+            st.markdown("**Chat ID**")
+            st.code(conversation_id, language=None)
+            st.markdown("**Refresh-safe link**")
+            st.code(
+                f"{APP_BASE_URL}/?conversation_id={conversation_id}",
+                language=None,
+            )
 
 if new_chat:
     try:
@@ -198,7 +205,7 @@ if not conversation["turns"]:
         )
 
 for turn in conversation["turns"]:
-    render_turn(client, turn)
+    render_turn(client, turn, debug_mode=UI_DEBUG_MODE)
 
 active_run_id = conversation.get("active_run_id")
 
@@ -216,7 +223,7 @@ def active_run_fragment(run_id: str) -> None:
         return
     reduce_live_events(state, run.get("events") or [])
     st.session_state[cursor_key] = run.get("next_event_id", cursor)
-    render_live_run(client, run, state)
+    render_live_run(client, run, state, debug_mode=UI_DEBUG_MODE)
     if run["status"] in {"completed", "failed", "stopped"}:
         st.session_state.pop(state_key, None)
         st.session_state.pop(cursor_key, None)

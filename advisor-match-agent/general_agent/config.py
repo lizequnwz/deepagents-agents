@@ -23,6 +23,18 @@ def _positive_int(name: str, default: int) -> int:
     return value
 
 
+def _boolean(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().casefold()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean (true/false), got {raw!r}.")
+
+
 def _model_kwargs() -> dict[str, Any]:
     raw = os.getenv("MODEL_KWARGS_JSON", "{}")
     try:
@@ -49,6 +61,9 @@ class Settings:
     api_port: int = field(default_factory=lambda: _positive_int("API_PORT", 8001))
     app_host: str = field(default_factory=lambda: os.getenv("APP_HOST", "127.0.0.1"))
     app_port: int = field(default_factory=lambda: _positive_int("APP_PORT", 8502))
+    ui_debug_mode: bool = field(
+        default_factory=lambda: _boolean("UI_DEBUG_MODE", False)
+    )
     run_timeout_seconds: int = field(
         default_factory=lambda: _positive_int("RUN_TIMEOUT_SECONDS", 900)
     )

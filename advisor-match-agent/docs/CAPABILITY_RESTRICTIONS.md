@@ -4,7 +4,7 @@ This classification applies to the model-facing Advisor Match Agent and its loop
 
 | Inherited capability | Decision | Enforcement |
 | --- | --- | --- |
-| CSV/XLSX upload parsing | Keep with restrictions | One immutable attachment; `.csv`/`.xlsx`; size, row, sheet, column, and sample bounds; opaque attachment ID and typed resolver only. |
+| CSV/XLSX upload parsing | Keep with restrictions | One immutable original attachment; `.csv`/`.xlsx`; size, row, sheet, column, and sample bounds; opaque attachment ID and typed resolver only. One explicit all-rows firm may create a same-format immutable derived attachment with persisted provenance. |
 | Advisor reference access | Replace with narrow tool | `find_all_advisors` returns an opaque manifest; the model never receives master rows. |
 | Matching/code execution | Replace with deterministic library | Versioned application functions perform normalization, matching, scoring, duplicates, and validation. No model-authored code runs. |
 | Result creation/modification | Replace with narrow tool | Only deterministic `advisor_matches.xlsx` regeneration from persisted decisions. Each verified revision is explicitly published under an opaque artifact ID. |
@@ -20,4 +20,4 @@ This classification applies to the model-facing Advisor Match Agent and its loop
 | Generic human workspace | Disable | No shared folders, arbitrary uploads, file browser, preview, promotion, rename, or general workspace endpoints. Originals and workbook artifacts remain downloadable by ID. |
 | Advisor profile building | Do not register | Typed contract and skill reference remain `# TODO`; the agent does not offer or simulate a handoff. |
 
-The sole model-facing tool set is `inspect_advisor_upload`, `validate_advisor_input`, `find_all_advisors`, `create_advisor_match`, `get_current_advisor_match`, `list_advisor_match_results`, `propose_crd_match`, `apply_advisor_match_decisions`, plus read-only installed-skill discovery.
+The sole model-facing tool set is `inspect_advisor_upload`, `validate_advisor_input`, `get_current_advisor_input`, `apply_firm_to_advisor_upload`, `find_all_advisors`, `create_advisor_match`, `get_current_advisor_match`, `list_advisor_match_results`, `propose_crd_match`, `apply_advisor_match_decisions`, plus read-only installed-skill discovery.

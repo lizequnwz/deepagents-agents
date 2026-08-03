@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import itertools
 import os
+import tempfile
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +15,8 @@ from typing import Any
 from langchain_core.tools import BaseTool, tool
 
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
+from general_agent.advisor_matching import normalization as norm
+from general_agent.advisor_matching.augmentation import augment_input_with_firm
 from general_agent.advisor_matching.input_loader import validate_and_load_input
 from general_agent.advisor_matching.matcher import run_matching
 from general_agent.advisor_matching.policy import POLICY_VERSION
@@ -21,6 +25,7 @@ from general_agent.advisor_matching.profiler import (
 )
 from general_agent.advisor_matching.schemas import (
     AdvisorRecord,
+    FirmAugmentationResult,
     InputMapping,
     InputSummary,
     MASTER_COLUMNS,
@@ -95,10 +100,18 @@ def build_advisor_tools(
     ) -> dict[str, Any]:
         """Validate one interpreted advisor upload and return its pre-match checkpoint."""
 
+        corp_id, conversation_id = current_context()
         source, _ = resolve_upload(attachment_id)
         loaded = validate_and_load_input(
             source, mapping, max_rows=settings.advisor_max_input_rows
         )
+        metadata = store.attachment_metadata(
+            attachment_id,
+            corp_id=corp_id,
+            conversation_id=conversation_id,
+        )
+        transformation = metadata["transformation"]
+        _validate_source_transformation(loaded.rows, mapping, transformation)
         result = MappingValidationResult(
             attachment_id=attachment_id,
             source_sha256=loaded.source_sha256,
@@ -108,9 +121,146 @@ def build_advisor_tools(
             columns=loaded.columns,
             input_summary=loaded.summary,
             missing_firm_sample=loaded.missing_firm_sample,
+            source_transformation=transformation,
             warnings=_input_summary_warnings(loaded.summary),
         )
-        return result.model_dump(mode="json")
+        serialized = result.model_dump(mode="json")
+        run_id = backend.active_run_id
+        if not run_id:
+            raise RuntimeError("The active run context is unavailable.")
+        store.set_advisor_input_checkpoint(
+            corp_id=corp_id,
+            conversation_id=conversation_id,
+            attachment_id=attachment_id,
+            validated_run_id=run_id,
+            validation=serialized,
+        )
+        return serialized
+
+    @tool
+    def get_current_advisor_input() -> dict[str, Any]:
+        """Return the latest validated advisor input checkpoint in this chat."""
+
+        corp_id, conversation_id = current_context()
+        try:
+            checkpoint = store.get_advisor_input_checkpoint(
+                conversation_id, corp_id=corp_id
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "No validated advisor input exists in the current chat."
+            ) from exc
+        return checkpoint["validation"]
+
+    @tool
+    def apply_firm_to_advisor_upload(
+        firm_name: str,
+        attachment_id: str | None = None,
+        mapping: InputMapping | None = None,
+    ) -> dict[str, Any]:
+        """Create an immutable derived upload with one user-confirmed firm on all rows."""
+
+        corp_id, conversation_id = current_context()
+        run_id = backend.active_run_id
+        if not run_id:
+            raise RuntimeError("The active run context is unavailable.")
+        try:
+            stored_checkpoint = store.get_advisor_input_checkpoint(
+                conversation_id, corp_id=corp_id
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "Validate an advisor input before applying an all-rows firm."
+            ) from exc
+        if stored_checkpoint["validated_run_id"] == run_id:
+            raise ValueError(
+                "Ask for and receive the all-rows firm confirmation in a later "
+                "user turn before applying it."
+            )
+        checkpoint = stored_checkpoint["validation"]
+        checkpoint_attachment_id = str(checkpoint["attachment_id"])
+        if attachment_id is not None and attachment_id != checkpoint_attachment_id:
+            raise ValueError(
+                "The supplied attachment is not the current validated input."
+            )
+        attachment_id = checkpoint_attachment_id
+        checkpoint_mapping = InputMapping.model_validate(checkpoint["mapping"])
+        if (
+            mapping is not None
+            and mapping.model_dump(mode="json")
+            != checkpoint_mapping.model_dump(mode="json")
+        ):
+            raise ValueError(
+                "The supplied mapping is not the current validated mapping."
+            )
+        mapping = checkpoint_mapping
+        source, original_name = resolve_upload(attachment_id)
+        current_question = store.get_run(run_id, corp_id=corp_id).question
+        if not _contains_explicit_firm(current_question, firm_name):
+            raise ValueError(
+                "The firm name must appear explicitly in the current user message "
+                "before it can be applied to every advisor."
+            )
+        suffix = source.suffix.lower()
+        derived_name = f"{Path(original_name).stem}_with_firm{suffix}"
+        with tempfile.TemporaryDirectory(prefix="advisor-firm-") as temporary:
+            staged = Path(temporary) / derived_name
+            augmentation = augment_input_with_firm(
+                source,
+                staged,
+                mapping,
+                firm_name,
+                max_rows=settings.advisor_max_input_rows,
+            )
+            transformation = {
+                "type": "bulk_firm_augmentation",
+                "source_attachment_id": attachment_id,
+                "source_sha256": augmentation.source_sha256,
+                "firm_name": augmentation.firm_name,
+                "rows_updated": augmentation.rows_updated,
+                "selected_sheet": augmentation.selected_sheet,
+                "firm_column_index": augmentation.firm_column_index,
+                "firm_column_header": augmentation.firm_column_header,
+            }
+            content_type = (
+                "text/csv"
+                if suffix == ".csv"
+                else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            with staged.open("rb") as handle:
+                attachment, protected = workspace.upload(
+                    corp_id=corp_id,
+                    conversation_id=conversation_id,
+                    original_name=derived_name,
+                    content_type=content_type,
+                    source=handle,
+                    max_bytes=settings.max_upload_mb * 1024 * 1024,
+                )
+        try:
+            store.add_attachment(
+                run_id,
+                attachment,
+                protected,
+                corp_id=corp_id,
+                derived_from_attachment_id=attachment_id,
+                transformation=transformation,
+            )
+        except Exception:
+            protected.unlink(missing_ok=True)
+            with contextlib.suppress(OSError):
+                protected.parent.rmdir()
+            raise
+        return FirmAugmentationResult(
+            source_attachment_id=attachment_id,
+            attachment_id=attachment.attachment_id,
+            original_name=attachment.original_name,
+            source_sha256=augmentation.source_sha256,
+            derived_sha256=attachment.sha256,
+            firm_name=augmentation.firm_name,
+            rows_updated=augmentation.rows_updated,
+            selected_sheet=augmentation.selected_sheet,
+            mapping=augmentation.mapping,
+        ).model_dump(mode="json")
 
     @tool
     def find_all_advisors() -> dict[str, Any]:
@@ -185,14 +335,36 @@ def build_advisor_tools(
             raise ValueError(
                 "The upload or mapping changed after validation; validate it again."
             )
+        _require_current_validation(
+            store=store,
+            corp_id=corp_id,
+            conversation_id=conversation_id,
+            attachment_id=attachment_id,
+            mapping=mapping,
+            mapping_fingerprint=mapping_fingerprint,
+        )
+        metadata = store.attachment_metadata(
+            attachment_id,
+            corp_id=corp_id,
+            conversation_id=conversation_id,
+        )
+        transformation = metadata["transformation"]
+        _validate_source_transformation(loaded.rows, mapping, transformation)
         if (
             loaded.summary.missing_firm_confirmation_required
             and not allow_missing_firm
         ):
+            if loaded.summary.firm_column_missing:
+                raise ValueError(
+                    "The selected input has no mapped firm column. Ask whether "
+                    "one firm applies to every advisor; otherwise require explicit "
+                    "permission to continue with weaker evidence."
+                )
             raise ValueError(
                 f"{loaded.summary.missing_firm_row_count} rows have a usable name "
-                "but no firm, valid CRD, or valid email. Ask whether the user can "
-                "provide a corrected upload or explicitly wants to continue."
+                "but no firm, valid CRD, or valid email. Ask whether one firm "
+                "applies to every advisor; otherwise require explicit permission "
+                "to continue with weaker evidence."
             )
         reference, snapshot = _resolve_reference_snapshot(
             store=store,
@@ -216,6 +388,7 @@ def build_advisor_tools(
             source_sha256=loaded.source_sha256,
             mapping=mapping.model_dump(mode="json"),
             input_summary=loaded.summary.model_dump(mode="json"),
+            source_transformation=transformation,
             reference=reference.model_dump(mode="json"),
             decisions=[decision.model_dump(mode="json") for decision in decisions],
             counts=counts.model_dump(mode="json"),
@@ -232,6 +405,7 @@ def build_advisor_tools(
             mapping_fingerprint=loaded.mapping_fingerprint,
             input_summary=loaded.summary,
             counts=counts,
+            source_transformation=transformation,
             warnings=warnings,
             policy_version=POLICY_VERSION,
         ).model_dump(mode="json")
@@ -254,6 +428,7 @@ def build_advisor_tools(
             "source_name": session["source_name"],
             "interpreted_mapping": session["mapping"],
             "input_summary": session["input_summary"],
+            "source_transformation": session["source_transformation"],
             "counts": session["counts"],
             "status": session["status"],
             "revision": session["revision"],
@@ -433,6 +608,8 @@ def build_advisor_tools(
     return [
         inspect_advisor_upload,
         validate_advisor_input,
+        get_current_advisor_input,
+        apply_firm_to_advisor_upload,
         find_all_advisors,
         create_advisor_match,
         get_current_advisor_match,
@@ -440,6 +617,74 @@ def build_advisor_tools(
         propose_crd_match,
         apply_advisor_match_decisions,
     ]
+
+
+def _validate_source_transformation(
+    rows: list[tuple[int, dict[str, object], dict[str, str]]],
+    mapping: InputMapping,
+    transformation: dict[str, Any],
+) -> None:
+    if not transformation:
+        return
+    if transformation.get("type") != "bulk_firm_augmentation":
+        raise ValueError("The advisor attachment has an unsupported transformation.")
+    binding = mapping.firm_name
+    expected_header = transformation.get("firm_column_header")
+    expected_index = transformation.get("firm_column_index")
+    if (
+        binding is None
+        or len(binding.columns) != 1
+        or binding.columns[0].index != expected_index
+        or binding.columns[0].header != expected_header
+    ):
+        raise ValueError(
+            "The mapping must use the exact firm column created by the derived upload."
+        )
+    expected_firm = str(transformation.get("firm_name") or "").strip()
+    if not expected_firm or any(
+        str(mapped.get("firm_name") or "").strip() != expected_firm
+        for _, _, mapped in rows
+    ):
+        raise ValueError(
+            "The derived upload no longer contains the confirmed firm on every row."
+        )
+
+
+def _require_current_validation(
+    *,
+    store: Store,
+    corp_id: str,
+    conversation_id: str,
+    attachment_id: str,
+    mapping: InputMapping,
+    mapping_fingerprint: str,
+) -> None:
+    try:
+        validation = store.get_advisor_input_checkpoint(
+            conversation_id, corp_id=corp_id
+        )["validation"]
+    except KeyError as exc:
+        raise ValueError("Validate the advisor input before matching.") from exc
+    if (
+        validation.get("attachment_id") != attachment_id
+        or validation.get("mapping_fingerprint") != mapping_fingerprint
+        or validation.get("mapping") != mapping.model_dump(mode="json")
+    ):
+        raise ValueError(
+            "Validate this exact advisor attachment and mapping before matching."
+        )
+
+
+def _contains_explicit_firm(question: str, firm_name: str) -> bool:
+    question_words = norm.words(question)
+    firm_words = norm.words(firm_name)
+    if not firm_words:
+        return False
+    width = len(firm_words)
+    return any(
+        question_words[index : index + width] == firm_words
+        for index in range(len(question_words) - width + 1)
+    )
 
 
 def _normalize_status_filter(status: str | None) -> MatchStatus | None:
@@ -649,6 +894,7 @@ def _write_session_workbook(
             policy_version=session["policy_version"],
             session_status=session["status"],
             session_revision=session["revision"],
+            source_transformation=session["source_transformation"],
         )
         os.replace(temporary, output)
         artifact = Artifact(
@@ -693,6 +939,8 @@ def _input_summary_warnings(summary: InputSummary) -> list[str]:
         )
     if summary.blank_row_count:
         warnings.append(f"Skipped {summary.blank_row_count} completely blank rows.")
+    if summary.firm_column_missing:
+        warnings.append("The selected input has no mapped firm column.")
     if summary.missing_firm_row_count:
         warnings.append(
             f"{summary.missing_firm_row_count} rows have a usable name but no firm, "

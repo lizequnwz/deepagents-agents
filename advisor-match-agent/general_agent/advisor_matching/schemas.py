@@ -98,6 +98,7 @@ class InputSummary(BaseModel):
     data_row_count: int = Field(ge=0)
     blank_row_count: int = Field(ge=0)
     preamble_row_count: int = Field(ge=0)
+    firm_column_missing: bool = False
     missing_firm_row_count: int = Field(ge=0)
     missing_firm_confirmation_required: bool = False
 
@@ -113,6 +114,7 @@ class MappingValidationResult(BaseModel):
     missing_firm_sample: list[dict[str, Any]] = Field(
         default_factory=list, max_length=5
     )
+    source_transformation: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -201,8 +203,22 @@ class MatchRunResult(BaseModel):
     mapping_fingerprint: str
     input_summary: InputSummary
     counts: MatchCounts
+    source_transformation: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     policy_version: str
+
+
+class FirmAugmentationResult(BaseModel):
+    source_attachment_id: str
+    attachment_id: str
+    original_name: str
+    source_sha256: str
+    derived_sha256: str
+    firm_name: str
+    rows_updated: int = Field(gt=0)
+    selected_sheet: str | None
+    mapping: InputMapping
+    requires_validation: Literal[True] = True
 
 
 class ReviewDecision(BaseModel):
