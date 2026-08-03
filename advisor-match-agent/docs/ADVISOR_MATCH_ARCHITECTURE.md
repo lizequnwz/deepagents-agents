@@ -30,42 +30,42 @@ An input with no mapped firm column requires one conversational checkpoint, even
 
 ## Stage 2: retrieve and match
 
-Only after validation and clarification does the agent call `find_all_advisors`. The tool validates and projects the authoritative schema into a protected, immutable, corporation-and-conversation-scoped CSV. The model receives only an opaque snapshot ID and manifest—not a path or advisor rows.
+Only after validation and clarification does the agent call `create_advisor_match`. The tool retrieves or reuses the authoritative source for that immutable attachment, validates and projects it into a protected corporation-and-conversation-scoped CSV, and builds temporary exact CRD, email, and normalized-name indexes during the same stream. The model receives only an opaque manifest—not a path or advisor rows.
 
-`create_advisor_match` accepts the attachment ID, exact mapping, mapping fingerprint, opaque reference ID, and the explicit missing-firm continuation flag. It:
+`create_advisor_match` accepts the attachment ID, exact mapping, mapping fingerprint, and the explicit missing-firm continuation flag. It:
 
 1. resolves the attachment in the current corporation and conversation, verifies its protected path and hash, and revalidates the mapping fingerprint;
-2. resolves the reference ID through the corporation-scoped store;
-3. validates the protected path, hash, schema, and row count;
-4. runs deterministic matching;
+2. reuses the attachment's completed snapshot or atomically creates it from one authoritative-source iteration;
+3. validates the protected path, hash, schema, row count, required names, and unique CRDs;
+4. runs deterministic indexed matching;
 5. persists the structured session;
-6. generates and reopens `advisor_matches.xlsx` for verification;
-7. atomically publishes the verified workbook under an opaque artifact ID tied to the active run, match session, and revision.
+6. releases the temporary index;
+7. generates and reopens `advisor_matches.xlsx` for verification;
+8. atomically publishes the verified workbook under an opaque artifact ID tied to the active run, match session, and revision.
 
-The reference snapshot is fresh for every new match session and remains fixed throughout later review turns.
+The reference snapshot is created once per immutable attachment. Mapping corrections, match retries, and later review turns reuse it.
 
 ## Deterministic policy
 
-The matching engine applies policy version 2 in order:
+The matching engine applies policy version 4 in order:
 
 1. Exact CRD is decisive; other conflicts become warnings.
 2. Unique normalized email is decisive after CRD. A non-unique authoritative email is ambiguous.
-3. A usable name is a multi-part full name or both first and last name.
-4. Exact name requires an exact/close firm or exact city and state.
-5. Fuzzy name requires policy score, runner-up margin, and independent support.
-6. A fuzzy name plus fuzzy firm cannot auto-match without exact city and state.
-7. Nickname aliases and name-only evidence create candidates but never auto-match.
-8. Strong firm or state conflicts block name-based auto-matching.
-9. ZIP is contextual only; street address is outside the workflow.
-10. Plausible unresolved rows are `Ambiguous Match`; insufficient, invalid, or unsupported rows are `No Match` with a row-level reason.
+3. A usable name produces an exact normalized first/last key; middle tokens are ignored, and uncommaed full names use their first and last tokens.
+4. Exact indexed name requires exact/wildcard/close firm or exact city and state.
+5. General fuzzy-name matching is not performed.
+6. Curated nicknames and name-only evidence create review candidates but never auto-match.
+7. Strong firm or state conflicts block name-based auto-matching.
+8. ZIP is contextual only; street address is outside the workflow.
+9. Unresolved indexed candidates are `Ambiguous Match`; missing-name-key, invalid, or unsupported rows are `No Match` with a row-level reason.
 
 Malformed individual CRD, email, or name values become warnings or row-level results. They do not abort other rows. Completely blank rows are not advisor records. Duplicate input rows remain separate decisions and receive a duplicate-group marker.
 
-Internal scores rank candidates; they are not probabilities and are never returned to the model or workbook.
+Explicit evidence precedence ranks candidates. Close-firm similarity remains bounded within the small exact-name candidate group and its numeric value is never returned to the model or workbook.
 
 ## Stage 3: conversational review
 
-The agent reports the interpreted mapping and counts, then pages through ambiguous rows first and no-match rows second. Automated matches are listed only when requested. Review payloads contain source row numbers, candidate CRDs, and qualitative supporting, conflicting, and ZIP-context evidence.
+The agent reports the interpreted mapping and counts, then pages through ambiguous rows first and no-match rows second. Automated matches are listed only when requested. Review payloads contain source row numbers, candidate CRDs, total candidate counts, truncation flags, and qualitative supporting, conflicting, and ZIP-context evidence.
 
 The only review mutations are:
 
@@ -111,7 +111,7 @@ SQLite is the source of truth for ownership, hashes, sessions, decisions, audits
 The workbook remains a deterministic four-sheet projection:
 
 1. `Matched`—17 human-facing columns by default, with technical audit fields hidden at the right.
-2. `Review Required`—18 human-facing columns and one row per candidate or no-match item.
+2. `Review Required`—20 human-facing columns, including candidate-pool size and truncation, and one row per presented candidate or no-match item.
 3. `Original Input`—physical row number plus source columns in original order.
 4. `Run Summary`—mapping, row counts, status counts, hashes, source-transformation provenance, snapshot ID, policy, and revision.
 
@@ -119,7 +119,7 @@ Names and locations are combined for readability. Headers are styled and frozen;
 
 ## Production source replacement
 
-The current source is a synthetic 40-row CSV. A Snowflake adapter can implement the same `AdvisorReferenceSource` protocol without changing agent instructions or review contracts. At production scale, replace full in-memory fuzzy comparison with stable database snapshots, exact CRD/email lookup, and deterministic candidate blocking. The model must still receive only manifests and bounded candidate pages.
+The current source is a synthetic 40-row CSV. A future Snowflake adapter can stream the same projected `AdvisorReferenceSource` schema once per uploaded attachment without changing agent instructions or review contracts. The application writes the immutable snapshot and builds compact exact indexes in one pass; it never compares each uploaded name with the complete master. The model still receives only manifests and bounded candidate pages.
 
 ## Deferred profile building
 

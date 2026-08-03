@@ -148,17 +148,6 @@ class MatchCandidate(BaseModel):
     supporting_evidence: list[str] = Field(default_factory=list)
     conflicting_evidence: list[str] = Field(default_factory=list)
     contextual_evidence: list[str] = Field(default_factory=list)
-    internal_score: float = Field(default=0, ge=0, le=1, exclude=True)
-    internal_name_similarity: float = Field(default=0, ge=0, le=1, exclude=True)
-    internal_alias_name_similarity: float = Field(
-        default=0, ge=0, le=1, exclude=True
-    )
-    internal_firm_similarity: float = Field(default=0, ge=0, le=1, exclude=True)
-    internal_exact_firm: bool = Field(default=False, exclude=True)
-    internal_close_firm: bool = Field(default=False, exclude=True)
-    internal_location_match: bool = Field(default=False, exclude=True)
-    internal_state_conflict: bool = Field(default=False, exclude=True)
-    internal_firm_conflict: bool = Field(default=False, exclude=True)
 
 
 class MatchDecision(BaseModel):
@@ -172,10 +161,23 @@ class MatchDecision(BaseModel):
     explanation: str
     matched_advisor: MatchCandidate | None = None
     candidates: list[MatchCandidate] = Field(default_factory=list, max_length=3)
+    candidate_count: int = Field(default=0, ge=0)
+    candidates_truncated: bool = False
     warnings: list[str] = Field(default_factory=list)
     duplicate_group: str | None = None
     decision_source: Literal["Automated", "User Override"] = "Automated"
     automated_status: MatchStatus | None = None
+
+    @model_validator(mode="after")
+    def validate_candidate_count(self) -> MatchDecision:
+        """Backfill counts for persisted policy-v3 decisions and reject drift."""
+
+        if self.candidates and self.candidate_count == 0:
+            self.candidate_count = len(self.candidates)
+        if self.candidate_count < len(self.candidates):
+            raise ValueError("candidate_count cannot be smaller than candidates.")
+        self.candidates_truncated = self.candidate_count > len(self.candidates)
+        return self
 
 
 class MatchCounts(BaseModel):
@@ -204,6 +206,7 @@ class MatchRunResult(BaseModel):
     input_summary: InputSummary
     counts: MatchCounts
     source_transformation: dict[str, Any] = Field(default_factory=dict)
+    reference: ReferenceSnapshotManifest
     warnings: list[str] = Field(default_factory=list)
     policy_version: str
 

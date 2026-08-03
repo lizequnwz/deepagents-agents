@@ -207,6 +207,7 @@ class Store:
                     id TEXT PRIMARY KEY,
                     corp_id TEXT NOT NULL,
                     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                    source_attachment_id TEXT,
                     manifest_json TEXT NOT NULL,
                     snapshot_path TEXT NOT NULL,
                     consumed_by_session_id TEXT,
@@ -315,6 +316,11 @@ class Store:
                     "ALTER TABLE advisor_reference_snapshots "
                     "ADD COLUMN consumed_by_session_id TEXT"
                 )
+            if "source_attachment_id" not in snapshot_columns:
+                self._connection.execute(
+                    "ALTER TABLE advisor_reference_snapshots "
+                    "ADD COLUMN source_attachment_id TEXT"
+                )
             self._connection.executescript(
                 """
                 CREATE INDEX IF NOT EXISTS conversations_corp_idx
@@ -333,6 +339,11 @@ class Store:
                     ON advisor_match_review_decisions(corp_id, session_id, created_at);
                 CREATE INDEX IF NOT EXISTS advisor_reference_snapshots_corp_idx
                     ON advisor_reference_snapshots(corp_id, conversation_id, created_at);
+                CREATE UNIQUE INDEX IF NOT EXISTS advisor_reference_attachment_idx
+                    ON advisor_reference_snapshots(
+                        corp_id, conversation_id, source_attachment_id
+                    )
+                    WHERE source_attachment_id IS NOT NULL;
                 """
             )
 
@@ -742,20 +753,21 @@ class Store:
             reference_snapshot_id = str(reference["reference_snapshot_id"])
             snapshot_cursor = self._connection.execute(
                 "UPDATE advisor_reference_snapshots "
-                "SET consumed_by_session_id=? "
+                "SET consumed_by_session_id=COALESCE(consumed_by_session_id, ?) "
                 "WHERE id=? AND corp_id=? AND conversation_id=? "
-                "AND consumed_by_session_id IS NULL",
+                "AND source_attachment_id=?",
                 (
                     session_id,
                     reference_snapshot_id,
                     corp_id,
                     conversation_id,
+                    source_attachment_id,
                 ),
             )
             if snapshot_cursor.rowcount == 0:
                 raise ValueError(
-                    "The advisor reference snapshot is unknown or already used by "
-                    "another match session. Retrieve a fresh snapshot."
+                    "The advisor reference snapshot is unknown or belongs to a "
+                    "different attachment."
                 )
             self._connection.execute(
                 """INSERT INTO advisor_match_sessions(
@@ -959,6 +971,7 @@ class Store:
         snapshot_id: str,
         corp_id: str,
         conversation_id: str,
+        source_attachment_id: str | None = None,
         manifest: Mapping[str, Any],
         snapshot_path: Path,
     ) -> None:
@@ -973,18 +986,41 @@ class Store:
                 raise KeyError(conversation_id)
             self._connection.execute(
                 """INSERT INTO advisor_reference_snapshots(
-                    id, corp_id, conversation_id, manifest_json, snapshot_path,
-                    created_at
-                ) VALUES (?, ?, ?, ?, ?, ?)""",
+                    id, corp_id, conversation_id, source_attachment_id,
+                    manifest_json, snapshot_path, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     snapshot_id,
                     corp_id,
                     conversation_id,
+                    source_attachment_id,
                     json.dumps(manifest, ensure_ascii=False, default=str),
                     str(snapshot_path),
                     _iso(utc_now()),
                 ),
             )
+
+    def get_advisor_reference_snapshot_for_attachment(
+        self,
+        attachment_id: str,
+        *,
+        corp_id: str,
+        conversation_id: str,
+    ) -> dict[str, Any]:
+        """Return the completed reference snapshot pinned to one upload."""
+
+        corp_id = self._corp(corp_id)
+        with self._lock:
+            row = self._connection.execute(
+                """SELECT * FROM advisor_reference_snapshots
+                WHERE source_attachment_id=? AND corp_id=? AND conversation_id=?""",
+                (attachment_id, corp_id, conversation_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(attachment_id)
+        result = dict(row)
+        result["manifest"] = json.loads(result.pop("manifest_json"))
+        return result
 
     def get_advisor_reference_snapshot(
         self,

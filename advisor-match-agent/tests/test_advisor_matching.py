@@ -11,7 +11,11 @@ from general_agent.advisor_matching import policy
 from general_agent.advisor_matching.augmentation import augment_input_with_firm
 from general_agent.advisor_matching.input_loader import validate_and_load_input
 from general_agent.advisor_matching.matcher import run_matching
-from general_agent.advisor_matching.schemas import AdvisorRecord, InputMapping
+from general_agent.advisor_matching.schemas import (
+    AdvisorRecord,
+    InputMapping,
+    MatchDecision,
+)
 from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
 
 
@@ -119,6 +123,8 @@ def test_non_unique_email_is_ambiguous_even_with_other_evidence() -> None:
     assert counts.ambiguous_match == 1
     assert decisions[0].rule_id == "NON_UNIQUE_EMAIL"
     assert {item.crd_number for item in decisions[0].candidates} == {"1002", "1003"}
+    assert decisions[0].candidate_count == 2
+    assert decisions[0].candidates_truncated is False
 
 
 @pytest.mark.parametrize(
@@ -167,9 +173,11 @@ def test_nickname_with_support_is_review_only() -> None:
         ADVISORS,
     )
     assert counts.ambiguous_match == 1
+    assert decisions[0].rule_id == "NICKNAME_REVIEW_REQUIRED"
     assert decisions[0].candidates[0].crd_number == "1001"
     assert any(
         "Nickname alias" in evidence
+        or "Curated nickname" in evidence
         for evidence in decisions[0].candidates[0].supporting_evidence
     )
 
@@ -180,6 +188,7 @@ def test_name_alone_is_never_confirmed() -> None:
     )
     assert counts.matched == 0
     assert decisions[0].status == "Ambiguous Match"
+    assert decisions[0].rule_id == "EXACT_NAME_REVIEW_REQUIRED"
     assert len(decisions[0].candidates) == 2
 
 
@@ -352,7 +361,7 @@ def test_firm_wildcard_does_not_choose_between_duplicate_names() -> None:
     }
 
 
-def test_fuzzy_name_plus_fuzzy_firm_needs_exact_location() -> None:
+def test_name_typo_is_no_match_even_with_firm_or_location() -> None:
     without_location, counts, _ = run_matching(
         [
             _row(
@@ -363,7 +372,8 @@ def test_fuzzy_name_plus_fuzzy_firm_needs_exact_location() -> None:
         ],
         ADVISORS,
     )
-    assert counts.ambiguous_match == 1
+    assert counts.no_match == 1
+    assert without_location[0].rule_id == "NAME_NOT_FOUND"
     with_location, counts, _ = run_matching(
         [
             _row(
@@ -376,8 +386,132 @@ def test_fuzzy_name_plus_fuzzy_firm_needs_exact_location() -> None:
         ],
         ADVISORS,
     )
+    assert counts.no_match == 1
+    assert with_location[0].rule_id == "NAME_NOT_FOUND"
+
+
+def test_middle_name_is_ignored_for_exact_index_lookup() -> None:
+    decisions, counts, _ = run_matching(
+        [
+            _row(
+                2,
+                full_name="Robert Allen Mercer",
+                firm_name="Cedar Grove Advisory",
+            )
+        ],
+        ADVISORS,
+    )
     assert counts.matched == 1
-    assert with_location[0].rule_id == "FUZZY_NAME_CORROBORATED"
+    assert decisions[0].rule_id == "EXACT_NAME_SUPPORTED"
+
+
+def test_uncommaed_compound_surname_limitation_is_explicit() -> None:
+    advisors = [
+        AdvisorRecord(
+            crd_number="2001",
+            first_name="Maria",
+            last_name="De La Cruz",
+            firm_name="Harbor Advisory",
+        )
+    ]
+    decisions, counts, _ = run_matching(
+        [_row(2, full_name="Maria De La Cruz", firm_name="Harbor Advisory")],
+        advisors,
+    )
+    assert counts.no_match == 1
+    assert decisions[0].rule_id == "NAME_NOT_FOUND"
+
+    separated, separated_counts, _ = run_matching(
+        [
+            _row(
+                3,
+                first_name="Maria",
+                last_name="De La Cruz",
+                firm_name="Harbor Advisory",
+            )
+        ],
+        advisors,
+    )
+    assert separated_counts.matched == 1
+    assert separated[0].rule_id == "EXACT_NAME_SUPPORTED"
+
+
+def test_candidate_pool_is_bounded_and_reports_total() -> None:
+    advisors = [
+        AdvisorRecord(
+            crd_number=str(3000 + index),
+            first_name="John",
+            last_name="Smith",
+        )
+        for index in range(5)
+    ]
+    decisions, counts, _ = run_matching(
+        [_row(2, full_name="John Smith")], advisors
+    )
+    assert counts.ambiguous_match == 1
+    assert len(decisions[0].candidates) == 3
+    assert decisions[0].candidate_count == 5
+    assert decisions[0].candidates_truncated is True
+
+
+def test_candidate_order_uses_explicit_evidence_precedence() -> None:
+    advisors = [
+        AdvisorRecord(
+            crd_number="3003",
+            first_name="John",
+            last_name="Smith",
+            firm_name="Northstar Global Wealth Partners",
+        ),
+        AdvisorRecord(
+            crd_number="3002",
+            first_name="John",
+            last_name="Smith",
+            city="Boston",
+            state="MA",
+        ),
+        AdvisorRecord(
+            crd_number="3001",
+            first_name="John",
+            last_name="Smith",
+            firm_name="Northstar Wealth",
+        ),
+    ]
+    decisions, counts, _ = run_matching(
+        [
+            _row(
+                2,
+                full_name="John Smith",
+                firm_name="Northstar Wealth",
+                city="Boston",
+                state="MA",
+            )
+        ],
+        advisors,
+    )
+    assert counts.ambiguous_match == 1
+    assert [item.crd_number for item in decisions[0].candidates] == [
+        "3001",
+        "3002",
+        "3003",
+    ]
+
+
+def test_policy_v3_decision_backfills_candidate_count() -> None:
+    legacy = MatchDecision.model_validate(
+        {
+            "review_item_id": "ami_legacy",
+            "source_row_number": 2,
+            "source_values": {"Name": "John Smith"},
+            "mapped_values": {"full_name": "John Smith"},
+            "status": "Ambiguous Match",
+            "confidence": "Uncertain",
+            "rule_id": "AMBIGUOUS_CANDIDATES",
+            "explanation": "Legacy decision",
+            "candidates": [ADVISORS[1].model_dump()],
+        }
+    )
+    assert legacy.candidate_count == 1
+    assert legacy.candidates_truncated is False
 
 
 def test_firm_and_state_conflicts_block_name_based_auto_match() -> None:
@@ -691,7 +825,7 @@ def test_unreadable_xlsx_is_reported_as_a_structural_input_error(tmp_path) -> No
                 "city": _binding(2, "City"),
                 "state": _binding(3, "State"),
             },
-            (0, 3, 0),
+            (0, 2, 1),
         ),
         (
             "duplicate_rows.xlsx",
@@ -748,15 +882,10 @@ def test_skill_policy_reference_matches_executable_policy() -> None:
             / "matching-policy.yaml"
         ).read_text(encoding="utf-8")
     )
-    fuzzy = documented["fuzzy"]
     assert documented["version"] == policy.POLICY_VERSION
-    assert fuzzy["acceptance_score"] == policy.ACCEPTANCE_SCORE
-    assert fuzzy["plausible_score"] == policy.PLAUSIBLE_SCORE
-    assert fuzzy["minimum_margin"] == policy.MINIMUM_MARGIN
-    assert fuzzy["minimum_name_similarity"] == policy.MINIMUM_NAME_SIMILARITY
-    assert fuzzy["minimum_firm_similarity"] == policy.MINIMUM_FIRM_SIMILARITY
-    assert fuzzy["firm_conflict_similarity"] == policy.FIRM_CONFLICT_SIMILARITY
-    assert fuzzy["weights"] == policy.WEIGHTS
+    firm = documented["firm_similarity"]
+    assert firm["minimum_similarity"] == policy.MINIMUM_FIRM_SIMILARITY
+    assert firm["conflict_similarity"] == policy.FIRM_CONFLICT_SIMILARITY
     wildcard = documented["firm_wildcard"]
     assert wildcard["anchored"] is True
     assert wildcard["minimum_length"] == policy.FIRM_WILDCARD_MIN_LENGTH

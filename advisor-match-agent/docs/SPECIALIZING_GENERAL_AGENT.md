@@ -64,9 +64,9 @@ Prompts are not a security boundary. Enforce paths, scope, limits, fingerprint c
 
 ## Matching policy design
 
-Apply exact identifiers before probabilistic-looking evidence. This implementation uses exact CRD, unique normalized email, then supported exact/fuzzy names. Firm normalization removes harmless legal suffixes; close firm matching is deterministic. City and state form location support; ZIP is context only; street address is excluded.
+Apply exact identifiers before name evidence. This implementation uses exact CRD, unique normalized email, then indexed exact normalized first/last names. General fuzzy-name matching is intentionally absent; curated nicknames are review-only. Firm normalization removes harmless legal suffixes, and close firm matching is evaluated only within the bounded name candidate group. City and state form location support; ZIP is context only; street address is excluded.
 
-Fuzzy scores are ranking thresholds, not probabilities. Keep them internal and versioned. Calibrate policy against labeled historical cases before production use.
+Candidate ordering uses explicit evidence precedence rather than a weighted score. Keep the bounded close-firm threshold internal and versioned. Calibrate policy against labeled historical cases before production use.
 
 ## Workbook design
 
@@ -76,7 +76,7 @@ A human-first default view is compatible with auditability: keep useful identity
 
 ## Production database replacement
 
-The synthetic source implements `AdvisorReferenceSource`. A Snowflake implementation should produce the same projected schema and immutable manifest. For million-row sources, do not transfer the table into model context and do not compare every unresolved row with every advisor. Use a stable source snapshot, exact CRD/email lookup, normalized-name blocking, deterministic candidate pagination, query IDs, and load/performance tests.
+The synthetic source implements `AdvisorReferenceSource`. A future Snowflake implementation should stream the same projected schema and immutable manifest once per attachment. Do not transfer the table into model context or compare every unresolved row with every advisor; build exact CRD/email/name indexes during the source stream, preserve query IDs, and keep candidate pages bounded.
 
 ## Validation order
 

@@ -1,6 +1,6 @@
 ---
 name: advisor-match
-description: "Interpret one advisor CSV or XLSX flexibly, match its rows deterministically against the authoritative advisor database, create advisor_matches.xlsx, and conduct conversational exception review. Use for header detection, column mapping, CRD lookup, advisor identity resolution, fuzzy firm/name matching, review overrides, and approval."
+description: "Interpret one advisor CSV or XLSX flexibly, match its rows deterministically against the authoritative advisor database, create advisor_matches.xlsx, and conduct conversational exception review. Use for header detection, column mapping, CRD lookup, exact normalized advisor identity resolution, bounded firm comparison, review overrides, and approval."
 ---
 
 # Advisor matching
@@ -16,14 +16,14 @@ description: "Interpret one advisor CSV or XLSX flexibly, match its rows determi
 
 ## 2. Match deterministically
 
-7. After all clarification and any derived-input validation, call `find_all_advisors` exactly once for the new run. Treat its snapshot ID as opaque.
-8. Call `create_advisor_match` with the exact validated attachment, mapping, mapping fingerprint, reference snapshot ID, and `allow_missing_firm=true` only after the user explicitly chooses to continue without firm data.
+7. After all clarification and any derived-input validation, call `create_advisor_match` with the exact validated attachment, mapping, and mapping fingerprint. The tool retrieves or reuses the attachment-scoped authoritative snapshot internally. Use `allow_missing_firm=true` only after the user explicitly chooses to continue without firm data.
+8. Treat the returned reference manifest and snapshot ID as opaque. Never request the master rows or a protected path.
 9. Report the interpreted mapping, selected sheet/header mode, any bulk-firm augmentation, `Matched`, `Ambiguous Match`, and `No Match` counts, warnings, session ID, and workbook artifact ID.
 
 ## 3. Review exceptions conversationally
 
 10. Page through `Ambiguous Match` items first with `list_advisor_match_results`, then offer `No Match` pages by reason. Use pages of 10 or fewer. Show automated Matched rows only when requested.
-11. Explain source rows, candidate CRDs, and qualitative firm/location support or conflicts. Never present internal scores.
+11. Explain source rows, candidate CRDs, total candidate counts, truncation, and qualitative firm/location support or conflicts. Never present internal firm-similarity values.
 12. Use `apply_advisor_match_decisions` only for an explicit candidate or No Match choice. Other source-data corrections require a corrected upload and new session.
 13. For an unlisted advisor, require an exact user-supplied CRD, call `propose_crd_match`, show the resolved record, and wait for confirmation in a later user turn before applying it.
 14. The user may approve with unresolved exceptions. After approval, report the final workbook artifact. Profile building is not implemented; do not offer or simulate it.

@@ -15,8 +15,8 @@ flowchart TD
     F -->|Yes| C{"One firm for every advisor?"}
     C -->|Firm supplied| A2["Create immutable derived input"] --> V
     C -->|No firm| W2["Explicitly continue with weaker evidence"] --> R
-    F -->|No| R["Find all advisors"]
-    R --> S["Persist opaque immutable snapshot"]
+    F -->|No| R["Create advisor match"]
+    R --> S["Retrieve or reuse attachment snapshot and build exact indexes"]
     S --> M["Run deterministic matcher"]
     M --> DB[("Match session + audit")]
     M --> W["Generate and verify workbook"]
@@ -35,8 +35,8 @@ flowchart TD
 4. **Interpret**—the agent selects one worksheet and maps CRD, name, firm, email, city, state, and optional ZIP. It asks the user when the meaning is not clear.
 5. **Validate**—`validate_advisor_input` confirms exact indexes and headers before data loading, skips blank/preamble rows, reports the missing-firm checkpoint, and returns a source-and-mapping fingerprint.
 6. **Clarify if needed**—always ask whether one firm applies to every advisor. If supplied, `apply_firm_to_advisor_upload` creates an audited immutable derived input and returns its exact mapping; validate it before continuing. If unavailable, the user may explicitly continue with weaker evidence.
-7. **Retrieve the source**—`find_all_advisors` creates a fresh protected snapshot and returns only its opaque manifest.
-8. **Match**—`create_advisor_match` revalidates the attachment and fingerprint, verifies the reference snapshot, runs policy version 2, persists a session, creates and verifies the workbook, and publishes revision 1 under an artifact ID.
+7. **Retrieve and match**—`create_advisor_match` revalidates the attachment and fingerprint, retrieves or reuses its protected snapshot, builds compact exact indexes, runs policy version 4, persists a session, creates and verifies the workbook, and publishes revision 1 under an artifact ID.
+8. **Release the index**—the temporary in-memory index is discarded after decisions persist; the immutable CSV remains for integrity checks, retries, and exact-CRD proposals.
 9. **Report**—the agent shows the interpreted mapping, header mode, selected sheet, warnings, session ID, workbook artifact ID, and three status counts.
 10. **Review**—the agent pages ambiguous items first, then no-match items by reason. Candidate explanations use qualitative evidence only.
 11. **Apply explicit choices**—the application records before/after audit data, recalculates counts, increments the revision, regenerates and verifies the workbook, and publishes a new immutable artifact ID.
@@ -63,12 +63,10 @@ flowchart TD
     EMAIL -->|Multiple records| AE["Ambiguous / NON_UNIQUE_EMAIL"]
     EMAIL -->|No result| NAME{"Usable name?"}
     NAME -->|No| NM["No Match with row reason"]
-    NAME -->|Yes| EXACT{"Exact name + safe support?"}
+    NAME -->|Yes| EXACT{"Indexed exact name + safe support?"}
     EXACT -->|Unique| MN["Matched / EXACT_NAME_SUPPORTED"]
-    EXACT -->|No| FUZZY{"Fuzzy policy + margin + support?"}
-    FUZZY -->|Safe| MF["Matched / FUZZY_NAME_CORROBORATED"]
-    FUZZY -->|Plausible| AM["Ambiguous Match"]
-    FUZZY -->|None| NC["No Match / NO_ACCEPTABLE_CANDIDATE"]
+    EXACT -->|Nickname or unresolved candidates| AM["Ambiguous Match"]
+    EXACT -->|No indexed candidate| NC["No Match / NAME_NOT_FOUND"]
 ```
 
 Exact/close firm and exact city/state are independent support. Strong firm or state conflicts block name-based automation. Same-state city differences are weaker conflicts. Legal firm suffixes normalize away. Nicknames generate candidates only. ZIP is displayed as context and never changes status.
@@ -77,10 +75,10 @@ Exact/close firm and exact city/state are independent support. Strong firm or st
 
 The model sees bounded raw previews, the validated mapping summary, reference manifest, match counts/warnings, and bounded review pages with at most three candidates per item.
 
-It does not see the complete upload, authoritative table, persisted decision collection, internal similarity scores, protected attachment/reference/artifact paths, or workbook contents.
+It does not see the complete upload, authoritative table, persisted decision collection, internal firm-similarity values, protected attachment/reference/artifact paths, or workbook contents.
 
 ## Output
 
 `advisor_matches.xlsx` contains `Matched`, `Review Required`, `Original Input`, and `Run Summary`. For a bulk-firm augmentation, `Original Input` reflects the derived table and `Run Summary` records the original attachment/hash, supplied firm, and affected-row count. The first two sheets use a compact human-facing layout; technical audit fields are hidden by default. Every revision is generated from structured state, styled, reopened, checked for formulas, reconciled, and explicitly registered as an immutable artifact before return.
 
-Current limitations are the synthetic reference, in-memory fuzzy candidate scan, and intentionally unimplemented profile builder.
+Current limitations are the synthetic reference, first/last-token parsing for uncommaed full names, and intentionally unimplemented profile builder.

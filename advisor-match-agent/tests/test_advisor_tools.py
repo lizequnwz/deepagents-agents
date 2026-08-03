@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from openpyxl import load_workbook
 
+import general_agent.advisor_workflow as workflow_module
 from general_agent.advisor_backend import AdvisorWorkspaceBackend
 from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
 from general_agent.advisor_matching.workbook import verify_match_workbook
@@ -14,14 +15,26 @@ from general_agent.store import Store
 from general_agent.workspace import Workspace
 
 
-def _tools(settings, workspace, backend, store):
-    source = SyntheticAdvisorReferenceSource(
+def _source():
+    return SyntheticAdvisorReferenceSource(
         Path(__file__).parents[1]
-        / "general_agent"
-        / "advisor_matching"
-        / "data"
-        / "master_advisors.csv"
+        / "general_agent/advisor_matching/data/master_advisors.csv"
     )
+
+
+class CountingAdvisorSource:
+    source_kind = "synthetic"
+    schema_version = "1"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def iter_records(self):
+        self.calls += 1
+        yield from _source().iter_records()
+
+
+def _tools(settings, workspace, backend, store, *, source=None):
     return {
         item.name: item
         for item in build_advisor_tools(
@@ -29,7 +42,7 @@ def _tools(settings, workspace, backend, store):
             workspace=workspace,
             backend=backend,
             store=store,
-            advisor_source=source,
+            advisor_source=source or _source(),
         )
     }
 
@@ -78,7 +91,10 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         ),
     )
     backend = AdvisorWorkspaceBackend(settings.runtime_root)
-    tools = _tools(settings, workspace, backend, store)
+    advisor_source = CountingAdvisorSource()
+    tools = _tools(
+        settings, workspace, backend, store, source=advisor_source
+    )
     mapping = {
         "full_name": {"columns": [{"index": 0, "header": "Advisor Name"}]},
         "firm_name": {"columns": [{"index": 1, "header": "Firm"}]},
@@ -103,7 +119,14 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
         assert validation["input_summary"]["data_row_count"] == 1
         assert validation["input_summary"]["missing_firm_confirmation_required"] is False
 
-        manifest = await tools["find_all_advisors"].ainvoke({})
+        result = await tools["create_advisor_match"].ainvoke(
+            {
+                "attachment_id": attachment_id,
+                "mapping": mapping,
+                "mapping_fingerprint": validation["mapping_fingerprint"],
+            }
+        )
+        manifest = result["reference"]
         assert manifest["row_count"] == 40
         assert manifest["reference_snapshot_id"].startswith("ars_")
         assert "snapshot_path" not in manifest
@@ -119,29 +142,24 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
                 manifest["reference_snapshot_id"], corp_id="B654321"
             )
 
-        result = await tools["create_advisor_match"].ainvoke(
-            {
-                "attachment_id": attachment_id,
-                "reference_snapshot_id": manifest["reference_snapshot_id"],
-                "mapping": mapping,
-                "mapping_fingerprint": validation["mapping_fingerprint"],
-            }
-        )
         assert result["counts"]["ambiguous_match"] == 1
         assert result["interpreted_mapping"] == validation["mapping"]
-        with pytest.raises(ValueError, match="Retrieve a fresh snapshot"):
-            await tools["create_advisor_match"].ainvoke(
-                {
-                    "attachment_id": attachment_id,
-                    "reference_snapshot_id": manifest["reference_snapshot_id"],
-                    "mapping": mapping,
-                    "mapping_fingerprint": validation["mapping_fingerprint"],
-                }
-            )
         current = await tools["get_current_advisor_match"].ainvoke({})
         assert current["match_session_id"] == result["match_session_id"]
         assert current["counts"] == result["counts"]
         assert current["interpreted_mapping"] == result["interpreted_mapping"]
+
+        repeated = await tools["create_advisor_match"].ainvoke(
+            {
+                "attachment_id": attachment_id,
+                "mapping": mapping,
+                "mapping_fingerprint": validation["mapping_fingerprint"],
+            }
+        )
+        assert repeated["reference"]["reference_snapshot_id"] == manifest[
+            "reference_snapshot_id"
+        ]
+        assert advisor_source.calls == 1
 
         page = await tools["list_advisor_match_results"].ainvoke(
             {
@@ -190,7 +208,128 @@ async def test_three_stage_match_review_and_regeneration(settings) -> None:
     output, _ = store.artifact_path(updated["output_artifact_id"], corp_id=corp_id)
     assert verify_match_workbook(output, expected_rows=1)["matched"] == 1
     artifacts = store.get_conversation(conversation_id, corp_id=corp_id).turns[0].artifacts
-    assert [artifact.revision for artifact in artifacts] == [1, 2]
+    assert [artifact.revision for artifact in artifacts] == [1, 1, 2]
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_mapping_correction_reuses_completed_attachment_snapshot(settings) -> None:
+    corp_id = "A123456"
+    workspace = Workspace(settings.data_root)
+    store = Store(settings.application_db, settings.data_root)
+    conversation_id = store.create_conversation(corp_id=corp_id).conversation_id
+    run_id, _ = store.create_run(conversation_id, "match", corp_id=corp_id)
+    attachment_id = _upload(
+        workspace,
+        store,
+        corp_id=corp_id,
+        conversation_id=conversation_id,
+        run_id=run_id,
+        name="alternate-name-columns.csv",
+        content=(
+            b"Name,First,Last,Firm\n"
+            b"Avery Stone,Avery,Stone,Northstar Wealth Partners\n"
+        ),
+    )
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
+    advisor_source = CountingAdvisorSource()
+    tools = _tools(settings, workspace, backend, store, source=advisor_source)
+    full_name_mapping = {
+        "full_name": {"columns": [{"index": 0, "header": "Name"}]},
+        "firm_name": {"columns": [{"index": 3, "header": "Firm"}]},
+    }
+    split_name_mapping = {
+        "first_name": {"columns": [{"index": 1, "header": "First"}]},
+        "last_name": {"columns": [{"index": 2, "header": "Last"}]},
+        "firm_name": {"columns": [{"index": 3, "header": "Firm"}]},
+    }
+
+    async with backend.run_scope(run_id, corp_id, conversation_id):
+        first_validation = await tools["validate_advisor_input"].ainvoke(
+            {"attachment_id": attachment_id, "mapping": full_name_mapping}
+        )
+        first = await tools["create_advisor_match"].ainvoke(
+            {
+                "attachment_id": attachment_id,
+                "mapping": full_name_mapping,
+                "mapping_fingerprint": first_validation["mapping_fingerprint"],
+            }
+        )
+        corrected_validation = await tools["validate_advisor_input"].ainvoke(
+            {"attachment_id": attachment_id, "mapping": split_name_mapping}
+        )
+        corrected = await tools["create_advisor_match"].ainvoke(
+            {
+                "attachment_id": attachment_id,
+                "mapping": split_name_mapping,
+                "mapping_fingerprint": corrected_validation["mapping_fingerprint"],
+            }
+        )
+
+    assert corrected["reference"]["reference_snapshot_id"] == first["reference"][
+        "reference_snapshot_id"
+    ]
+    assert advisor_source.calls == 1
+    assert first["counts"] == corrected["counts"] == {
+        "matched": 1,
+        "ambiguous_match": 0,
+        "no_match": 0,
+    }
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_match_retry_after_failure_reuses_completed_snapshot(
+    settings, monkeypatch
+) -> None:
+    corp_id = "A123456"
+    workspace = Workspace(settings.data_root)
+    store = Store(settings.application_db, settings.data_root)
+    conversation_id = store.create_conversation(corp_id=corp_id).conversation_id
+    run_id, _ = store.create_run(conversation_id, "match", corp_id=corp_id)
+    attachment_id = _upload(
+        workspace,
+        store,
+        corp_id=corp_id,
+        conversation_id=conversation_id,
+        run_id=run_id,
+        name="retry.csv",
+        content=b"Name,Firm\nAvery Stone,Northstar Wealth Partners\n",
+    )
+    backend = AdvisorWorkspaceBackend(settings.runtime_root)
+    advisor_source = CountingAdvisorSource()
+    tools = _tools(settings, workspace, backend, store, source=advisor_source)
+    mapping = {
+        "full_name": {"columns": [{"index": 0, "header": "Name"}]},
+        "firm_name": {"columns": [{"index": 1, "header": "Firm"}]},
+    }
+    real_matcher = workflow_module.run_matching
+    attempts = 0
+
+    def fail_once(rows, index):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("simulated post-snapshot match failure")
+        return real_matcher(rows, index)
+
+    monkeypatch.setattr(workflow_module, "run_matching", fail_once)
+    async with backend.run_scope(run_id, corp_id, conversation_id):
+        validation = await tools["validate_advisor_input"].ainvoke(
+            {"attachment_id": attachment_id, "mapping": mapping}
+        )
+        request = {
+            "attachment_id": attachment_id,
+            "mapping": mapping,
+            "mapping_fingerprint": validation["mapping_fingerprint"],
+        }
+        with pytest.raises(RuntimeError, match="post-snapshot"):
+            await tools["create_advisor_match"].ainvoke(request)
+        result = await tools["create_advisor_match"].ainvoke(request)
+
+    assert result["counts"]["matched"] == 1
+    assert advisor_source.calls == 1
+    assert attempts == 2
     store.close()
 
 
@@ -232,10 +371,8 @@ async def test_missing_firm_requires_explicit_continue_and_fingerprint(settings)
     async with backend.run_scope(second_run_id, corp_id, conversation_id):
         checkpoint = await tools["get_current_advisor_input"].ainvoke({})
         assert checkpoint["mapping_fingerprint"] == validation["mapping_fingerprint"]
-        manifest = await tools["find_all_advisors"].ainvoke({})
         base = {
             "attachment_id": attachment_id,
-            "reference_snapshot_id": manifest["reference_snapshot_id"],
             "mapping": mapping,
         }
         with pytest.raises(ValueError, match="validate it again"):
@@ -340,11 +477,9 @@ async def test_user_confirmed_firm_creates_derived_input_and_audited_match(
         assert validation["source_transformation"]["firm_name"] == (
             "Cedar Grove Advisory"
         )
-        manifest = await tools["find_all_advisors"].ainvoke({})
         result = await tools["create_advisor_match"].ainvoke(
             {
                 "attachment_id": derived_id,
-                "reference_snapshot_id": manifest["reference_snapshot_id"],
                 "mapping": augmented["mapping"],
                 "mapping_fingerprint": validation["mapping_fingerprint"],
             }
@@ -456,11 +591,9 @@ async def test_unlisted_crd_requires_proposal_then_later_turn_confirmation(
         validation = await tools["validate_advisor_input"].ainvoke(
             {"attachment_id": attachment_id, "mapping": mapping}
         )
-        manifest = await tools["find_all_advisors"].ainvoke({})
         result = await tools["create_advisor_match"].ainvoke(
             {
                 "attachment_id": attachment_id,
-                "reference_snapshot_id": manifest["reference_snapshot_id"],
                 "mapping": mapping,
                 "mapping_fingerprint": validation["mapping_fingerprint"],
                 "allow_missing_firm": True,

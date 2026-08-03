@@ -84,12 +84,12 @@ def test_prompt_enforces_matching_and_review_boundaries() -> None:
     for required in (
         "Your purpose", "advisor-match skill", "never decide identities row by row",
         "exact column indexes and observed headers",
-        "Always call the mapping-validation tool before retrieving",
+        "Always call the mapping-validation tool before matching",
         "no mapped firm column, always ask whether one firm applies",
         "get_current_advisor_input",
         "Never overwrite the original upload",
-        "authoritative database tool once for each new match run",
-        "snapshot ID is opaque",
+        "retrieves or reuses the attachment's authoritative snapshot internally",
+        "Treat the returned manifest and snapshot ID as opaque",
         "qualitative supporting and conflicting evidence",
         "unlisted advisor requires an exact user-supplied CRD",
         "correct the input and retry", "profile building is not implemented",
@@ -120,7 +120,6 @@ def test_advisor_tool_schemas_do_not_expose_runtime_or_host_paths(settings) -> N
         "validate_advisor_input",
         "get_current_advisor_input",
         "apply_firm_to_advisor_upload",
-        "find_all_advisors",
         "create_advisor_match",
         "get_current_advisor_match",
         "list_advisor_match_results",
@@ -131,6 +130,8 @@ def test_advisor_tool_schemas_do_not_expose_runtime_or_host_paths(settings) -> N
         fields = item.args_schema.model_fields
         assert "runtime" not in fields
         assert "host_path" not in fields
+    create_match = next(item for item in tools if item.name == "create_advisor_match")
+    assert "reference_snapshot_id" not in create_match.args_schema.model_fields
 
 
 @pytest.mark.asyncio

@@ -1,16 +1,15 @@
-version: "3"
+version: "4"
 review_candidate_limit: 3
+name_matching:
+  exact_normalized_first_last: true
+  ignore_middle_tokens: true
+  fuzzy_names: false
+  nickname_candidates_require_review: true
 firm_wildcard:
   anchored: true
   minimum_length: 4
-fuzzy:
-  acceptance_score: 0.92
-  plausible_score: 0.78
-  minimum_margin: 0.10
-  minimum_name_similarity: 0.92
-  minimum_firm_similarity: 0.88
-  firm_conflict_similarity: 0.45
-  require_independent_corroboration: true
-  weights: {name: 0.65, firm: 0.25, city: 0.05, state: 0.05}
+firm_similarity:
+  minimum_similarity: 0.88
+  conflict_similarity: 0.45
 statuses: [Matched, Ambiguous Match, No Match]
 confidence: [High, Uncertain, None, User Confirmed]

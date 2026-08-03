@@ -97,7 +97,9 @@ def test_workbook_is_human_first_styled_auditable_and_formula_safe(tmp_path) -> 
         if not review.column_dimensions[review.cell(1, index).column_letter].hidden
     ]
     assert len(visible_matched) == 17
-    assert len(visible_review) == 18
+    assert len(visible_review) == 20
+    assert "Candidate Pool Size" in visible_review
+    assert "Candidates Truncated" in visible_review
     assert "Review Item ID" not in visible_review
     assert matched.column_dimensions["A"].width >= len("Source Row")
     assert matched.row_dimensions[1].height == 24

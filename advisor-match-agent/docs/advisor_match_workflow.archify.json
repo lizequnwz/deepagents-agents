@@ -3,7 +3,7 @@
   "diagram_type": "workflow",
   "meta": {
     "title": "Advisor Match Agent Workflow",
-    "subtitle": "Opaque IDs, deterministic matching, and explicitly published workbook revisions",
+    "subtitle": "One attachment snapshot, compact exact indexes, and audited workbook revisions",
     "output": "docs/advisor_match_workflow.html",
     "animation": "none",
     "visual_preset": "signal-flow",
@@ -29,8 +29,8 @@
     { "id": "clarify", "lane": "interaction", "col": 3, "type": "external", "label": "Clarify", "sublabel": "mapping or evidence" },
     { "id": "interpret_input", "lane": "agent", "col": 2, "type": "backend", "label": "Interpret", "sublabel": "profile + map", "tag": "bounded samples" },
     { "id": "review", "lane": "agent", "col": 4, "type": "backend", "label": "Review", "sublabel": "explicit choices" },
-    { "id": "reference_snapshot", "lane": "deterministic", "col": 2, "type": "cloud", "label": "Snapshot", "sublabel": "ID + hash", "width": 60 },
-    { "id": "match_rows", "lane": "deterministic", "col": 4, "type": "backend", "label": "Match", "sublabel": "policy", "tag": "deterministic", "width": 60 },
+    { "id": "reference_snapshot", "lane": "deterministic", "col": 2, "type": "cloud", "label": "Snapshot", "sublabel": "once per attachment", "width": 82 },
+    { "id": "match_rows", "lane": "deterministic", "col": 4, "type": "backend", "label": "Match", "sublabel": "exact index + policy v4", "tag": "deterministic", "width": 96 },
     { "id": "attachment", "lane": "storage", "col": 2, "type": "database", "label": "Attachment", "sublabel": "ID + SHA-256" },
     { "id": "publish_artifact", "lane": "storage", "col": 5, "type": "database", "label": "Publish", "sublabel": "artifact + audit IDs", "tag": "explicit" }
   ],
@@ -50,6 +50,7 @@
       "title": "Minimal File Model",
       "items": [
         "Uploads exist once under an attachment ID",
+        "Reference source is read once per attachment",
         "Reference rows stay behind a snapshot ID",
         "Each workbook revision gets an artifact ID",
         "No chat/shared workspace or baseline diff"
