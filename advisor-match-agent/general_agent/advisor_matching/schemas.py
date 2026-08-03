@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, Optional
 
 MASTER_COLUMNS = (
     "CRD_NUMBER",
@@ -119,16 +119,16 @@ class MappingValidationResult(BaseModel):
 
 
 class AdvisorRecord(BaseModel):
-    crd_number: str
-    first_name: str
-    last_name: str
-    firm_name: str = ""
-    email: str = ""
-    city: str = ""
-    state: str = ""
-    zip_code: str = ""
+    crd_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    firm_name: Optional[str] = None
+    email: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
 
-    def master_dict(self) -> dict[str, str]:
+    def master_dict(self) -> dict[str, Optional[str]]:
         return {column: getattr(self, column.lower()) for column in MASTER_COLUMNS}
 
 
