@@ -37,7 +37,13 @@ def validate_corp_id(value: str) -> str:
 
 
 def corp_storage_key(corp_id: str) -> str:
-    """Return a stable opaque directory key without exposing the corp ID."""
+    """Return the readable, validated directory name for a corporation."""
+
+    return validate_corp_id(corp_id)
+
+
+def legacy_corp_storage_key(corp_id: str) -> str:
+    """Return the pre-readable-layout directory key for startup migration only."""
 
     normalized = validate_corp_id(corp_id)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
@@ -84,7 +90,9 @@ class Workspace:
         self.users_root.mkdir(parents=True, exist_ok=True)
 
     def user_data_root(self, corp_id: str) -> Path:
-        return self.users_root / corp_storage_key(corp_id)
+        directory_name = corp_storage_key(corp_id)
+        self._reject_case_only_collision(directory_name)
+        return self.users_root / directory_name
 
     def ensure_user(self, corp_id: str) -> Path:
         root = self.user_data_root(corp_id)
@@ -159,6 +167,18 @@ class Workspace:
         target = root / _safe_id(object_id) / filename
         self._assert_within(target, root)
         return target
+
+    def _reject_case_only_collision(self, directory_name: str) -> None:
+        """Keep distinct corp IDs from colliding on case-insensitive volumes."""
+
+        for existing in self.users_root.iterdir():
+            if (
+                existing.name != directory_name
+                and existing.name.casefold() == directory_name.casefold()
+            ):
+                raise WorkspacePathError(
+                    "A corporation storage directory differs only by letter case."
+                )
 
     @staticmethod
     def _assert_within(candidate: Path, root: Path) -> None:

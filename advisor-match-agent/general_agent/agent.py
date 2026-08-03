@@ -14,7 +14,6 @@ from deepagents import (
 from deepagents.middleware import FilesystemMiddleware
 from langchain.agents.middleware import (
     ModelCallLimitMiddleware,
-    TodoListMiddleware,
     ToolCallLimitMiddleware,
     ToolErrorMiddleware,
 )
@@ -158,7 +157,6 @@ def build_agent(
         backend=backend,
         middleware=[
             _filesystem_middleware(backend),
-            TodoListMiddleware(system_prompt=""),
             ToolErrorMiddleware(on_error=_recoverable_tool_error),
             ModelCallLimitMiddleware(
                 run_limit=settings.max_model_calls,

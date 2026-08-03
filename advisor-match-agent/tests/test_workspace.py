@@ -8,6 +8,21 @@ import pytest
 from general_agent.workspace import Workspace, WorkspacePathError, corp_storage_key
 
 
+def test_corp_storage_directory_uses_the_readable_validated_id(settings) -> None:
+    workspace = Workspace(settings.data_root)
+
+    assert corp_storage_key("A123456") == "A123456"
+    assert workspace.ensure_user("A123456") == settings.data_root / "users" / "A123456"
+
+
+def test_case_only_corporation_directories_are_rejected(settings) -> None:
+    workspace = Workspace(settings.data_root)
+    workspace.ensure_user("A123456")
+
+    with pytest.raises(WorkspacePathError, match="differs only by letter case"):
+        workspace.ensure_user("a123456")
+
+
 def test_upload_is_single_immutable_corporation_scoped_copy(settings) -> None:
     workspace = Workspace(settings.data_root)
     attachment, protected = workspace.upload(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import filecmp
 import json
 import shutil
 import sqlite3
@@ -26,7 +27,11 @@ from general_agent.schemas import (
     Turn,
     utc_now,
 )
-from general_agent.workspace import corp_storage_key, validate_corp_id
+from general_agent.workspace import (
+    corp_storage_key,
+    legacy_corp_storage_key,
+    validate_corp_id,
+)
 
 
 class ActiveRunError(RuntimeError):
@@ -49,7 +54,7 @@ class Store:
         self._connection.execute("PRAGMA foreign_keys=ON")
         self._lock = threading.RLock()
         self._create_schema()
-        self._migrate_legacy_snapshot_paths()
+        self._migrate_storage_layouts()
         self.recover_abandoned_runs()
 
     def close(self) -> None:
@@ -298,38 +303,191 @@ class Store:
     def _corp(self, corp_id: str | None) -> str:
         return validate_corp_id(corp_id or self.default_corp_id)
 
-    def _migrate_legacy_snapshot_paths(self) -> None:
-        """Move pre-tenant protected files under the default user's data root."""
+    def _migrate_storage_layouts(self) -> None:
+        """Migrate obsolete protected-file layouts to readable corp directories.
 
-        corp_id = self.default_corp_id
-        destination_root = self.data_root / "users" / corp_storage_key(corp_id)
-        destination_root.mkdir(parents=True, exist_ok=True)
-        with self._lock, self._connection:
+        The migration is intentionally idempotent. A filesystem move can finish
+        before SQLite commits its replacement paths; on the next startup the
+        destination file is detected and the stored path is repaired.
+        """
+
+        with self._lock:
+            corp_ids = self._stored_corp_ids()
+            corp_ids.add(self.default_corp_id)
+            users_root = self.data_root / "users"
+            users_root.mkdir(parents=True, exist_ok=True)
+            for corp_id in sorted(corp_ids):
+                directory_name = corp_storage_key(corp_id)
+                self._reject_case_only_corp_directory_collision(
+                    users_root, directory_name
+                )
+                destination_root = users_root / directory_name
+                hashed_root = users_root / legacy_corp_storage_key(corp_id)
+                self._move_directory_contents(hashed_root, destination_root)
+                if corp_id == self.default_corp_id:
+                    for category in (
+                        "attachments",
+                        "artifacts",
+                        "advisor_references",
+                    ):
+                        self._move_directory_contents(
+                            self.data_root / category,
+                            destination_root / category,
+                        )
+                self._rewrite_protected_paths(
+                    corp_id=corp_id,
+                    hashed_root=hashed_root,
+                    destination_root=destination_root,
+                )
+
+    def _stored_corp_ids(self) -> set[str]:
+        """Return every validated corporation represented in persisted state."""
+
+        tables = (
+            "conversations",
+            "runs",
+            "turns",
+            "events",
+            "attachments",
+            "artifacts",
+            "agent_usage",
+            "advisor_match_sessions",
+            "advisor_match_review_decisions",
+            "advisor_match_override_proposals",
+            "advisor_reference_snapshots",
+        )
+        corp_ids: set[str] = set()
+        for table in tables:
+            rows = self._connection.execute(
+                f"SELECT DISTINCT corp_id FROM {table}"
+            ).fetchall()
+            corp_ids.update(validate_corp_id(row["corp_id"]) for row in rows)
+        return corp_ids
+
+    @staticmethod
+    def _reject_case_only_corp_directory_collision(
+        users_root: Path, directory_name: str
+    ) -> None:
+        for existing in users_root.iterdir():
+            if (
+                existing.name != directory_name
+                and existing.name.casefold() == directory_name.casefold()
+            ):
+                raise ValueError(
+                    "Corporation storage directories may not differ only by "
+                    "letter case."
+                )
+
+    @staticmethod
+    def _move_directory_contents(source: Path, destination: Path) -> None:
+        """Merge a protected directory tree without overwriting distinct data."""
+
+        if source.is_symlink() or (source.exists() and not source.is_dir()):
+            raise ValueError(f"Unsafe legacy storage directory: {source}")
+        if not source.exists():
+            return
+        if destination.is_symlink():
+            raise ValueError(f"Unsafe storage migration destination: {destination}")
+        destination.mkdir(parents=True, exist_ok=True)
+        for child in source.iterdir():
+            if child.is_symlink():
+                raise ValueError(f"Unsafe legacy storage entry: {child}")
+            if not child.is_file() and not child.is_dir():
+                raise ValueError(f"Unsupported legacy storage entry: {child}")
+            target = destination / child.name
+            if target.is_symlink():
+                raise ValueError(f"Unsafe storage migration destination: {target}")
+            if target.exists():
+                if child.is_dir() and target.is_dir():
+                    Store._move_directory_contents(child, target)
+                    continue
+                if child.is_file() and target.is_file() and filecmp.cmp(
+                    child, target, shallow=False
+                ):
+                    child.unlink()
+                    continue
+                raise ValueError(
+                    f"Storage migration collision at {target}; resolve it before "
+                    "starting the application."
+                )
+            shutil.move(str(child), str(target))
+        source.rmdir()
+
+    def _rewrite_protected_paths(
+        self,
+        *,
+        corp_id: str,
+        hashed_root: Path,
+        destination_root: Path,
+    ) -> None:
+        """Replace persisted legacy paths after their files are safely moved."""
+
+        layouts: list[tuple[Path, Path]] = [
+            (hashed_root, destination_root),
+        ]
+        if corp_id == self.default_corp_id:
+            layouts.append((self.data_root, destination_root))
+        with self._connection:
             for table, column, category in (
                 ("attachments", "protected_path", "attachments"),
                 ("artifacts", "snapshot_path", "artifacts"),
+                (
+                    "advisor_reference_snapshots",
+                    "snapshot_path",
+                    "advisor_references",
+                ),
             ):
                 rows = self._connection.execute(
                     f"SELECT id, {column} AS path FROM {table} WHERE corp_id=?",
                     (corp_id,),
                 ).fetchall()
-                old_root = (self.data_root / category).resolve()
                 for row in rows:
                     source = Path(row["path"])
-                    if not source.exists():
+                    destination = self._migrated_path(
+                        source=source,
+                        category=category,
+                        layouts=layouts,
+                        legacy_directory=legacy_corp_storage_key(corp_id),
+                        destination_root=destination_root,
+                    )
+                    if (
+                        destination is None
+                        or not destination.is_file()
+                        or destination.is_symlink()
+                    ):
                         continue
-                    try:
-                        relative = source.resolve().relative_to(old_root)
-                    except ValueError:
-                        continue
-                    destination = destination_root / category / relative
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    if not destination.exists():
-                        shutil.move(str(source), str(destination))
                     self._connection.execute(
                         f"UPDATE {table} SET {column}=? WHERE id=? AND corp_id=?",
                         (str(destination), row["id"], corp_id),
                     )
+
+    @staticmethod
+    def _migrated_path(
+        *,
+        source: Path,
+        category: str,
+        layouts: list[tuple[Path, Path]],
+        legacy_directory: str,
+        destination_root: Path,
+    ) -> Path | None:
+        source_resolved = source.resolve(strict=False)
+        for old_root, layout_destination_root in layouts:
+            old_category = (old_root / category).resolve(strict=False)
+            try:
+                relative = source_resolved.relative_to(old_category)
+            except ValueError:
+                continue
+            return layout_destination_root / category / relative
+        parts = source_resolved.parts
+        for index in range(len(parts) - 3):
+            if (
+                parts[index] == "users"
+                and parts[index + 1] == legacy_directory
+                and parts[index + 2] == category
+            ):
+                return destination_root / category / Path(*parts[index + 3 :])
+        return None
+
     def recover_abandoned_runs(self) -> None:
         now = _iso(utc_now())
         message = "The backend restarted before this run finished."

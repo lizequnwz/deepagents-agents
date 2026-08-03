@@ -84,7 +84,7 @@ SQLite stores:
 - before/after review audit records;
 - two-turn manual-CRD proposals.
 
-Protected attachments, reference files, and workbook artifacts live under `.data/users/<corp-key>/`. Every lookup includes `corp_id`; attachments and snapshots also belong to one conversation. The agent cannot read uploads, snapshots, sessions, or workbooks through generic filesystem tools.
+Protected attachments, reference files, and workbook artifacts live under `.data/users/<corp-id>/`, where `<corp-id>` is the validated readable corporation ID. Every lookup includes `corp_id`; attachments and snapshots also belong to one conversation. The agent cannot read uploads, snapshots, sessions, or workbooks through generic filesystem tools.
 
 There is no generic chat/shared workspace, file browser, arbitrary file upload, or filesystem-wide artifact diff. The only virtual filesystem is the read-only installed-skill tree under `.data/runtime/skills`. Loopback-only services, `virtual_mode=True`, symlink/traversal rejection, disabled general-purpose subagent, limits, cancellation, and restart recovery remain in force.
 
@@ -95,7 +95,7 @@ The protected file layout is deliberately small:
 ├── application.sqlite3
 ├── checkpoints.sqlite3
 ├── runtime/skills/advisor-match/
-└── users/<corp-key>/
+└── users/<corp-id>/
     ├── attachments/<attachment-id>/<original-name>
     ├── advisor_references/<snapshot-id>/advisor_reference.csv
     └── artifacts/<run-id>/<artifact-id>/advisor_matches.xlsx
