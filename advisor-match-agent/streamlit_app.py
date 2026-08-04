@@ -89,12 +89,12 @@ def get_or_create_current_conversation(
 
 
 def render_page_header() -> None:
-    st.caption(":material/manage_search: TRUSTED ADVISOR MATCH AGENT")
-    st.title("Match financial advisors and export results", anchor=False)
+    st.caption(":material/manage_search: TRUSTED ADVISOR WORKFLOW AGENT")
+    st.title("Match financial advisors and generate reports", anchor=False)
     st.caption(
         "Upload one CSV or XLSX, match its advisor rows against the master "
-        "advisor database, identify uncertain records, and export an auditable workbook "
-        "for offline review."
+        "advisor database, or generate a placeholder HTML profile report from a CRD "
+        "column."
     )
 
 
@@ -189,27 +189,38 @@ if not conversation["turns"]:
             "ambiguous or unmatched records on the Review Required sheet for me to "
             "review in Excel."
         ),
+        ":material/description: Generate advisor profile report": (
+            "Generate an advisor profile report from the CRD numbers in the uploaded "
+            "file. Identify the exact CRD column, ignore blank values, and deduplicate "
+            "repeated CRDs."
+        ),
     }
     with st.container(border=True):
         st.subheader("Start with a task", anchor=False)
         st.caption(
-            "Attach one CSV or XLSX, choose the example, or write your own matching request."
+            "Attach one CSV or XLSX, choose an example, or write your own request."
         )
         starter_key = f"starter_prompt_{conversation_id}"
         st.pills(
             "Example tasks",
             list(suggestions),
             label_visibility="collapsed",
-            width="content",
+            width="stretch",
             key=starter_key,
             on_change=load_starter_prompt,
             args=(starter_key, suggestions),
         )
 
-for turn in conversation["turns"]:
-    render_turn(client, turn, debug_mode=UI_DEBUG_MODE)
-
 active_run_id = conversation.get("active_run_id")
+
+for turn in conversation["turns"]:
+    render_turn(
+        client,
+        turn,
+        conversation_id=conversation_id,
+        actions_disabled=bool(active_run_id),
+        debug_mode=UI_DEBUG_MODE,
+    )
 
 
 @st.fragment(run_every=0.5)

@@ -6,11 +6,12 @@ behavior was already deterministic: profiling, validation, firm resolution,
 reference snapshots, candidate generation, scoring, match decisions, ambiguity
 classification, and workbook generation.
 
-The refactor keeps the reusable domain modules and narrows model judgment to two
-well-defined contracts:
+The refactor keeps the reusable domain modules and narrows model judgment to
+three well-defined contracts:
 
 - route the user's conversational intent;
-- interpret a bounded upload profile into an exact typed mapping.
+- interpret a bounded upload profile into an exact typed match mapping; and
+- identify one exact CRD column for direct profile-report requests.
 
 Everything else is an explicit graph edge or application-service call. This
 improves predictability, makes node/state transitions observable, removes skill
@@ -23,11 +24,14 @@ single-purpose financial identity workflow, that reviewable friction is useful.
 Future advisor-matching variants can add explicit nodes, deterministic policy
 versions, or a bounded conversational layer without reintroducing a planner.
 
-The current graph deliberately stops after workbook publication. Moving
+The matching branch deliberately stops after workbook publication. Moving
 post-match review into the downloaded workbook removes review pagination,
 manual-override proposals, approval state, review-audit mutations, and repeated
 workbook regeneration. That reduces state and failure modes while preserving
-the deterministic matching output and its audit evidence.
+the deterministic matching output and its audit evidence. A separate bounded
+branch can consume only automated matched CRDs, or validated CRDs from a direct
+upload, to publish a static placeholder HTML profile report. It adds no runtime
+tools, network access, or row-level model decisions.
 
 Useful former runtime-skill material now lives in `docs/contracts/`; maintenance
 utilities live in `scripts/advisor_match/`. Those files document or exercise

@@ -80,10 +80,14 @@ class Workspace:
         )
 
     def artifact_file(
-        self, corp_id: str, run_id: str, artifact_id: str
+        self,
+        corp_id: str,
+        run_id: str,
+        artifact_id: str,
+        filename: str = "advisor_matches.xlsx",
     ) -> Path:
         run_root = self.category_root(corp_id, "artifacts") / _safe_id(run_id)
-        target = run_root / _safe_id(artifact_id) / "advisor_matches.xlsx"
+        target = run_root / _safe_id(artifact_id) / safe_filename(filename)
         self._assert_within(target, self.category_root(corp_id, "artifacts"))
         return target
 

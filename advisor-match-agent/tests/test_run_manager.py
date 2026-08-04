@@ -70,3 +70,7 @@ def test_usage_callback_records_ai_message_metadata() -> None:
 def test_graph_node_names_have_user_facing_progress_labels() -> None:
     assert _node_label("map_input") == "Identifying advisor columns"
     assert _node_label("match") == "Comparing advisors with the master database"
+    assert _node_label("map_crd_input") == "Identifying the CRD column"
+    assert _node_label("generate_profile_report") == (
+        "Generating the advisor profile report"
+    )

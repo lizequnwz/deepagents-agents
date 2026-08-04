@@ -2,96 +2,52 @@
   "schema_version": 1,
   "diagram_type": "workflow",
   "meta": {
-    "title": "Advisor Matching Workflow",
-    "subtitle": "A bounded LangGraph run that clarifies input, matches deterministically, and ends with a verified workbook",
+    "title": "Advisor Match + Profile Report Workflow",
+    "subtitle": "One bounded LangGraph routes matching and CRD-based placeholder reports",
     "output": "docs/advisor_match_workflow.html",
     "animation": "none",
     "visual_preset": "blueprint",
     "quality_profile": "showcase",
     "views": [
-      {
-        "id": "complete_run",
-        "label": "Complete matching run",
-        "focus": ["upload", "route", "prepare", "match", "publish"],
-        "note": "Follow one upload through bounded interpretation, deterministic matching, and workbook publication."
-      },
-      {
-        "id": "clarifications",
-        "label": "Pre-match clarifications",
-        "focus": ["prepare", "mapping_question", "firm_question", "match"],
-        "note": "Only unresolved column meaning or firm context can pause the graph."
-      },
-      {
-        "id": "offline_review",
-        "label": "Offline review boundary",
-        "focus": ["match", "publish", "download"],
-        "note": "The graph stops after export; review and local edits happen in the downloaded workbook."
-      }
+      { "id": "match-flow", "label": "Match and export", "focus": ["request", "route", "match", "workbook"], "note": "Follow deterministic matching through verified workbook publication." },
+      { "id": "direct-profile", "label": "Direct profile report", "focus": ["request", "route", "profile_source", "generate_report", "persist_report", "preview"], "note": "A CRD-bearing upload reaches report generation after exact column validation." },
+      { "id": "post-match-profile", "label": "Post-match handoff", "focus": ["workbook", "profile_source", "generate_report", "persist_report", "preview"], "note": "Only automatically matched CRDs flow into the one-click report action." },
+      { "id": "clarification", "label": "Resolve ambiguity", "focus": ["profile_source"], "note": "Ambiguous worksheets, headers, or columns pause through the existing interrupt before preparation completes." }
     ]
   },
   "lanes": [
     { "id": "user", "label": "User + Streamlit" },
     { "id": "control", "label": "LangGraph Control" },
-    { "id": "matching", "label": "Deterministic Matching" },
-    { "id": "output", "label": "Verified Output" },
-    { "id": "mapping_help", "label": "Mapping Clarification", "variant": "exception" },
-    { "id": "firm_help", "label": "Firm Clarification", "variant": "exception" },
-    { "id": "boundary", "label": "Outside Application", "variant": "exception" }
+    { "id": "matching", "label": "Advisor Matching" },
+    { "id": "storage", "label": "Protected Persistence" },
+    { "id": "profile", "label": "Profile Report" },
+    { "id": "output", "label": "Preview + Download" },
+    { "id": "exception", "label": "Clarification", "variant": "exception" }
   ],
-  "phases": [
-    { "id": "request", "label": "Request", "fromCol": 0, "toCol": 1 },
-    { "id": "prepare_phase", "label": "Interpret + validate", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
-    { "id": "execute", "label": "Match + deliver", "fromCol": 4, "toCol": 5, "variant": "security" }
-  ],
-  "mainPath": ["upload", "route", "prepare", "match", "publish"],
+  "mainPath": ["request", "route", "match", "workbook"],
   "nodes": [
-    { "id": "upload", "lane": "user", "col": 0, "type": "frontend", "label": "Upload", "sublabel": "CSV/XLSX" },
-    { "id": "route", "lane": "control", "col": 1, "type": "backend", "label": "Route", "sublabel": "typed intent", "tag": "max 3 attempts" },
-    { "id": "prepare", "lane": "matching", "col": 2, "type": "security", "label": "Prepare", "sublabel": "inspect · map · check", "tag": "bounded" },
-    { "id": "match", "lane": "matching", "col": 4, "type": "backend", "label": "Match", "sublabel": "policy owned", "tag": "deterministic" },
-    { "id": "publish", "lane": "output", "col": 5, "type": "database", "label": "Publish", "sublabel": "verified XLSX", "tag": "graph ends" },
-    { "id": "mapping_question", "lane": "mapping_help", "col": 3, "type": "messagebus", "label": "Map Question", "sublabel": "interrupt + resume" },
-    { "id": "firm_question", "lane": "firm_help", "col": 4, "type": "messagebus", "label": "Firm Question", "sublabel": "interrupt + resume" },
-    { "id": "download", "lane": "boundary", "col": 5, "type": "external", "label": "Review Copy", "sublabel": "local Excel", "tag": "not re-ingested" }
+    { "id": "request", "lane": "user", "col": 0, "type": "frontend", "label": "Request", "sublabel": "prompt or button", "width": 80 },
+    { "id": "route", "lane": "control", "col": 1, "type": "backend", "label": "Route", "sublabel": "UI hint or intent", "tag": "typed", "width": 80 },
+    { "id": "match", "lane": "matching", "col": 2, "type": "security", "label": "Match", "sublabel": "map + code policy", "width": 80 },
+    { "id": "workbook", "lane": "storage", "col": 3, "type": "database", "label": "Workbook", "sublabel": "immutable XLSX", "width": 80 },
+    { "id": "profile_source", "lane": "profile", "col": 3, "type": "security", "label": "CRD Src", "sublabel": "validated", "width": 60 },
+    { "id": "generate_report", "lane": "profile", "col": 4, "type": "backend", "label": "Build", "sublabel": "static HTML", "width": 60 },
+    { "id": "persist_report", "lane": "storage", "col": 5, "type": "database", "label": "Persist", "sublabel": "scoped audit", "width": 80 },
+    { "id": "preview", "lane": "output", "col": 5, "type": "frontend", "label": "Preview", "sublabel": "HTML + download", "width": 80 }
   ],
   "edges": [
-    { "from": "upload", "to": "route" },
-    { "from": "route", "to": "prepare", "route": "drop", "fromSide": "bottom", "toSide": "top" },
-    { "from": "prepare", "to": "match", "route": "straight" },
-    { "from": "match", "to": "publish" },
-    { "from": "prepare", "to": "mapping_question", "variant": "security", "role": "error" },
-    { "from": "mapping_question", "to": "prepare", "variant": "dashed", "role": "return" },
-    { "from": "match", "to": "firm_question", "variant": "security", "role": "error" },
-    { "from": "firm_question", "to": "match", "variant": "dashed", "role": "return" },
-    { "from": "publish", "to": "download", "label": "user-owned copy", "variant": "dashed" }
+    { "from": "request", "to": "route", "role": "main" },
+    { "from": "route", "to": "match", "role": "main" },
+    { "from": "match", "to": "workbook", "role": "main", "variant": "emphasis" },
+    { "from": "route", "to": "profile_source", "role": "branch", "route": "return-left", "fromSide": "left", "toSide": "left" },
+    { "from": "workbook", "to": "profile_source", "role": "branch", "variant": "emphasis" },
+    { "from": "profile_source", "to": "generate_report", "role": "main", "route": "bottom-channel", "fromSide": "bottom", "toSide": "bottom" },
+    { "from": "generate_report", "to": "persist_report", "role": "main", "variant": "security" },
+    { "from": "persist_report", "to": "preview", "role": "main", "variant": "emphasis", "route": "outside-right", "fromSide": "right", "toSide": "right" }
   ],
   "cards": [
-    {
-      "dot": "emerald",
-      "title": "Deterministic Core",
-      "items": [
-        "Code owns validation, candidate generation, scoring, and match decisions",
-        "The model routes intent and helps interpret ambiguous input structure",
-        "No model chooses advisors row by row"
-      ]
-    },
-    {
-      "dot": "amber",
-      "title": "Only Pre-Match Interrupts",
-      "items": [
-        "Column meaning can pause before validation",
-        "Missing or unrecognized firm context can pause before matching",
-        "A new attachment resets the in-memory graph state"
-      ]
-    },
-    {
-      "dot": "cyan",
-      "title": "Workbook Is the Handoff",
-      "items": [
-        "Matched and Review Required sheets explain automated outcomes",
-        "Users may edit their downloaded copy for downstream work",
-        "Local edits are not sent back to or validated by the application"
-      ]
-    }
+    { "dot": "cyan", "title": "Hybrid Routing", "items": ["Explicit UI actions bypass intent classification", "Natural language remains available", "Both workflows share one bounded StateGraph"] },
+    { "dot": "emerald", "title": "Code-Owned Decisions", "items": ["The model sees only bounded upload profiles", "Matching and CRD extraction stay deterministic", "No shell, network, tools, or subagents are added"] },
+    { "dot": "violet", "title": "Auditable Outputs", "items": ["Workbook and HTML artifacts are immutable", "Report sources and CRD counts are corporation scoped", "Only automatically matched CRDs enter post-match reports"] }
   ]
 }

@@ -1,11 +1,13 @@
-"""Small, versioned prompts for the two bounded LLM decisions."""
+"""Small, versioned prompts for bounded routing and column interpretation."""
 
-ROUTER_PROMPT = """You route one message for a financial-advisor matching app.
+ROUTER_PROMPT = """You route one message for a financial-advisor workflow app.
 Return only the typed route. The app can start matching an uploaded CSV/XLSX,
+generate an advisor profile report from a CSV/XLSX CRD column or a completed match,
 continue a firm or mapping clarification, reset current progress, greet the user,
 and explain its capabilities. It cannot edit match decisions in chat, validate
-edits made to a downloaded workbook, do unrelated general assistance, or build
-profiles. Post-match review happens only in the downloaded workbook.
+edits made to a downloaded workbook, or do unrelated general assistance.
+Post-match review happens only in the downloaded workbook. Profile reports use
+only automatically matched CRDs unless the user uploads a separate reviewed file.
 Use greeting for greetings and social openers such as hello, hi, good morning,
 or thanks when the message does not contain another task.
 
@@ -58,6 +60,44 @@ and include a short example answer. Use clarification_kind=confirm_mapping with
 a proposed mapping only when a simple yes can safely approve it. Otherwise use
 clarification_kind=provide_details with mapping=null. Never invent columns,
 worksheets, headers, or user intent.
+
+Prior clarification question: {question}
+User clarification answer: {answer}
+Previously proposed mapping JSON: {proposed_mapping}
+Bounded profile JSON:
+{profile}
+"""
+
+
+CRD_MAPPING_PROMPT = """Interpret this bounded CSV/XLSX profile into one exact
+CrdInputMapping for an advisor profile report. Select exactly one worksheet,
+one header row (or headerless input), and exactly one physical CRD column. Use
+the exact zero-based column index and exact observed header. Treat headers such
+as CRD, CRD number, FINRA CRD, advisor CRD, selected CRD, and input CRD as
+possible CRD columns. Do not map names, emails, firms, or other identity fields.
+If the bounded evidence contains no plausible CRD column, set
+missing_crd_column=true, mapping=null, and clarification_required=false.
+Do not guess when multiple worksheets, header rows, or CRD columns are genuinely
+plausible; request one concise clarification naming the displayed choices.
+Use clarification_kind=confirm_mapping with the proposed mapping only when a
+simple yes safely confirms one interpretation. Otherwise use
+clarification_kind=provide_details with mapping=null. Never invent a worksheet,
+header, or column, and never mention schemas, indexes, or internal IDs.
+
+User context: {message}
+Bounded profile JSON:
+{profile}
+"""
+
+
+CRD_MAPPING_CLARIFICATION_PROMPT = """Resolve a pending CRD-column clarification
+for one advisor profile report. Use the bounded profile, exact prior question,
+and current answer. Return a complete CrdInputMapping only when the answer
+selects one exact worksheet, header row, and physical CRD column. If ambiguity
+remains, ask exactly one clearer follow-up question and name the displayed
+choices. Never invent file structure or interpret another identity field as CRD.
+If the answer and bounded evidence establish that no CRD column exists, set
+missing_crd_column=true, mapping=null, and clarification_required=false.
 
 Prior clarification question: {question}
 User clarification answer: {answer}

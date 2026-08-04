@@ -9,7 +9,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -292,14 +292,30 @@ def create_app(
         conversation_id: str,
         text: Annotated[str, Form()] = "",
         files: Annotated[list[UploadFile] | None, File()] = None,
+        requested_workflow: Annotated[
+            Literal["match", "profile_report"] | None, Form()
+        ] = None,
+        source_match_session_id: Annotated[str | None, Form()] = None,
     ) -> Run:
         corp_id = _request_corp(request)
         files = files or []
         settings = request.app.state.settings
-        if not text.strip() and not files:
-            raise HTTPException(400, "A message or at least one file is required.")
+        if not text.strip() and not files and not source_match_session_id:
+            raise HTTPException(
+                400, "A message, file, or completed match source is required."
+            )
         if len(files) > 1:
             raise HTTPException(400, "Attach at most one advisor CSV or XLSX file.")
+        if source_match_session_id and requested_workflow != "profile_report":
+            raise HTTPException(
+                400,
+                "A match-session source can only be used for a profile report.",
+            )
+        if source_match_session_id and files:
+            raise HTTPException(
+                400,
+                "Choose either a completed match or an uploaded file for the report.",
+            )
         for upload in files:
             if Path(upload.filename or "").suffix.lower() not in {".csv", ".xlsx"}:
                 raise HTTPException(400, "Advisor matching accepts only CSV or XLSX attachments.")
@@ -308,7 +324,12 @@ def create_app(
             run_id = manager.create_run(
                 corp_id,
                 conversation_id,
-                text.strip() or "Match the advisors in the attached file.",
+                text.strip()
+                or (
+                    "Generate an advisor profile report."
+                    if requested_workflow == "profile_report"
+                    else "Match the advisors in the attached file."
+                ),
             )
         except KeyError as exc:
             raise HTTPException(404, "Conversation not found.") from exc
@@ -334,7 +355,13 @@ def create_app(
         finally:
             for upload in files:
                 await upload.close()
-        manager.start(run_id, corp_id, attachments)
+        manager.start(
+            run_id,
+            corp_id,
+            attachments,
+            requested_workflow=requested_workflow,
+            source_match_session_id=source_match_session_id,
+        )
         return request.app.state.store.get_run(run_id, corp_id=corp_id)
 
     @app.get("/runs/{run_id}", response_model=Run)

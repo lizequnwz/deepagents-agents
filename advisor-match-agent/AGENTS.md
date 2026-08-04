@@ -4,8 +4,9 @@
 
 - This is a loopback-only financial-advisor matching application built with
   LangGraph, LangChain, FastAPI, Streamlit, and SQLite.
-- Its only supported agent workflow is matching one uploaded CSV/XLSX against
-  an authoritative advisor source and exporting results for offline review.
+- Its supported workflows are matching one uploaded CSV/XLSX against an
+  authoritative advisor source and generating a placeholder advisor profile
+  report from validated CRDs or a persisted match session.
 - The runtime agent has no shell, arbitrary Python/code execution, network,
   package-installation, general file-write, or subagent capability.
 - Prompt instructions are not a security boundary. Enforce corporation scope,
@@ -27,13 +28,13 @@
 ## Non-negotiable invariants
 
 - Never modify the sibling parent `general-agent` project.
-- Scope every conversation, run, upload, snapshot, match session, workbook, and
-  artifact by `corp_id`.
+- Scope every conversation, run, upload, snapshot, match session, profile
+  report, workbook, and artifact by `corp_id`.
 - Keep both services loopback-only. Corporation IDs isolate storage but are not
   authentication; do not present this app as safe for untrusted users.
 - Keep traversal/symlink rejection, protected storage roots,
   attachment/reference/artifact IDs, structured-output retry limits,
-  cancellation, documented restart loss, and immutable workbook artifacts.
+  cancellation, documented restart loss, and immutable workbook/HTML artifacts.
 - The model may inspect bounded upload profiles. It must never receive the
   complete master table or full workbook and must never decide matches row by
   row.
@@ -44,10 +45,12 @@
   are candidate evidence only; a fuzzy name alone is never confirmed.
 - Never modify the original upload. Always generate and verify the four-sheet
   `advisor_matches.xlsx` export from persisted structured decisions.
-- The graph ends after verified workbook publication. Ambiguous and unmatched
+- Matching ends after verified workbook publication. Ambiguous and unmatched
   records are reviewed in a downloaded copy; local edits are not re-ingested or
   validated by the application.
-- Profile building remains an unregistered `# TODO`; do not simulate it.
+- Advisor profile reporting is a supported placeholder-only workflow. It may
+  emit only deterministic static HTML from validated, opaque CRD identifiers;
+  it must not fetch or simulate advisor profile data.
 - Do not hand-edit `.data/` or other derived runtime state. The generic
   chat/shared workspace is intentionally unsupported.
 

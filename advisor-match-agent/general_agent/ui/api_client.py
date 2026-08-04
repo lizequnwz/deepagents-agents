@@ -62,6 +62,9 @@ class AgentAPIClient:
         conversation_id: str,
         text: str,
         uploads: list[Any],
+        *,
+        requested_workflow: str | None = None,
+        source_match_session_id: str | None = None,
     ) -> dict[str, Any]:
         files = [
             (
@@ -70,10 +73,15 @@ class AgentAPIClient:
             )
             for upload in uploads
         ]
+        data = {"text": text}
+        if requested_workflow is not None:
+            data["requested_workflow"] = requested_workflow
+        if source_match_session_id is not None:
+            data["source_match_session_id"] = source_match_session_id
         return self._request(
             "POST",
             f"/conversations/{conversation_id}/messages",
-            data={"text": text},
+            data=data,
             files=files,
             timeout=120.0,
         )

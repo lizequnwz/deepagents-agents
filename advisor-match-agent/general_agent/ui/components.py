@@ -8,7 +8,7 @@ from typing import Any
 
 import streamlit as st
 
-from general_agent.ui.api_client import AgentAPIClient
+from general_agent.ui.api_client import APIError, AgentAPIClient
 
 _PHASE_ICONS = {
     "started": ":material/pending:",
@@ -28,7 +28,12 @@ def reduce_live_events(state: dict[str, Any], events: list[dict[str, Any]]) -> d
 
 
 def render_turn(
-    client: AgentAPIClient, turn: dict[str, Any], *, debug_mode: bool = False
+    client: AgentAPIClient,
+    turn: dict[str, Any],
+    *,
+    conversation_id: str,
+    actions_disabled: bool = False,
+    debug_mode: bool = False,
 ) -> None:
     with st.chat_message("user"):
         st.markdown(_markdown_text(turn["user_message"]))
@@ -64,7 +69,13 @@ def render_turn(
                 st.caption("Technical details are available below because debug mode is enabled.")
                 with st.expander("Technical details", icon=":material/bug_report:"):
                     st.code(turn["error"], language="text")
-        render_artifacts(client, turn.get("artifacts") or [], turn["run_id"])
+        render_artifacts(
+            client,
+            turn.get("artifacts") or [],
+            turn["run_id"],
+            conversation_id=conversation_id,
+            actions_disabled=actions_disabled,
+        )
         activity_state = reduce_live_events({}, turn.get("events") or [])
         if activity_state.get("activities"):
             with st.status(
@@ -79,11 +90,22 @@ def render_turn(
             )
 
 
-def render_artifacts(client: AgentAPIClient, artifacts: list[dict[str, Any]], run_id: str) -> None:
+def render_artifacts(
+    client: AgentAPIClient,
+    artifacts: list[dict[str, Any]],
+    run_id: str,
+    *,
+    conversation_id: str,
+    actions_disabled: bool = False,
+) -> None:
     if not artifacts:
         return
-    with st.expander("Workbook exports", icon=":material/folder:", expanded=True):
+    with st.expander("Workflow exports", icon=":material/folder:", expanded=True):
         for artifact in artifacts:
+            is_profile_report = (
+                artifact.get("artifact_kind") == "advisor_profile_report"
+                or Path(artifact["relative_path"]).suffix.casefold() == ".html"
+            )
             with st.container(horizontal=True, vertical_alignment="center"):
                 st.markdown(
                     f"**{Path(artifact['relative_path']).name}**  "
@@ -94,14 +116,68 @@ def render_artifacts(client: AgentAPIClient, artifacts: list[dict[str, Any]], ru
                     details.append(f"Revision {artifact['revision']}")
                 st.caption(" · ".join(details))
                 st.download_button(
-                    "Download",
+                    "Download HTML" if is_profile_report else "Download",
                     data=lambda item=artifact: client.download_artifact(item["artifact_id"]),
                     file_name=Path(artifact["relative_path"]).name,
+                    mime="text/html" if is_profile_report else None,
                     icon=":material/download:",
                     type="tertiary",
                     on_click="ignore",
                     key=f"artifact_{run_id}_{artifact['artifact_id']}",
                 )
+                if artifact.get("match_session_id") and not is_profile_report:
+                    if st.button(
+                        "Generate advisor profile report",
+                        icon=":material/description:",
+                        type="secondary",
+                        disabled=actions_disabled,
+                        key=f"profile_action_{artifact['artifact_id']}",
+                    ):
+                        _start_profile_report(
+                            client,
+                            conversation_id,
+                            str(artifact["match_session_id"]),
+                        )
+            if is_profile_report:
+                _render_profile_report_preview(client, artifact)
+
+
+def _start_profile_report(
+    client: AgentAPIClient,
+    conversation_id: str,
+    match_session_id: str,
+) -> None:
+    try:
+        run = client.send_message(
+            conversation_id,
+            "Generate an advisor profile report from the automatically matched CRD numbers.",
+            [],
+            requested_workflow="profile_report",
+            source_match_session_id=match_session_id,
+        )
+    except APIError as exc:
+        st.error(str(exc), icon=":material/error:")
+        return
+    st.session_state[f"live_state_{run['run_id']}"] = {}
+    st.session_state[f"event_cursor_{run['run_id']}"] = 0
+    st.rerun()
+
+
+def _render_profile_report_preview(
+    client: AgentAPIClient, artifact: dict[str, Any]
+) -> None:
+    with st.expander(
+        "Preview advisor profile report",
+        icon=":material/preview:",
+        expanded=True,
+    ):
+        try:
+            html = client.download_artifact(artifact["artifact_id"]).decode("utf-8")
+        except (APIError, UnicodeError) as exc:
+            st.error(f"The HTML preview is unavailable: {exc}", icon=":material/error:")
+            return
+        st.caption("Version 1 is an intentionally blank placeholder HTML report.")
+        st.html(html, unsafe_allow_javascript=False)
 
 
 def render_live_run(

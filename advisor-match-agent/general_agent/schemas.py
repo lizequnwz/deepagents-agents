@@ -51,6 +51,10 @@ class Artifact(BaseModel):
     artifact_id: str
     run_id: str
     match_session_id: str | None = None
+    profile_report_id: str | None = None
+    artifact_kind: Literal[
+        "advisor_match_workbook", "advisor_profile_report"
+    ] = "advisor_match_workbook"
     revision: int | None = Field(default=None, ge=1)
     relative_path: str
     change_type: Literal["created", "modified", "deleted"]

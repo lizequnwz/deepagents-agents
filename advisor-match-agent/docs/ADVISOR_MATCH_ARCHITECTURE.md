@@ -1,149 +1,104 @@
-# Advisor Match Architecture
+# Advisor Match and Profile Report Architecture
 
 ## Decision
 
-The application uses a single explicit LangGraph workflow, not Deep Agents.
-The matching problem has a fixed sequence and code-owned identity policy, so a
-planner, dynamic tool selection, filesystem skills, subagents, and an autonomous
-tool loop would add uncertainty without adding required capability.
+The application uses one explicit LangGraph `StateGraph`, not Deep Agents. Its
+two bounded workflows share routing, checkpoints, cancellation, clarification,
+event streaming, protected storage, and artifact download behavior.
 
-The graph ends after deterministic matching and verified workbook publication.
-Post-match row review is intentionally outside the application: the user reviews
-and may edit the downloaded workbook locally.
+Explicit Streamlit actions set `requested_workflow` and bypass intent
+classification. Conversational requests use the typed router. Structured model
+output may interpret a bounded upload profile, but deterministic code owns file
+validation, matching, CRD extraction, report generation, storage, and
+publication.
 
 ## Component boundaries
 
 ```mermaid
 flowchart LR
-    UI[Streamlit chat] --> API[FastAPI]
+    UI[Streamlit chat and actions] --> API[FastAPI]
     API --> RM[RunManager]
     RM --> G[StateGraph]
-    G --> R[Typed router LLM]
-    G --> M[Typed mapping LLM]
+    G --> R[Typed router]
+    G --> MM[Typed match mapping]
+    G --> CM[Typed CRD mapping]
     G --> S[AdvisorService]
-    S --> D[Deterministic matching core]
-    S --> W[Workbook generator and verifier]
+    S --> D[Deterministic matching and CRD core]
+    S --> A[Workbook and HTML publishers]
     G <--> IM[InMemorySaver]
     S <--> DB[(AdvisorRepository SQLite)]
     S <--> FS[Protected corp-scoped files]
-    W --> X[Downloaded workbook]
-    X -. local edits only .-> U[User workflow]
+    A --> OUT[Preview and downloads]
 ```
 
-`RunManager` streams application events (`node_completed`,
-`clarification_required`, `artifact_published`, and run status). Model calls are
-non-streaming. The UI polls the existing run endpoint and therefore does not
-depend on token streaming.
+`RunManager` emits node, clarification, artifact, and run-status events. Model
+calls are non-streaming. The UI polls the existing run endpoint.
 
-## Graph nodes
-
-1. `route` — strict structured intent and same-turn firm extraction.
-2. `inspect` — bounded sheet/row/column profile.
-3. `map_input` — strict structured `InputMapping`; ambiguous interpretations
-   branch to `clarify`.
-4. `resolve_mapping` — resumes a mapping clarification with the pending
-   question, current answer, optional proposed mapping, and bounded profile. A
-   clear affirmative accepts a stored proposal deterministically.
-5. `validate` — deterministic load, row limits, transformation checks, and
-   mapping fingerprint.
-6. `remap_firm` — binds an exact user-selected firm column and revalidates.
-7. `match` — firm resolution, authoritative snapshot, deterministic matching,
-   durable session creation, workbook generation, verification, and publication.
-8. `clarify` — `interrupt()` for mapping or firm ambiguity; the next text-only
-   message resumes with `Command(resume=...)`.
-9. `reset`, `greeting`, `capabilities`, and `unsupported` — small terminal
-   branches with deterministic user-facing copy.
-
-There are no graph nodes for review pages, row mutations, manual CRD proposals,
-approval, or post-match status. Requests for those operations are routed to
-capability guidance that explains the workbook-only review boundary.
-
-## Exact node and edge map
+## Graph branches
 
 ```mermaid
 flowchart TD
-    START([New user turn]) --> route[route: typed RouteDecision]
-    route --> route_edge{_route_edge}
+    START([New user turn]) --> route[route]
+    route --> choice{workflow}
 
-    route_edge -->|start match: fresh| inspect[inspect: bounded file profile]
-    route_edge -->|pending mapping| map_input[map_input: typed InputMapping]
-    route_edge -->|firm column supplied| remap_firm[remap_firm: bind and revalidate]
-    route_edge -->|firm resolution supplied| match[match: deterministic match and export]
-    route_edge -->|reset| reset[reset]
-    route_edge -->|greeting| greeting[greeting]
-    route_edge -->|capabilities| capabilities[capabilities]
-    route_edge -->|unsupported| unsupported[unsupported]
+    choice -->|match| inspect[inspect bounded upload]
+    inspect --> map_input[map_input]
+    map_input --> validate[validate]
+    validate --> match[match and publish XLSX]
+    match --> END([End turn])
 
-    inspect --> after_inspect{profile available?}
-    after_inspect -->|yes| map_input
-    after_inspect -->|no| END([End turn])
+    choice -->|profile upload| inspect
+    inspect --> map_crd[map_crd_input]
+    map_crd --> validate_crd[validate_crd_input]
+    validate_crd --> report[generate_profile_report]
 
-    map_input --> after_mapping{mapping complete?}
-    resolve_mapping[resolve_mapping: pending context and answer] --> after_mapping
-    after_mapping -->|yes| validate[validate: limits and fingerprint]
-    after_mapping -->|clarification| clarify[clarify]
-    after_mapping -->|failure| END
+    choice -->|profile match session| report
+    report --> publish[store immutable HTML]
+    publish --> END
 
-    clarify --> interrupt([interrupt: wait for user])
-    interrupt --> resume([Command resume])
-    resume --> after_clarify{clarification kind}
-    after_clarify -->|mapping| resolve_mapping
-    after_clarify -->|firm| route
-
-    validate --> after_validation{validation present?}
-    after_validation -->|yes| match
-    after_validation -->|no| END
-
-    remap_firm --> after_remap{firm question remains?}
-    after_remap -->|no| match
-    after_remap -->|yes| clarify
-
-    match --> after_match{firm question remains?}
-    after_match -->|yes| clarify
-    after_match -->|no: workbook published or blocker| END
-
-    reset --> END
-    greeting --> END
-    capabilities --> END
-    unsupported --> END
+    map_input -->|ambiguous| clarify[clarify interrupt]
+    map_crd -->|ambiguous| clarify
+    clarify --> resume[Command resume]
+    resume --> resolve{pending kind}
+    resolve --> resolve_mapping[resolve_mapping]
+    resolve --> resolve_crd[resolve_crd_mapping]
 ```
 
-The graph does not send full chat history through these edges. `route` receives
-the current message plus phase/attachment/session flags. `resolve_mapping`
-receives the exact pending question, current answer, optional proposed mapping,
-and bounded file profile.
+Matching-specific firm clarification and remapping remain unchanged. Greeting,
+capabilities, reset, unsupported, and missing-profile-source paths are small
+terminal branches.
 
-A new attachment deletes the conversation's in-memory checkpoint and starts a
-fresh graph. Text such as “apply firm ABC to all advisors” resumes the pending
-thread and does not reset it. One run may be active per `(corp_id,
-conversation_id)`; different conversations may run concurrently under the same
-corporation.
+## State and handoff
 
-## State and persistence
+Graph state contains scoped IDs, the current request, workflow hint/selection,
+bounded profile, exact mapping and validation metadata, result summaries,
+pending clarification, response, and error. It never contains a full input or
+master table, workbook/HTML bytes, or a CRD list.
 
-Graph state contains corporation, conversation, and run IDs; current message;
-attachment ID; phase; router decision; bounded upload profile; mapping;
-validation summary; match result summary; pending clarification payload;
-response; and error. It never contains the complete advisor reference, full
-input table, workbook bytes, a review page, or a pending manual override.
+Post-match report generation passes `match_session_id`, not workbook contents or
+copied CRDs. The service reloads the corporation- and conversation-scoped
+session, selects only automated `Matched` decisions, and deduplicates their CRDs.
+For direct uploads, the service reopens the immutable attachment and validates
+its hash, worksheet, header row, physical column index, exact header, row limit,
+and mapping fingerprint immediately before extraction.
 
-`InMemorySaver` is intentional. API restart loses conversations, checkpoints,
-pending interrupts, and progress. SQLite retains only durable matching evidence:
-attachment metadata, reference snapshots, match sessions, and artifact metadata.
+`InMemorySaver` and conversations/runs/events remain process-local. SQLite
+durably stores attachments, reference snapshots, match sessions, workbook
+artifacts, and additive `advisor_profile_reports` records. API restart therefore
+loses pending conversations and interrupts but not published audit evidence.
 
-## Authority and failure behavior
+## Authority and outputs
 
-The model can route and interpret columns. It cannot select arbitrary tools or
-decide advisor identities. Each structured LLM operation has three total
-attempts; exhaustion fails the current run without mutating deterministic
-decisions. Blocking file/reference work runs off the event loop. File, row,
-preview, timeout, corporation-scope, integrity, duplicate-CRD, identity-policy,
-and workbook-validation rules remain enforced in code.
+The model may route and interpret bounded columns. It cannot select arbitrary
+tools, decide advisor identities, extract CRDs, or create artifacts. CRDs are
+opaque trimmed strings; blanks are ignored and duplicates retain first-seen
+order. Post-match reports exclude ambiguous, unmatched, and candidate-only CRDs.
 
-The workbook has four sheets: `Matched`, `Review Required`, `Original Input`,
-and `Run Summary`. Editable review columns in `Review Required` are deliberately
-blank. Changes to a downloaded copy are user-owned and are not sent back to or
-validated by the application.
+Matching publishes the verified four-sheet `advisor_matches.xlsx`. Profile
+report version 1 publishes a verified, deterministic
+`advisor_profile_report.html` with a valid shell and empty body. It performs no
+network access and does not simulate profile data. Both artifact types are
+immutable, hashed, corporation scoped, and downloaded through the existing API.
 
-The interactive version of this workflow is
+The interactive workflow is
 [`advisor_match_workflow.html`](advisor_match_workflow.html).

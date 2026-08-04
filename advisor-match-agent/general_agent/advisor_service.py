@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from dataclasses import dataclass
@@ -13,7 +14,16 @@ from general_agent.advisor_matching.index import ReferenceDataQualityError
 from general_agent.advisor_matching.matcher import run_matching
 from general_agent.advisor_matching.policy import POLICY_VERSION
 from general_agent.advisor_matching.profiler import inspect_advisor_upload
+from general_agent.advisor_matching.profile_report import (
+    CrdCollection,
+    collect_input_crds,
+    collect_matched_crds,
+    generate_advisor_profile_report,
+    verify_advisor_profile_report,
+)
 from general_agent.advisor_matching.schemas import (
+    CrdInputMapping,
+    CrdInputValidationResult,
     FirmClarificationResult,
     FirmResolution,
     InputMapping,
@@ -22,6 +32,7 @@ from general_agent.advisor_matching.schemas import (
     MatchCounts,
     MatchDecision,
     MatchRunResult,
+    ProfileReportResult,
     ReferenceSnapshotManifest,
     ReferenceBlockerResult,
 )
@@ -220,6 +231,116 @@ class AdvisorService:
             policy_version=POLICY_VERSION,
         )
 
+    def validate_profile_input(
+        self,
+        context: ServiceContext,
+        attachment_id: str,
+        mapping: CrdInputMapping,
+    ) -> CrdInputValidationResult:
+        source, _ = self.resolve_upload(context, attachment_id)
+        loaded = validate_and_load_input(
+            source,
+            mapping.as_input_mapping(),
+            max_rows=self.settings.advisor_max_input_rows,
+        )
+        metadata = self.repository.attachment_metadata(
+            attachment_id,
+            corp_id=context.corp_id,
+            conversation_id=context.conversation_id,
+        )
+        transformation = metadata["transformation"]
+        _validate_source_transformation(
+            loaded.rows, mapping.as_input_mapping(), transformation
+        )
+        crds = collect_input_crds(loaded.rows)
+        if not crds.crd_numbers:
+            raise ValueError(
+                "the selected CRD column contains no usable CRD values"
+            )
+        return CrdInputValidationResult(
+            attachment_id=attachment_id,
+            source_sha256=loaded.source_sha256,
+            selected_sheet=loaded.selected_sheet,
+            mapping=mapping,
+            mapping_fingerprint=loaded.mapping_fingerprint,
+            columns=loaded.columns,
+            data_row_count=loaded.summary.data_row_count,
+            usable_crd_count=(crds.input_count - crds.blank_count),
+            unique_crd_count=crds.unique_count,
+            blank_crd_count=crds.blank_count,
+            duplicate_crd_count=crds.duplicate_count,
+            source_transformation=transformation,
+        )
+
+    def create_profile_report_from_upload(
+        self,
+        context: ServiceContext,
+        validation: CrdInputValidationResult,
+    ) -> ProfileReportResult:
+        source, _ = self.resolve_upload(context, validation.attachment_id)
+        generic_mapping = validation.mapping.as_input_mapping()
+        loaded = validate_and_load_input(
+            source,
+            generic_mapping,
+            max_rows=self.settings.advisor_max_input_rows,
+        )
+        if (
+            loaded.mapping_fingerprint != validation.mapping_fingerprint
+            or loaded.source_sha256 != validation.source_sha256
+        ):
+            raise ValueError(
+                "The upload or CRD mapping changed after validation; validate it again."
+            )
+        transformation = self.repository.attachment_metadata(
+            validation.attachment_id,
+            corp_id=context.corp_id,
+            conversation_id=context.conversation_id,
+        )["transformation"]
+        _validate_source_transformation(loaded.rows, generic_mapping, transformation)
+        crds = collect_input_crds(loaded.rows)
+        if not crds.crd_numbers:
+            raise ValueError("The selected CRD column contains no usable CRD values.")
+        return self._write_profile_report(
+            context,
+            crds,
+            source_kind="attachment",
+            source_attachment_id=validation.attachment_id,
+            source_sha256=loaded.source_sha256,
+            mapping=validation.mapping.model_dump(mode="json"),
+            mapping_fingerprint=loaded.mapping_fingerprint,
+        )
+
+    def create_profile_report_from_match(
+        self,
+        context: ServiceContext,
+        match_session_id: str,
+    ) -> ProfileReportResult:
+        try:
+            session = self.repository.get_advisor_match_session(
+                match_session_id,
+                corp_id=context.corp_id,
+                conversation_id=context.conversation_id,
+            )
+        except KeyError as exc:
+            raise ValueError(
+                "The completed advisor match is unavailable in the current chat."
+            ) from exc
+        decisions = [
+            MatchDecision.model_validate(value) for value in session["decisions"]
+        ]
+        crds = collect_matched_crds(decisions)
+        if not crds.crd_numbers:
+            raise ValueError(
+                "The completed match contains no automatically matched CRD numbers."
+            )
+        return self._write_profile_report(
+            context,
+            crds,
+            source_kind="match_session",
+            source_match_session_id=match_session_id,
+            source_sha256=session["source_sha256"],
+        )
+
     def _write_workbook(self, context: ServiceContext, session_id: str) -> Artifact:
         session = self.repository.get_advisor_match_session(
             session_id,
@@ -272,6 +393,90 @@ class AdvisorService:
             self.runtime.add_artifact(artifact, corp_id=context.corp_id)
             return artifact
         except Exception:
+            temporary.unlink(missing_ok=True)
+            output.unlink(missing_ok=True)
+            try:
+                output.parent.rmdir()
+            except OSError:
+                pass
+            raise
+
+    def _write_profile_report(
+        self,
+        context: ServiceContext,
+        crds: CrdCollection,
+        *,
+        source_kind: str,
+        source_match_session_id: str | None = None,
+        source_attachment_id: str | None = None,
+        source_sha256: str | None = None,
+        mapping: dict[str, Any] | None = None,
+        mapping_fingerprint: str | None = None,
+    ) -> ProfileReportResult:
+        report_id = "apr_" + uuid.uuid4().hex
+        artifact_id = "art_" + uuid.uuid4().hex
+        output = self.workspace.artifact_file(
+            context.corp_id,
+            context.run_id,
+            artifact_id,
+            "advisor_profile_report.html",
+        )
+        output.parent.mkdir(parents=True, exist_ok=False)
+        temporary = output.with_name(".advisor_profile_report.building.html")
+        report_persisted = False
+        try:
+            html = generate_advisor_profile_report(crds.crd_numbers)
+            temporary.write_text(html, encoding="utf-8", newline="\n")
+            verify_advisor_profile_report(temporary)
+            temporary.replace(output)
+            artifact = Artifact(
+                artifact_id=artifact_id,
+                run_id=context.run_id,
+                profile_report_id=report_id,
+                artifact_kind="advisor_profile_report",
+                relative_path="advisor_profile_report.html",
+                change_type="created",
+                size_bytes=output.stat().st_size,
+                sha256=sha256_file(output),
+                created_at=utc_now(),
+            )
+            result = ProfileReportResult(
+                profile_report_id=report_id,
+                output_artifact_id=artifact_id,
+                source_kind=source_kind,
+                source_match_session_id=source_match_session_id,
+                source_attachment_id=source_attachment_id,
+                input_crd_count=crds.input_count,
+                unique_crd_count=crds.unique_count,
+                blank_crd_count=crds.blank_count,
+                duplicate_crd_count=crds.duplicate_count,
+            )
+            self.repository.add_profile_report(
+                report_id=report_id,
+                artifact=artifact,
+                snapshot_path=output,
+                corp_id=context.corp_id,
+                conversation_id=context.conversation_id,
+                source_kind=source_kind,
+                source_match_session_id=source_match_session_id,
+                source_attachment_id=source_attachment_id,
+                source_sha256=source_sha256,
+                mapping=mapping,
+                mapping_fingerprint=mapping_fingerprint,
+                crd_numbers=crds.crd_numbers,
+                input_crd_count=crds.input_count,
+                blank_crd_count=crds.blank_count,
+                duplicate_crd_count=crds.duplicate_count,
+            )
+            report_persisted = True
+            self.runtime.add_artifact(artifact, corp_id=context.corp_id)
+            return result
+        except Exception:
+            if report_persisted:
+                with contextlib.suppress(Exception):
+                    self.repository.delete_profile_report(
+                        report_id, corp_id=context.corp_id
+                    )
             temporary.unlink(missing_ok=True)
             output.unlink(missing_ok=True)
             try:

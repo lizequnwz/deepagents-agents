@@ -94,6 +94,36 @@ class InputMapping(BaseModel):
         }
 
 
+class CrdInputMapping(BaseModel):
+    """Exact worksheet/header/column selection for profile-report input."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sheet_name: str | None = None
+    header_row: int | None = Field(default=1, ge=1)
+    crd_number: FieldBinding
+
+    @model_validator(mode="after")
+    def validate_crd_binding(self) -> "CrdInputMapping":
+        if len(self.crd_number.columns) != 1:
+            raise ValueError("A profile report must use exactly one CRD column.")
+        if self.crd_number.combine != "first":
+            raise ValueError("A profile report cannot combine multiple CRD columns.")
+        reference = self.crd_number.columns[0]
+        if self.header_row is None and reference.header is not None:
+            raise ValueError("Headerless CRD mappings must use a null column header.")
+        if self.header_row is not None and reference.header is None:
+            raise ValueError("Headed CRD mappings must include the observed header.")
+        return self
+
+    def as_input_mapping(self) -> InputMapping:
+        return InputMapping(
+            sheet_name=self.sheet_name,
+            header_row=self.header_row,
+            crd_number=self.crd_number,
+        )
+
+
 class InputSummary(BaseModel):
     data_row_count: int = Field(ge=0)
     blank_row_count: int = Field(ge=0)
@@ -116,6 +146,21 @@ class MappingValidationResult(BaseModel):
     )
     source_transformation: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
+
+
+class CrdInputValidationResult(BaseModel):
+    attachment_id: str
+    source_sha256: str
+    selected_sheet: str | None
+    mapping: CrdInputMapping
+    mapping_fingerprint: str
+    columns: list[dict[str, Any]]
+    data_row_count: int = Field(ge=1)
+    usable_crd_count: int = Field(ge=0)
+    unique_crd_count: int = Field(ge=0)
+    blank_crd_count: int = Field(ge=0)
+    duplicate_crd_count: int = Field(ge=0)
+    source_transformation: dict[str, Any] = Field(default_factory=dict)
 
 
 class AdvisorRecord(BaseModel):
@@ -271,9 +316,27 @@ class ReferenceBlockerResult(BaseModel):
         return self
 
 
-class ProfileBuildRequest(BaseModel):
-    """# TODO: register only when advisor profile building is implemented."""
-
-    match_session_id: str
-    matched_crd_numbers: list[str] = Field(default_factory=list)
+class ProfileReportResult(BaseModel):
+    workflow_status: Literal["profile_report_created"] = "profile_report_created"
+    profile_report_id: str
+    output_artifact_id: str
+    source_kind: Literal["match_session", "attachment"]
+    source_match_session_id: str | None = None
+    source_attachment_id: str | None = None
+    input_crd_count: int = Field(ge=0)
+    unique_crd_count: int = Field(ge=1)
+    blank_crd_count: int = Field(ge=0)
+    duplicate_crd_count: int = Field(ge=0)
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "ProfileReportResult":
+        match_source = self.source_match_session_id is not None
+        upload_source = self.source_attachment_id is not None
+        if match_source == upload_source:
+            raise ValueError("A profile report must have exactly one source.")
+        if self.source_kind == "match_session" and not match_source:
+            raise ValueError("A match-session report requires a match session.")
+        if self.source_kind == "attachment" and not upload_source:
+            raise ValueError("An attachment report requires an attachment.")
+        return self

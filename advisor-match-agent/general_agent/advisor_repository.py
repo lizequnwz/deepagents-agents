@@ -108,6 +108,43 @@ class AdvisorRepository:
                     created_at TEXT NOT NULL,
                     UNIQUE(corp_id, match_session_id, revision)
                 );
+
+                CREATE TABLE IF NOT EXISTS advisor_profile_reports (
+                    id TEXT PRIMARY KEY,
+                    corp_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    source_kind TEXT NOT NULL CHECK(
+                        source_kind IN ('match_session', 'attachment')
+                    ),
+                    source_match_session_id TEXT,
+                    source_attachment_id TEXT,
+                    source_sha256 TEXT,
+                    mapping_json TEXT,
+                    mapping_fingerprint TEXT,
+                    crd_numbers_json TEXT NOT NULL,
+                    input_crd_count INTEGER NOT NULL,
+                    unique_crd_count INTEGER NOT NULL,
+                    blank_crd_count INTEGER NOT NULL,
+                    duplicate_crd_count INTEGER NOT NULL,
+                    output_artifact_id TEXT NOT NULL UNIQUE,
+                    relative_path TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    snapshot_path TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    CHECK(
+                        (source_kind='match_session'
+                            AND source_match_session_id IS NOT NULL
+                            AND source_attachment_id IS NULL)
+                        OR
+                        (source_kind='attachment'
+                            AND source_attachment_id IS NOT NULL
+                            AND source_match_session_id IS NULL)
+                    )
+                );
+                CREATE INDEX IF NOT EXISTS advisor_profile_reports_scope_idx
+                    ON advisor_profile_reports(corp_id, conversation_id, created_at);
                 """
             )
 
@@ -368,12 +405,126 @@ class AdvisorRepository:
             if cursor.rowcount == 0:
                 raise KeyError(session_id)
 
+    def add_profile_report(
+        self,
+        *,
+        report_id: str,
+        artifact: Artifact,
+        snapshot_path: Path,
+        corp_id: str,
+        conversation_id: str,
+        source_kind: str,
+        source_match_session_id: str | None,
+        source_attachment_id: str | None,
+        source_sha256: str | None,
+        mapping: Mapping[str, Any] | None,
+        mapping_fingerprint: str | None,
+        crd_numbers: list[str],
+        input_crd_count: int,
+        blank_crd_count: int,
+        duplicate_crd_count: int,
+    ) -> None:
+        corp = self._corp(corp_id)
+        if artifact.profile_report_id != report_id:
+            raise ValueError("Profile report artifact metadata is inconsistent.")
+        with self._lock, self._connection:
+            if source_kind == "match_session":
+                exists = self._connection.execute(
+                    """SELECT 1 FROM advisor_match_sessions
+                    WHERE id=? AND corp_id=? AND conversation_id=?""",
+                    (source_match_session_id, corp, conversation_id),
+                ).fetchone()
+                if not exists:
+                    raise KeyError(source_match_session_id)
+            elif source_kind == "attachment":
+                exists = self._connection.execute(
+                    """SELECT 1 FROM advisor_attachments
+                    WHERE id=? AND corp_id=? AND conversation_id=?""",
+                    (source_attachment_id, corp, conversation_id),
+                ).fetchone()
+                if not exists:
+                    raise KeyError(source_attachment_id)
+            else:
+                raise ValueError("Unknown profile report source kind.")
+            self._connection.execute(
+                """INSERT INTO advisor_profile_reports(
+                    id, corp_id, conversation_id, run_id, source_kind,
+                    source_match_session_id, source_attachment_id, source_sha256,
+                    mapping_json, mapping_fingerprint, crd_numbers_json,
+                    input_crd_count, unique_crd_count, blank_crd_count,
+                    duplicate_crd_count, output_artifact_id, relative_path,
+                    size_bytes, sha256, snapshot_path, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    report_id,
+                    corp,
+                    conversation_id,
+                    artifact.run_id,
+                    source_kind,
+                    source_match_session_id,
+                    source_attachment_id,
+                    source_sha256,
+                    _json(mapping) if mapping is not None else None,
+                    mapping_fingerprint,
+                    _json(crd_numbers),
+                    input_crd_count,
+                    len(crd_numbers),
+                    blank_crd_count,
+                    duplicate_crd_count,
+                    artifact.artifact_id,
+                    artifact.relative_path,
+                    artifact.size_bytes,
+                    artifact.sha256,
+                    str(snapshot_path),
+                    _iso(artifact.created_at),
+                ),
+            )
+
+    def get_profile_report(
+        self,
+        report_id: str,
+        *,
+        corp_id: str,
+        conversation_id: str | None = None,
+    ) -> dict[str, Any]:
+        query = "SELECT * FROM advisor_profile_reports WHERE id=? AND corp_id=?"
+        values: list[Any] = [report_id, self._corp(corp_id)]
+        if conversation_id is not None:
+            query += " AND conversation_id=?"
+            values.append(conversation_id)
+        with self._lock:
+            row = self._connection.execute(query, values).fetchone()
+        if row is None:
+            raise KeyError(report_id)
+        value = dict(row)
+        value["crd_numbers"] = json.loads(value.pop("crd_numbers_json"))
+        mapping_json = value.pop("mapping_json")
+        value["mapping"] = json.loads(mapping_json) if mapping_json else None
+        return value
+
+    def delete_profile_report(self, report_id: str, *, corp_id: str) -> None:
+        """Remove a just-created report record when publication cannot complete."""
+
+        with self._lock, self._connection:
+            self._connection.execute(
+                "DELETE FROM advisor_profile_reports WHERE id=? AND corp_id=?",
+                (report_id, self._corp(corp_id)),
+            )
+
     def artifact_path(self, artifact_id: str, *, corp_id: str) -> tuple[Path, str]:
+        corp = self._corp(corp_id)
         with self._lock:
             row = self._connection.execute(
                 "SELECT snapshot_path, relative_path FROM advisor_artifacts WHERE id=? AND corp_id=?",
-                (artifact_id, self._corp(corp_id)),
+                (artifact_id, corp),
             ).fetchone()
+            if row is None:
+                row = self._connection.execute(
+                    """SELECT snapshot_path, relative_path
+                    FROM advisor_profile_reports
+                    WHERE output_artifact_id=? AND corp_id=?""",
+                    (artifact_id, corp),
+                ).fetchone()
         if row is None:
             raise KeyError(artifact_id)
         return Path(row["snapshot_path"]), Path(row["relative_path"]).name

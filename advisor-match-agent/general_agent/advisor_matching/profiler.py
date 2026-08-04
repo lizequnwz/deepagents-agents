@@ -15,7 +15,14 @@ from general_agent.advisor_matching.source import sha256_file
 from general_agent.config import Settings
 
 _ALIASES = {
-    "crd_number": {"crd", "crd number", "finra crd", "advisor crd"},
+    "crd_number": {
+        "crd",
+        "crd number",
+        "finra crd",
+        "advisor crd",
+        "selected crd",
+        "input crd",
+    },
     "first_name": {"first name", "firstname", "advisor first", "given name"},
     "last_name": {"last name", "lastname", "advisor last", "surname"},
     "full_name": {"name", "full name", "advisor name", "representative"},

@@ -26,10 +26,15 @@ _NODE_LABELS = {
     "route": "Understanding your request",
     "inspect": "Reading the uploaded file",
     "map_input": "Identifying advisor columns",
+    "map_crd_input": "Identifying the CRD column",
     "resolve_mapping": "Applying your column clarification",
+    "resolve_crd_mapping": "Applying your CRD-column clarification",
     "validate": "Validating advisor rows",
+    "validate_crd_input": "Validating CRD values",
     "remap_firm": "Updating the firm-column mapping",
     "match": "Comparing advisors with the master database",
+    "generate_profile_report": "Generating the advisor profile report",
+    "profile_source_required": "Preparing profile report guidance",
     "clarify": "Waiting for your clarification",
     "reset": "Resetting the matching workflow",
     "greeting": "Preparing guidance",
@@ -129,10 +134,24 @@ class RunManager:
         self.runtime.add_attachment(run_id, attachment, corp_id=corp_id)
         return attachment
 
-    def start(self, run_id: str, corp_id: str, attachments: list[Attachment]) -> None:
+    def start(
+        self,
+        run_id: str,
+        corp_id: str,
+        attachments: list[Attachment],
+        *,
+        requested_workflow: str | None = None,
+        source_match_session_id: str | None = None,
+    ) -> None:
         self._run_corps[run_id] = corp_id
         task = asyncio.create_task(
-            self._drive(run_id, corp_id, attachments),
+            self._drive(
+                run_id,
+                corp_id,
+                attachments,
+                requested_workflow=requested_workflow,
+                source_match_session_id=source_match_session_id,
+            ),
             name=f"advisor-match-graph-{run_id}",
         )
         self._tasks[run_id] = task
@@ -157,7 +176,13 @@ class RunManager:
         self._run_corps.pop(run_id, None)
 
     async def _drive(
-        self, run_id: str, corp_id: str, attachments: list[Attachment]
+        self,
+        run_id: str,
+        corp_id: str,
+        attachments: list[Attachment],
+        *,
+        requested_workflow: str | None,
+        source_match_session_id: str | None,
     ) -> None:
         run = self.runtime.get_run(run_id, corp_id=corp_id)
         thread_id = f"{corp_id}:{run.conversation_id}"
@@ -187,6 +212,8 @@ class RunManager:
                     "user_message": run.question,
                     "attachment_id": attachments[0].attachment_id,
                     "is_new_attachment": True,
+                    "requested_workflow": requested_workflow,
+                    "source_match_session_id": source_match_session_id,
                     "phase": "idle",
                     "response": "",
                     "error": None,
@@ -202,6 +229,8 @@ class RunManager:
                     "run_id": run_id,
                     "user_message": run.question,
                     "is_new_attachment": False,
+                    "requested_workflow": requested_workflow,
+                    "source_match_session_id": source_match_session_id,
                     "response": "",
                     "error": None,
                 }
@@ -309,6 +338,7 @@ class RunManager:
                             data={
                                 "artifact_id": result["output_artifact_id"],
                                 "match_session_id": result.get("match_session_id"),
+                                "artifact_kind": "advisor_match_workbook",
                             },
                             corp_id=corp_id,
                         )
@@ -330,6 +360,34 @@ class RunManager:
                                 data={"counts": dict(counts)},
                                 corp_id=corp_id,
                             )
+                    profile_result = value.get("profile_report_result")
+                    if isinstance(profile_result, Mapping) and profile_result.get(
+                        "output_artifact_id"
+                    ):
+                        self.runtime.add_event(
+                            run_id,
+                            "artifact_published",
+                            "completed",
+                            "Published advisor profile report",
+                            data={
+                                "artifact_id": profile_result["output_artifact_id"],
+                                "profile_report_id": profile_result.get(
+                                    "profile_report_id"
+                                ),
+                                "artifact_kind": "advisor_profile_report",
+                                "counts": {
+                                    "input": profile_result.get("input_crd_count", 0),
+                                    "unique": profile_result.get(
+                                        "unique_crd_count", 0
+                                    ),
+                                    "blank": profile_result.get("blank_crd_count", 0),
+                                    "duplicate": profile_result.get(
+                                        "duplicate_crd_count", 0
+                                    ),
+                                },
+                            },
+                            corp_id=corp_id,
+                        )
         return response
 
     async def _has_interrupt(self, config: dict[str, Any]) -> bool:

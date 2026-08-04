@@ -8,10 +8,13 @@ from langgraph.types import Command
 from general_agent import user_messages
 from general_agent.advisor_matching.schemas import (
     ColumnRef,
+    CrdInputMapping,
+    CrdInputValidationResult,
     FieldBinding,
     InputMapping,
     InputSummary,
     MappingValidationResult,
+    ProfileReportResult,
 )
 from general_agent.graph import (
     _after_inspect,
@@ -21,7 +24,7 @@ from general_agent.graph import (
     _structured_attempts,
     build_advisor_graph,
 )
-from general_agent.graph_state import MappingDecision, RouteDecision
+from general_agent.graph_state import CrdMappingDecision, MappingDecision, RouteDecision
 
 
 class StructuredModel:
@@ -79,6 +82,101 @@ class MappingClarificationModel:
                 raise AssertionError(f"Unexpected schema: {schema}")
 
         return Output()
+
+
+class ProfileRequestModel:
+    def __init__(self, decisions: list[CrdMappingDecision] | None = None) -> None:
+        self.route_calls = 0
+        self.crd_mapping_calls = 0
+        self.decisions = iter(decisions) if decisions is not None else None
+
+    def with_structured_output(self, schema):
+        outer = self
+
+        class Output:
+            async def ainvoke(_self, _prompt):
+                if schema is RouteDecision:
+                    outer.route_calls += 1
+                    return RouteDecision(route="start_profile_report")
+                if schema is CrdMappingDecision:
+                    outer.crd_mapping_calls += 1
+                    if outer.decisions is not None:
+                        return next(outer.decisions)
+                    return CrdMappingDecision(
+                        mapping=CrdInputMapping(
+                            crd_number=FieldBinding(
+                                columns=[ColumnRef(index=0, header="CRD")]
+                            )
+                        )
+                    )
+                raise AssertionError(f"Unexpected schema invocation: {schema}")
+
+        return Output()
+
+
+class ProfileWorkflowService:
+    def __init__(self) -> None:
+        self.report_sources: list[str] = []
+
+    def inspect(self, _context, attachment_id):
+        return {
+            "attachment_id": attachment_id,
+            "format": "csv",
+            "sheets": [
+                {
+                    "name": None,
+                    "header_candidates": [
+                        {
+                            "row_number": 1,
+                            "columns": [
+                                {"index": 0, "header": "CRD", "label": "CRD"}
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def validate_profile_input(self, _context, attachment_id, mapping):
+        return CrdInputValidationResult(
+            attachment_id=attachment_id,
+            source_sha256="a" * 64,
+            selected_sheet=None,
+            mapping=mapping,
+            mapping_fingerprint="profile-fingerprint",
+            columns=[{"index": 0, "header": "CRD", "label": "CRD"}],
+            data_row_count=2,
+            usable_crd_count=2,
+            unique_crd_count=2,
+            blank_crd_count=0,
+            duplicate_crd_count=0,
+        )
+
+    def create_profile_report_from_upload(self, _context, validation):
+        self.report_sources.append(validation.attachment_id)
+        return ProfileReportResult(
+            profile_report_id="apr_test",
+            output_artifact_id="art_profile",
+            source_kind="attachment",
+            source_attachment_id=validation.attachment_id,
+            input_crd_count=2,
+            unique_crd_count=2,
+            blank_crd_count=0,
+            duplicate_crd_count=0,
+        )
+
+    def create_profile_report_from_match(self, _context, match_session_id):
+        self.report_sources.append(match_session_id)
+        return ProfileReportResult(
+            profile_report_id="apr_test",
+            output_artifact_id="art_profile",
+            source_kind="match_session",
+            source_match_session_id=match_session_id,
+            input_crd_count=2,
+            unique_crd_count=2,
+            blank_crd_count=0,
+            duplicate_crd_count=0,
+        )
 
 
 class MappingWorkflowService:
@@ -230,6 +328,157 @@ async def test_graph_greets_and_guides_the_user(settings) -> None:
     )
     assert result["response"].startswith("Hi!")
     assert "attach one raw advisor CSV or XLSX file" in result["response"]
+
+
+@pytest.mark.asyncio
+async def test_explicit_profile_upload_bypasses_router_and_generates_report(
+    settings,
+) -> None:
+    model = ProfileRequestModel()
+    service = ProfileWorkflowService()
+    graph = build_advisor_graph(settings, service=service, model=model)
+
+    result = await graph.ainvoke(
+        {
+            "corp_id": "A123456",
+            "conversation_id": "conversation-one",
+            "run_id": "run-one",
+            "user_message": "Generate the profile report",
+            "attachment_id": "att_profile",
+            "is_new_attachment": True,
+            "requested_workflow": "profile_report",
+            "phase": "idle",
+        },
+        config={"configurable": {"thread_id": "profile-upload"}},
+    )
+
+    assert model.route_calls == 0
+    assert model.crd_mapping_calls == 1
+    assert service.report_sources == ["att_profile"]
+    assert result["phase"] == "profile_complete"
+    assert result["profile_report_result"]["unique_crd_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_natural_language_profile_upload_uses_typed_router(settings) -> None:
+    model = ProfileRequestModel()
+    service = ProfileWorkflowService()
+    graph = build_advisor_graph(settings, service=service, model=model)
+
+    result = await graph.ainvoke(
+        {
+            "corp_id": "A123456",
+            "conversation_id": "conversation-one",
+            "run_id": "run-natural-profile",
+            "user_message": "Generate advisor profile reports",
+            "attachment_id": "att_profile",
+            "is_new_attachment": True,
+            "phase": "idle",
+        },
+        config={"configurable": {"thread_id": "natural-profile-upload"}},
+    )
+
+    assert model.route_calls == 1
+    assert service.report_sources == ["att_profile"]
+    assert result["phase"] == "profile_complete"
+
+
+@pytest.mark.asyncio
+async def test_missing_crd_column_stops_without_generation(settings) -> None:
+    model = ProfileRequestModel(
+        [CrdMappingDecision(missing_crd_column=True)]
+    )
+    service = ProfileWorkflowService()
+    graph = build_advisor_graph(settings, service=service, model=model)
+
+    result = await graph.ainvoke(
+        {
+            "corp_id": "A123456",
+            "conversation_id": "conversation-one",
+            "run_id": "run-missing-crd",
+            "user_message": "Generate the profile report",
+            "attachment_id": "att_profile",
+            "is_new_attachment": True,
+            "requested_workflow": "profile_report",
+            "phase": "idle",
+        },
+        config={"configurable": {"thread_id": "missing-profile-column"}},
+    )
+
+    assert "requires one column containing CRD identifiers" in result["response"]
+    assert service.report_sources == []
+    assert not result.get("profile_report_result")
+
+
+@pytest.mark.asyncio
+async def test_profile_mapping_ambiguity_interrupts_and_yes_resumes(settings) -> None:
+    proposed = CrdInputMapping(
+        crd_number=FieldBinding(columns=[ColumnRef(index=0, header="CRD")])
+    )
+    model = ProfileRequestModel(
+        [
+            CrdMappingDecision(
+                mapping=proposed,
+                clarification_required=True,
+                clarification_kind="confirm_mapping",
+                clarification_question="Should I use the CRD column?",
+            )
+        ]
+    )
+    service = ProfileWorkflowService()
+    graph = build_advisor_graph(settings, service=service, model=model)
+    config = {"configurable": {"thread_id": "profile-mapping-confirmation"}}
+
+    interrupted = await graph.ainvoke(
+        {
+            "corp_id": "A123456",
+            "conversation_id": "conversation-one",
+            "run_id": "run-profile-one",
+            "user_message": "Generate the profile report",
+            "attachment_id": "att_profile",
+            "is_new_attachment": True,
+            "requested_workflow": "profile_report",
+            "phase": "idle",
+        },
+        config=config,
+    )
+    assert interrupted["__interrupt__"]
+    assert interrupted["pending_kind"] == "profile_mapping"
+
+    result = await graph.ainvoke(
+        Command(resume={"message": "Yes", "run_id": "run-profile-two"}),
+        config=config,
+    )
+    assert result["phase"] == "profile_complete"
+    assert service.report_sources == ["att_profile"]
+
+
+@pytest.mark.asyncio
+async def test_explicit_post_match_profile_uses_supplied_session_without_upload(
+    settings,
+) -> None:
+    model = ProfileRequestModel()
+    service = ProfileWorkflowService()
+    graph = build_advisor_graph(settings, service=service, model=model)
+
+    result = await graph.ainvoke(
+        {
+            "corp_id": "A123456",
+            "conversation_id": "conversation-one",
+            "run_id": "run-two",
+            "user_message": "Generate the profile report",
+            "is_new_attachment": False,
+            "requested_workflow": "profile_report",
+            "source_match_session_id": "ams_test",
+            "phase": "complete",
+        },
+        config={"configurable": {"thread_id": "profile-match"}},
+    )
+
+    assert model.route_calls == 0
+    assert model.crd_mapping_calls == 0
+    assert service.report_sources == ["ams_test"]
+    assert result["profile_report_result"]["source_kind"] == "match_session"
 
 
 @pytest.mark.asyncio

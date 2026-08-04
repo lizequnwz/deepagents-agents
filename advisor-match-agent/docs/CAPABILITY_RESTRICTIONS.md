@@ -11,7 +11,7 @@
 | Row-by-row LLM identity decisions | Forbidden | Deterministic matching policy owns all application decisions. |
 | Conversational post-match review | Not supported | Review happens in the downloaded workbook; local edits are not re-ingested. |
 | Persistent conversations/checkpoints | Not supported | `InMemorySaver` and `RuntimeStore` are process-local. |
-| Profile building | Not implemented | Remains an unregistered `# TODO`. |
+| Advisor profile report | Placeholder only | Deterministic code emits static blank HTML from validated CRDs; no profile data is fetched or inferred. |
 
 Prompts are not security boundaries. Corp scope, path validation, file
 integrity, row limits, matching policy, and workbook validation

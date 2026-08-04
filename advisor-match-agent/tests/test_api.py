@@ -105,3 +105,47 @@ def test_generic_workspace_routes_are_not_exposed(settings) -> None:
         assert client.get("/workspace").status_code == 404
         assert client.post("/workspace/uploads").status_code == 404
         assert client.get("/workspace/inspect").status_code == 404
+
+
+def test_explicit_profile_action_reaches_graph_as_deterministic_input(settings) -> None:
+    graph = FakeGraph()
+    app = create_app(settings=settings, graph_override=graph)
+    with TestClient(app) as client:
+        conversation_id = client.post("/conversations", json={}).json()[
+            "conversation_id"
+        ]
+        response = client.post(
+            f"/conversations/{conversation_id}/messages",
+            data={
+                "requested_workflow": "profile_report",
+                "source_match_session_id": "ams_test",
+            },
+        )
+        assert response.status_code == 200
+        for _ in range(100):
+            if graph.calls:
+                break
+            time.sleep(0.01)
+        graph_input = graph.calls[0][0]
+        assert graph_input["requested_workflow"] == "profile_report"
+        assert graph_input["source_match_session_id"] == "ams_test"
+        assert graph_input["user_message"] == "Generate an advisor profile report."
+
+
+def test_profile_action_rejects_conflicting_upload_source(settings) -> None:
+    app = create_app(settings=settings, graph_override=FakeGraph())
+    with TestClient(app) as client:
+        conversation_id = client.post("/conversations", json={}).json()[
+            "conversation_id"
+        ]
+        response = client.post(
+            f"/conversations/{conversation_id}/messages",
+            data={
+                "text": "Generate the profile report",
+                "requested_workflow": "profile_report",
+                "source_match_session_id": "ams_test",
+            },
+            files=[("files", ("crds.csv", b"CRD\n1001\n", "text/csv"))],
+        )
+        assert response.status_code == 400
+        assert "either a completed match or an uploaded file" in response.text

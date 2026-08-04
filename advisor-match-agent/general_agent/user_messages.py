@@ -44,13 +44,54 @@ def match_complete(counts: dict[str, Any]) -> str:
             "All rows matched automatically. The **Review Required** sheet is empty, "
             "and the workbook is ready for your downstream work."
         )
+    if matched:
+        lines.extend(
+            [
+                "",
+                "Use **Generate advisor profile report** below to create a placeholder "
+                "HTML report from the automatically matched CRD numbers.",
+            ]
+        )
     return "\n".join(lines)
+
+
+def profile_source_required() -> str:
+    return (
+        "Attach one advisor CSV or XLSX file that contains CRD numbers, or first "
+        "complete advisor matching and use its **Generate advisor profile report** "
+        "action."
+    )
+
+
+def missing_crd_column() -> str:
+    return (
+        "I couldn’t find a usable CRD column in the uploaded file. A profile report "
+        "requires one column containing CRD identifiers. Add or rename that column "
+        "and upload the file again."
+    )
+
+
+def profile_report_complete(result: dict[str, Any]) -> str:
+    unique = int(result.get("unique_crd_count") or 0)
+    duplicates = int(result.get("duplicate_crd_count") or 0)
+    blanks = int(result.get("blank_crd_count") or 0)
+    lines = [
+        f"I generated the placeholder advisor profile report for {unique} unique "
+        f"CRD number{'s' if unique != 1 else ''}.",
+        "Preview it below or download the HTML file for offline review.",
+    ]
+    if duplicates or blanks:
+        lines.append(
+            f"I ignored {duplicates} duplicate occurrence{'s' if duplicates != 1 else ''} "
+            f"and {blanks} blank value{'s' if blanks != 1 else ''}."
+        )
+    return "\n\n".join(lines)
 
 
 def reset_complete() -> str:
     return (
-        "I cleared the current matching progress from this chat. When you’re ready, "
-        "attach a CSV or XLSX file to start a fresh match."
+        "I cleared the current advisor workflow progress from this chat. When you’re "
+        "ready, attach a CSV or XLSX file to start a fresh match or profile report."
     )
 
 
@@ -61,15 +102,17 @@ def capabilities(has_match: bool = False) -> str:
             "application output. Review ambiguous or unmatched records on its **Review "
             "Required** sheet and record any final decisions in your downloaded copy. "
             "This application does not apply row-level review choices in chat or "
-            "validate changes made to the downloaded workbook. Attach a new file if "
-            "you want to start another matching run."
+            "validate changes made to the downloaded workbook. You can generate a "
+            "placeholder advisor profile report from the automatically matched CRDs, "
+            "or attach a new file containing a CRD column."
         )
     return (
         "I can match advisors from one CSV or XLSX file against the configured master "
         "advisor database. I’ll inspect the columns, perform deterministic matching, "
         "and prepare an auditable workbook. Ambiguous and unmatched records are placed "
-        "on a **Review Required** sheet for you to review in Excel. Attach a file when "
-        "you’re ready. I don’t perform general web research or build advisor profiles."
+        "on a **Review Required** sheet for you to review in Excel. I can also generate "
+        "a placeholder HTML advisor profile report from a CRD column. Attach a file "
+        "when you’re ready. I don’t perform general web research."
     )
 
 
@@ -83,6 +126,11 @@ def unsupported(
             "I’m waiting for your answer about how to interpret the uploaded columns. "
             "Please answer that question or provide the worksheet, header row, or "
             "column meaning you want me to use."
+        )
+    elif pending_kind == "profile_mapping":
+        next_step = (
+            "I’m waiting for your answer about which worksheet, header row, and column "
+            "contains CRD numbers. Please answer that question to continue."
         )
     elif pending_kind == "firm":
         next_step = (

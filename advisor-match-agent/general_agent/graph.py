@@ -15,6 +15,8 @@ from langgraph.types import interrupt
 from general_agent import user_messages
 from general_agent.advisor_matching.schemas import (
     ColumnRef,
+    CrdInputMapping,
+    CrdInputValidationResult,
     FieldBinding,
     InputMapping,
     MappingValidationResult,
@@ -22,11 +24,18 @@ from general_agent.advisor_matching.schemas import (
 from general_agent.advisor_service import AdvisorService, ServiceContext
 from general_agent.config import Settings
 from general_agent.graph_prompts import (
+    CRD_MAPPING_CLARIFICATION_PROMPT,
+    CRD_MAPPING_PROMPT,
     MAPPING_CLARIFICATION_PROMPT,
     MAPPING_PROMPT,
     ROUTER_PROMPT,
 )
-from general_agent.graph_state import AdvisorGraphState, MappingDecision, RouteDecision
+from general_agent.graph_state import (
+    AdvisorGraphState,
+    CrdMappingDecision,
+    MappingDecision,
+    RouteDecision,
+)
 
 
 def build_advisor_graph(
@@ -44,34 +53,42 @@ def build_advisor_graph(
     )
     router_model = chat_model.with_structured_output(RouteDecision)
     mapping_model = chat_model.with_structured_output(MappingDecision)
+    crd_mapping_model = chat_model.with_structured_output(CrdMappingDecision)
 
     async def route(state: AdvisorGraphState) -> dict[str, Any]:
-        if state.get("is_new_attachment"):
-            # Attachment presence owns the start decision. The router still runs
-            # to extract an all-rows firm from the same message.
-            decision = await _structured_attempts(
-                router_model,
-                ROUTER_PROMPT.format(
-                    phase="new_attachment",
-                    has_attachment=True,
-                    has_match=False,
-                    message=state.get("user_message", ""),
-                ),
-                RouteDecision,
-            )
-            decision.route = "start_match"
+        requested = state.get("requested_workflow")
+        if requested == "profile_report":
+            decision = RouteDecision(route="start_profile_report")
+        elif requested == "match":
+            decision = RouteDecision(route="start_match")
         else:
             decision = await _structured_attempts(
                 router_model,
                 ROUTER_PROMPT.format(
-                    phase=state.get("phase", "idle"),
+                    phase=(
+                        "new_attachment"
+                        if state.get("is_new_attachment")
+                        else state.get("phase", "idle")
+                    ),
                     has_attachment=bool(state.get("attachment_id")),
-                    has_match=bool((state.get("result") or {}).get("match_session_id")),
+                    has_match=bool(
+                        state.get("source_match_session_id")
+                        or (state.get("result") or {}).get("match_session_id")
+                    ),
                     message=state.get("user_message", ""),
                 ),
                 RouteDecision,
             )
-        return {"route": decision.model_dump(mode="json"), "is_new_attachment": False}
+        active_workflow = (
+            "profile_report"
+            if decision.route == "start_profile_report"
+            else "match"
+        )
+        return {
+            "route": decision.model_dump(mode="json"),
+            "active_workflow": active_workflow,
+            "is_new_attachment": False,
+        }
 
     async def inspect(state: AdvisorGraphState) -> dict[str, Any]:
         attachment_id = state.get("attachment_id")
@@ -86,7 +103,12 @@ def build_advisor_graph(
             )
         except ValueError as exc:
             return {"phase": "idle", "response": user_messages.user_fixable_error(exc)}
-        return {"profile": profile, "phase": "mapping", "error": None}
+        phase = (
+            "profile_mapping"
+            if state.get("active_workflow") == "profile_report"
+            else "mapping"
+        )
+        return {"profile": profile, "phase": phase, "error": None}
 
     async def map_input(state: AdvisorGraphState) -> dict[str, Any]:
         profile = state.get("profile")
@@ -107,6 +129,26 @@ def build_advisor_graph(
             MappingDecision,
         )
         return _mapping_decision_update(decision)
+
+    async def map_crd_input(state: AdvisorGraphState) -> dict[str, Any]:
+        profile = state.get("profile")
+        if not profile:
+            return {
+                "phase": "idle",
+                "response": (
+                    "I couldn’t inspect the uploaded file. Please attach it again "
+                    "to start a fresh advisor profile report."
+                ),
+            }
+        decision = await _structured_attempts(
+            crd_mapping_model,
+            CRD_MAPPING_PROMPT.format(
+                message=state.get("user_message", ""),
+                profile=json.dumps(profile, ensure_ascii=False, default=str),
+            ),
+            CrdMappingDecision,
+        )
+        return _crd_mapping_decision_update(decision)
 
     async def resolve_mapping(state: AdvisorGraphState) -> dict[str, Any]:
         payload = state.get("pending_payload") or {}
@@ -150,6 +192,51 @@ def build_advisor_graph(
             MappingDecision,
         )
         return _mapping_decision_update(decision)
+
+    async def resolve_crd_mapping(state: AdvisorGraphState) -> dict[str, Any]:
+        payload = state.get("pending_payload") or {}
+        answer = str(state.get("clarification_answer") or "").strip()
+        proposed = payload.get("proposed_mapping")
+        if proposed and _affirmative(answer):
+            mapping = CrdInputMapping.model_validate(proposed)
+            return {
+                "mapping": mapping.model_dump(mode="json"),
+                "phase": "profile_validating",
+                "pending_kind": None,
+                "pending_payload": {},
+                "clarification_answer": None,
+                "response": "",
+                "error": None,
+            }
+        profile = state.get("profile")
+        if not profile:
+            return {
+                "phase": "idle",
+                "pending_kind": None,
+                "pending_payload": {},
+                "clarification_answer": None,
+                "response": (
+                    "I no longer have the bounded file preview needed to interpret "
+                    "that answer. Please attach the file again."
+                ),
+            }
+        decision = await _structured_attempts(
+            crd_mapping_model,
+            CRD_MAPPING_CLARIFICATION_PROMPT.format(
+                question=str(
+                    payload.get("question") or "Please clarify the CRD column."
+                ),
+                answer=answer or "(no answer provided)",
+                proposed_mapping=(
+                    json.dumps(proposed, ensure_ascii=False, default=str)
+                    if proposed
+                    else "null"
+                ),
+                profile=json.dumps(profile, ensure_ascii=False, default=str),
+            ),
+            CrdMappingDecision,
+        )
+        return _crd_mapping_decision_update(decision)
 
     async def validate(state: AdvisorGraphState) -> dict[str, Any]:
         try:
@@ -212,6 +299,71 @@ def build_advisor_graph(
             "response": user_messages.match_complete(counts),
         }
 
+    async def validate_crd_input(state: AdvisorGraphState) -> dict[str, Any]:
+        try:
+            validation = await asyncio.to_thread(
+                service.validate_profile_input,
+                _context(state),
+                str(state["attachment_id"]),
+                CrdInputMapping.model_validate(state["mapping"]),
+            )
+        except ValueError as exc:
+            return {
+                "phase": "profile_mapping",
+                "response": user_messages.user_fixable_error(exc),
+                "profile_report_validation": {},
+                "error": None,
+            }
+        return {
+            "profile_report_validation": validation.model_dump(mode="json"),
+            "phase": "profile_generating",
+            "error": None,
+        }
+
+    async def generate_profile_report(
+        state: AdvisorGraphState,
+    ) -> dict[str, Any]:
+        source_match_session_id = state.get("source_match_session_id") or (
+            (state.get("result") or {}).get("match_session_id")
+        )
+        try:
+            if source_match_session_id:
+                result = await asyncio.to_thread(
+                    service.create_profile_report_from_match,
+                    _context(state),
+                    str(source_match_session_id),
+                )
+            elif state.get("profile_report_validation"):
+                result = await asyncio.to_thread(
+                    service.create_profile_report_from_upload,
+                    _context(state),
+                    CrdInputValidationResult.model_validate(
+                        state["profile_report_validation"]
+                    ),
+                )
+            else:
+                return {
+                    "phase": "idle",
+                    "response": user_messages.profile_source_required(),
+                }
+        except ValueError as exc:
+            return {
+                "phase": "profile_report",
+                "response": user_messages.user_fixable_error(exc),
+            }
+        value = result.model_dump(mode="json")
+        return {
+            "profile_report_result": value,
+            "phase": "profile_complete",
+            "pending_kind": None,
+            "pending_payload": {},
+            "clarification_answer": None,
+            "response": user_messages.profile_report_complete(value),
+        }
+
+    def profile_source_required(_state: AdvisorGraphState) -> dict[str, Any]:
+        return {"phase": "idle", "response": user_messages.profile_source_required()}
+
     async def remap_firm(state: AdvisorGraphState) -> dict[str, Any]:
         validation = MappingValidationResult.model_validate(state["validation"])
         decision = RouteDecision.model_validate(state.get("route") or {})
@@ -257,6 +409,10 @@ def build_advisor_graph(
         payload = state.get("pending_payload") or {}
         if state.get("pending_kind") == "firm":
             question = str(payload.get("question") or _firm_question(state))
+        elif state.get("pending_kind") == "profile_mapping":
+            question = str(
+                payload.get("question") or "Please clarify which column contains CRDs."
+            )
         else:
             question = str(payload.get("question") or "Please clarify the input mapping.")
         answer = interrupt(
@@ -290,6 +446,11 @@ def build_advisor_graph(
             "mapping": {},
             "validation": {},
             "result": {},
+            "profile_report_validation": {},
+            "profile_report_result": {},
+            "source_match_session_id": None,
+            "requested_workflow": None,
+            "active_workflow": "match",
             "pending_kind": None,
             "pending_payload": {},
             "clarification_answer": None,
@@ -302,10 +463,10 @@ def build_advisor_graph(
     def greeting(_state: AdvisorGraphState) -> dict[str, Any]:
         return {
             "response": (
-                "Hi! I can help you match financial advisors. "
+                "Hi! I can help you match financial advisors or generate a placeholder "
+                "advisor profile report from CRD numbers. "
                 "To get started, attach one raw advisor CSV or XLSX file and ask me "
-                "to match it. I’ll help interpret the columns and prepare an auditable "
-                "workbook with ambiguous or unmatched rows clearly identified."
+                "to match it or identify its CRD column."
             )
         }
 
@@ -323,10 +484,15 @@ def build_advisor_graph(
         ("route", route),
         ("inspect", inspect),
         ("map_input", map_input),
+        ("map_crd_input", map_crd_input),
         ("resolve_mapping", resolve_mapping),
+        ("resolve_crd_mapping", resolve_crd_mapping),
         ("validate", validate),
+        ("validate_crd_input", validate_crd_input),
         ("remap_firm", remap_firm),
         ("match", match),
+        ("generate_profile_report", generate_profile_report),
+        ("profile_source_required", profile_source_required),
         ("clarify", clarify),
         ("reset", reset),
         ("greeting", greeting),
@@ -338,8 +504,18 @@ def build_advisor_graph(
     graph.add_conditional_edges("route", _route_edge)
     graph.add_conditional_edges("inspect", _after_inspect)
     graph.add_conditional_edges("map_input", _after_mapping)
+    graph.add_conditional_edges("map_crd_input", _after_crd_mapping)
     graph.add_conditional_edges("resolve_mapping", _after_mapping)
+    graph.add_conditional_edges("resolve_crd_mapping", _after_crd_mapping)
     graph.add_conditional_edges("validate", _after_validation)
+    graph.add_conditional_edges(
+        "validate_crd_input",
+        lambda state: (
+            "generate_profile_report"
+            if state.get("profile_report_validation")
+            else END
+        ),
+    )
     graph.add_conditional_edges(
         "remap_firm",
         lambda state: "clarify" if state.get("pending_kind") else "match",
@@ -353,6 +529,7 @@ def build_advisor_graph(
         "greeting",
         "capabilities",
         "unsupported",
+        "profile_source_required",
     ):
         graph.add_edge(terminal, END)
     return graph.compile(checkpointer=checkpointer or InMemorySaver())
@@ -422,6 +599,57 @@ def _mapping_decision_update(decision: MappingDecision) -> dict[str, Any]:
     }
 
 
+def _crd_mapping_decision_update(
+    decision: CrdMappingDecision,
+) -> dict[str, Any]:
+    if decision.missing_crd_column:
+        return {
+            "mapping": {},
+            "phase": "idle",
+            "pending_kind": None,
+            "pending_payload": {},
+            "clarification_answer": None,
+            "response": user_messages.missing_crd_column(),
+            "error": None,
+        }
+    if decision.clarification_required or decision.mapping is None:
+        kind = decision.clarification_kind or (
+            "confirm_mapping" if decision.mapping is not None else "provide_details"
+        )
+        proposed = (
+            decision.mapping.model_dump(mode="json")
+            if kind == "confirm_mapping" and decision.mapping is not None
+            else None
+        )
+        question = decision.clarification_question or (
+            "Should I use this proposed CRD column?"
+            if proposed
+            else "Which worksheet, header row, and displayed column contains CRDs?"
+        )
+        return {
+            "mapping": {},
+            "phase": "profile_mapping_clarification",
+            "pending_kind": "profile_mapping",
+            "pending_payload": {
+                "question": question,
+                "clarification_kind": kind,
+                "proposed_mapping": proposed,
+            },
+            "clarification_answer": None,
+            "response": "",
+            "error": None,
+        }
+    return {
+        "mapping": decision.mapping.model_dump(mode="json"),
+        "pending_kind": None,
+        "pending_payload": {},
+        "clarification_answer": None,
+        "phase": "profile_validating",
+        "response": "",
+        "error": None,
+    }
+
+
 def _route_edge(state: AdvisorGraphState) -> str:
     route = (state.get("route") or {}).get("route", "unsupported")
     if route == "start_match":
@@ -432,13 +660,31 @@ def _route_edge(state: AdvisorGraphState) -> str:
         if state.get("profile") and state.get("pending_kind") == "mapping":
             return "map_input"
         return "inspect"
+    if route == "start_profile_report":
+        if state.get("source_match_session_id") or (
+            state.get("result") or {}
+        ).get("match_session_id"):
+            return "generate_profile_report"
+        if state.get("profile_report_validation"):
+            return "generate_profile_report"
+        if state.get("attachment_id"):
+            if state.get("profile") and state.get("pending_kind") == "profile_mapping":
+                return "map_crd_input"
+            return "inspect"
+        return "profile_source_required"
     return str(route)
 
 
 def _after_inspect(state: AdvisorGraphState) -> str:
     """Stop cleanly when matching was requested without an attachment."""
 
-    return "map_input" if state.get("profile") else END
+    if not state.get("profile"):
+        return END
+    return (
+        "map_crd_input"
+        if state.get("active_workflow") == "profile_report"
+        else "map_input"
+    )
 
 
 def _after_mapping(state: AdvisorGraphState) -> str:
@@ -447,8 +693,20 @@ def _after_mapping(state: AdvisorGraphState) -> str:
     return "clarify" if state.get("pending_kind") else "validate"
 
 
+def _after_crd_mapping(state: AdvisorGraphState) -> str:
+    if state.get("error"):
+        return END
+    if not state.get("mapping") and not state.get("pending_kind"):
+        return END
+    return "clarify" if state.get("pending_kind") else "validate_crd_input"
+
+
 def _after_clarify(state: AdvisorGraphState) -> str:
-    return "resolve_mapping" if state.get("pending_kind") == "mapping" else "route"
+    if state.get("pending_kind") == "mapping":
+        return "resolve_mapping"
+    if state.get("pending_kind") == "profile_mapping":
+        return "resolve_crd_mapping"
+    return "route"
 
 
 def _after_validation(state: AdvisorGraphState) -> str:
