@@ -30,11 +30,11 @@
   "nodes": [
     { "id": "message", "lane": "client", "col": 0, "type": "frontend", "label": "Message + File", "sublabel": "one CSV/XLSX" },
     { "id": "router", "lane": "graph", "col": 1, "type": "backend", "label": "Typed Router", "sublabel": "3 attempts max", "tag": "LLM" },
-    { "id": "mapping", "lane": "core", "col": 2, "type": "backend", "label": "Map Input", "sublabel": "bounded profile", "tag": "LLM", "width": 100 },
+    { "id": "mapping", "lane": "core", "col": 2, "type": "backend", "label": "Map / Resolve", "sublabel": "bounded context", "tag": "LLM", "width": 100 },
     { "id": "validate", "lane": "graph", "col": 3, "type": "security", "label": "Validate", "sublabel": "limits + fingerprint" },
     { "id": "match", "lane": "core", "col": 4, "type": "security", "label": "Match + Score", "sublabel": "deterministic policy" },
     { "id": "publish", "lane": "client", "col": 5, "type": "backend", "label": "Workbook", "sublabel": "reply + events" },
-    { "id": "interrupt", "lane": "review", "col": 1, "type": "messagebus", "label": "Interrupt", "sublabel": "ask + resume" },
+    { "id": "interrupt", "lane": "review", "col": 1, "type": "messagebus", "label": "Mapping Pause", "sublabel": "interrupt + resume", "width": 100 },
     { "id": "decisions", "lane": "review", "col": 5, "type": "external", "label": "Review", "sublabel": "explicit choices" },
     { "id": "memory", "lane": "data", "col": 0, "type": "database", "label": "Memory", "sublabel": "restart loss" },
     { "id": "repository", "lane": "data", "col": 4, "type": "database", "label": "Audit DB", "sublabel": "durable evidence" }
@@ -46,7 +46,7 @@
     { "id": "validate_match", "from": "validate", "to": "match", "variant": "security" },
     { "id": "match_publish", "from": "match", "to": "publish", "variant": "security" },
     { "id": "clarify", "from": "mapping", "to": "interrupt", "variant": "dashed", "role": "branch" },
-    { "id": "resume", "from": "interrupt", "to": "router", "variant": "dashed", "role": "return" },
+    { "id": "resume", "from": "interrupt", "to": "mapping", "variant": "dashed", "role": "return" },
     { "id": "review_apply", "from": "decisions", "to": "publish", "variant": "security", "role": "return" },
     { "id": "checkpoint", "from": "message", "to": "memory", "variant": "dashed" },
     { "id": "audit", "from": "match", "to": "repository", "variant": "dashed" },
@@ -59,7 +59,7 @@
       "items": [
         "Normalization, candidates, scores, decisions, and exports are code-owned",
         "The model never receives the complete reference or workbook",
-        "Exact CRD and review invariants remain unchanged"
+        "Exact CRD, firm handling, review mutations, and workbook verification remain code-owned"
       ]
     },
     {
@@ -68,6 +68,7 @@
       "items": [
         "Router and mapping use strict structured output",
         "Three total attempts per decision",
+        "Mapping resumes bypass the router; a clear yes accepts the stored proposal",
         "No tools, planner, subagents, or autonomous loop"
       ]
     },
@@ -78,6 +79,16 @@
         "Conversation and interrupt progress are process-local",
         "API restart begins a fresh conversation",
         "Durable advisor evidence remains for audit and download"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Router Branches",
+      "items": [
+        "Start match enters inspect, mapping, validation, and deterministic matching",
+        "Review and manual CRD requests use bounded explicit command nodes",
+        "Approve, status, reset, greeting, capabilities, and unsupported are terminal branches",
+        "Firm answers route only among exact column remap, explicit override, source values, or continue"
       ]
     }
   ]

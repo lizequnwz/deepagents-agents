@@ -4605,12 +4605,12 @@
 
         <!-- Edge paths -->
         <path data-edge-from="message" data-edge-to="router" data-edge-key="0" data-edge-id="intake_route" data-composition-points="134,119;134,166;174,166;174,243" d="M 134 119 L 134 166 L 174 166 L 174 243" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="router" data-edge-to="mapping" data-edge-key="1" data-edge-id="route_mapping" data-composition-points="266,243;266,290;250,290;250,360" d="M 266 243 L 266 290 L 250 290 L 250 360" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="router" data-edge-to="mapping" data-edge-key="1" data-edge-id="route_mapping" data-composition-points="266,243;266,290;250,290;250,353" d="M 266 243 L 266 290 L 250 290 L 250 353" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="mapping" data-edge-to="validate" data-edge-key="2" data-edge-id="mapping_validate" data-composition-points="350,367;350,290;384,290;384,243" d="M 350 367 L 350 290 L 384 290 L 384 243" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="validate" data-edge-to="match" data-edge-key="3" data-edge-id="validate_match" data-composition-points="476,243;476,290;454,290;454,367" d="M 476 243 L 476 290 L 454 290 L 454 367" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
         <path data-edge-from="match" data-edge-to="publish" data-edge-key="4" data-edge-id="match_publish" data-composition-points="546,367;546,228;579,228;579,119" d="M 546 367 L 546 228 L 579 228 L 579 119" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="mapping" data-edge-to="interrupt" data-edge-key="5" data-edge-id="clarify" data-composition-points="250,374;250,414;266,414;266,491" d="M 250 374 L 250 414 L 266 414 L 266 491" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="interrupt" data-edge-to="router" data-edge-key="6" data-edge-id="resume" data-composition-points="220,465;220,352;220,352;220,277" d="M 220 465 L 220 352 L 220 352 L 220 277" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="mapping" data-edge-to="interrupt" data-edge-key="5" data-edge-id="clarify" data-composition-points="250,367;250,414;270,414;270,484" d="M 250 367 L 250 414 L 270 414 L 270 484" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="interrupt" data-edge-to="mapping" data-edge-key="6" data-edge-id="resume" data-composition-points="270,498;270,414;250,414;250,381" d="M 270 498 L 270 414 L 250 414 L 250 381" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
         <path data-edge-from="decisions" data-edge-to="publish" data-edge-key="7" data-edge-id="review_apply" data-composition-points="618,465;618,290;618,290;618,145" d="M 618 465 L 618 290 L 618 290 L 618 145" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
         <path data-edge-from="message" data-edge-to="memory" data-edge-key="8" data-edge-id="checkpoint" data-composition-points="88,145;88,352;88,352;88,589" d="M 88 145 L 88 352 L 88 352 L 88 589" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
         <path data-edge-from="match" data-edge-to="repository" data-edge-key="9" data-edge-id="audit" data-composition-points="500,393;500,476;500,476;500,589" d="M 500 393 L 500 476 L 500 476 L 500 589" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
@@ -4643,15 +4643,15 @@
         <text data-detail="fine" x="220" y="265" class="t-backend" font-size="7" text-anchor="middle">LLM</text>
         </g>
 
-        <g id="node-mapping" data-node-id="mapping" data-node-label="Map Input" tabindex="0" role="button" aria-label="Focus Map Input, bounded profile, Deterministic Core › Interpret" aria-pressed="false" data-node-kind="backend" data-node-sublabel="bounded profile" data-node-tag="LLM" data-node-context="Deterministic Core › Interpret">
-          <title>Map Input · bounded profile · Deterministic Core › Interpret · LLM</title>
+        <g id="node-mapping" data-node-id="mapping" data-node-label="Map / Resolve" tabindex="0" role="button" aria-label="Focus Map / Resolve, bounded context, Deterministic Core › Interpret" aria-pressed="false" data-node-kind="backend" data-node-sublabel="bounded context" data-node-tag="LLM" data-node-context="Deterministic Core › Interpret">
+          <title>Map / Resolve · bounded context · Deterministic Core › Interpret · LLM</title>
           <rect x="250" y="333" width="100" height="68" rx="6" class="c-mask"/>
           <rect x="250" y="333" width="100" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(256 339) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="300" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Map Input</text>
-          <text data-detail="context" x="300" y="371" class="t-muted" font-size="8" text-anchor="middle">bounded profile</text>
+          <text data-detail-anchor x="300" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Map / Resolve</text>
+          <text data-detail="context" x="300" y="371" class="t-muted" font-size="8" text-anchor="middle">bounded context</text>
         <text data-detail="fine" x="300" y="389" class="t-backend" font-size="7" text-anchor="middle">LLM</text>
         </g>
 
@@ -4690,18 +4690,18 @@
           <text data-detail="context" x="625" y="131" class="t-muted" font-size="8" text-anchor="middle">reply + events</text>
         </g>
 
-        <g id="node-interrupt" data-node-id="interrupt" data-node-label="Interrupt" tabindex="0" role="button" aria-label="Focus Interrupt, ask + resume, Human Review › Intake" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="ask + resume" data-node-context="Human Review › Intake">
-          <title>Interrupt · ask + resume · Human Review › Intake</title>
-          <rect x="174" y="465" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="174" y="465" width="92" height="52" rx="6" class="c-messagebus" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(180 471) scale(0.6875)">
+        <g id="node-interrupt" data-node-id="interrupt" data-node-label="Mapping Pause" tabindex="0" role="button" aria-label="Focus Mapping Pause, interrupt + resume, Human Review › Intake" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="interrupt + resume" data-node-context="Human Review › Intake">
+          <title>Mapping Pause · interrupt + resume · Human Review › Intake</title>
+          <rect x="170" y="465" width="100" height="52" rx="6" class="c-mask"/>
+          <rect x="170" y="465" width="100" height="52" rx="6" class="c-messagebus" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(176 471) scale(0.6875)">
             <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
             <circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
             <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
             <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
           </g>
-          <text data-detail-anchor x="220" y="486" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Interrupt</text>
-          <text data-detail="context" x="220" y="503" class="t-muted" font-size="8" text-anchor="middle">ask + resume</text>
+          <text data-detail-anchor x="220" y="486" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Mapping Pause</text>
+          <text data-detail="context" x="220" y="503" class="t-muted" font-size="8" text-anchor="middle">interrupt + resume</text>
         </g>
 
         <g id="node-decisions" data-node-id="decisions" data-node-label="Review" tabindex="0" role="button" aria-label="Focus Review, explicit choices, Human Review › Execute + review" aria-pressed="false" data-node-kind="external" data-node-sublabel="explicit choices" data-node-context="Human Review › Execute + review">
@@ -4968,7 +4968,7 @@
         <ul>
           <li>&bull; Normalization, candidates, scores, decisions, and exports are code-owned</li>
           <li>&bull; The model never receives the complete reference or workbook</li>
-          <li>&bull; Exact CRD and review invariants remain unchanged</li>
+          <li>&bull; Exact CRD, firm handling, review mutations, and workbook verification remain code-owned</li>
         </ul>
       </div>
 
@@ -4980,6 +4980,7 @@
         <ul>
           <li>&bull; Router and mapping use strict structured output</li>
           <li>&bull; Three total attempts per decision</li>
+          <li>&bull; Mapping resumes bypass the router; a clear yes accepts the stored proposal</li>
           <li>&bull; No tools, planner, subagents, or autonomous loop</li>
         </ul>
       </div>
@@ -4993,6 +4994,19 @@
           <li>&bull; Conversation and interrupt progress are process-local</li>
           <li>&bull; API restart begins a fresh conversation</li>
           <li>&bull; Durable advisor evidence remains for audit and download</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>Router Branches</h3>
+        </div>
+        <ul>
+          <li>&bull; Start match enters inspect, mapping, validation, and deterministic matching</li>
+          <li>&bull; Review and manual CRD requests use bounded explicit command nodes</li>
+          <li>&bull; Approve, status, reset, greeting, capabilities, and unsupported are terminal branches</li>
+          <li>&bull; Firm answers route only among exact column remap, explicit override, source values, or continue</li>
         </ul>
       </div>
     </div>

@@ -57,6 +57,85 @@ The graph is one `StateGraph`:
 10. `confirm_manual`, `cancel_manual`, `approve`, `status`, `reset`,
    `capabilities`, `unsupported` — explicit terminal branches.
 
+## Exact node and edge map
+
+This diagram mirrors the compiled `StateGraph`. Diamonds are conditional-edge
+functions rather than executable nodes. Purple nodes are the only LLM decision
+points; green nodes are deterministic application code.
+
+```mermaid
+flowchart TD
+    START(["New user turn"]) --> route["route<br/>Typed RouteDecision"]
+    route --> route_edge{"_route_edge"}
+
+    route_edge -->|"start_match · fresh"| inspect["inspect<br/>Bounded file profile"]
+    route_edge -->|"start_match · pending mapping"| map_input["map_input<br/>Typed InputMapping"]
+    route_edge -->|"firm column supplied"| remap_firm["remap_firm<br/>Bind exact column + revalidate"]
+    route_edge -->|"firm resolution supplied"| match["match<br/>Deterministic matching + export"]
+    route_edge -->|"review"| review["review<br/>Page or apply row decisions"]
+    route_edge -->|"propose_crd"| propose_crd["propose_crd<br/>Presented candidate or pending proposal"]
+    route_edge -->|"confirm_manual"| confirm_manual["confirm_manual"]
+    route_edge -->|"cancel_manual"| cancel_manual["cancel_manual"]
+    route_edge -->|"approve"| approve["approve"]
+    route_edge -->|"status"| status["status"]
+    route_edge -->|"reset"| reset["reset"]
+    route_edge -->|"greeting"| greeting["greeting"]
+    route_edge -->|"capabilities"| capabilities["capabilities"]
+    route_edge -->|"unsupported"| unsupported["unsupported"]
+
+    inspect --> after_inspect{"_after_inspect<br/>profile available?"}
+    after_inspect -->|"yes"| map_input
+    after_inspect -->|"no · missing/invalid file"| END(["End turn"])
+
+    map_input --> after_mapping{"_after_mapping"}
+    resolve_mapping["resolve_mapping<br/>Pending question + answer + profile"] --> after_mapping
+    after_mapping -->|"mapping complete"| validate["validate<br/>Reload + limits + fingerprint"]
+    after_mapping -->|"clarification required"| clarify["clarify"]
+    after_mapping -->|"structured-output failure"| END
+
+    clarify --> interrupt(["interrupt() · wait for user"])
+    interrupt --> resume(["Command(resume=answer)"])
+    resume --> after_clarify{"_after_clarify"}
+    after_clarify -->|"mapping question"| resolve_mapping
+    after_clarify -->|"firm question"| route
+
+    validate --> after_validation{"_after_validation<br/>validation present?"}
+    after_validation -->|"yes"| match
+    after_validation -->|"no · actionable error"| END
+
+    remap_firm --> after_remap{"pending firm question?"}
+    after_remap -->|"no · revalidated"| match
+    after_remap -->|"yes · invalid/unknown column"| clarify
+
+    match --> after_match{"pending firm question?"}
+    after_match -->|"yes"| clarify
+    after_match -->|"no · result or blocker returned"| END
+
+    review --> END
+    propose_crd --> END
+    confirm_manual --> END
+    cancel_manual --> END
+    approve --> END
+    status --> END
+    reset --> END
+    greeting --> END
+    capabilities --> END
+    unsupported --> END
+
+    classDef llm fill:#ede9fe,stroke:#7c3aed,color:#2e1065,stroke-width:2px;
+    classDef deterministic fill:#dcfce7,stroke:#15803d,color:#052e16,stroke-width:2px;
+    classDef human fill:#ffedd5,stroke:#c2410c,color:#431407,stroke-width:2px;
+    class route,map_input,resolve_mapping llm;
+    class inspect,validate,remap_firm,match,review,propose_crd,confirm_manual,cancel_manual,approve,status,reset,greeting,capabilities,unsupported deterministic;
+    class clarify,interrupt,resume human;
+```
+
+The graph does not send full chat history through these edges. `route` receives
+the current message plus phase/attachment/session flags. `resolve_mapping`
+receives the exact pending question, current answer, optional proposed mapping,
+and bounded file profile. A clear affirmative accepts a stored proposed mapping
+deterministically before another model call is considered.
+
 A new attachment deletes the conversation's in-memory checkpoint and starts a
 fresh graph. Text such as “apply firm ABC to all advisors” resumes the pending
 thread and does not reset it. One run may be active per `(corp_id,
