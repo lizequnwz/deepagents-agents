@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -83,18 +82,6 @@ class Settings:
     run_timeout_seconds: int = field(
         default_factory=lambda: _positive_int("RUN_TIMEOUT_SECONDS", 900)
     )
-    max_model_calls: int = field(
-        default_factory=lambda: _positive_int("MAX_MODEL_CALLS", 32)
-    )
-    max_tool_calls: int = field(
-        default_factory=lambda: _positive_int("MAX_TOOL_CALLS", 64)
-    )
-    max_run_tokens: int = field(
-        default_factory=lambda: _positive_int("MAX_RUN_TOKENS", 1_000_000)
-    )
-    max_event_output_chars: int = field(
-        default_factory=lambda: _positive_int("MAX_EVENT_OUTPUT_CHARS", 12_000)
-    )
     default_corp_id: str = field(
         default_factory=lambda: os.getenv("DEFAULT_CORP_ID", "A123456").strip()
         or "A123456"
@@ -123,16 +110,8 @@ class Settings:
         return self.project_root / ".data"
 
     @property
-    def application_db(self) -> Path:
-        return self.data_root / "application.sqlite3"
-
-    @property
-    def checkpoint_db(self) -> Path:
-        return self.data_root / "checkpoints.sqlite3"
-
-    @property
-    def runtime_root(self) -> Path:
-        return self.data_root / "runtime"
+    def advisor_repository_db(self) -> Path:
+        return self.data_root / "advisor_repository.sqlite3"
 
     @property
     def logs_root(self) -> Path:
@@ -142,31 +121,13 @@ class Settings:
     def api_log(self) -> Path:
         return self.logs_root / "api.log"
 
-    @property
-    def installed_skills_root(self) -> Path:
-        return self.runtime_root / "skills"
-
-    @property
-    def skills_source_root(self) -> Path:
-        return self.project_root / "skills"
-
     def prepare_directories(self) -> None:
         for path in (
             self.data_root,
-            self.runtime_root,
             self.logs_root,
             self.data_root / "users",
         ):
             path.mkdir(parents=True, exist_ok=True)
-        if self.skills_source_root.exists():
-            # The installed tree is derived application state. Replace it rather
-            # than merging so renamed or retired skills cannot remain discoverable
-            # after an upgrade.
-            shutil.rmtree(self.installed_skills_root, ignore_errors=True)
-            self.installed_skills_root.mkdir(parents=True, exist_ok=True)
-            advisor_skill = self.skills_source_root / "advisor-match"
-            if advisor_skill.is_dir():
-                shutil.copytree(advisor_skill, self.installed_skills_root / "advisor-match")
 
     def readiness_errors(self, *, require_model: bool = True) -> list[str]:
         errors: list[str] = []

@@ -2,68 +2,82 @@
   "schema_version": 1,
   "diagram_type": "workflow",
   "meta": {
-    "title": "Advisor Match Agent Workflow",
-    "subtitle": "One attachment snapshot, compact exact indexes, and audited workbook revisions",
-    "output": "docs/advisor_match_workflow.html",
+    "title": "Advisor Match LangGraph Workflow",
+    "subtitle": "Bounded LLM routing and mapping around a deterministic matching core",
     "animation": "none",
-    "visual_preset": "signal-flow",
+    "visual_preset": "blueprint",
     "quality_profile": "showcase",
-    "viewBox": [720, 820]
+    "output": "docs/advisor_match_workflow.html",
+    "viewBox": [820, 900]
   },
   "lanes": [
-    { "id": "interaction", "label": "User + Streamlit" },
-    { "id": "storage", "label": "Protected Storage + SQLite" },
-    { "id": "agent", "label": "Bounded Agent Reasoning" },
-    { "id": "deterministic", "label": "Deterministic Application Code" }
+    { "id": "client", "label": "Chat UI + API" },
+    { "id": "graph", "label": "LangGraph Control" },
+    { "id": "core", "label": "Deterministic Core" },
+    { "id": "review", "label": "Human Review", "variant": "exception" },
+    { "id": "data", "label": "State + Evidence" }
   ],
   "phases": [
-    { "id": "intake", "label": "Immutable intake", "fromCol": 0, "toCol": 1, "variant": "security" },
-    { "id": "interpret", "label": "Map", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
-    { "id": "resolve", "label": "Resolve + review", "fromCol": 3, "toCol": 4 },
-    { "id": "deliver", "label": "Verify + publish", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+    { "id": "intake", "label": "Intake", "fromCol": 0, "toCol": 1 },
+    { "id": "interpret", "label": "Interpret", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
+    { "id": "execute", "label": "Execute + review", "fromCol": 3, "toCol": 5, "variant": "security" }
   ],
-  "mainPath": ["upload", "attachment", "interpret_input", "reference_snapshot", "match_rows", "publish_artifact", "download"],
+  "groups": [
+    { "id": "llm_boundary", "label": "Bounded LLM decisions", "lane": "graph", "fromCol": 1, "toCol": 2, "variant": "emphasis" },
+    { "id": "policy_core", "label": "Code-owned identity policy", "lane": "core", "fromCol": 3, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["message", "router", "mapping", "validate", "match", "publish"],
   "nodes": [
-    { "id": "upload", "lane": "interaction", "col": 0, "type": "external", "label": "Upload", "sublabel": "one CSV or XLSX" },
-    { "id": "download", "lane": "interaction", "col": 5, "type": "frontend", "label": "Download", "sublabel": "verified workbook" },
-    { "id": "clarify", "lane": "interaction", "col": 3, "type": "external", "label": "Clarify", "sublabel": "mapping or evidence" },
-    { "id": "interpret_input", "lane": "agent", "col": 2, "type": "backend", "label": "Interpret", "sublabel": "profile + map", "tag": "bounded samples" },
-    { "id": "review", "lane": "agent", "col": 4, "type": "backend", "label": "Review", "sublabel": "explicit choices" },
-    { "id": "reference_snapshot", "lane": "deterministic", "col": 2, "type": "cloud", "label": "Snapshot", "sublabel": "once per attachment", "width": 82 },
-    { "id": "match_rows", "lane": "deterministic", "col": 4, "type": "backend", "label": "Match", "sublabel": "exact index + policy v5", "tag": "deterministic", "width": 96 },
-    { "id": "attachment", "lane": "storage", "col": 2, "type": "database", "label": "Attachment", "sublabel": "ID + SHA-256" },
-    { "id": "publish_artifact", "lane": "storage", "col": 5, "type": "database", "label": "Publish", "sublabel": "artifact + audit IDs", "tag": "explicit" }
+    { "id": "message", "lane": "client", "col": 0, "type": "frontend", "label": "Message + File", "sublabel": "one CSV/XLSX" },
+    { "id": "router", "lane": "graph", "col": 1, "type": "backend", "label": "Typed Router", "sublabel": "3 attempts max", "tag": "LLM" },
+    { "id": "mapping", "lane": "core", "col": 2, "type": "backend", "label": "Map Input", "sublabel": "bounded profile", "tag": "LLM", "width": 100 },
+    { "id": "validate", "lane": "graph", "col": 3, "type": "security", "label": "Validate", "sublabel": "limits + fingerprint" },
+    { "id": "match", "lane": "core", "col": 4, "type": "security", "label": "Match + Score", "sublabel": "deterministic policy" },
+    { "id": "publish", "lane": "client", "col": 5, "type": "backend", "label": "Workbook", "sublabel": "reply + events" },
+    { "id": "interrupt", "lane": "review", "col": 1, "type": "messagebus", "label": "Interrupt", "sublabel": "ask + resume" },
+    { "id": "decisions", "lane": "review", "col": 5, "type": "external", "label": "Review", "sublabel": "explicit choices" },
+    { "id": "memory", "lane": "data", "col": 0, "type": "database", "label": "Memory", "sublabel": "restart loss" },
+    { "id": "repository", "lane": "data", "col": 4, "type": "database", "label": "Audit DB", "sublabel": "durable evidence" }
   ],
   "edges": [
-    { "id": "store_upload", "from": "upload", "to": "attachment", "role": "main", "variant": "security" },
-    { "id": "profile_attachment", "from": "attachment", "to": "interpret_input", "role": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom", "route": "straight" },
-    { "id": "request_clarification", "from": "interpret_input", "to": "clarify", "role": "branch", "variant": "dashed", "fromSide": "right", "toSide": "bottom", "via": [[430, 367]] },
-    { "id": "retrieve_reference", "from": "interpret_input", "to": "reference_snapshot", "role": "main", "fromSide": "bottom", "toSide": "top", "route": "drop" },
-    { "id": "run_match", "from": "reference_snapshot", "to": "match_rows", "role": "main", "variant": "emphasis" },
-    { "id": "open_review", "from": "match_rows", "to": "review", "role": "branch", "fromSide": "top", "toSide": "bottom", "route": "drop" },
-    { "id": "publish_initial", "from": "match_rows", "to": "publish_artifact", "role": "main", "variant": "security", "fromSide": "right", "toSide": "bottom", "via": [[625, 491]] },
-    { "id": "deliver_artifact", "from": "publish_artifact", "to": "download", "role": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom", "route": "drop" }
+    { "id": "intake_route", "from": "message", "to": "router", "variant": "default" },
+    { "id": "route_mapping", "from": "router", "to": "mapping", "variant": "emphasis" },
+    { "id": "mapping_validate", "from": "mapping", "to": "validate", "variant": "default" },
+    { "id": "validate_match", "from": "validate", "to": "match", "variant": "security" },
+    { "id": "match_publish", "from": "match", "to": "publish", "variant": "security" },
+    { "id": "clarify", "from": "mapping", "to": "interrupt", "variant": "dashed", "role": "branch" },
+    { "id": "resume", "from": "interrupt", "to": "router", "variant": "dashed", "role": "return" },
+    { "id": "review_apply", "from": "decisions", "to": "publish", "variant": "security", "role": "return" },
+    { "id": "checkpoint", "from": "message", "to": "memory", "variant": "dashed" },
+    { "id": "audit", "from": "match", "to": "repository", "variant": "dashed" },
+    { "id": "review_request", "from": "publish", "to": "decisions", "variant": "dashed", "role": "branch" }
   ],
   "cards": [
     {
       "dot": "emerald",
-      "title": "Minimal File Model",
+      "title": "Deterministic Authority",
       "items": [
-        "Uploads exist once under an attachment ID",
-        "Reference source is read once per attachment",
-        "Reference rows stay behind a snapshot ID",
-        "Each workbook revision gets an artifact ID",
-        "No chat/shared workspace or baseline diff"
+        "Normalization, candidates, scores, decisions, and exports are code-owned",
+        "The model never receives the complete reference or workbook",
+        "Exact CRD and review invariants remain unchanged"
       ]
     },
     {
       "dot": "violet",
-      "title": "Decision Boundary",
+      "title": "LLM Boundary",
       "items": [
-        "The model interprets bounded samples",
-        "Application code owns every row decision",
-        "Review mutations require explicit choices",
-        "SQLite stores decisions and before/after audit"
+        "Router and mapping use strict structured output",
+        "Three total attempts per decision",
+        "No tools, planner, subagents, or autonomous loop"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Restart Semantics",
+      "items": [
+        "Conversation and interrupt progress are process-local",
+        "API restart begins a fresh conversation",
+        "Durable advisor evidence remains for audit and download"
       ]
     }
   ]

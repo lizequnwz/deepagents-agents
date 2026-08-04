@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import sqlite3
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -14,12 +13,13 @@ from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-from general_agent.agent import build_agent
-from general_agent.advisor_backend import AdvisorWorkspaceBackend
+from general_agent.advisor_repository import AdvisorRepository
+from general_agent.advisor_service import AdvisorService
 from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
 from general_agent.config import Settings, load_settings
+from general_agent.graph import build_advisor_graph
 from general_agent.observability import (
     configure_logging,
     log_event,
@@ -36,7 +36,7 @@ from general_agent.schemas import (
     Run,
     RunStatus,
 )
-from general_agent.store import ActiveRunError, Store
+from general_agent.runtime_store import ActiveRunError, RuntimeStore
 from general_agent.workspace import Workspace, WorkspacePathError, validate_corp_id
 
 logger = logging.getLogger("general_agent.api")
@@ -70,43 +70,41 @@ def create_app(
         )
         try:
             workspace = Workspace(active_settings.data_root)
-            store = Store(
-                active_settings.application_db,
-                active_settings.data_root,
+            runtime = RuntimeStore(active_settings.default_corp_id)
+            repository = AdvisorRepository(
+                active_settings.advisor_repository_db,
                 active_settings.default_corp_id,
             )
-            backend = AdvisorWorkspaceBackend(active_settings.runtime_root)
             advisor_source = SyntheticAdvisorReferenceSource(
                 active_settings.project_root
                 / "general_agent/advisor_matching/data/master_advisors.csv"
             )
-            _migrate_checkpoint_threads(
-                active_settings.checkpoint_db, active_settings.default_corp_id
-            )
-            checkpoint_context = AsyncSqliteSaver.from_conn_string(
-                str(active_settings.checkpoint_db)
-            )
-            checkpointer = await checkpoint_context.__aenter__()
-            await checkpointer.setup()
-            graph = graph_override or build_agent(
-                active_settings,
+            checkpointer = InMemorySaver()
+            service = AdvisorService(
+                settings=active_settings,
                 workspace=workspace,
-                backend=backend,
-                store=store,
+                repository=repository,
+                runtime=runtime,
                 advisor_source=advisor_source,
+            )
+            graph = graph_override or build_advisor_graph(
+                active_settings,
+                service=service,
                 checkpointer=checkpointer,
             )
             manager = RunManager(
                 settings=active_settings,
-                store=store,
+                runtime=runtime,
+                repository=repository,
                 workspace=workspace,
-                backend=backend,
                 graph=graph,
             )
             app.state.settings = active_settings
             app.state.workspace = workspace
-            app.state.store = store
-            app.state.backend = backend
+            app.state.store = runtime
+            app.state.runtime = runtime
+            app.state.repository = repository
+            app.state.service = service
             app.state.checkpointer = checkpointer
             app.state.manager = manager
         except Exception:
@@ -131,8 +129,7 @@ def create_app(
             )
             try:
                 await manager.shutdown()
-                store.close()
-                await checkpoint_context.__aexit__(None, None, None)
+                repository.close()
                 log_event(logger, logging.INFO, "api.service.stopped")
             except Exception:
                 log_event(
@@ -221,7 +218,7 @@ def create_app(
             "trusted_host_execution": False,
             "active_run_id": active[0] if active else None,
             "max_upload_mb": settings.max_upload_mb,
-            "max_run_tokens": settings.max_run_tokens,
+            "state_persistence": "in_memory",
         }
 
     @app.post("/conversations", response_model=ConversationSummary)
@@ -276,11 +273,10 @@ def create_app(
             raise HTTPException(404, "Conversation not found.") from exc
         except ActiveRunError as exc:
             raise HTTPException(409, str(exc)) from exc
-        for run_id in run_ids:
-            with contextlib.suppress(Exception):
-                await request.app.state.checkpointer.adelete_thread(
-                    f"{corp_id}:{run_id}"
-                )
+        with contextlib.suppress(Exception):
+            await request.app.state.checkpointer.adelete_thread(
+                f"{corp_id}:{conversation_id}"
+            )
         log_event(
             logger,
             logging.INFO,
@@ -371,7 +367,7 @@ def create_app(
     async def download_attachment(request: Request, attachment_id: str) -> FileResponse:
         corp_id = _request_corp(request)
         try:
-            path, name, _sha256 = request.app.state.store.attachment_path(
+            path, name, _sha256 = request.app.state.repository.attachment_path(
                 attachment_id, corp_id=corp_id
             )
         except KeyError as exc:
@@ -390,7 +386,7 @@ def create_app(
     async def download_artifact(request: Request, artifact_id: str) -> FileResponse:
         corp_id = _request_corp(request)
         try:
-            path, name = request.app.state.store.artifact_path(
+            path, name = request.app.state.repository.artifact_path(
                 artifact_id, corp_id=corp_id
             )
         except KeyError as exc:
@@ -448,24 +444,4 @@ def _current_exception_type() -> str:
     return type(exception).__name__ if exception is not None else "Exception"
 
 
-def _migrate_checkpoint_threads(path: Path, default_corp_id: str) -> None:
-    """Assign pre-corp checkpoint threads to the configured default user."""
-
-    if not path.exists():
-        return
-    prefix = validate_corp_id(default_corp_id) + ":"
-    with sqlite3.connect(path) as connection:
-        tables = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
-        for table in ("checkpoints", "writes"):
-            if table in tables:
-                connection.execute(
-                    f"UPDATE {table} SET thread_id=? || thread_id "
-                    "WHERE instr(thread_id, ':')=0",
-                    (prefix,),
-                )
 app = create_app()

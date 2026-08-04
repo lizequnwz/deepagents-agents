@@ -21,27 +21,9 @@ _PHASE_ICONS = {
 def reduce_live_events(state: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
     """Fold event-only run updates into stable fragment-rendering state."""
 
-    state.setdefault("todos", [])
     state.setdefault("activities", [])
-    state.setdefault("tools", {})
     for event in events:
-        kind = event["kind"]
-        data = event.get("data") or {}
-        if kind == "plan_updated" and event.get("agent") == "advisor-match-agent":
-            state["todos"] = data.get("todos") or []
-        elif kind == "tool_started":
-            call_id = str(data.get("call_id") or event["id"])
-            state["tools"][call_id] = event
-            state["activities"].append(("tool", call_id))
-        elif kind == "tool_finished":
-            call_id = str(data.get("call_id") or event["id"])
-            prior = state["tools"].get(call_id, {})
-            merged = {**prior, **event, "data": {**(prior.get("data") or {}), **data}}
-            state["tools"][call_id] = merged
-            if ("tool", call_id) not in state["activities"]:
-                state["activities"].append(("tool", call_id))
-        elif kind not in {"usage_updated", "assistant_delta", "plan_updated"}:
-            state["activities"].append(("event", event))
+        state["activities"].append(("event", event))
     return state
 
 
@@ -79,11 +61,12 @@ def render_turn(
         elif turn.get("error"):
             st.error(_friendly_error(turn["error"]), icon=":material/error:")
             if debug_mode:
+                st.caption("Technical details are available below because debug mode is enabled.")
                 with st.expander("Technical details", icon=":material/bug_report:"):
                     st.code(turn["error"], language="text")
         render_artifacts(client, turn.get("artifacts") or [], turn["run_id"])
         activity_state = reduce_live_events({}, turn.get("events") or [])
-        if activity_state.get("activities") or activity_state.get("todos"):
+        if activity_state.get("activities"):
             with st.status(
                 "How this was produced",
                 expanded=False,
@@ -152,48 +135,11 @@ def render_live_run(
 def render_activity_timeline(
     state: dict[str, Any], *, debug_mode: bool = False
 ) -> None:
-    """Render plans and consolidated v3 lifecycle events like the analyst UI."""
-
-    todos = state.get("todos") or []
-    if todos:
-        with st.container(border=True):
-            st.markdown("**Plan**")
-            for todo in todos:
-                status = (
-                    todo.get("status", "pending")
-                    if isinstance(todo, dict)
-                    else "pending"
-                )
-                content = (
-                    todo.get("content", str(todo))
-                    if isinstance(todo, dict)
-                    else str(todo)
-                )
-                icon = {
-                    "completed": ":material/check_circle:",
-                    "in_progress": ":material/progress_activity:",
-                }.get(status, ":material/radio_button_unchecked:")
-                st.caption(f"{icon} {content}")
+    """Render explicit graph/application lifecycle events."""
     for activity_type, item in state.get("activities") or []:
-        if activity_type == "tool":
-            event = state["tools"][item]
-            data = event.get("data") or {}
-            duration = _duration_suffix(data.get("duration_ms"))
-            st.caption(
-                f"{_PHASE_ICONS.get(str(event.get('phase')), ':material/info:')} "
-                f"{event.get('label') or data.get('tool_name') or 'Tool activity'} · "
-                f"{_agent_label(event.get('agent'))}{duration}"
-            )
-            if debug_mode:
-                _render_tool(event)
-            continue
         event = item
         duration = _duration_suffix((event.get("data") or {}).get("duration_ms"))
-        icon = (
-            ":material/account_tree:"
-            if str(event.get("kind", "")).startswith("subagent_")
-            else _PHASE_ICONS.get(str(event.get("phase")), ":material/info:")
-        )
+        icon = _PHASE_ICONS.get(str(event.get("phase")), ":material/info:")
         st.caption(
             f"{icon} {event.get('label') or 'Agent activity'} · "
             f"{_agent_label(event.get('agent'))}{duration}"
@@ -205,29 +151,7 @@ def _latest_activity_label(state: dict[str, Any]) -> str | None:
     if not activities:
         return None
     activity_type, item = activities[-1]
-    if activity_type == "tool":
-        return str(state["tools"][item].get("label") or "Using a tool")
-    return str(item.get("label") or "Deep Agent is working…")
-
-
-def _render_tool(event: dict[str, Any]) -> None:
-    data = event.get("data") or {}
-    name = str(data.get("tool_name") or "tool")
-    phase = event.get("phase")
-    with st.expander(
-        event.get("label") or name,
-        icon=":material/build:",
-        expanded=False,
-    ):
-        tool_input = data.get("input")
-        if tool_input is not None:
-            st.json(tool_input)
-        if "output" in data and data.get("output") not in (None, ""):
-            output = data["output"]
-            st.code(str(output), language="text")
-        if phase in {"completed", "failed"}:
-            duration = int(data.get("duration_ms") or 0)
-            st.caption(f"{'Failed' if phase == 'failed' else 'Completed'} · {duration / 1000:.2f}s")
+    return str(item.get("label") or "Advisor Match Agent is working…")
 
 
 def render_diagnostics(diagnostics: dict[str, Any], *, key: str) -> None:
@@ -341,7 +265,11 @@ def _friendly_error(error: str) -> str:
             "The configured OpenAI transport rejected reasoning with tools. "
             "Restart the backend to apply the Responses API configuration, then try again."
         )
-    return "The run failed. Open technical details for the provider or tool error."
+    return (
+        "I couldn’t finish this request. Your upload and previous matching results "
+        "were not changed. Please try again; if the problem continues, check the API "
+        "logs or enable UI debug mode for technical details."
+    )
 
 
 def _markdown_text(value: Any) -> str:

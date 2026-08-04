@@ -62,14 +62,12 @@ class Artifact(BaseModel):
 class RunEvent(BaseModel):
     id: int
     kind: Literal[
-        "assistant_delta",
-        "plan_updated",
-        "tool_started",
-        "tool_finished",
-        "subagent_started",
-        "subagent_finished",
-        "usage_updated",
-        "artifact_changed",
+        "node_started",
+        "node_completed",
+        "node_failed",
+        "clarification_required",
+        "review_required",
+        "artifact_published",
         "run_status",
     ]
     phase: Literal["started", "updated", "completed", "failed"]

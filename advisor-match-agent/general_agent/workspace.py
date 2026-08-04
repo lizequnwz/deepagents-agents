@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextvars
 import hashlib
 import os
 import re
@@ -12,12 +11,6 @@ from typing import BinaryIO
 
 from general_agent.schemas import Attachment, utc_now
 
-_CURRENT_CORP_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "advisor_match_corp_id", default=None
-)
-_CURRENT_CONVERSATION_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "advisor_match_conversation_id", default=None
-)
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9._() -]+")
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _CATEGORIES = {"attachments", "advisor_references", "artifacts"}
@@ -40,37 +33,6 @@ def corp_storage_key(corp_id: str) -> str:
     """Return the readable, validated directory name for a corporation."""
 
     return validate_corp_id(corp_id)
-
-
-def legacy_corp_storage_key(corp_id: str) -> str:
-    """Return the pre-readable-layout directory key for startup migration only."""
-
-    normalized = validate_corp_id(corp_id)
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
-
-
-def set_current_workspace(
-    corp_id: str, conversation_id: str
-) -> tuple[contextvars.Token[str | None], contextvars.Token[str | None]]:
-    corp_token = _CURRENT_CORP_ID.set(validate_corp_id(corp_id))
-    conversation_token = _CURRENT_CONVERSATION_ID.set(_safe_id(conversation_id))
-    return corp_token, conversation_token
-
-
-def reset_current_workspace(
-    tokens: tuple[contextvars.Token[str | None], contextvars.Token[str | None]],
-) -> None:
-    corp_token, conversation_token = tokens
-    _CURRENT_CONVERSATION_ID.reset(conversation_token)
-    _CURRENT_CORP_ID.reset(corp_token)
-
-
-def current_conversation_id() -> str | None:
-    return _CURRENT_CONVERSATION_ID.get()
-
-
-def current_corp_id() -> str | None:
-    return _CURRENT_CORP_ID.get()
 
 
 def safe_filename(name: str) -> str:

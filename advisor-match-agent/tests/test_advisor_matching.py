@@ -877,9 +877,8 @@ def test_skill_policy_reference_matches_executable_policy() -> None:
     documented = yaml.safe_load(
         (
             root
-            / "skills"
-            / "advisor-match"
-            / "references"
+            / "docs"
+            / "contracts"
             / "matching-policy.yaml"
         ).read_text(encoding="utf-8")
     )

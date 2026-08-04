@@ -3,7 +3,7 @@
 ## Purpose and trust model
 
 - This is a loopback-only financial-advisor matching application built with
-  DeepAgents, LangChain, FastAPI, Streamlit, and SQLite.
+  LangGraph, LangChain, FastAPI, Streamlit, and SQLite.
 - Its only supported agent workflow is matching one uploaded CSV/XLSX against
   an authoritative advisor source, reviewing decisions, and exporting results.
 - The runtime agent has no shell, arbitrary Python/code execution, network,
@@ -13,19 +13,16 @@
 
 ## Start here
 
-- `general_agent/agent.py`: sole-purpose prompt, narrow tools, filesystem skill
-  reads, budgets, and disabled general-purpose subagent.
-- `general_agent/advisor_tools.py`: typed workflow and review-session tools.
+- `general_agent/graph.py`: explicit nodes, edges, routing, and interrupts.
+- `general_agent/advisor_service.py`: deterministic workflow service boundary.
 - `general_agent/advisor_matching/`: schemas, normalization, policy, matching,
   source adapter, input profiling/loading, and workbook generation.
-- `general_agent/advisor_backend.py`: non-shell, skill-read-only backend and
-  corporation/run context.
-- `general_agent/store.py`: application and advisor-review persistence.
+- `general_agent/runtime_store.py`: process-local conversations, runs, and events.
+- `general_agent/advisor_repository.py`: durable advisor-review persistence.
 - `general_agent/workspace.py`: minimal corporation-scoped protected attachment,
   reference-snapshot, and workbook-artifact storage.
-- `skills/advisor-match/`: the only skill installed for the runtime agent.
-- `docs/SPECIALIZING_GENERAL_AGENT.md`: source architecture and specialization
-  rationale; preserve its reusable-base boundaries.
+- `docs/contracts/`: static policy and workbook contracts; never model skills.
+- `docs/SPECIALIZING_GENERAL_AGENT.md`: architecture rationale.
 
 ## Non-negotiable invariants
 
@@ -34,9 +31,9 @@
   decision, proposal, workbook, and artifact by `corp_id`.
 - Keep both services loopback-only. Corporation IDs isolate storage but are not
   authentication; do not present this app as safe for untrusted users.
-- Keep `virtual_mode=True`, traversal/symlink rejection, protected storage roots,
-  attachment/reference/artifact IDs, read-only installed skills, model/tool/token
-  limits, cancellation, restart recovery, and immutable workbook artifacts.
+- Keep traversal/symlink rejection, protected storage roots,
+  attachment/reference/artifact IDs, structured-output retry limits,
+  cancellation, documented restart loss, and immutable workbook artifacts.
 - The model may inspect bounded profiles and review pages. It must never receive
   the complete master table or full workbook and must never decide matches row
   by row.
@@ -53,14 +50,12 @@
 - Do not hand-edit `.data/` or other derived runtime state. The generic
   chat/shared workspace is intentionally unsupported.
 
-## Agent prompt and skill
+## Graph prompts and contracts
 
-- `SYSTEM_PROMPT` in `general_agent/agent.py` is canonical and must match the
-  backend's actual narrow capabilities.
-- Keep skill trigger/workflow details in `skills/advisor-match/SKILL.md` and its
-  references rather than hard-coding a skill catalog in the prompt.
-- Edit source skills only. `Settings.prepare_directories()` replaces the
-  installed skill tree and installs only `advisor-match`.
+- Keep router and mapping prompts in `general_agent/graph_prompts.py` aligned
+  with their strict schemas in `general_agent/graph_state.py`.
+- Runtime skills and general-purpose tool selection are intentionally absent.
+- Keep static behavior contracts in `docs/contracts/`.
 - Treat prompt, tool schema, policy, and workbook changes as behavior changes;
   add focused deterministic tests.
 

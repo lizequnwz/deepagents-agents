@@ -160,7 +160,7 @@ with st.sidebar:
             expanded=False,
         ):
             st.info(
-                "The advisor agent has no shell or arbitrary code-execution tool.",
+                "The advisor graph has no shell, dynamic tools, or arbitrary code execution.",
                 icon=":material/security:",
             )
             st.markdown("**Chat ID**")

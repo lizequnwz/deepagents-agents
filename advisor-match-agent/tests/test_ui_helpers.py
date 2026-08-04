@@ -1,41 +1,26 @@
 from __future__ import annotations
 
-from general_agent.ui import components
-from general_agent.ui.components import _markdown_text, reduce_live_events
+from general_agent.ui.components import _friendly_error, _markdown_text, reduce_live_events
 
 
-def test_event_reduction_ignores_model_text_and_tracks_event_lifecycle() -> None:
+def test_event_reduction_tracks_explicit_graph_events() -> None:
     state = {}
     reduce_live_events(
         state,
         [
-            {"id": 1, "kind": "assistant_delta", "data": {"text": "Hel"}},
-            {"id": 2, "kind": "assistant_delta", "data": {"text": "lo"}},
+            {"id": 1, "kind": "node_completed", "phase": "completed", "label": "Route"},
             {
-                "id": 3,
-                "kind": "plan_updated",
-                "agent": "advisor-match-agent",
-                "data": {"todos": [{"content": "Test", "status": "in_progress"}]},
-            },
-            {
-                "id": 4,
-                "kind": "tool_started",
-                "phase": "started",
-                "data": {"call_id": "c1", "tool_name": "list_advisor_match_results", "input": {"match_session_id": "ams_test"}},
-            },
-            {
-                "id": 5,
-                "kind": "tool_finished",
+                "id": 2,
+                "kind": "clarification_required",
                 "phase": "completed",
-                "data": {"call_id": "c1", "output": "/workspace", "duration_ms": 8},
+                "label": "Which sheet should I use?",
             },
         ],
     )
-    assert "text" not in state
-    assert state["todos"][0]["content"] == "Test"
-    assert state["tools"]["c1"]["data"]["input"]["match_session_id"] == "ams_test"
-    assert state["tools"]["c1"]["data"]["output"] == "/workspace"
-    assert state["activities"].count(("tool", "c1")) == 1
+    assert [item[1]["kind"] for item in state["activities"]] == [
+        "node_completed",
+        "clarification_required",
+    ]
 
 
 def test_currency_markdown_does_not_turn_into_math() -> None:
@@ -44,30 +29,7 @@ def test_currency_markdown_does_not_turn_into_math() -> None:
     assert "$x+y$" in rendered
 
 
-def test_tool_arguments_and_results_render_only_in_debug_mode(monkeypatch) -> None:
-    rendered = []
-    monkeypatch.setattr(components.st, "caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr(components, "_render_tool", rendered.append)
-    state = {
-        "activities": [("tool", "c1")],
-        "tools": {
-            "c1": {
-                "id": 1,
-                "kind": "tool_finished",
-                "phase": "completed",
-                "label": "Completed tool · inspect_advisor_upload",
-                "data": {
-                    "call_id": "c1",
-                    "tool_name": "inspect_advisor_upload",
-                    "input": {"attachment_id": "att_test"},
-                    "output": {"format": "csv"},
-                },
-            }
-        },
-    }
-
-    components.render_activity_timeline(state)
-    assert rendered == []
-
-    components.render_activity_timeline(state, debug_mode=True)
-    assert rendered == [state["tools"]["c1"]]
+def test_generic_error_does_not_claim_hidden_details_are_openable() -> None:
+    message = _friendly_error("provider exploded")
+    assert "Open technical details" not in message
+    assert "previous matching results were not changed" in message

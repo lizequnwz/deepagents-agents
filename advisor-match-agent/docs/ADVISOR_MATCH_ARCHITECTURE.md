@@ -1,126 +1,101 @@
-# Advisor Match implementation architecture
+# Advisor Match Architecture
 
-Advisor Match Agent has three user-facing stages and one strict ownership rule: the model interprets bounded evidence and conducts the conversation; deterministic application code owns every identity decision and workbook mutation.
+## Decision
 
-The interactive workflow is also available as [advisor_match_workflow.html](advisor_match_workflow.html).
+The application uses a single explicit LangGraph workflow, not Deep Agents.
+The matching problem has a fixed sequence and code-owned identity policy, so a
+planner, dynamic tool selection, filesystem skills, subagents, and an autonomous
+tool loop added uncertainty without adding required capability.
 
-## Stage 1: interpret and validate
+## Component boundaries
 
-FastAPI stores the uploaded CSV or XLSX once in protected storage and gives it an opaque, corporation-and-conversation-scoped attachment ID. `inspect_advisor_upload` resolves that ID and reads at most the configured preview bounds with `header=None`. It therefore does not assume the first row is a header. For each CSV or bounded workbook sheet it returns:
-
-- physical raw-row previews;
-- several plausible header rows with exact header values, patterns, samples, and deterministic synonym suggestions;
-- a headerless view using generated display labels such as `Column A`;
-- the source hash and truncation warnings.
-
-The agent selects exactly one worksheet, a headed or headerless interpretation, and an `InputMapping`. It asks the user when more than one interpretation is plausible.
-
-`validate_advisor_input` then reopens the upload and validates the exact worksheet, physical header row, zero-based indexes, and observed headers. Duplicate headers remain safe because the index is decisive. Headerless references use `header=null`.
-
-Validation loads only after the structural references pass. It skips completely blank rows, excludes preamble rows above the selected header, preserves physical row numbers, enforces the input-row limit, persists a corporation-and-conversation-scoped continuation checkpoint, and returns:
-
-- the canonical mapping and exact selected columns;
-- data, blank, and preamble counts;
-- the missing-firm checkpoint count and a bounded sample;
-- a fingerprint over the source SHA-256 and canonical mapping.
-
-Validation separately counts usable-name rows that lack firm, valid CRD, and valid email. A missing firm column is not itself a checkpoint when every row has CRD or valid email evidence. `create_advisor_match` owns firm resolution: an exact user-stated all-rows firm may be supplied in the same turn, is verified against the current user message, and is applied only to copied mapped row values. The attachment, source hash, mapping, and fingerprint remain unchanged. If a mapped firm column agrees after normalization, source display values are preserved. Blank, mixed, or conflicting source values return a bounded clarification result before reference retrieval. A later override requires the exact firm to be restated; the user may instead retain source values or explicitly continue without firm evidence.
-
-`get_current_advisor_input` returns the latest persisted bounded validation checkpoint so a later clarification turn can resume with exact attachment and mapping identifiers rather than reconstructing them from model prose.
-
-## Stage 2: retrieve and match
-
-After validation the agent calls `create_advisor_match`. The tool first resolves firm handling and either returns a bounded clarification outcome or continues through matching and workbook publication. It then retrieves or reuses the authoritative source for that immutable attachment, validates and projects it into a protected corporation-and-conversation-scoped CSV, and builds temporary exact CRD, email, and normalized-name indexes during the same stream. The model receives only an opaque manifest—not a path or advisor rows.
-
-`create_advisor_match` accepts the attachment ID, exact mapping, mapping fingerprint, optional `all_rows_firm`, and a typed firm resolution. It:
-
-1. resolves the attachment in the current corporation and conversation, verifies its protected path and hash, and revalidates the mapping fingerprint;
-2. resolves source-firm agreement, missing-firm continuation, or an audited session override before reference retrieval;
-3. reuses the attachment's completed snapshot or atomically creates it from one authoritative-source iteration;
-4. validates the protected path, hash, schema, row count, required names, and unique CRDs;
-5. returns a controlled blocker with CRD occurrence counts if the authoritative source is duplicated;
-6. runs deterministic indexed matching and persists the structured session;
-7. releases the temporary index;
-8. generates, reopens, verifies, and atomically publishes `advisor_matches.xlsx` under an opaque artifact ID.
-
-The reference snapshot is created once per immutable attachment. Mapping corrections, match retries, and later review turns reuse it.
-
-## Deterministic policy
-
-The matching engine applies policy version 5 in order:
-
-1. Exact trimmed CRD is decisive; CRDs are opaque strings with no digit validation or numeric extraction. Other conflicts become warnings.
-2. Unique normalized email is decisive after CRD. A non-unique authoritative email is ambiguous.
-3. A usable name produces an exact normalized first/last key; middle tokens are ignored, and uncommaed full names use their first and last tokens.
-4. Exact indexed name requires exact/wildcard/close firm or exact city and state.
-5. General fuzzy-name matching is not performed.
-6. Curated nicknames and name-only evidence create review candidates but never auto-match.
-7. Strong firm or state conflicts block name-based auto-matching.
-8. ZIP is contextual only; street address is outside the workflow.
-9. Unresolved indexed candidates are `Ambiguous Match`; missing-name-key, invalid, or unsupported rows are `No Match` with a row-level reason.
-
-Malformed individual email or name values become warnings or row-level results. Any nonblank trimmed input CRD is usable as an opaque identifier. Completely blank rows are not advisor records. Duplicate input rows remain separate decisions and receive a duplicate-group marker.
-
-Explicit evidence precedence ranks candidates. Close-firm similarity remains bounded within the small exact-name candidate group and its numeric value is never returned to the model or workbook.
-
-## Stage 3: conversational review
-
-The agent reports the interpreted mapping and counts, then pages through ambiguous rows first and no-match rows second. Automated matches are listed only when requested. Review payloads contain source row numbers, candidate CRDs, total candidate counts, truncation flags, and qualitative supporting, conflicting, and ZIP-context evidence.
-
-The only review mutations are:
-
-- confirm a presented candidate;
-- confirm No Match;
-- propose an exact unlisted CRD and confirm it in a later user turn.
-
-The effective decision remains stored on each row. Before/after decision JSON is appended to the audit table in the same SQLite transaction as the session update. The original automated status remains on overridden rows. The unused `reopen` action and general conversational input editing are not supported. The one exception is the audited pre-match all-rows firm override inside `create_advisor_match`; all other corrections require a new upload and session.
-
-Approval may retain unresolved exceptions. A later explicit review choice creates another session revision and regenerates the workbook.
-
-## Persistence and isolation
-
-SQLite stores:
-
-- corporation-scoped match sessions and input summaries;
-- derived-input provenance, including the source attachment/hash, user-supplied firm, affected-row count, and appended column;
-- opaque reference manifests and protected snapshot paths;
-- before/after review audit records;
-- two-turn manual-CRD proposals.
-
-Protected attachments, reference files, and workbook artifacts live under `.data/users/<corp-id>/`, where `<corp-id>` is the validated readable corporation ID. Every lookup includes `corp_id`; attachments and snapshots also belong to one conversation. The agent cannot read uploads, snapshots, sessions, or workbooks through generic filesystem tools.
-
-There is no generic chat/shared workspace, file browser, arbitrary file upload, or filesystem-wide artifact diff. The only virtual filesystem is the read-only installed-skill tree under `.data/runtime/skills`. Loopback-only services, `virtual_mode=True`, symlink/traversal rejection, disabled general-purpose subagent, limits, cancellation, and restart recovery remain in force.
-
-The protected file layout is deliberately small:
-
-```text
-.data/
-├── application.sqlite3
-├── checkpoints.sqlite3
-├── runtime/skills/advisor-match/
-└── users/<corp-id>/
-    ├── attachments/<attachment-id>/<original-or-derived-name>
-    ├── advisor_references/<snapshot-id>/advisor_reference.csv
-    └── artifacts/<run-id>/<artifact-id>/advisor_matches.xlsx
+```mermaid
+flowchart LR
+    UI[Streamlit chat] --> API[FastAPI]
+    API --> RM[RunManager]
+    RM --> G[StateGraph]
+    G --> R[Typed router LLM]
+    G --> M[Typed mapping LLM]
+    G --> S[AdvisorService]
+    S --> D[Deterministic matching core]
+    S --> W[Workbook generator]
+    G <--> IM[InMemorySaver]
+    S <--> DB[(AdvisorRepository SQLite)]
+    S <--> FS[Protected corp-scoped files]
 ```
 
-SQLite is the source of truth for ownership, hashes, sessions, decisions, audits, and artifact revisions. Files are never discovered by comparing a before/after directory manifest.
+`RunManager` streams application events (`node_completed`,
+`clarification_required`, `artifact_published`, and run status). Model calls are
+non-streaming. The UI keeps polling the existing run endpoint and therefore
+does not depend on token streaming.
 
-## Workbook projection
+## Graph
 
-The workbook remains a deterministic four-sheet projection:
+The graph is one `StateGraph`:
 
-1. `Matched`—17 human-facing columns by default, with technical audit fields hidden at the right.
-2. `Review Required`—20 human-facing columns, including candidate-pool size and truncation, and one row per presented candidate or no-match item.
-3. `Original Input`—physical row number plus source columns in original order.
-4. `Run Summary`—mapping, row counts, status counts, hashes, source-transformation provenance, snapshot ID, policy, and revision.
+1. `route` — strict structured intent and same-turn firm extraction.
+2. `inspect` — bounded sheet/row/column profile.
+3. `map_input` — strict structured `InputMapping`; ambiguous interpretations
+   branch to `clarify`. A yes/no question must carry the concrete proposed
+   mapping that an affirmative answer would approve.
+4. `resolve_mapping` — resumes mapping clarification with the exact pending
+   question, the current answer, any proposed mapping, and the bounded upload
+   profile. It bypasses the general request router. A clear affirmative accepts
+   a stored proposal deterministically; other answers return only to the typed
+   mapping interpreter.
+5. `validate` — deterministic load, row limits, transformation checks, and
+   mapping fingerprint.
+6. `match` — firm resolution, authoritative snapshot, deterministic matching,
+   durable session creation, and verified workbook publication.
+7. `remap_firm` — binds an exact user-selected source column and revalidates the
+   immutable upload.
+8. `clarify` — `interrupt()` for mapping or firm ambiguity; the next text-only
+   message resumes with `Command(resume=...)`.
+9. `review` and `propose_crd` — resolve user-facing source row numbers to
+   internal review IDs. Presented candidates can be selected directly; an
+   unlisted CRD creates a pending later-turn confirmation.
+10. `confirm_manual`, `cancel_manual`, `approve`, `status`, `reset`,
+   `capabilities`, `unsupported` — explicit terminal branches.
 
-Names and locations are combined for readability. Headers are styled and frozen; filters, bounded widths, alternating fills, status colors, wrapping, and text-safe CRD/ZIP values are applied. User-controlled strings are forced to text to prevent formula injection. Verification rejects formulas and reconciles effective decision rows to Original Input before the file is atomically published and registered in SQLite.
+A new attachment deletes the conversation's in-memory checkpoint and starts a
+fresh graph. Text such as “apply firm ABC to all advisors” resumes the pending
+thread and does not reset it. One run may be active per `(corp_id,
+conversation_id)`; different conversations may run concurrently under the same
+corporation.
 
-## Production source replacement
+## State
 
-The current source is a synthetic 40-row CSV. A future Snowflake adapter can stream the same projected `AdvisorReferenceSource` schema once per uploaded attachment without changing agent instructions or review contracts. The application writes the immutable snapshot and builds compact exact indexes in one pass; it never compares each uploaded name with the complete master. The model still receives only manifests and bounded candidate pages.
+Graph state contains IDs and bounded structured values: corporation,
+conversation, run, current message, attachment ID, phase, router decision,
+bounded upload profile, mapping, validation fingerprint/summary, result summary,
+pending interrupt/proposal payload, bounded current review page, response, and
+error. Mapping interrupts retain only the pending question, clarification type,
+and optional proposed mapping; full chat history is not sent to the model on
+resume. Internal session, review, proposal, and artifact IDs remain in state and
+audit data instead of normal user-facing copy. State never contains the complete
+advisor reference, full input table, or workbook bytes.
 
-## Deferred profile building
+`InMemorySaver` is intentional. API restart loses conversations, checkpoints,
+pending interrupts, and progress. Durable business evidence stays in
+`.data/advisor_repository.sqlite3`; legacy databases are neither migrated nor
+deleted.
 
-Advisor profile building remains an unregistered `# TODO`. A future tool must accept an approved match session, use effective Matched CRDs only, preserve corporation scope, and create separate auditable artifacts.
+## Authority and failure behavior
+
+The model can route and interpret columns. It cannot select arbitrary tools or
+decide advisor identities. Each structured LLM operation has three total
+attempts; exhaustion fails the current run without mutating deterministic
+decisions. Blocking file/reference work runs off the event loop. Existing file,
+row, preview, timeout, corp-scope, integrity, duplicate-CRD, review, and workbook
+validation rules remain enforced in code.
+
+User-facing operational copy is deterministic and centralized in
+`general_agent/user_messages.py`. Known user-fixable validation errors become
+actionable graph responses. Unexpected provider or system failures still fail
+the run and expose technical details only when UI debug mode is enabled.
+
+LangSmith tracing remains off by default. Operational logs contain IDs, event
+names, counts, durations, and exception types—not raw advisor rows or prompts.
+
+The interactive version of this workflow is
+[`advisor_match_workflow.html`](advisor_match_workflow.html).

@@ -8,7 +8,7 @@ from general_agent.api import create_app
 from tests.fakes import FakeGraph
 
 
-def test_api_persists_chat_and_enforces_single_active_run(settings) -> None:
+def test_api_keeps_chat_in_memory_and_allows_concurrent_threads(settings) -> None:
     graph = FakeGraph(blocked=True)
     app = create_app(settings=settings, graph_override=graph)
     with TestClient(app) as client:
@@ -26,13 +26,14 @@ def test_api_persists_chat_and_enforces_single_active_run(settings) -> None:
         )
         assert response.status_code == 200
         run_id = response.json()["run_id"]
-        collision = client.post(
+        concurrent = client.post(
             f"/conversations/{second['conversation_id']}/messages",
             data={"text": "also work"},
         )
-        assert collision.status_code == 409
+        assert concurrent.status_code == 200
         stopped = client.post(f"/runs/{run_id}/stop")
         assert stopped.status_code == 200
+        client.post(f"/runs/{concurrent.json()['run_id']}/stop")
         for _ in range(100):
             run = client.get(f"/runs/{run_id}").json()
             if run["status"] == "stopped":

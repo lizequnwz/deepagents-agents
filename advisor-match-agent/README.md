@@ -1,116 +1,60 @@
 # Advisor Match Agent
 
-Advisor Match Agent is a trusted DeepAgents application that matches financial-advisor rows from one uploaded CSV or XLSX against an authoritative advisor reference, conducts a bounded conversational review, and publishes a verified `advisor_matches.xlsx` artifact.
+Advisor Match Agent is a loopback-only LangGraph application that matches one
+uploaded advisor CSV/XLSX against an authoritative reference, supports bounded
+human review, and publishes a verified `advisor_matches.xlsx` workbook.
 
-The initial reference is a wholly synthetic development dataset. No Snowflake connection or advisor profile builder is implemented yet.
+The control plane is an explicit `StateGraph`. Two non-streaming LLM decisions
+are allowed: a typed request router and a typed input-mapping interpreter. Each
+gets at most three total structured-output attempts. Normalization, candidate
+generation, scoring, identity decisions, review mutations, and workbook
+generation remain deterministic Python.
 
-> [!CAUTION]
-> Keep both services loopback-only. Corporation IDs provide storage isolation, not authentication. Uploaded advisor information is sensitive and bounded samples/review pages are sent to the configured model provider.
+## State and storage
 
-## Workflow
+- `InMemorySaver` holds graph checkpoints and pending `interrupt()` calls.
+- Conversations, turns, runs, and progress events are process-local.
+- An API restart intentionally starts a fresh conversation and loses pending
+  progress.
+- `.data/advisor_repository.sqlite3` durably stores attachment metadata,
+  reference snapshots, match sessions, review audits, override proposals, and
+  artifact metadata.
+- Older application/checkpoint databases are left untouched and are not read.
 
-1. Upload one `.csv` or `.xlsx` in the chat composer.
-2. Ask the agent to match its advisors.
-3. The model inspects bounded raw rows, detects a header or headerless layout, selects one sheet, and asks when column meanings are ambiguous.
-4. Deterministic code validates exact indexes and headers. A same-turn all-rows firm is applied to copied mapped values inside the match call; the upload is never changed or derived. Missing firm data asks for clarification only on name-bearing rows without CRD or valid email evidence.
-5. The agent retrieves an opaque authoritative snapshot; deterministic code performs every row decision. Duplicate master CRDs return a controlled authoritative-source blocker.
-6. Review `Ambiguous Match` first and `No Match` second in bounded conversational pages. Automated matches are available on request.
-7. Confirm a presented candidate, confirm no match, or supply an exact CRD for a separately reconfirmed override.
-8. Download the styled, verified four-sheet workbook artifact and optionally approve with unresolved exceptions. Every successful revision has its own immutable artifact ID.
+## Run locally
 
-Profile building is a documented `# TODO` and is not exposed as a tool.
-
-The model never reads or edits the whole workbook, receives the full master table, runs shell commands, installs packages, browses the web, or delegates to a general-purpose subagent.
-
-## Output workbook
-
-- `Matched`: effective automatic and user-confirmed matches.
-- `Review Required`: ambiguous candidates and no-match rows.
-- `Original Input`: the selected source table in original order.
-- `Run Summary`: session, mapping, counts, hashes, policy versions, and approval state.
-
-The first two sheets use a compact human-first layout with technical audit fields hidden by default. Headers are frozen and filtered; widths, fills, wrapping, status colors, and text-safe CRD/ZIP formats are applied. Every revision is regenerated deterministically, reopened for validation, and published under a new immutable artifact ID.
-
-## Synthetic data and examples
-
-- Master source: `general_agent/advisor_matching/data/master_advisors.csv`
-- Example uploads: `examples/advisor-match/`
-- Generator: `scripts/generate_advisor_match_fixtures.py`
-- Matching policy: `skills/advisor-match/references/matching-policy.yaml`
-
-All fixture identities are invented and use reserved example email domains.
-
-## Quick start
-
-Requirements: macOS or Linux, Python 3.11+, `uv`, and credentials for a LangChain chat model with reliable tool calling.
-
-```bash
-cp .env.example .env
-# Set MODEL_NAME and the required provider credential.
-./scripts/start.sh
-```
-
-Open <http://127.0.0.1:8502>. The loopback API is at <http://127.0.0.1:8001/docs>.
-
-## Configuration
-
-Important defaults:
-
-| Variable | Default |
-| --- | ---: |
-| `API_HOST` / `APP_HOST` | `127.0.0.1` |
-| `UI_DEBUG_MODE` | `false` |
-| `LOG_LEVEL` | `INFO` |
-| `LOG_MAX_BYTES` | `10485760` |
-| `LOG_BACKUP_COUNT` | `5` |
-| `ADVISOR_MAX_INPUT_ROWS` | `50000` |
-| `ADVISOR_MAX_REFERENCE_ROWS` | `1000000` |
-| `MAX_UPLOAD_MB` | `100` |
-| `MAX_MODEL_CALLS` / `MAX_TOOL_CALLS` | `32` / `64` |
-
-LangSmith tracing is off by default because prompts and tool pages can contain advisor information.
-The normal UI shows concise plan and tool lifecycle progress without tool arguments,
-tool results, token diagnostics, chat IDs, or technical error details. Set
-`UI_DEBUG_MODE=true` and restart the UI to display those debugging details.
-
-## Operational logs
-
-The API process writes a combined, human-readable API and agent timeline to
-`.data/logs/api.log`. It includes request IDs, run/model/tool lifecycle events,
-durations, status codes, token counts, and artifact metadata. It does not log
-prompts, advisor values, filenames, uploaded content, tool payloads, model
-responses, reasoning, credentials, headers, query values, or response bodies.
-
-Follow the active log or open the current file with:
-
-```bash
-tail -f .data/logs/api.log
-less .data/logs/api.log
-```
-
-The file rotates at 10 MiB by default and retains `api.log.1` through
-`api.log.5`. Set `LOG_LEVEL=DEBUG` for additional safe lifecycle records such
-as health checks, run polling, and plan item counts. Rotation size and retention
-are controlled by `LOG_MAX_BYTES` and `LOG_BACKUP_COUNT`.
-
-## Storage and isolation
-
-Uploads are written once to protected corporation-scoped storage and referenced by opaque attachment ID. Reference snapshots and verified workbook revisions use the same pattern. SQLite stores conversations, sessions, decisions, audits, hashes, and file locations; there is no generic chat/shared workspace or model-visible upload path.
-
-Derived state lives under `.data/`. Do not hand-edit it. Installed skills are rebuilt under `.data/runtime/skills` at startup, and only `advisor-match` is exposed through the agent's read-only virtual filesystem.
-
-## Development and tests
+Copy `.env.example` to `.env`, configure `MODEL_NAME` and provider credentials,
+then run:
 
 ```bash
 uv sync --locked --all-groups
-uv run python scripts/generate_advisor_match_fixtures.py
+./scripts/start.sh
+```
+
+The API and Streamlit UI must remain bound to loopback addresses. Corporation
+IDs provide storage isolation, not authentication.
+
+## Important files
+
+- `general_agent/graph.py` — nodes, edges, interrupts, and graph compilation.
+- `general_agent/graph_state.py` — graph state and structured LLM contracts.
+- `general_agent/user_messages.py` — deterministic user-facing workflow copy.
+- `general_agent/advisor_service.py` — explicit application-service boundary.
+- `general_agent/advisor_matching/` — deterministic policy and workbook code.
+- `general_agent/runtime_store.py` — in-memory chat/run/event state.
+- `general_agent/advisor_repository.py` — durable advisor audit records.
+- `docs/contracts/` — matching, mapping, review, and workbook contracts.
+- `docs/advisor_match_workflow.html` — interactive workflow diagram.
+
+Matching policy: `docs/contracts/matching-policy.yaml`.
+
+## Validate
+
+```bash
 uv run pytest
+uv run python scripts/generate_advisor_match_fixtures.py
 git diff --check
 ```
 
-The deterministic suite does not require model credentials. Provider-backed smoke tests remain opt-in.
-
-The general specialization rationale remains in `docs/SPECIALIZING_GENERAL_AGENT.md`; this project implements its deterministic matching boundary with a synthetic source and persisted review sessions.
-
-The concrete state and conversational-review design is documented in `docs/ADVISOR_MATCH_ARCHITECTURE.md`.
-The inherited-capability disposition is documented in `docs/CAPABILITY_RESTRICTIONS.md`.
+The live provider smoke remains opt-in. Profile building is still an
+unregistered `# TODO` and is not simulated.

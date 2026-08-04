@@ -289,7 +289,7 @@ class ManualOverrideProposal(BaseModel):
     review_item_id: str
     advisor: MatchCandidate
     reference_sha256: str
-    status: Literal["Pending", "Applied", "Invalidated"] = "Pending"
+    status: Literal["Pending", "Applied", "Cancelled", "Invalidated"] = "Pending"
 
 
 class ProfileBuildRequest(BaseModel):
