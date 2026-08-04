@@ -65,21 +65,11 @@ def test_service_validates_matches_and_publishes_workbook(settings) -> None:
     path, name = repository.artifact_path(result.output_artifact_id, corp_id=corp_id)
     assert path.is_file()
     assert name == "advisor_matches.xlsx"
-
-    page = service.list_results(
-        context, result.match_session_id, status="no_match", limit=10
-    )
-    proposal = service.propose_crd(
-        context,
+    session = repository.get_advisor_match_session(
         result.match_session_id,
-        page["items"][0]["review_item_id"],
-        "99000001",
+        corp_id=corp_id,
+        conversation_id=conversation.conversation_id,
     )
-    service.cancel_proposal(
-        context, proposal["proposal_id"], result.match_session_id
-    )
-    stored = repository.get_advisor_override_proposal(
-        proposal["proposal_id"], corp_id=corp_id
-    )
-    assert stored["status"] == "Cancelled"
+    assert session["status"] == "Matching Complete"
+    assert session["revision"] == 1
     repository.close()

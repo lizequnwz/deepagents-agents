@@ -2,93 +2,95 @@
   "schema_version": 1,
   "diagram_type": "workflow",
   "meta": {
-    "title": "Advisor Match LangGraph Workflow",
-    "subtitle": "Bounded LLM routing and mapping around a deterministic matching core",
+    "title": "Advisor Matching Workflow",
+    "subtitle": "A bounded LangGraph run that clarifies input, matches deterministically, and ends with a verified workbook",
+    "output": "docs/advisor_match_workflow.html",
     "animation": "none",
     "visual_preset": "blueprint",
     "quality_profile": "showcase",
-    "output": "docs/advisor_match_workflow.html",
-    "viewBox": [820, 900]
+    "views": [
+      {
+        "id": "complete_run",
+        "label": "Complete matching run",
+        "focus": ["upload", "route", "prepare", "match", "publish"],
+        "note": "Follow one upload through bounded interpretation, deterministic matching, and workbook publication."
+      },
+      {
+        "id": "clarifications",
+        "label": "Pre-match clarifications",
+        "focus": ["prepare", "mapping_question", "firm_question", "match"],
+        "note": "Only unresolved column meaning or firm context can pause the graph."
+      },
+      {
+        "id": "offline_review",
+        "label": "Offline review boundary",
+        "focus": ["match", "publish", "download"],
+        "note": "The graph stops after export; review and local edits happen in the downloaded workbook."
+      }
+    ]
   },
   "lanes": [
-    { "id": "client", "label": "Chat UI + API" },
-    { "id": "graph", "label": "LangGraph Control" },
-    { "id": "core", "label": "Deterministic Core" },
-    { "id": "review", "label": "Human Review", "variant": "exception" },
-    { "id": "data", "label": "State + Evidence" }
+    { "id": "user", "label": "User + Streamlit" },
+    { "id": "control", "label": "LangGraph Control" },
+    { "id": "matching", "label": "Deterministic Matching" },
+    { "id": "output", "label": "Verified Output" },
+    { "id": "mapping_help", "label": "Mapping Clarification", "variant": "exception" },
+    { "id": "firm_help", "label": "Firm Clarification", "variant": "exception" },
+    { "id": "boundary", "label": "Outside Application", "variant": "exception" }
   ],
   "phases": [
-    { "id": "intake", "label": "Intake", "fromCol": 0, "toCol": 1 },
-    { "id": "interpret", "label": "Interpret", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
-    { "id": "execute", "label": "Execute + review", "fromCol": 3, "toCol": 5, "variant": "security" }
+    { "id": "request", "label": "Request", "fromCol": 0, "toCol": 1 },
+    { "id": "prepare_phase", "label": "Interpret + validate", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "execute", "label": "Match + deliver", "fromCol": 4, "toCol": 5, "variant": "security" }
   ],
-  "groups": [
-    { "id": "llm_boundary", "label": "Bounded LLM decisions", "lane": "graph", "fromCol": 1, "toCol": 2, "variant": "emphasis" },
-    { "id": "policy_core", "label": "Code-owned identity policy", "lane": "core", "fromCol": 3, "toCol": 5, "variant": "security" }
-  ],
-  "mainPath": ["message", "router", "mapping", "validate", "match", "publish"],
+  "mainPath": ["upload", "route", "prepare", "match", "publish"],
   "nodes": [
-    { "id": "message", "lane": "client", "col": 0, "type": "frontend", "label": "Message + File", "sublabel": "one CSV/XLSX" },
-    { "id": "router", "lane": "graph", "col": 1, "type": "backend", "label": "Typed Router", "sublabel": "3 attempts max", "tag": "LLM" },
-    { "id": "mapping", "lane": "core", "col": 2, "type": "backend", "label": "Map / Resolve", "sublabel": "bounded context", "tag": "LLM", "width": 100 },
-    { "id": "validate", "lane": "graph", "col": 3, "type": "security", "label": "Validate", "sublabel": "limits + fingerprint" },
-    { "id": "match", "lane": "core", "col": 4, "type": "security", "label": "Match + Score", "sublabel": "deterministic policy" },
-    { "id": "publish", "lane": "client", "col": 5, "type": "backend", "label": "Workbook", "sublabel": "reply + events" },
-    { "id": "interrupt", "lane": "review", "col": 1, "type": "messagebus", "label": "Mapping Pause", "sublabel": "interrupt + resume", "width": 100 },
-    { "id": "decisions", "lane": "review", "col": 5, "type": "external", "label": "Review", "sublabel": "explicit choices" },
-    { "id": "memory", "lane": "data", "col": 0, "type": "database", "label": "Memory", "sublabel": "restart loss" },
-    { "id": "repository", "lane": "data", "col": 4, "type": "database", "label": "Audit DB", "sublabel": "durable evidence" }
+    { "id": "upload", "lane": "user", "col": 0, "type": "frontend", "label": "Upload", "sublabel": "CSV/XLSX" },
+    { "id": "route", "lane": "control", "col": 1, "type": "backend", "label": "Route", "sublabel": "typed intent", "tag": "max 3 attempts" },
+    { "id": "prepare", "lane": "matching", "col": 2, "type": "security", "label": "Prepare", "sublabel": "inspect · map · check", "tag": "bounded" },
+    { "id": "match", "lane": "matching", "col": 4, "type": "backend", "label": "Match", "sublabel": "policy owned", "tag": "deterministic" },
+    { "id": "publish", "lane": "output", "col": 5, "type": "database", "label": "Publish", "sublabel": "verified XLSX", "tag": "graph ends" },
+    { "id": "mapping_question", "lane": "mapping_help", "col": 3, "type": "messagebus", "label": "Map Question", "sublabel": "interrupt + resume" },
+    { "id": "firm_question", "lane": "firm_help", "col": 4, "type": "messagebus", "label": "Firm Question", "sublabel": "interrupt + resume" },
+    { "id": "download", "lane": "boundary", "col": 5, "type": "external", "label": "Review Copy", "sublabel": "local Excel", "tag": "not re-ingested" }
   ],
   "edges": [
-    { "id": "intake_route", "from": "message", "to": "router", "variant": "default" },
-    { "id": "route_mapping", "from": "router", "to": "mapping", "variant": "emphasis" },
-    { "id": "mapping_validate", "from": "mapping", "to": "validate", "variant": "default" },
-    { "id": "validate_match", "from": "validate", "to": "match", "variant": "security" },
-    { "id": "match_publish", "from": "match", "to": "publish", "variant": "security" },
-    { "id": "clarify", "from": "mapping", "to": "interrupt", "variant": "dashed", "role": "branch" },
-    { "id": "resume", "from": "interrupt", "to": "mapping", "variant": "dashed", "role": "return" },
-    { "id": "review_apply", "from": "decisions", "to": "publish", "variant": "security", "role": "return" },
-    { "id": "checkpoint", "from": "message", "to": "memory", "variant": "dashed" },
-    { "id": "audit", "from": "match", "to": "repository", "variant": "dashed" },
-    { "id": "review_request", "from": "publish", "to": "decisions", "variant": "dashed", "role": "branch" }
+    { "from": "upload", "to": "route" },
+    { "from": "route", "to": "prepare", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "prepare", "to": "match", "route": "straight" },
+    { "from": "match", "to": "publish" },
+    { "from": "prepare", "to": "mapping_question", "variant": "security", "role": "error" },
+    { "from": "mapping_question", "to": "prepare", "variant": "dashed", "role": "return" },
+    { "from": "match", "to": "firm_question", "variant": "security", "role": "error" },
+    { "from": "firm_question", "to": "match", "variant": "dashed", "role": "return" },
+    { "from": "publish", "to": "download", "label": "user-owned copy", "variant": "dashed" }
   ],
   "cards": [
     {
       "dot": "emerald",
-      "title": "Deterministic Authority",
+      "title": "Deterministic Core",
       "items": [
-        "Normalization, candidates, scores, decisions, and exports are code-owned",
-        "The model never receives the complete reference or workbook",
-        "Exact CRD, firm handling, review mutations, and workbook verification remain code-owned"
-      ]
-    },
-    {
-      "dot": "violet",
-      "title": "LLM Boundary",
-      "items": [
-        "Router and mapping use strict structured output",
-        "Three total attempts per decision",
-        "Mapping resumes bypass the router; a clear yes accepts the stored proposal",
-        "No tools, planner, subagents, or autonomous loop"
+        "Code owns validation, candidate generation, scoring, and match decisions",
+        "The model routes intent and helps interpret ambiguous input structure",
+        "No model chooses advisors row by row"
       ]
     },
     {
       "dot": "amber",
-      "title": "Restart Semantics",
+      "title": "Only Pre-Match Interrupts",
       "items": [
-        "Conversation and interrupt progress are process-local",
-        "API restart begins a fresh conversation",
-        "Durable advisor evidence remains for audit and download"
+        "Column meaning can pause before validation",
+        "Missing or unrecognized firm context can pause before matching",
+        "A new attachment resets the in-memory graph state"
       ]
     },
     {
       "dot": "cyan",
-      "title": "Router Branches",
+      "title": "Workbook Is the Handoff",
       "items": [
-        "Start match enters inspect, mapping, validation, and deterministic matching",
-        "Review and manual CRD requests use bounded explicit command nodes",
-        "Approve, status, reset, greeting, capabilities, and unsupported are terminal branches",
-        "Firm answers route only among exact column remap, explicit override, source values, or continue"
+        "Matched and Review Required sheets explain automated outcomes",
+        "Users may edit their downloaded copy for downstream work",
+        "Local edits are not sent back to or validated by the application"
       ]
     }
   ]

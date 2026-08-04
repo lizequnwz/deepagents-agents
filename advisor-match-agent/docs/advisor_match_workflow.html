@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 2.12.0">
-  <title>Advisor Match LangGraph Workflow Diagram</title>
+  <title>Advisor Matching Workflow Diagram</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -4496,12 +4496,12 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>Advisor Match LangGraph Workflow</h1>
+        <h1>Advisor Matching Workflow</h1>
       </div>
-      <p class="subtitle">Bounded LLM routing and mapping around a deterministic matching core</p>
+      <p class="subtitle">A bounded LangGraph run that clarifies input, matches deterministically, and ends with a verified workbook</p>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[]</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"complete_run","label":"Complete matching run","focus":["upload","route","prepare","match","publish"],"note":"Follow one upload through bounded interpretation, deterministic matching, and workbook publication."},{"id":"clarifications","label":"Pre-match clarifications","focus":["prepare","mapping_question","firm_question","match"],"note":"Only unresolved column meaning or firm context can pause the graph."},{"id":"offline_review","label":"Offline review boundary","focus":["match","publish","download"],"note":"The graph stops after export; review and local edits happen in the downloaded workbook."}]</script>
 
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
       <button id="guided-view-prev" type="button" aria-label="Previous guided view" title="Previous guided view ([)">&#8592;</button>
@@ -4544,9 +4544,9 @@
 
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read">
-      <svg viewBox="0 0 820 900" role="img" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="blueprint" data-quality-profile="showcase">
-        <title id="archify-diagram-title">Advisor Match LangGraph Workflow</title>
-        <desc id="archify-diagram-description">Bounded LLM routing and mapping around a deterministic matching core</desc>
+      <svg viewBox="0 0 720 1024" role="img" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="blueprint" data-quality-profile="showcase">
+        <title id="archify-diagram-title">Advisor Matching Workflow</title>
+        <desc id="archify-diagram-description">A bounded LangGraph run that clarifies input, matches deterministically, and ends with a verified workbook</desc>
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -4571,54 +4571,57 @@
 
         <!-- Swimlanes -->
         <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="74" class="t-dim" font-size="10" font-weight="600">01 / Chat UI + API</text>
+        <text x="54" y="74" class="t-dim" font-size="10" font-weight="600">01 / User + Streamlit</text>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="176" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="198" class="t-dim" font-size="10" font-weight="600">02 / LangGraph Control</text>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="300" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="322" class="t-dim" font-size="10" font-weight="600">03 / Deterministic Core</text>
+        <text x="54" y="322" class="t-dim" font-size="10" font-weight="600">03 / Deterministic Matching</text>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-3" x="40" y="424" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="exception-lane" data-composition-frame-id="lane-3-exception" x="46" y="430" width="628" height="92" rx="8" class="c-security-group" stroke-width="1"/>
-        <text x="54" y="446" class="t-security" font-size="10" font-weight="600">EX / Human Review</text>
+        <text x="54" y="446" class="t-dim" font-size="10" font-weight="600">04 / Verified Output</text>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-4" x="40" y="548" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="570" class="t-dim" font-size="10" font-weight="600">05 / State + Evidence</text>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="exception-lane" data-composition-frame-id="lane-4-exception" x="46" y="554" width="628" height="92" rx="8" class="c-security-group" stroke-width="1"/>
+        <text x="54" y="570" class="t-security" font-size="10" font-weight="600">EX / Mapping Clarification</text>
+
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-5" x="40" y="672" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="exception-lane" data-composition-frame-id="lane-5-exception" x="46" y="678" width="628" height="92" rx="8" class="c-security-group" stroke-width="1"/>
+        <text x="54" y="694" class="t-security" font-size="10" font-weight="600">EX / Firm Clarification</text>
+
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-6" x="40" y="796" width="640" height="104" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="exception-lane" data-composition-frame-id="lane-6-exception" x="46" y="802" width="628" height="92" rx="8" class="c-security-group" stroke-width="1"/>
+        <text x="54" y="818" class="t-security" font-size="10" font-weight="600">EX / Outside Application</text>
 
         <!-- Phase headers -->
         <line x1="42" y1="35" x2="266" y2="35" class="a-default" stroke-width="1.1"/>
         <rect x="42" y="27" width="224" height="16" rx="4" class="c-mask"/>
-        <text x="154" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">Intake</text>
-        <line x1="254" y1="35" x2="346" y2="35" class="a-emphasis" stroke-width="1.1"/>
-        <rect x="254" y="27" width="92" height="16" rx="4" class="c-mask"/>
-        <text x="300" y="39" class="t-backend" font-size="8" font-weight="600" text-anchor="middle">Interpret</text>
-        <line x1="384" y1="35" x2="671" y2="35" class="a-security" stroke-width="1.1"/>
-        <rect x="384" y="27" width="287" height="16" rx="4" class="c-mask"/>
-        <text x="527.5" y="39" class="t-security" font-size="8" font-weight="600" text-anchor="middle">Execute + review</text>
+        <text x="154" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">Request</text>
+        <line x1="254" y1="35" x2="476" y2="35" class="a-emphasis" stroke-width="1.1"/>
+        <rect x="254" y="27" width="222" height="16" rx="4" class="c-mask"/>
+        <text x="365" y="39" class="t-backend" font-size="8" font-weight="600" text-anchor="middle">Interpret + validate</text>
+        <line x1="454" y1="35" x2="671" y2="35" class="a-security" stroke-width="1.1"/>
+        <rect x="454" y="27" width="217" height="16" rx="4" class="c-mask"/>
+        <text x="562.5" y="39" class="t-security" font-size="8" font-weight="600" text-anchor="middle">Match + deliver</text>
 
         <!-- Workflow groups -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="group" data-composition-frame-id="group-0" x="170" y="214" width="180" height="58" rx="9" class="c-lane" stroke-width="1"/>
-        <text x="180" y="228" class="t-backend" font-size="7" font-weight="600">Bounded LLM decisions</text>
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="group" data-composition-frame-id="group-1" x="380" y="338" width="295" height="58" rx="9" class="c-security-group" stroke-width="1"/>
-        <text x="390" y="352" class="t-security" font-size="7" font-weight="600">Code-owned identity policy</text>
+
 
         <!-- Edge paths -->
-        <path data-edge-from="message" data-edge-to="router" data-edge-key="0" data-edge-id="intake_route" data-composition-points="134,119;134,166;174,166;174,243" d="M 134 119 L 134 166 L 174 166 L 174 243" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="router" data-edge-to="mapping" data-edge-key="1" data-edge-id="route_mapping" data-composition-points="266,243;266,290;250,290;250,353" d="M 266 243 L 266 290 L 250 290 L 250 353" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="mapping" data-edge-to="validate" data-edge-key="2" data-edge-id="mapping_validate" data-composition-points="350,367;350,290;384,290;384,243" d="M 350 367 L 350 290 L 384 290 L 384 243" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="validate" data-edge-to="match" data-edge-key="3" data-edge-id="validate_match" data-composition-points="476,243;476,290;454,290;454,367" d="M 476 243 L 476 290 L 454 290 L 454 367" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="match" data-edge-to="publish" data-edge-key="4" data-edge-id="match_publish" data-composition-points="546,367;546,228;579,228;579,119" d="M 546 367 L 546 228 L 579 228 L 579 119" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="mapping" data-edge-to="interrupt" data-edge-key="5" data-edge-id="clarify" data-composition-points="250,367;250,414;270,414;270,484" d="M 250 367 L 250 414 L 270 414 L 270 484" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="interrupt" data-edge-to="mapping" data-edge-key="6" data-edge-id="resume" data-composition-points="270,498;270,414;250,414;250,381" d="M 270 498 L 270 414 L 250 414 L 250 381" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="decisions" data-edge-to="publish" data-edge-key="7" data-edge-id="review_apply" data-composition-points="618,465;618,290;618,290;618,145" d="M 618 465 L 618 290 L 618 290 L 618 145" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="message" data-edge-to="memory" data-edge-key="8" data-edge-id="checkpoint" data-composition-points="88,145;88,352;88,352;88,589" d="M 88 145 L 88 352 L 88 352 L 88 589" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="match" data-edge-to="repository" data-edge-key="9" data-edge-id="audit" data-composition-points="500,393;500,476;500,476;500,589" d="M 500 393 L 500 476 L 500 476 L 500 589" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="publish" data-edge-to="decisions" data-edge-key="10" data-edge-id="review_request" data-composition-points="632,145;632,290;632,290;632,465" d="M 632 145 L 632 290 L 632 290 L 632 465" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="upload" data-edge-to="route" data-edge-key="0" data-composition-points="134,119;134,166;174,166;174,243" d="M 134 119 L 134 166 L 174 166 L 174 243" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="route" data-edge-to="prepare" data-edge-key="1" data-composition-points="220,277;220,290;300,290;300,333" d="M 220 277 L 220 290 L 300 290 L 300 333" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="prepare" data-edge-to="match" data-edge-key="2" data-composition-points="346,367;454,367" d="M 346 367 L 454 367" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="match" data-edge-to="publish" data-edge-key="3" data-composition-points="546,367;546,414;579,414;579,491" d="M 546 367 L 546 414 L 579 414 L 579 491" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="prepare" data-edge-to="mapping_question" data-edge-key="4" data-composition-points="346,374;346,476;384,476;384,622" d="M 346 374 L 346 476 L 384 476 L 384 622" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="mapping_question" data-edge-to="prepare" data-edge-key="5" data-composition-points="384,608;384,476;346,476;346,360" d="M 384 608 L 384 476 L 346 476 L 346 360" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="match" data-edge-to="firm_question" data-edge-key="6" data-composition-points="507,401;507,538;507,538;507,713" d="M 507 401 L 507 538 L 507 538 L 507 713" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="firm_question" data-edge-to="match" data-edge-key="7" data-composition-points="493,713;493,538;493,538;493,401" d="M 493 713 L 493 538 L 493 538 L 493 401" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="publish" data-edge-to="download" data-edge-label="user-owned copy" data-edge-key="8" data-composition-points="625,525;625,662;625,662;625,829" d="M 625 525 L 625 662 L 625 662 L 625 829" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
 
         <!-- Nodes -->
-        <g id="node-message" data-node-id="message" data-node-label="Message + File" tabindex="0" role="button" aria-label="Focus Message + File, one CSV/XLSX, Chat UI + API › Intake" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="one CSV/XLSX" data-node-context="Chat UI + API › Intake">
-          <title>Message + File · one CSV/XLSX · Chat UI + API › Intake</title>
+        <g id="node-upload" data-node-id="upload" data-node-label="Upload" tabindex="0" role="button" aria-label="Focus Upload, CSV/XLSX, User + Streamlit › Request" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="CSV/XLSX" data-node-context="User + Streamlit › Request">
+          <title>Upload · CSV/XLSX · User + Streamlit › Request</title>
           <rect x="42" y="93" width="92" height="52" rx="6" class="c-mask"/>
           <rect x="42" y="93" width="92" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(48 99) scale(0.6875)">
@@ -4627,117 +4630,99 @@
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-detail-anchor x="88" y="114" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Message + File</text>
-          <text data-detail="context" x="88" y="131" class="t-muted" font-size="8" text-anchor="middle">one CSV/XLSX</text>
+          <text data-detail-anchor x="88" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Upload</text>
+          <text data-detail="context" x="88" y="131" class="t-muted" font-size="8" text-anchor="middle">CSV/XLSX</text>
         </g>
 
-        <g id="node-router" data-node-id="router" data-node-label="Typed Router" tabindex="0" role="button" aria-label="Focus Typed Router, 3 attempts max, LangGraph Control › Bounded LLM decisions › Intake" aria-pressed="false" data-node-kind="backend" data-node-sublabel="3 attempts max" data-node-tag="LLM" data-node-context="LangGraph Control › Bounded LLM decisions › Intake">
-          <title>Typed Router · 3 attempts max · LangGraph Control › Bounded LLM decisions › Intake · LLM</title>
+        <g id="node-route" data-node-id="route" data-node-label="Route" tabindex="0" role="button" aria-label="Focus Route, typed intent, LangGraph Control › Request" aria-pressed="false" data-node-kind="backend" data-node-sublabel="typed intent" data-node-tag="max 3 attempts" data-node-context="LangGraph Control › Request">
+          <title>Route · typed intent · LangGraph Control › Request · max 3 attempts</title>
           <rect x="174" y="209" width="92" height="68" rx="6" class="c-mask"/>
           <rect x="174" y="209" width="92" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(180 215) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="220" y="230" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Typed Router</text>
-          <text data-detail="context" x="220" y="247" class="t-muted" font-size="8" text-anchor="middle">3 attempts max</text>
-        <text data-detail="fine" x="220" y="265" class="t-backend" font-size="7" text-anchor="middle">LLM</text>
+          <text data-detail-anchor x="220" y="230" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Route</text>
+          <text data-detail="context" x="220" y="247" class="t-muted" font-size="8" text-anchor="middle">typed intent</text>
+        <text data-detail="fine" x="220" y="265" class="t-backend" font-size="7" text-anchor="middle">max 3 attempts</text>
         </g>
 
-        <g id="node-mapping" data-node-id="mapping" data-node-label="Map / Resolve" tabindex="0" role="button" aria-label="Focus Map / Resolve, bounded context, Deterministic Core › Interpret" aria-pressed="false" data-node-kind="backend" data-node-sublabel="bounded context" data-node-tag="LLM" data-node-context="Deterministic Core › Interpret">
-          <title>Map / Resolve · bounded context · Deterministic Core › Interpret · LLM</title>
-          <rect x="250" y="333" width="100" height="68" rx="6" class="c-mask"/>
-          <rect x="250" y="333" width="100" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(256 339) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-detail-anchor x="300" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Map / Resolve</text>
-          <text data-detail="context" x="300" y="371" class="t-muted" font-size="8" text-anchor="middle">bounded context</text>
-        <text data-detail="fine" x="300" y="389" class="t-backend" font-size="7" text-anchor="middle">LLM</text>
-        </g>
-
-        <g id="node-validate" data-node-id="validate" data-node-label="Validate" tabindex="0" role="button" aria-label="Focus Validate, limits + fingerprint, LangGraph Control › Execute + review" aria-pressed="false" data-node-kind="security" data-node-sublabel="limits + fingerprint" data-node-context="LangGraph Control › Execute + review">
-          <title>Validate · limits + fingerprint · LangGraph Control › Execute + review</title>
-          <rect x="384" y="217" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="384" y="217" width="92" height="52" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(390 223) scale(0.6875)">
+        <g id="node-prepare" data-node-id="prepare" data-node-label="Prepare" tabindex="0" role="button" aria-label="Focus Prepare, inspect · map · check, Deterministic Matching › Interpret + validate" aria-pressed="false" data-node-kind="security" data-node-sublabel="inspect · map · check" data-node-tag="bounded" data-node-context="Deterministic Matching › Interpret + validate">
+          <title>Prepare · inspect · map · check · Deterministic Matching › Interpret + validate · bounded</title>
+          <rect x="254" y="333" width="92" height="68" rx="6" class="c-mask"/>
+          <rect x="254" y="333" width="92" height="68" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(260 339) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-detail-anchor x="430" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Validate</text>
-          <text data-detail="context" x="430" y="255" class="t-muted" font-size="7" text-anchor="middle">limits + fingerprint</text>
+          <text data-detail-anchor x="300" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Prepare</text>
+          <text data-detail="context" x="300" y="371" class="t-muted" font-size="6.6" text-anchor="middle">inspect · map · check</text>
+        <text data-detail="fine" x="300" y="389" class="t-security" font-size="7" text-anchor="middle">bounded</text>
         </g>
 
-        <g id="node-match" data-node-id="match" data-node-label="Match + Score" tabindex="0" role="button" aria-label="Focus Match + Score, deterministic policy, Deterministic Core › Code-owned identity policy › Execute + review" aria-pressed="false" data-node-kind="security" data-node-sublabel="deterministic policy" data-node-context="Deterministic Core › Code-owned identity policy › Execute + review">
-          <title>Match + Score · deterministic policy · Deterministic Core › Code-owned identity policy › Execute + review</title>
-          <rect x="454" y="341" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="454" y="341" width="92" height="52" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(460 347) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-detail-anchor x="500" y="362" class="t-primary" font-size="10.7" font-weight="600" text-anchor="middle">Match + Score</text>
-          <text data-detail="context" x="500" y="379" class="t-muted" font-size="7" text-anchor="middle">deterministic policy</text>
-        </g>
-
-        <g id="node-publish" data-node-id="publish" data-node-label="Workbook" tabindex="0" role="button" aria-label="Focus Workbook, reply + events, Chat UI + API › Execute + review" aria-pressed="false" data-node-kind="backend" data-node-sublabel="reply + events" data-node-context="Chat UI + API › Execute + review">
-          <title>Workbook · reply + events · Chat UI + API › Execute + review</title>
-          <rect x="579" y="93" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="579" y="93" width="92" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(585 99) scale(0.6875)">
+        <g id="node-match" data-node-id="match" data-node-label="Match" tabindex="0" role="button" aria-label="Focus Match, policy owned, Deterministic Matching › Match + deliver" aria-pressed="false" data-node-kind="backend" data-node-sublabel="policy owned" data-node-tag="deterministic" data-node-context="Deterministic Matching › Match + deliver">
+          <title>Match · policy owned · Deterministic Matching › Match + deliver · deterministic</title>
+          <rect x="454" y="333" width="92" height="68" rx="6" class="c-mask"/>
+          <rect x="454" y="333" width="92" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(460 339) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="625" y="114" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Workbook</text>
-          <text data-detail="context" x="625" y="131" class="t-muted" font-size="8" text-anchor="middle">reply + events</text>
+          <text data-detail-anchor x="500" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Match</text>
+          <text data-detail="context" x="500" y="371" class="t-muted" font-size="8" text-anchor="middle">policy owned</text>
+        <text data-detail="fine" x="500" y="389" class="t-backend" font-size="7" text-anchor="middle">deterministic</text>
         </g>
 
-        <g id="node-interrupt" data-node-id="interrupt" data-node-label="Mapping Pause" tabindex="0" role="button" aria-label="Focus Mapping Pause, interrupt + resume, Human Review › Intake" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="interrupt + resume" data-node-context="Human Review › Intake">
-          <title>Mapping Pause · interrupt + resume · Human Review › Intake</title>
-          <rect x="170" y="465" width="100" height="52" rx="6" class="c-mask"/>
-          <rect x="170" y="465" width="100" height="52" rx="6" class="c-messagebus" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(176 471) scale(0.6875)">
+        <g id="node-publish" data-node-id="publish" data-node-label="Publish" tabindex="0" role="button" aria-label="Focus Publish, verified XLSX, Verified Output › Match + deliver" aria-pressed="false" data-node-kind="database" data-node-sublabel="verified XLSX" data-node-tag="graph ends" data-node-context="Verified Output › Match + deliver">
+          <title>Publish · verified XLSX · Verified Output › Match + deliver · graph ends</title>
+          <rect x="579" y="457" width="92" height="68" rx="6" class="c-mask"/>
+          <rect x="579" y="457" width="92" height="68" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(585 463) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-detail-anchor x="625" y="478" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Publish</text>
+          <text data-detail="context" x="625" y="495" class="t-muted" font-size="8" text-anchor="middle">verified XLSX</text>
+        <text data-detail="fine" x="625" y="513" class="t-database" font-size="7" text-anchor="middle">graph ends</text>
+        </g>
+
+        <g id="node-mapping_question" data-node-id="mapping_question" data-node-label="Map Question" tabindex="0" role="button" aria-label="Focus Map Question, interrupt + resume, Mapping Clarification › Interpret + validate" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="interrupt + resume" data-node-context="Mapping Clarification › Interpret + validate">
+          <title>Map Question · interrupt + resume · Mapping Clarification › Interpret + validate</title>
+          <rect x="384" y="589" width="92" height="52" rx="6" class="c-mask"/>
+          <rect x="384" y="589" width="92" height="52" rx="6" class="c-messagebus" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(390 595) scale(0.6875)">
             <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
             <circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
             <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
             <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
           </g>
-          <text data-detail-anchor x="220" y="486" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Mapping Pause</text>
-          <text data-detail="context" x="220" y="503" class="t-muted" font-size="8" text-anchor="middle">interrupt + resume</text>
+          <text data-detail-anchor x="430" y="610" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Map Question</text>
+          <text data-detail="context" x="430" y="627" class="t-muted" font-size="7.7" text-anchor="middle">interrupt + resume</text>
         </g>
 
-        <g id="node-decisions" data-node-id="decisions" data-node-label="Review" tabindex="0" role="button" aria-label="Focus Review, explicit choices, Human Review › Execute + review" aria-pressed="false" data-node-kind="external" data-node-sublabel="explicit choices" data-node-context="Human Review › Execute + review">
-          <title>Review · explicit choices · Human Review › Execute + review</title>
-          <rect x="579" y="465" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="579" y="465" width="92" height="52" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(585 471) scale(0.6875)">
+        <g id="node-firm_question" data-node-id="firm_question" data-node-label="Firm Question" tabindex="0" role="button" aria-label="Focus Firm Question, interrupt + resume, Firm Clarification › Match + deliver" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="interrupt + resume" data-node-context="Firm Clarification › Match + deliver">
+          <title>Firm Question · interrupt + resume · Firm Clarification › Match + deliver</title>
+          <rect x="454" y="713" width="92" height="52" rx="6" class="c-mask"/>
+          <rect x="454" y="713" width="92" height="52" rx="6" class="c-messagebus" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(460 719) scale(0.6875)">
+            <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+            <circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+            <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+            <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+          </g>
+          <text data-detail-anchor x="500" y="734" class="t-primary" font-size="10.7" font-weight="600" text-anchor="middle">Firm Question</text>
+          <text data-detail="context" x="500" y="751" class="t-muted" font-size="7.7" text-anchor="middle">interrupt + resume</text>
+        </g>
+
+        <g id="node-download" data-node-id="download" data-node-label="Review Copy" tabindex="0" role="button" aria-label="Focus Review Copy, local Excel, Outside Application › Match + deliver" aria-pressed="false" data-node-kind="external" data-node-sublabel="local Excel" data-node-tag="not re-ingested" data-node-context="Outside Application › Match + deliver">
+          <title>Review Copy · local Excel · Outside Application › Match + deliver · not re-ingested</title>
+          <rect x="579" y="829" width="92" height="68" rx="6" class="c-mask"/>
+          <rect x="579" y="829" width="92" height="68" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(585 835) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-detail-anchor x="625" y="486" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Review</text>
-          <text data-detail="context" x="625" y="503" class="t-muted" font-size="8" text-anchor="middle">explicit choices</text>
-        </g>
-
-        <g id="node-memory" data-node-id="memory" data-node-label="Memory" tabindex="0" role="button" aria-label="Focus Memory, restart loss, State + Evidence › Intake" aria-pressed="false" data-node-kind="database" data-node-sublabel="restart loss" data-node-context="State + Evidence › Intake">
-          <title>Memory · restart loss · State + Evidence › Intake</title>
-          <rect x="42" y="589" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="42" y="589" width="92" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(48 595) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-detail-anchor x="88" y="610" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Memory</text>
-          <text data-detail="context" x="88" y="627" class="t-muted" font-size="8" text-anchor="middle">restart loss</text>
-        </g>
-
-        <g id="node-repository" data-node-id="repository" data-node-label="Audit DB" tabindex="0" role="button" aria-label="Focus Audit DB, durable evidence, State + Evidence › Execute + review" aria-pressed="false" data-node-kind="database" data-node-sublabel="durable evidence" data-node-context="State + Evidence › Execute + review">
-          <title>Audit DB · durable evidence · State + Evidence › Execute + review</title>
-          <rect x="454" y="589" width="92" height="52" rx="6" class="c-mask"/>
-          <rect x="454" y="589" width="92" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(460 595) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-detail-anchor x="500" y="610" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Audit DB</text>
-          <text data-detail="context" x="500" y="627" class="t-muted" font-size="8" text-anchor="middle">durable evidence</text>
+          <text data-detail-anchor x="625" y="850" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Review Copy</text>
+          <text data-detail="context" x="625" y="867" class="t-muted" font-size="8" text-anchor="middle">local Excel</text>
+        <text data-detail="fine" x="625" y="885" class="t-external" font-size="7" text-anchor="middle">not re-ingested</text>
         </g>
 
         <!-- Edge labels -->
@@ -4749,32 +4734,33 @@
 
 
 
-
-
-
+        <g data-detail="context" data-edge-from="publish" data-edge-to="download" data-edge-label="user-owned copy" data-edge-key="8">
+          <rect x="584" y="642" width="82" height="14" rx="3" class="c-mask"/>
+          <text x="625" y="652" class="t-database" font-size="8" text-anchor="middle">user-owned copy</text>
+        </g>
 
         <!-- Legend -->
         <g data-legend-bridge>
-          <text x="175" y="676" class="t-primary" font-size="10" font-weight="600">Legend</text>
+          <text x="175" y="924" class="t-primary" font-size="10" font-weight="600">Legend</text>
         <g data-legend-kind="frontend">
-          <rect x="175" y="688" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
-          <text x="195" y="696" class="t-muted" font-size="7">User UI</text>
+          <rect x="175" y="936" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
+          <text x="195" y="944" class="t-muted" font-size="7">User UI</text>
         </g>
         <g data-legend-kind="backend">
-          <rect x="260" y="688" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-          <text x="280" y="696" class="t-muted" font-size="7">Agent logic</text>
+          <rect x="260" y="936" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+          <text x="280" y="944" class="t-muted" font-size="7">Agent logic</text>
         </g>
         <g data-legend-kind="security">
-          <rect x="370" y="688" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
-          <text x="390" y="696" class="t-muted" font-size="7">Policy</text>
+          <rect x="370" y="936" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
+          <text x="390" y="944" class="t-muted" font-size="7">Policy</text>
         </g>
         <g data-legend-kind="messagebus">
-          <rect x="455" y="688" width="14" height="9" rx="2" class="c-messagebus" stroke-width="1"/>
-          <text x="475" y="696" class="t-muted" font-size="7">Tool action</text>
+          <rect x="455" y="936" width="14" height="9" rx="2" class="c-messagebus" stroke-width="1"/>
+          <text x="475" y="944" class="t-muted" font-size="7">Tool action</text>
         </g>
         <g data-legend-kind="database">
-          <rect x="565" y="688" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
-          <text x="585" y="696" class="t-muted" font-size="7">Context / trace</text>
+          <rect x="565" y="936" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
+          <text x="585" y="944" class="t-muted" font-size="7">Context / trace</text>
         </g>
         </g>
       </svg>
@@ -4963,57 +4949,43 @@
       <div class="card">
         <div class="card-header">
           <div class="card-dot emerald"></div>
-          <h3>Deterministic Authority</h3>
+          <h3>Deterministic Core</h3>
         </div>
         <ul>
-          <li>&bull; Normalization, candidates, scores, decisions, and exports are code-owned</li>
-          <li>&bull; The model never receives the complete reference or workbook</li>
-          <li>&bull; Exact CRD, firm handling, review mutations, and workbook verification remain code-owned</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot violet"></div>
-          <h3>LLM Boundary</h3>
-        </div>
-        <ul>
-          <li>&bull; Router and mapping use strict structured output</li>
-          <li>&bull; Three total attempts per decision</li>
-          <li>&bull; Mapping resumes bypass the router; a clear yes accepts the stored proposal</li>
-          <li>&bull; No tools, planner, subagents, or autonomous loop</li>
+          <li>&bull; Code owns validation, candidate generation, scoring, and match decisions</li>
+          <li>&bull; The model routes intent and helps interpret ambiguous input structure</li>
+          <li>&bull; No model chooses advisors row by row</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot amber"></div>
-          <h3>Restart Semantics</h3>
+          <h3>Only Pre-Match Interrupts</h3>
         </div>
         <ul>
-          <li>&bull; Conversation and interrupt progress are process-local</li>
-          <li>&bull; API restart begins a fresh conversation</li>
-          <li>&bull; Durable advisor evidence remains for audit and download</li>
+          <li>&bull; Column meaning can pause before validation</li>
+          <li>&bull; Missing or unrecognized firm context can pause before matching</li>
+          <li>&bull; A new attachment resets the in-memory graph state</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
-          <h3>Router Branches</h3>
+          <h3>Workbook Is the Handoff</h3>
         </div>
         <ul>
-          <li>&bull; Start match enters inspect, mapping, validation, and deterministic matching</li>
-          <li>&bull; Review and manual CRD requests use bounded explicit command nodes</li>
-          <li>&bull; Approve, status, reset, greeting, capabilities, and unsupported are terminal branches</li>
-          <li>&bull; Firm answers route only among exact column remap, explicit override, source values, or continue</li>
+          <li>&bull; Matched and Review Required sheets explain automated outcomes</li>
+          <li>&bull; Users may edit their downloaded copy for downstream work</li>
+          <li>&bull; Local edits are not sent back to or validated by the application</li>
         </ul>
       </div>
     </div>
 
     <!-- Footer -->
     <p class="footer">
-      Workflow diagram &bull; Built with Archify<span class="no-print"> &bull; <a class="artifact-start-link" href="https://tt-a1i.github.io/archify/start.html?type=workflow&amp;source=artifact" target="_blank" rel="noopener noreferrer">Create yours &nearr;</a> &bull; Hover to trace &bull; <kbd>R</kbd> route &bull; Click to focus &bull; <kbd>+</kbd>/<kbd>&minus;</kbd> zoom &bull; <kbd>M</kbd> radar &bull; <kbd>T</kbd> theme &bull; <kbd>E</kbd> export</span>
+      Workflow diagram &bull; Built with Archify<span class="no-print"> &bull; <a class="artifact-start-link" href="https://tt-a1i.github.io/archify/start.html?type=workflow&amp;source=artifact" target="_blank" rel="noopener noreferrer">Create yours &nearr;</a> &bull; Hover to trace &bull; <kbd>R</kbd> route &bull; Click to focus &bull; <kbd>+</kbd>/<kbd>&minus;</kbd> zoom &bull; <kbd>M</kbd> radar &bull; <kbd>[</kbd>/<kbd>]</kbd> views &bull; <kbd>P</kbd> play story &bull; <kbd>T</kbd> theme &bull; <kbd>E</kbd> export</span>
     </p>
   </div>
 

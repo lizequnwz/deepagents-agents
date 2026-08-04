@@ -6,17 +6,11 @@ from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from general_agent.advisor_matching.schemas import InputMapping, ReviewDecision
+from general_agent.advisor_matching.schemas import InputMapping
 
 
 RouteName = Literal[
     "start_match",
-    "review",
-    "propose_crd",
-    "confirm_manual",
-    "cancel_manual",
-    "approve",
-    "status",
     "reset",
     "greeting",
     "capabilities",
@@ -33,17 +27,6 @@ class RouteDecision(BaseModel):
     firm_resolution: Literal[
         "auto", "use_source", "override_all", "continue_without_firm"
     ] = "auto"
-    match_session_id: str | None = None
-    review_status: Literal["matched", "ambiguous_match", "no_match"] | None = None
-    source_row_number: int | None = Field(default=None, ge=1)
-    name_query: str | None = Field(default=None, max_length=200)
-    review_cursor: int = Field(default=0, ge=0)
-    review_limit: int = Field(default=10, ge=1, le=20)
-    next_page: bool = False
-    review_action: Literal["confirm_candidate", "confirm_no_match"] | None = None
-    review_decisions: list[ReviewDecision] = Field(default_factory=list, max_length=20)
-    review_item_id: str | None = None
-    crd_number: str | None = Field(default=None, max_length=32)
 
 
 class MappingDecision(BaseModel):
@@ -93,6 +76,5 @@ class AdvisorGraphState(TypedDict, total=False):
     pending_kind: str | None
     pending_payload: dict[str, Any]
     clarification_answer: str | None
-    review_page: dict[str, Any]
     response: str
     error: str | None

@@ -1,4 +1,4 @@
-"""Explicit application service for deterministic advisor matching and review."""
+"""Explicit application service for deterministic advisor matching and export."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from general_agent.advisor_matching import normalization as norm
 from general_agent.advisor_matching.input_loader import validate_and_load_input
 from general_agent.advisor_matching.index import ReferenceDataQualityError
 from general_agent.advisor_matching.matcher import run_matching
@@ -20,29 +19,20 @@ from general_agent.advisor_matching.schemas import (
     InputMapping,
     InputSummary,
     MappingValidationResult,
-    MatchCandidate,
     MatchCounts,
     MatchDecision,
     MatchRunResult,
     ReferenceSnapshotManifest,
     ReferenceBlockerResult,
-    ReviewDecision,
 )
 from general_agent.advisor_matching.source import AdvisorReferenceSource, sha256_file
 from general_agent.advisor_matching.workbook import write_match_workbook
 from general_agent.advisor_repository import AdvisorRepository
 from general_agent.advisor_support import (
-    _apply_review,
-    _counts,
     _contains_explicit_firm,
-    _find_item,
     _input_summary_warnings,
-    _iter_reference,
     _load_or_create_reference,
-    _normalize_status_filter,
     _resolve_firm_rows,
-    _resolve_reference_snapshot,
-    _review_view,
     _unique,
     _validate_source_transformation,
     _validated_firm_name,
@@ -229,196 +219,6 @@ class AdvisorService:
             warnings=_unique([*_input_summary_warnings(loaded.summary), *match_warnings]),
             policy_version=POLICY_VERSION,
         )
-
-    def current_match(self, context: ServiceContext) -> dict[str, Any]:
-        session = self.repository.get_latest_advisor_match_session(
-            context.conversation_id, corp_id=context.corp_id
-        )
-        return {
-            "match_session_id": session["id"],
-            "source_name": session["source_name"],
-            "interpreted_mapping": session["mapping"],
-            "input_summary": session["input_summary"],
-            "source_transformation": session["source_transformation"],
-            "counts": session["counts"],
-            "status": session["status"],
-            "revision": session["revision"],
-            "output_artifact_id": session["output_artifact_id"],
-            "updated_at": session["updated_at"],
-        }
-
-    def list_results(
-        self,
-        context: ServiceContext,
-        match_session_id: str,
-        *,
-        status: str | None = None,
-        source_row_number: int | None = None,
-        name_query: str | None = None,
-        cursor: int = 0,
-        limit: int = 10,
-    ) -> dict[str, Any]:
-        if cursor < 0 or limit < 1 or limit > 20:
-            raise ValueError("cursor must be nonnegative and limit must be between 1 and 20.")
-        session = self.repository.get_advisor_match_session(
-            match_session_id,
-            corp_id=context.corp_id,
-            conversation_id=context.conversation_id,
-        )
-        items = [MatchDecision.model_validate(value) for value in session["decisions"]]
-        normalized_status = _normalize_status_filter(status)
-        if normalized_status:
-            items = [item for item in items if item.status == normalized_status]
-        if source_row_number is not None:
-            items = [item for item in items if item.source_row_number == source_row_number]
-        if name_query:
-            query = name_query.strip().casefold()
-            items = [
-                item
-                for item in items
-                if query
-                in " ".join(
-                    (
-                        item.mapped_values.get("first_name", ""),
-                        item.mapped_values.get("last_name", ""),
-                        item.mapped_values.get("full_name", ""),
-                    )
-                ).casefold()
-            ]
-        page = items[cursor : cursor + limit]
-        return {
-            "match_session_id": match_session_id,
-            "items": [_review_view(item) for item in page],
-            "total": len(items),
-            "next_cursor": cursor + limit if cursor + limit < len(items) else None,
-        }
-
-    def propose_crd(
-        self,
-        context: ServiceContext,
-        match_session_id: str,
-        review_item_id: str,
-        crd_number: str,
-    ) -> dict[str, Any]:
-        session = self.repository.get_advisor_match_session(
-            match_session_id,
-            corp_id=context.corp_id,
-            conversation_id=context.conversation_id,
-        )
-        item = _find_item(session, review_item_id)
-        reference, snapshot = _resolve_reference_snapshot(
-            store=self.repository,
-            workspace=self.workspace,
-            corp_id=context.corp_id,
-            conversation_id=session["conversation_id"],
-            snapshot_id=session["reference"]["reference_snapshot_id"],
-        )
-        normalized_crd = norm.crd(crd_number)
-        record = next(
-            (item for item in _iter_reference(snapshot) if item.crd_number == normalized_crd),
-            None,
-        )
-        if record is None:
-            raise ValueError("The supplied CRD does not exist in this session's reference.")
-        candidate = MatchCandidate(**record.model_dump())
-        proposal_id = self.repository.create_advisor_override_proposal(
-            corp_id=context.corp_id,
-            session_id=match_session_id,
-            review_item_id=review_item_id,
-            crd_number=normalized_crd,
-            advisor=candidate.model_dump(mode="json"),
-            reference_sha256=reference.sha256,
-            created_run_id=context.run_id,
-        )
-        return {
-            "proposal_id": proposal_id,
-            "review_item": _review_view(item),
-            "resolved_advisor": candidate.model_dump(mode="json"),
-            "requires_explicit_confirmation": True,
-        }
-
-    def apply_decisions(
-        self,
-        context: ServiceContext,
-        match_session_id: str,
-        decisions: list[ReviewDecision],
-        *,
-        approve_session: bool = False,
-    ) -> dict[str, Any]:
-        if len(decisions) > 20:
-            raise ValueError("Apply at most 20 review decisions per request.")
-        if len({item.review_item_id for item in decisions}) != len(decisions):
-            raise ValueError("Each review item may appear only once per request.")
-        session = self.repository.get_advisor_match_session(
-            match_session_id,
-            corp_id=context.corp_id,
-            conversation_id=context.conversation_id,
-        )
-        items = [MatchDecision.model_validate(value) for value in session["decisions"]]
-        by_id = {item.review_item_id: item for item in items}
-        audits: list[dict[str, Any]] = []
-        proposal_ids: list[str] = []
-        for requested in decisions:
-            item = by_id.get(requested.review_item_id)
-            if item is None:
-                raise ValueError(f"Unknown review item: {requested.review_item_id}.")
-            prior = item.model_dump(mode="json")
-            proposal_id = _apply_review(
-                self.repository,
-                context.run_id,
-                context.corp_id,
-                session,
-                item,
-                requested,
-            )
-            if proposal_id:
-                proposal_ids.append(proposal_id)
-            audits.append(
-                {
-                    "review_item_id": item.review_item_id,
-                    "action": requested.action,
-                    "crd_number": requested.crd_number,
-                    "note": requested.note,
-                    "prior": prior,
-                    "new": item.model_dump(mode="json"),
-                }
-            )
-        counts = _counts(items)
-        status = "Approved" if approve_session else session["status"]
-        self.repository.update_advisor_match_session(
-            match_session_id,
-            corp_id=context.corp_id,
-            decisions=[item.model_dump(mode="json") for item in items],
-            counts=counts.model_dump(mode="json"),
-            status=status,
-            audits=audits,
-            proposal_ids=proposal_ids,
-        )
-        artifact = self._write_workbook(context, match_session_id)
-        return {
-            "match_session_id": match_session_id,
-            "counts": counts.model_dump(),
-            "status": status,
-            "output_artifact_id": artifact.artifact_id,
-        }
-
-    def cancel_proposal(
-        self, context: ServiceContext, proposal_id: str, match_session_id: str
-    ) -> None:
-        proposal = self.repository.get_advisor_override_proposal(
-            proposal_id, corp_id=context.corp_id
-        )
-        if proposal["session_id"] != match_session_id:
-            raise ValueError("The pending manual match does not belong to these results.")
-        self.repository.get_advisor_match_session(
-            match_session_id,
-            corp_id=context.corp_id,
-            conversation_id=context.conversation_id,
-        )
-        if not self.repository.cancel_advisor_override_proposal(
-            proposal_id, corp_id=context.corp_id
-        ):
-            raise ValueError("The pending manual match is no longer available.")
 
     def _write_workbook(self, context: ServiceContext, session_id: str) -> Artifact:
         session = self.repository.get_advisor_match_session(

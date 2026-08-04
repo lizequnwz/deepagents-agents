@@ -151,7 +151,7 @@ def _resolve(
             rule_id="NON_UNIQUE_EMAIL",
             explanation=(
                 "The normalized email belongs to multiple authoritative advisor "
-                "records and requires user review."
+                "records and requires manual review in the exported workbook."
             ),
             assessments=assessments,
             warnings=warnings,
@@ -242,9 +242,9 @@ def _resolve(
             "EXACT_NAME_REVIEW_REQUIRED" if has_exact else "NICKNAME_REVIEW_REQUIRED"
         ),
         explanation=(
-            "One or more exact-name candidates require user review."
+            "One or more exact-name candidates require manual workbook review."
             if has_exact
-            else "One or more nickname-derived candidates require user review."
+            else "One or more nickname-derived candidates require manual workbook review."
         ),
         assessments=assessments,
         warnings=warnings,

@@ -8,11 +8,12 @@
 | Subagents / delegation | Not supported | The graph contains no agent or subgraph planner. |
 | Generic file access | Not supported | `Workspace` resolves protected corp-scoped IDs only. |
 | Full master table in model context | Forbidden | Matching and snapshot access stay deterministic. |
-| Row-by-row LLM identity decisions | Forbidden | Matcher and review policy own all decisions. |
+| Row-by-row LLM identity decisions | Forbidden | Deterministic matching policy owns all application decisions. |
+| Conversational post-match review | Not supported | Review happens in the downloaded workbook; local edits are not re-ingested. |
 | Persistent conversations/checkpoints | Not supported | `InMemorySaver` and `RuntimeStore` are process-local. |
 | Profile building | Not implemented | Remains an unregistered `# TODO`. |
 
 Prompts are not security boundaries. Corp scope, path validation, file
-integrity, row limits, matching policy, review rules, and workbook validation
+integrity, row limits, matching policy, and workbook validation
 are enforced in application code. The services are loopback-only and corp IDs
 are not authentication.

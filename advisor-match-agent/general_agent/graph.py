@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Literal
+from typing import Any
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
@@ -18,7 +18,6 @@ from general_agent.advisor_matching.schemas import (
     FieldBinding,
     InputMapping,
     MappingValidationResult,
-    ReviewDecision,
 )
 from general_agent.advisor_service import AdvisorService, ServiceContext
 from general_agent.config import Settings
@@ -72,10 +71,6 @@ def build_advisor_graph(
                 ),
                 RouteDecision,
             )
-        if state.get("pending_kind") == "manual_crd":
-            explicit = _manual_confirmation_route(state.get("user_message", ""))
-            if explicit:
-                decision.route = explicit
         return {"route": decision.model_dump(mode="json"), "is_new_attachment": False}
 
     async def inspect(state: AdvisorGraphState) -> dict[str, Any]:
@@ -210,11 +205,10 @@ def build_advisor_graph(
         counts = value["counts"]
         return {
             "result": value,
-            "phase": "review",
+            "phase": "complete",
             "pending_kind": None,
             "pending_payload": {},
             "clarification_answer": None,
-            "review_page": {},
             "response": user_messages.match_complete(counts),
         }
 
@@ -288,314 +282,6 @@ def build_advisor_graph(
             "is_new_attachment": False,
         }
 
-    async def review(state: AdvisorGraphState) -> dict[str, Any]:
-        decision = RouteDecision.model_validate(state["route"])
-        session_id = decision.match_session_id or (state.get("result") or {}).get(
-            "match_session_id"
-        )
-        if not session_id:
-            try:
-                current = await asyncio.to_thread(service.current_match, _context(state))
-                session_id = current["match_session_id"]
-            except KeyError:
-                return {"response": user_messages.no_match_session()}
-        requested_decisions = list(decision.review_decisions)
-        if decision.review_action:
-            if decision.source_row_number is None:
-                return {
-                    "response": (
-                        "Tell me which source row you want to update. For example, "
-                        "`Choose CRD 12345 for row 12` or `Leave row 12 unmatched`."
-                    )
-                }
-            try:
-                page = await asyncio.to_thread(
-                    service.list_results,
-                    _context(state),
-                    session_id,
-                    status=None,
-                    source_row_number=decision.source_row_number,
-                    limit=2,
-                )
-            except (KeyError, ValueError) as exc:
-                return {
-                    "response": user_messages.user_fixable_error(ValueError(str(exc)))
-                }
-            if not page["items"]:
-                return {
-                    "response": (
-                        f"I couldn’t find source row {decision.source_row_number} in "
-                        "the current matching results. Ask me to show the review list "
-                        "and choose one of the displayed row numbers."
-                    )
-                }
-            item = page["items"][0]
-            if decision.review_action == "confirm_candidate" and not decision.crd_number:
-                return {
-                    "response": (
-                        f"Tell me which candidate CRD to use for row "
-                        f"{decision.source_row_number}."
-                    )
-                }
-            requested_decisions.append(
-                ReviewDecision(
-                    review_item_id=item["review_item_id"],
-                    action=decision.review_action,
-                    crd_number=decision.crd_number,
-                )
-            )
-        if requested_decisions:
-            try:
-                result = await asyncio.to_thread(
-                    service.apply_decisions,
-                    _context(state),
-                    session_id,
-                    requested_decisions,
-                    approve_session=False,
-                )
-            except (KeyError, ValueError) as exc:
-                return {"response": user_messages.user_fixable_error(ValueError(str(exc)))}
-            return {
-                "phase": "review",
-                "result": result,
-                "review_page": {},
-                "response": user_messages.decisions_applied(
-                    result, len(requested_decisions)
-                ),
-            }
-        cursor = decision.review_cursor
-        status_filter = decision.review_status or "ambiguous_match"
-        name_query = decision.name_query
-        if decision.next_page:
-            previous_page = state.get("review_page") or {}
-            next_cursor = previous_page.get("next_cursor")
-            if next_cursor is None:
-                return {
-                    "response": (
-                        "You’re already at the end of the current review list. You can "
-                        "ask to see ambiguous advisors, unmatched advisors, or matching status."
-                    )
-                }
-            cursor = int(next_cursor)
-            status_filter = str(previous_page.get("_status_filter") or status_filter)
-            name_query = previous_page.get("_name_query") or name_query
-        try:
-            page = await asyncio.to_thread(
-                service.list_results,
-                _context(state),
-                session_id,
-                status=status_filter,
-                source_row_number=decision.source_row_number,
-                name_query=name_query,
-                cursor=cursor,
-                limit=decision.review_limit,
-            )
-        except (KeyError, ValueError) as exc:
-            return {"response": user_messages.user_fixable_error(ValueError(str(exc)))}
-        page = {
-            **page,
-            "_status_filter": status_filter,
-            "_name_query": name_query,
-        }
-        return {
-            "phase": "review",
-            "response": user_messages.review_page(page),
-            "review_page": page,
-            "result": {**(state.get("result") or {}), "match_session_id": session_id},
-        }
-
-    async def propose_crd(state: AdvisorGraphState) -> dict[str, Any]:
-        decision = RouteDecision.model_validate(state["route"])
-        session_id = decision.match_session_id or (state.get("result") or {}).get(
-            "match_session_id"
-        )
-        if not session_id:
-            try:
-                current = await asyncio.to_thread(service.current_match, _context(state))
-                session_id = current["match_session_id"]
-            except KeyError:
-                return {"response": user_messages.no_match_session()}
-        if not decision.crd_number:
-            return {
-                "response": (
-                    "Tell me the exact CRD you want to use and the source row number. "
-                    "For example: `Use CRD 12345 for row 12`."
-                )
-            }
-        item: dict[str, Any] | None = None
-        if decision.source_row_number is not None:
-            try:
-                page = await asyncio.to_thread(
-                    service.list_results,
-                    _context(state),
-                    session_id,
-                    status=None,
-                    source_row_number=decision.source_row_number,
-                    limit=2,
-                )
-            except (KeyError, ValueError) as exc:
-                return {
-                    "response": user_messages.user_fixable_error(ValueError(str(exc)))
-                }
-            item = page["items"][0] if page["items"] else None
-        elif decision.review_item_id:
-            item = {"review_item_id": decision.review_item_id}
-        else:
-            return {
-                "response": (
-                    "Tell me which source row should use that CRD. For example: "
-                    f"`Use CRD {decision.crd_number} for row 12`."
-                )
-            }
-        if item is None:
-            return {
-                "response": (
-                    f"I couldn’t find source row {decision.source_row_number} in the "
-                    "current matching results. Ask me to show the review list first."
-                )
-            }
-        presented = {
-            str(candidate.get("crd_number") or "").strip()
-            for candidate in item.get("candidates") or []
-        }
-        if str(decision.crd_number).strip() in presented:
-            direct = ReviewDecision(
-                review_item_id=item["review_item_id"],
-                action="confirm_candidate",
-                crd_number=decision.crd_number,
-            )
-            try:
-                applied = await asyncio.to_thread(
-                    service.apply_decisions,
-                    _context(state),
-                    session_id,
-                    [direct],
-                    approve_session=False,
-                )
-            except (KeyError, ValueError) as exc:
-                return {"response": user_messages.user_fixable_error(ValueError(str(exc)))}
-            return {
-                "phase": "review",
-                "result": applied,
-                "review_page": {},
-                "response": user_messages.decisions_applied(applied, 1),
-            }
-        try:
-            result = await asyncio.to_thread(
-                service.propose_crd,
-                _context(state),
-                session_id,
-                item["review_item_id"],
-                decision.crd_number,
-            )
-        except (KeyError, ValueError) as exc:
-            return {"response": user_messages.user_fixable_error(ValueError(str(exc)))}
-        advisor = result["resolved_advisor"]
-        row_number = int(
-            (result.get("review_item") or {}).get("source_row_number")
-            or decision.source_row_number
-            or 0
-        )
-        return {
-            "phase": "manual_crd_confirmation",
-            "result": {**(state.get("result") or {}), **result},
-            "pending_kind": "manual_crd",
-            "pending_payload": {
-                "proposal_id": result["proposal_id"],
-                "match_session_id": session_id,
-                "review_item_id": item["review_item_id"],
-                "crd_number": advisor["crd_number"],
-                "source_row_number": row_number,
-            },
-            "response": user_messages.manual_crd_proposal(row_number, advisor),
-        }
-
-    async def confirm_manual(state: AdvisorGraphState) -> dict[str, Any]:
-        pending = state.get("pending_payload") or {}
-        if state.get("pending_kind") != "manual_crd" or not pending.get("proposal_id"):
-            return {"response": user_messages.no_pending_manual_match()}
-        decision = ReviewDecision(
-            review_item_id=str(pending["review_item_id"]),
-            action="confirm_manual_crd",
-            crd_number=str(pending["crd_number"]),
-            proposal_id=str(pending["proposal_id"]),
-        )
-        try:
-            result = await asyncio.to_thread(
-                service.apply_decisions,
-                _context(state),
-                str(pending["match_session_id"]),
-                [decision],
-                approve_session=False,
-            )
-        except (KeyError, ValueError) as exc:
-            return {"response": user_messages.user_fixable_error(ValueError(str(exc)))}
-        return {
-            "phase": "review",
-            "result": result,
-            "pending_kind": None,
-            "pending_payload": {},
-            "clarification_answer": None,
-            "review_page": {},
-            "response": user_messages.decisions_applied(result, 1),
-        }
-
-    async def cancel_manual(state: AdvisorGraphState) -> dict[str, Any]:
-        pending = state.get("pending_payload") or {}
-        if state.get("pending_kind") != "manual_crd" or not pending.get("proposal_id"):
-            return {"response": user_messages.no_pending_manual_match()}
-        try:
-            await asyncio.to_thread(
-                service.cancel_proposal,
-                _context(state),
-                str(pending["proposal_id"]),
-                str(pending["match_session_id"]),
-            )
-        except (KeyError, ValueError) as exc:
-            return {"response": user_messages.user_fixable_error(ValueError(str(exc)))}
-        row_number = pending.get("source_row_number")
-        return {
-            "phase": "review",
-            "pending_kind": None,
-            "pending_payload": {},
-            "response": user_messages.manual_match_cancelled(
-                int(row_number) if row_number else None
-            ),
-        }
-
-    async def approve(state: AdvisorGraphState) -> dict[str, Any]:
-        decision = RouteDecision.model_validate(state["route"])
-        session_id = decision.match_session_id or (state.get("result") or {}).get(
-            "match_session_id"
-        )
-        if not session_id:
-            return {"response": user_messages.no_match_session()}
-        try:
-            result = await asyncio.to_thread(
-                service.apply_decisions,
-                _context(state),
-                session_id,
-                decision.review_decisions,
-                approve_session=True,
-            )
-        except (KeyError, ValueError) as exc:
-            return {"response": user_messages.user_fixable_error(ValueError(str(exc)))}
-        return {
-            "phase": "approved",
-            "result": result,
-            "response": user_messages.approval_complete(result),
-        }
-
-    async def status(state: AdvisorGraphState) -> dict[str, Any]:
-        try:
-            current = await asyncio.to_thread(service.current_match, _context(state))
-        except KeyError:
-            return {"response": user_messages.no_match_session()}
-        return {
-            "result": current,
-            "response": user_messages.status_summary(current),
-        }
-
     def reset(_state: AdvisorGraphState) -> dict[str, Any]:
         return {
             "phase": "idle",
@@ -607,7 +293,6 @@ def build_advisor_graph(
             "pending_kind": None,
             "pending_payload": {},
             "clarification_answer": None,
-            "review_page": {},
             "response": user_messages.reset_complete(),
         }
 
@@ -617,10 +302,10 @@ def build_advisor_graph(
     def greeting(_state: AdvisorGraphState) -> dict[str, Any]:
         return {
             "response": (
-                "Hi! I can help you match and review financial advisors. "
+                "Hi! I can help you match financial advisors. "
                 "To get started, attach one raw advisor CSV or XLSX file and ask me "
-                "to match it. I’ll help interpret the columns, flag ambiguous or "
-                "unmatched rows for review, and prepare an auditable workbook."
+                "to match it. I’ll help interpret the columns and prepare an auditable "
+                "workbook with ambiguous or unmatched rows clearly identified."
             )
         }
 
@@ -643,12 +328,6 @@ def build_advisor_graph(
         ("remap_firm", remap_firm),
         ("match", match),
         ("clarify", clarify),
-        ("review", review),
-        ("propose_crd", propose_crd),
-        ("confirm_manual", confirm_manual),
-        ("cancel_manual", cancel_manual),
-        ("approve", approve),
-        ("status", status),
         ("reset", reset),
         ("greeting", greeting),
         ("capabilities", capabilities),
@@ -670,12 +349,6 @@ def build_advisor_graph(
     )
     graph.add_conditional_edges("clarify", _after_clarify)
     for terminal in (
-        "review",
-        "propose_crd",
-        "confirm_manual",
-        "cancel_manual",
-        "approve",
-        "status",
         "reset",
         "greeting",
         "capabilities",
@@ -762,29 +435,6 @@ def _route_edge(state: AdvisorGraphState) -> str:
     return str(route)
 
 
-def _manual_confirmation_route(
-    message: str,
-) -> Literal["confirm_manual", "cancel_manual"] | None:
-    normalized = " ".join(message.casefold().split()).strip(" .!?")
-    if normalized in {
-        "yes",
-        "confirm",
-        "confirm this match",
-        "apply this match",
-        "approve this match",
-    }:
-        return "confirm_manual"
-    if normalized in {
-        "no",
-        "cancel",
-        "cancel this match",
-        "do not apply this match",
-        "don't apply this match",
-    }:
-        return "cancel_manual"
-    return None
-
-
 def _after_inspect(state: AdvisorGraphState) -> str:
     """Stop cleanly when matching was requested without an attachment."""
 
@@ -861,7 +511,7 @@ def _firm_question(state: AdvisorGraphState) -> str:
             "- If every advisor belongs to the same firm, tell me the exact firm name, "
             "for example: `Use ABC Wealth for all advisors`.\n"
             "- I can continue without firm information, but affected rows may remain "
-            "unmatched or require manual review."
+            "unmatched and appear on the Review Required sheet."
         )
 
     sample = ", ".join(str(item) for item in payload.get("source_firm_sample") or [])

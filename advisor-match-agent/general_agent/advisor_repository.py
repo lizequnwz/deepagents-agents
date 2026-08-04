@@ -94,32 +94,6 @@ class AdvisorRepository:
                 CREATE INDEX IF NOT EXISTS advisor_match_sessions_scope_idx
                     ON advisor_match_sessions(corp_id, conversation_id, updated_at);
 
-                CREATE TABLE IF NOT EXISTS advisor_match_review_audits (
-                    id TEXT PRIMARY KEY,
-                    corp_id TEXT NOT NULL,
-                    session_id TEXT NOT NULL REFERENCES advisor_match_sessions(id) ON DELETE CASCADE,
-                    review_item_id TEXT NOT NULL,
-                    action TEXT NOT NULL,
-                    crd_number TEXT,
-                    note TEXT NOT NULL DEFAULT '',
-                    prior_decision_json TEXT NOT NULL,
-                    new_decision_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS advisor_override_proposals (
-                    id TEXT PRIMARY KEY,
-                    corp_id TEXT NOT NULL,
-                    session_id TEXT NOT NULL REFERENCES advisor_match_sessions(id) ON DELETE CASCADE,
-                    review_item_id TEXT NOT NULL,
-                    crd_number TEXT NOT NULL,
-                    advisor_json TEXT NOT NULL,
-                    reference_sha256 TEXT NOT NULL,
-                    created_run_id TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-
                 CREATE TABLE IF NOT EXISTS advisor_artifacts (
                     id TEXT PRIMARY KEY,
                     corp_id TEXT NOT NULL,
@@ -311,7 +285,7 @@ class AdvisorRepository:
                     source_sha256, mapping_json, input_summary_json,
                     source_transformation_json, reference_json, decisions_json,
                     counts_json, policy_version, status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Reviewing', ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Matching Complete', ?, ?)""",
                 (
                     session_id,
                     corp,
@@ -347,133 +321,6 @@ class AdvisorRepository:
         with self._lock:
             row = self._connection.execute(query, values).fetchone()
         return _session(row, session_id)
-
-    def get_latest_advisor_match_session(
-        self, conversation_id: str, *, corp_id: str
-    ) -> dict[str, Any]:
-        with self._lock:
-            row = self._connection.execute(
-                """SELECT * FROM advisor_match_sessions
-                WHERE conversation_id=? AND corp_id=?
-                ORDER BY updated_at DESC, created_at DESC LIMIT 1""",
-                (conversation_id, self._corp(corp_id)),
-            ).fetchone()
-        return _session(row, conversation_id)
-
-    def update_advisor_match_session(
-        self,
-        session_id: str,
-        *,
-        corp_id: str,
-        decisions: list[Mapping[str, Any]],
-        counts: Mapping[str, Any],
-        status: str | None = None,
-        audits: list[Mapping[str, Any]] | None = None,
-        proposal_ids: list[str] | None = None,
-    ) -> None:
-        corp = self._corp(corp_id)
-        assignments = "decisions_json=?, counts_json=?, updated_at=?, revision=revision+1"
-        values: list[Any] = [_json(decisions), _json(counts), _iso(utc_now())]
-        if status is not None:
-            assignments += ", status=?"
-            values.append(status)
-        values.extend((session_id, corp))
-        with self._lock, self._connection:
-            cursor = self._connection.execute(
-                f"UPDATE advisor_match_sessions SET {assignments} WHERE id=? AND corp_id=?",
-                values,
-            )
-            if cursor.rowcount == 0:
-                raise KeyError(session_id)
-            for audit in audits or []:
-                self._connection.execute(
-                    """INSERT INTO advisor_match_review_audits(
-                        id, corp_id, session_id, review_item_id, action, crd_number,
-                        note, prior_decision_json, new_decision_json, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "amd_" + uuid.uuid4().hex,
-                        corp,
-                        session_id,
-                        audit["review_item_id"],
-                        audit["action"],
-                        audit.get("crd_number"),
-                        audit.get("note", ""),
-                        _json(audit["prior"]),
-                        _json(audit["new"]),
-                        _iso(utc_now()),
-                    ),
-                )
-            for proposal_id in proposal_ids or []:
-                changed = self._connection.execute(
-                    """UPDATE advisor_override_proposals SET status='Applied'
-                    WHERE id=? AND corp_id=? AND status='Pending'""",
-                    (proposal_id, corp),
-                )
-                if changed.rowcount == 0:
-                    raise KeyError(proposal_id)
-
-    def create_advisor_override_proposal(
-        self,
-        *,
-        corp_id: str,
-        session_id: str,
-        review_item_id: str,
-        crd_number: str,
-        advisor: Mapping[str, Any],
-        reference_sha256: str,
-        created_run_id: str,
-    ) -> str:
-        proposal_id = "amp_" + uuid.uuid4().hex
-        corp = self._corp(corp_id)
-        with self._lock, self._connection:
-            if not self._connection.execute(
-                "SELECT 1 FROM advisor_match_sessions WHERE id=? AND corp_id=?",
-                (session_id, corp),
-            ).fetchone():
-                raise KeyError(session_id)
-            self._connection.execute(
-                """INSERT INTO advisor_override_proposals(
-                    id, corp_id, session_id, review_item_id, crd_number,
-                    advisor_json, reference_sha256, created_run_id, status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?)""",
-                (
-                    proposal_id,
-                    corp,
-                    session_id,
-                    review_item_id,
-                    crd_number,
-                    _json(advisor),
-                    reference_sha256,
-                    created_run_id,
-                    _iso(utc_now()),
-                ),
-            )
-        return proposal_id
-
-    def get_advisor_override_proposal(self, proposal_id: str, *, corp_id: str) -> dict[str, Any]:
-        with self._lock:
-            row = self._connection.execute(
-                "SELECT * FROM advisor_override_proposals WHERE id=? AND corp_id=?",
-                (proposal_id, self._corp(corp_id)),
-            ).fetchone()
-        if row is None:
-            raise KeyError(proposal_id)
-        value = dict(row)
-        value["advisor"] = json.loads(value.pop("advisor_json"))
-        return value
-
-    def cancel_advisor_override_proposal(
-        self, proposal_id: str, *, corp_id: str
-    ) -> bool:
-        corp = self._corp(corp_id)
-        with self._lock, self._connection:
-            changed = self._connection.execute(
-                """UPDATE advisor_override_proposals SET status='Cancelled'
-                WHERE id=? AND corp_id=? AND status='Pending'""",
-                (proposal_id, corp),
-            )
-        return changed.rowcount > 0
 
     def add_artifact(
         self,

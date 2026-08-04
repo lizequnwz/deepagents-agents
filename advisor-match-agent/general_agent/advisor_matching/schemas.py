@@ -133,7 +133,7 @@ class AdvisorRecord(BaseModel):
 
 
 MatchStatus = Literal["Matched", "Ambiguous Match", "No Match"]
-MatchConfidence = Literal["High", "Uncertain", "None", "User Confirmed"]
+MatchConfidence = Literal["High", "Uncertain", "None"]
 FirmResolution = Literal[
     "auto", "use_source", "override_all", "continue_without_firm"
 ]
@@ -168,8 +168,6 @@ class MatchDecision(BaseModel):
     candidates_truncated: bool = False
     warnings: list[str] = Field(default_factory=list)
     duplicate_group: str | None = None
-    decision_source: Literal["Automated", "User Override"] = "Automated"
-    automated_status: MatchStatus | None = None
 
     @model_validator(mode="after")
     def validate_candidate_count(self) -> MatchDecision:
@@ -271,25 +269,6 @@ class ReferenceBlockerResult(BaseModel):
                 "Only duplicate-reference blockers may include CRD diagnostics."
             )
         return self
-
-
-class ReviewDecision(BaseModel):
-    review_item_id: str
-    action: Literal[
-        "confirm_candidate", "confirm_manual_crd", "confirm_no_match"
-    ]
-    crd_number: str | None = None
-    proposal_id: str | None = None
-    note: str = ""
-
-
-class ManualOverrideProposal(BaseModel):
-    proposal_id: str
-    match_session_id: str
-    review_item_id: str
-    advisor: MatchCandidate
-    reference_sha256: str
-    status: Literal["Pending", "Applied", "Cancelled", "Invalidated"] = "Pending"
 
 
 class ProfileBuildRequest(BaseModel):

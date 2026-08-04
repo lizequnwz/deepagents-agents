@@ -69,4 +69,4 @@ def test_usage_callback_records_ai_message_metadata() -> None:
 
 def test_graph_node_names_have_user_facing_progress_labels() -> None:
     assert _node_label("map_input") == "Identifying advisor columns"
-    assert _node_label("confirm_manual") == "Applying the confirmed manual match"
+    assert _node_label("match") == "Comparing advisors with the master database"

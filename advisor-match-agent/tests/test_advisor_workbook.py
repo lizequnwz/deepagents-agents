@@ -97,9 +97,12 @@ def test_workbook_is_human_first_styled_auditable_and_formula_safe(tmp_path) -> 
         if not review.column_dimensions[review.cell(1, index).column_letter].hidden
     ]
     assert len(visible_matched) == 17
-    assert len(visible_review) == 20
+    assert len(visible_review) == 23
     assert "Candidate Pool Size" in visible_review
     assert "Candidates Truncated" in visible_review
+    assert "User Decision" in visible_review
+    assert "Selected CRD" in visible_review
+    assert "Reviewer Notes" in visible_review
     assert "Review Item ID" not in visible_review
     assert matched.column_dimensions["A"].width >= len("Source Row")
     assert matched.row_dimensions[1].height == 24
@@ -107,4 +110,14 @@ def test_workbook_is_human_first_styled_auditable_and_formula_safe(tmp_path) -> 
     assert matched["A1"].fill.fgColor.rgb.endswith("1F4E78")
     status_column = review_headers.index("Status") + 1
     assert review.cell(2, status_column).fill.fgColor.rgb.endswith("F4CCCC")
+    user_decision_column = review_headers.index("User Decision") + 1
+    assert review.cell(1, user_decision_column).fill.fgColor.rgb.endswith("FFF2CC")
+    assert review.cell(2, user_decision_column).fill.fgColor.rgb.endswith("FFF2CC")
+    summary = {
+        row[0].value: row[1].value
+        for row in workbook["Run Summary"].iter_rows(min_row=2)
+    }
+    assert "Review Required" in summary["Manual Review"]
+    assert "not sent back to or validated" in summary["Local Edit Boundary"]
+    assert summary["Session Status"] == "Matching Complete"
     workbook.close()

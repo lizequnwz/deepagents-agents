@@ -90,10 +90,11 @@ def get_or_create_current_conversation(
 
 def render_page_header() -> None:
     st.caption(":material/manage_search: TRUSTED ADVISOR MATCH AGENT")
-    st.title("Match and review financial advisors", anchor=False)
+    st.title("Match financial advisors and export results", anchor=False)
     st.caption(
         "Upload one CSV or XLSX, match its advisor rows against the master "
-        "advisor database, review uncertain records, and export an auditable workbook."
+        "advisor database, identify uncertain records, and export an auditable workbook "
+        "for offline review."
     )
 
 
@@ -124,7 +125,7 @@ with st.sidebar:
         f":material/corporate_fare: Corporation scope {st.session_state['corp_id']}"
     )
     st.caption(
-        "A trusted workflow for deterministic advisor matching and review."
+        "A trusted workflow for deterministic advisor matching and workbook export."
     )
     new_chat = st.button(
         "New chat",
@@ -184,8 +185,9 @@ if not conversation["turns"]:
     suggestions = {
         ":material/manage_search: Match uploaded advisors": (
             "Help me match the advisors from the uploaded file against the master "
-            "advisor database, review ambiguous or unmatched records with me, and "
-            "export the results as an auditable workbook."
+            "advisor database and export the results as an auditable workbook. Put "
+            "ambiguous or unmatched records on the Review Required sheet for me to "
+            "review in Excel."
         ),
     }
     with st.container(border=True):

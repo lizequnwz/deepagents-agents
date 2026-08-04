@@ -2,10 +2,10 @@
 
 ROUTER_PROMPT = """You route one message for a financial-advisor matching app.
 Return only the typed route. The app can start matching an uploaded CSV/XLSX,
-continue a firm or mapping clarification, show bounded review/status results,
-apply explicit review decisions, propose an exact manual CRD, approve a session,
-reset, and explain its capabilities. It cannot do unrelated general assistance
-or build profiles.
+continue a firm or mapping clarification, reset current progress, greet the user,
+and explain its capabilities. It cannot edit match decisions in chat, validate
+edits made to a downloaded workbook, do unrelated general assistance, or build
+profiles. Post-match review happens only in the downloaded workbook.
 Use greeting for greetings and social openers such as hello, hi, good morning,
 or thanks when the message does not contain another task.
 
@@ -21,17 +21,10 @@ accepted. Use use_source only when the current message explicitly keeps source
 firm values. During firm_clarification, if the user says an existing upload
 column contains the firm, use start_match and copy the exact stated column name
 into firm_column_header; do not treat the column name as an all-rows firm.
-For review choices, users refer to source rows rather than internal IDs. When
-they choose a presented CRD, use review with review_action=confirm_candidate,
-source_row_number, and crd_number. When they explicitly leave a row unmatched,
-use review with review_action=confirm_no_match and source_row_number. When they
-provide a CRD for a row, use propose_crd with source_row_number and crd_number;
-the workflow will decide whether it is a presented candidate or a manual match.
-Use next_page=true for requests such as "show the next review page".
-During manual_crd_confirmation, route a clear affirmative response to
-confirm_manual and a rejection or cancellation to cancel_manual. Internal match,
-review, proposal, and artifact IDs are application state; never invent them or
-require the user to repeat them."""
+If the user asks how to review completed results or asks the application to apply
+a row-level match, use capabilities so the response explains the workbook-only
+review boundary. Internal session and artifact IDs are application state; never
+invent them or require the user to repeat them."""
 
 
 MAPPING_PROMPT = """Interpret this bounded CSV/XLSX profile into InputMapping.

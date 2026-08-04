@@ -5,7 +5,7 @@
 - This is a loopback-only financial-advisor matching application built with
   LangGraph, LangChain, FastAPI, Streamlit, and SQLite.
 - Its only supported agent workflow is matching one uploaded CSV/XLSX against
-  an authoritative advisor source, reviewing decisions, and exporting results.
+  an authoritative advisor source and exporting results for offline review.
 - The runtime agent has no shell, arbitrary Python/code execution, network,
   package-installation, general file-write, or subagent capability.
 - Prompt instructions are not a security boundary. Enforce corporation scope,
@@ -18,7 +18,7 @@
 - `general_agent/advisor_matching/`: schemas, normalization, policy, matching,
   source adapter, input profiling/loading, and workbook generation.
 - `general_agent/runtime_store.py`: process-local conversations, runs, and events.
-- `general_agent/advisor_repository.py`: durable advisor-review persistence.
+- `general_agent/advisor_repository.py`: durable match and artifact persistence.
 - `general_agent/workspace.py`: minimal corporation-scoped protected attachment,
   reference-snapshot, and workbook-artifact storage.
 - `docs/contracts/`: static policy and workbook contracts; never model skills.
@@ -27,25 +27,26 @@
 ## Non-negotiable invariants
 
 - Never modify the sibling parent `general-agent` project.
-- Scope every conversation, run, upload, snapshot, match session, review
-  decision, proposal, workbook, and artifact by `corp_id`.
+- Scope every conversation, run, upload, snapshot, match session, workbook, and
+  artifact by `corp_id`.
 - Keep both services loopback-only. Corporation IDs isolate storage but are not
   authentication; do not present this app as safe for untrusted users.
 - Keep traversal/symlink rejection, protected storage roots,
   attachment/reference/artifact IDs, structured-output retry limits,
   cancellation, documented restart loss, and immutable workbook artifacts.
-- The model may inspect bounded profiles and review pages. It must never receive
-  the complete master table or full workbook and must never decide matches row
-  by row.
+- The model may inspect bounded upload profiles. It must never receive the
+  complete master table or full workbook and must never decide matches row by
+  row.
 - Deterministic code owns normalization, candidate generation, scoring,
-  decisions, duplicate detection, review mutations, and workbook regeneration.
+  decisions, duplicate detection, and workbook generation.
 - Exact CRD is decisive with conflict warnings. Unique normalized email is
   strong. Name matching needs independent evidence. Nicknames and fuzzy names
   are candidate evidence only; a fuzzy name alone is never confirmed.
-- An unlisted candidate requires exact CRD resolution, display, and explicit
-  confirmation in a later user turn before it is applied.
-- Never modify the original upload. Always regenerate and verify the four-sheet
+- Never modify the original upload. Always generate and verify the four-sheet
   `advisor_matches.xlsx` export from persisted structured decisions.
+- The graph ends after verified workbook publication. Ambiguous and unmatched
+  records are reviewed in a downloaded copy; local edits are not re-ingested or
+  validated by the application.
 - Profile building remains an unregistered `# TODO`; do not simulate it.
 - Do not hand-edit `.data/` or other derived runtime state. The generic
   chat/shared workspace is intentionally unsupported.

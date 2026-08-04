@@ -16,4 +16,4 @@ firm_similarity:
   minimum_similarity: 0.88
   conflict_similarity: 0.45
 statuses: [Matched, Ambiguous Match, No Match]
-confidence: [High, Uncertain, None, User Confirmed]
+confidence: [High, Uncertain, None]

@@ -22,12 +22,7 @@ from general_agent.advisor_matching.schemas import (
     InputMapping,
     InputSummary,
     MASTER_COLUMNS,
-    MatchCandidate,
-    MatchCounts,
-    MatchDecision,
-    MatchStatus,
     ReferenceSnapshotManifest,
-    ReviewDecision,
 )
 from general_agent.advisor_matching.source import AdvisorReferenceSource, sha256_file
 from general_agent.config import Settings
@@ -272,28 +267,6 @@ def _contains_explicit_firm(question: str, firm_name: str) -> bool:
     )
 
 
-def _normalize_status_filter(status: str | None) -> MatchStatus | None:
-    if status is None or not status.strip():
-        return None
-    key = " ".join(
-        status.replace("_", " ").replace("-", " ").split()
-    ).casefold()
-    aliases: dict[str, MatchStatus] = {
-        "matched": "Matched",
-        "ambiguous": "Ambiguous Match",
-        "ambiguous match": "Ambiguous Match",
-        "no match": "No Match",
-        "unmatched": "No Match",
-    }
-    normalized = aliases.get(key)
-    if normalized is None:
-        raise ValueError(
-            "Unsupported match status filter. Use matched, ambiguous_match, "
-            "or no_match."
-        )
-    return normalized
-
-
 def _resolve_reference_snapshot(
     *,
     store: AdvisorRepository,
@@ -423,111 +396,6 @@ def _iter_reference(path: Path):
                     for column in MASTER_COLUMNS
                 }
             )
-
-
-def _find_item(session: dict[str, Any], item_id: str) -> MatchDecision:
-    for value in session["decisions"]:
-        item = MatchDecision.model_validate(value)
-        if item.review_item_id == item_id:
-            return item
-    raise ValueError(f"Unknown review item: {item_id}.")
-
-
-def _review_view(item: MatchDecision) -> dict[str, Any]:
-    mapped = {key: value for key, value in item.mapped_values.items() if value}
-    return {
-        "review_item_id": item.review_item_id,
-        "source_row_number": item.source_row_number,
-        "input": mapped,
-        "status": item.status,
-        "confidence": item.confidence,
-        "rule_id": item.rule_id,
-        "reason": item.explanation,
-        "warnings": item.warnings,
-        "candidate_count": item.candidate_count,
-        "candidates_truncated": item.candidates_truncated,
-        "matched_advisor": item.matched_advisor.model_dump(mode="json")
-        if item.matched_advisor
-        else None,
-        "candidates": [
-            candidate.model_dump(mode="json") for candidate in item.candidates
-        ],
-        "duplicate_group": item.duplicate_group,
-        "decision_source": item.decision_source,
-        "automated_status": item.automated_status or item.status,
-    }
-
-
-def _apply_review(repository, active_run_id, corp_id, session, item, requested):
-    if item.automated_status is None:
-        item.automated_status = item.status
-    if requested.action == "confirm_candidate":
-        requested_crd = norm.crd(requested.crd_number)
-        candidate = next(
-            (
-                candidate
-                for candidate in item.candidates
-                if candidate.crd_number == requested_crd
-            ),
-            None,
-        )
-        if candidate is None:
-            raise ValueError(
-                "The selected CRD was not presented for this review item."
-            )
-        item.status, item.confidence, item.rule_id = (
-            "Matched",
-            "User Confirmed",
-            "USER_CONFIRMED_OVERRIDE",
-        )
-        item.matched_advisor, item.decision_source = candidate, "User Override"
-        item.explanation = "The user explicitly confirmed a presented advisor candidate."
-    elif requested.action == "confirm_manual_crd":
-        if not requested.proposal_id:
-            raise ValueError("A confirmed manual CRD proposal is required.")
-        proposal = repository.get_advisor_override_proposal(
-            requested.proposal_id, corp_id=corp_id
-        )
-        if (
-            proposal["session_id"] != session["id"]
-            or proposal["review_item_id"] != item.review_item_id
-            or proposal["status"] != "Pending"
-        ):
-            raise ValueError("The manual CRD proposal is invalid or stale.")
-        if proposal["created_run_id"] == active_run_id:
-            raise ValueError("Confirm a manual CRD proposal in a later user turn.")
-        if proposal["reference_sha256"] != session["reference"]["sha256"]:
-            raise ValueError(
-                "The manual CRD proposal uses a different reference snapshot."
-            )
-        item.status, item.confidence, item.rule_id = (
-            "Matched",
-            "User Confirmed",
-            "USER_CONFIRMED_OVERRIDE",
-        )
-        item.matched_advisor = MatchCandidate.model_validate(proposal["advisor"])
-        item.decision_source = "User Override"
-        item.explanation = "The user explicitly confirmed a separately resolved CRD override."
-        return requested.proposal_id
-    elif requested.action == "confirm_no_match":
-        item.status, item.confidence, item.rule_id = (
-            "No Match",
-            "None",
-            "USER_CONFIRMED_NO_MATCH",
-        )
-        item.matched_advisor, item.decision_source = None, "User Override"
-        item.explanation = "The user explicitly confirmed that this row should remain unmatched."
-    return None
-
-
-def _counts(items: list[MatchDecision]) -> MatchCounts:
-    return MatchCounts(
-        matched=sum(item.status == "Matched" for item in items),
-        ambiguous_match=sum(
-            item.status == "Ambiguous Match" for item in items
-        ),
-        no_match=sum(item.status == "No Match" for item in items),
-    )
 
 
 def _input_summary_warnings(summary: InputSummary) -> list[str]:

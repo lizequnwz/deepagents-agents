@@ -1,4 +1,4 @@
-"""Deterministic advisor identity matching and review workflows."""
+"""Deterministic advisor identity matching and workbook export."""
 
 from general_agent.advisor_matching.matcher import run_matching
 from general_agent.advisor_matching.profiler import inspect_advisor_upload

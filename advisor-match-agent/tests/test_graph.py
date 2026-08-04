@@ -16,7 +16,6 @@ from general_agent.advisor_matching.schemas import (
 from general_agent.graph import (
     _after_inspect,
     _firm_question,
-    _manual_confirmation_route,
     _mapping_with_firm_column,
     _route_edge,
     _structured_attempts,
@@ -274,7 +273,7 @@ async def test_yes_resumes_proposed_mapping_without_general_routing(settings) ->
         config=config,
     )
 
-    assert result["phase"] == "review"
+    assert result["phase"] == "complete"
     assert result["pending_kind"] is None
     assert result["clarification_answer"] is None
     assert "finished matching" in result["response"]
@@ -321,7 +320,7 @@ async def test_mapping_detail_resume_includes_bounded_pending_context(settings) 
         config=config,
     )
 
-    assert result["phase"] == "review"
+    assert result["phase"] == "complete"
     assert service.validated_mappings == [resolved]
     assert model.route_calls == 1
     assert len(model.mapping_prompts) == 2
@@ -414,57 +413,17 @@ def test_firm_column_answer_routes_to_remapping() -> None:
     )
 
 
-def test_manual_confirmation_phrases_are_deterministic() -> None:
-    assert _manual_confirmation_route("Confirm this match!") == "confirm_manual"
-    assert _manual_confirmation_route("Cancel this match") == "cancel_manual"
-    assert _manual_confirmation_route("Tell me more") is None
-
-
 def test_match_completion_is_actionable_and_hides_artifact_ids() -> None:
     response = user_messages.match_complete(
         {"matched": 84, "ambiguous_match": 11, "no_match": 5}
     )
 
     assert "100 advisors" in response
-    assert "review the 11 ambiguous advisors" in response
-    assert "review the 5 unmatched advisors" in response
+    assert "Review Required" in response
+    assert "User Decision" in response
+    assert "Selected CRD" in response
+    assert "not sent back to or validated" in response
     assert "artifact" not in response.casefold()
-
-
-def test_review_page_shows_decision_context_without_internal_ids() -> None:
-    response = user_messages.review_page(
-        {
-            "items": [
-                {
-                    "review_item_id": "ami_internal",
-                    "source_row_number": 12,
-                    "input": {"full_name": "Jane Smith"},
-                    "reason": "Two exact-name candidates require review.",
-                    "warnings": [],
-                    "candidates": [
-                        {
-                            "crd_number": "12345",
-                            "first_name": "Jane",
-                            "last_name": "Smith",
-                            "firm_name": "ABC Wealth",
-                            "city": "Boston",
-                            "state": "MA",
-                            "supporting_evidence": ["Exact normalized name"],
-                            "conflicting_evidence": [],
-                        }
-                    ],
-                }
-            ],
-            "total": 1,
-            "next_cursor": None,
-        }
-    )
-
-    assert "Row 12 — Jane Smith" in response
-    assert "ABC Wealth" in response
-    assert "Boston, MA" in response
-    assert "Choose CRD <number> for row 12" in response
-    assert "ami_internal" not in response
 
 
 class FixedRouteModel:
@@ -481,132 +440,25 @@ class FixedRouteModel:
         return Output()
 
 
-class ReviewService:
-    def __init__(self) -> None:
-        self.applied = []
-        self.list_kwargs = []
-
-    def list_results(self, *_args, **kwargs):
-        self.list_kwargs.append(kwargs)
-        return {
-            "items": [
-                {
-                    "review_item_id": "ami_internal",
-                    "source_row_number": 12,
-                    "input": {"full_name": "Jane Smith"},
-                    "candidates": [],
-                }
-            ],
-            "total": 1,
-            "next_cursor": None,
-        }
-
-    def apply_decisions(
-        self, _context, _session_id, decisions, *, approve_session=False
-    ):
-        assert approve_session is False
-        self.applied.extend(decisions)
-        return {
-            "match_session_id": "ams_internal",
-            "counts": {"matched": 1, "ambiguous_match": 0, "no_match": 0},
-            "status": "In Review",
-            "output_artifact_id": "art_internal",
-        }
-
-
 @pytest.mark.asyncio
-async def test_row_based_review_action_resolves_hidden_item_id(settings) -> None:
-    service = ReviewService()
+async def test_post_match_review_request_explains_workbook_boundary(settings) -> None:
     graph = build_advisor_graph(
         settings,
-        service=service,
-        model=FixedRouteModel(
-            RouteDecision(
-                route="review",
-                review_action="confirm_no_match",
-                source_row_number=12,
-            )
-        ),
+        service=object(),
+        model=FixedRouteModel(RouteDecision(route="capabilities")),
     )
     result = await graph.ainvoke(
         {
             "corp_id": "A123456",
             "conversation_id": "conversation-one",
             "run_id": "run-one",
-            "user_message": "Leave row 12 unmatched",
-            "phase": "review",
+            "user_message": "Use CRD 12345 for John Smith",
+            "phase": "complete",
             "result": {"match_session_id": "ams_internal"},
         },
         config={"configurable": {"thread_id": "review-command"}},
     )
 
-    assert service.applied[0].review_item_id == "ami_internal"
-    assert service.applied[0].action == "confirm_no_match"
-    assert "regenerated the workbook below" in result["response"]
-    assert "ami_internal" not in result["response"]
-    assert "art_internal" not in result["response"]
-
-
-@pytest.mark.asyncio
-async def test_manual_confirmation_uses_pending_ids_without_showing_them(settings) -> None:
-    service = ReviewService()
-    graph = build_advisor_graph(
-        settings,
-        service=service,
-        model=FixedRouteModel(RouteDecision(route="confirm_manual")),
-    )
-    result = await graph.ainvoke(
-        {
-            "corp_id": "A123456",
-            "conversation_id": "conversation-one",
-            "run_id": "confirmation-run",
-            "user_message": "Confirm this match",
-            "phase": "manual_crd_confirmation",
-            "pending_kind": "manual_crd",
-            "pending_payload": {
-                "proposal_id": "amp_internal",
-                "match_session_id": "ams_internal",
-                "review_item_id": "ami_internal",
-                "crd_number": "12345",
-                "source_row_number": 12,
-            },
-            "result": {"match_session_id": "ams_internal"},
-        },
-        config={"configurable": {"thread_id": "manual-confirmation"}},
-    )
-
-    applied = service.applied[0]
-    assert applied.action == "confirm_manual_crd"
-    assert applied.proposal_id == "amp_internal"
-    assert result["pending_kind"] is None
-    assert "amp_internal" not in result["response"]
-    assert "ami_internal" not in result["response"]
-
-
-@pytest.mark.asyncio
-async def test_next_review_page_uses_bounded_cursor_and_filter_from_state(settings) -> None:
-    service = ReviewService()
-    graph = build_advisor_graph(
-        settings,
-        service=service,
-        model=FixedRouteModel(RouteDecision(route="review", next_page=True)),
-    )
-    await graph.ainvoke(
-        {
-            "corp_id": "A123456",
-            "conversation_id": "conversation-one",
-            "run_id": "next-page-run",
-            "user_message": "Show the next review page",
-            "phase": "review",
-            "result": {"match_session_id": "ams_internal"},
-            "review_page": {
-                "next_cursor": 10,
-                "_status_filter": "no_match",
-                "_name_query": None,
-            },
-        },
-        config={"configurable": {"thread_id": "next-review-page"}},
-    )
-
-    assert service.list_kwargs[0]["cursor"] == 10
-    assert service.list_kwargs[0]["status"] == "no_match"
+    assert "workbook" in result["response"].casefold()
+    assert "does not apply row-level review choices" in result["response"]
+    assert "validate changes made to the downloaded workbook" in result["response"]

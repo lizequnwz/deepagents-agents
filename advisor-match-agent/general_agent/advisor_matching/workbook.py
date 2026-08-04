@@ -27,6 +27,7 @@ _HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 _HEADER_FONT = Font(name="Calibri", bold=True, color="FFFFFF")
 _BODY_FONT = Font(name="Calibri", size=11)
 _ALT_FILL = PatternFill("solid", fgColor="F4F7FA")
+_EDITABLE_FILL = PatternFill("solid", fgColor="FFF2CC")
 _STATUS_FILL = {
     "Matched": PatternFill("solid", fgColor="D9EAD3"),
     "Ambiguous Match": PatternFill("solid", fgColor="FFF2CC"),
@@ -36,8 +37,6 @@ _HIDDEN_AUDIT_HEADERS = {
     "Review Item ID",
     "Rule ID",
     "Confidence",
-    "Automated Status",
-    "Decision Source",
     "Duplicate Group",
 }
 
@@ -54,7 +53,7 @@ def write_match_workbook(
     source_sha256: str,
     reference: ReferenceSnapshotManifest,
     policy_version: str,
-    session_status: str = "Reviewing",
+    session_status: str = "Matching Complete",
     session_revision: int = 1,
     source_transformation: Mapping[str, object] | None = None,
 ) -> None:
@@ -195,8 +194,6 @@ def _write_matched(sheet, decisions: list[MatchDecision]) -> None:
         "Review Item ID",
         "Rule ID",
         "Confidence",
-        "Automated Status",
-        "Decision Source",
         "Duplicate Group",
     ]
 
@@ -213,6 +210,9 @@ def _write_review(sheet, decisions: list[MatchDecision]) -> None:
         "Source Row",
         "Status",
         "Reason",
+        "User Decision",
+        "Selected CRD",
+        "Reviewer Notes",
         "Input Name",
         "Input Firm",
         "Input Location",
@@ -233,8 +233,6 @@ def _write_review(sheet, decisions: list[MatchDecision]) -> None:
         "Review Item ID",
         "Rule ID",
         "Confidence",
-        "Automated Status",
-        "Decision Source",
         "Duplicate Group",
     ]
 
@@ -246,7 +244,13 @@ def _write_review(sheet, decisions: list[MatchDecision]) -> None:
             for rank, candidate in enumerate(candidates, start=1):
                 yield _review_row(decision, candidate, rank=rank)
 
-    _write_table(sheet, headers, rows, hidden=_HIDDEN_AUDIT_HEADERS)
+    _write_table(
+        sheet,
+        headers,
+        rows,
+        hidden=_HIDDEN_AUDIT_HEADERS,
+        editable={"User Decision", "Selected CRD", "Reviewer Notes"},
+    )
 
 
 def _write_original(sheet, decisions: list[MatchDecision]) -> None:
@@ -290,9 +294,24 @@ def _write_summary(
         source_sha256=source_sha256, mapping=mapping
     )
     values: list[tuple[str, object]] = [
+        (
+            "Workbook Purpose",
+            "Automated advisor matching results and audit evidence.",
+        ),
+        (
+            "Manual Review",
+            "Review ambiguous and unmatched records on the Review Required sheet. "
+            "Record a final outcome in User Decision, enter the chosen CRD in "
+            "Selected CRD when applicable, and add context in Reviewer Notes.",
+        ),
+        (
+            "Local Edit Boundary",
+            "Changes made to a downloaded copy are not sent back to or validated by "
+            "the advisor matching application.",
+        ),
         ("Session ID", session_id),
         ("Session Status", session_status),
-        ("Session Revision", session_revision),
+        ("Artifact Revision", session_revision),
         ("Source File", source_name),
         ("Selected Worksheet", mapping.sheet_name or "First worksheet / CSV"),
         ("Header Mode", "Headerless" if mapping.header_row is None else "Headed"),
@@ -404,8 +423,6 @@ def _matched_row(decision: MatchDecision) -> list[object]:
         decision.review_item_id,
         decision.rule_id,
         decision.confidence,
-        decision.automated_status or decision.status,
-        decision.decision_source,
         decision.duplicate_group or "",
     ]
 
@@ -420,6 +437,9 @@ def _review_row(
         decision.source_row_number,
         decision.status,
         decision.explanation,
+        "",
+        "",
+        "",
         _input_name(decision),
         decision.mapped_values.get("firm_name", ""),
         _location(decision.mapped_values),
@@ -440,8 +460,6 @@ def _review_row(
         decision.review_item_id,
         decision.rule_id,
         decision.confidence,
-        decision.automated_status or decision.status,
-        decision.decision_source,
         decision.duplicate_group or "",
     ]
 
@@ -452,7 +470,11 @@ def _write_table(
     rows_factory: Callable[[], Iterable[list[object]]],
     *,
     hidden: set[str],
+    editable: set[str] | None = None,
 ) -> None:
+    editable_indexes = {
+        index for index, header in enumerate(headers) if header in (editable or set())
+    }
     widths = [max(10, len(header) + 2) for header in headers]
     row_count = 0
     for values in rows_factory():
@@ -469,7 +491,13 @@ def _write_table(
     sheet.row_dimensions[1].height = 24
     sheet.freeze_panes = "A2"
     sheet.sheet_view.showGridLines = False
-    _append(sheet, headers, header=True, row_number=1)
+    _append(
+        sheet,
+        headers,
+        header=True,
+        row_number=1,
+        editable_indexes=editable_indexes,
+    )
     status_index = headers.index("Status") if "Status" in headers else None
     for row_number, values in enumerate(rows_factory(), start=2):
         if len(headers) > 10:
@@ -480,6 +508,7 @@ def _write_table(
             header=False,
             row_number=row_number,
             status_index=status_index,
+            editable_indexes=editable_indexes,
         )
     last_column = get_column_letter(len(headers))
     sheet.auto_filter.ref = f"A1:{last_column}{max(1, row_count + 1)}"
@@ -492,6 +521,7 @@ def _append(
     header: bool,
     row_number: int,
     status_index: int | None = None,
+    editable_indexes: set[int] | None = None,
 ) -> None:
     cells = []
     for index, value in enumerate(values):
@@ -506,7 +536,11 @@ def _append(
             horizontal="center" if header else "left",
         )
         if header:
-            cell.fill = _HEADER_FILL
+            cell.fill = _EDITABLE_FILL if index in (editable_indexes or set()) else _HEADER_FILL
+            if index in (editable_indexes or set()):
+                cell.font = Font(name="Calibri", bold=True, color="7F6000")
+        elif index in (editable_indexes or set()):
+            cell.fill = _EDITABLE_FILL
         elif status_index is not None and index == status_index:
             cell.fill = _STATUS_FILL.get(str(value), _ALT_FILL if row_number % 2 == 0 else PatternFill())
             cell.font = Font(name="Calibri", size=11, bold=True)
