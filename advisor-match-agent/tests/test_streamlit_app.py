@@ -101,8 +101,69 @@ def test_match_result_handoff_switches_tab_and_analyzes_profiles(monkeypatch) ->
     assert _button(app, "Generate profile report")
 
 
+def test_name_mapping_mode_immediately_switches_visible_column_selectors(
+    monkeypatch,
+) -> None:
+    match_analysis = {
+        "source": {"filename": "advisors.csv", "format": "csv", "sha256": "a" * 64},
+        "profile": _profile(None, ["CRD", "Full Name", "First Name", "Last Name"]),
+        "decision": {
+            "mapping": {
+                "sheet_name": None,
+                "header_row": 1,
+                "crd_number": {"index": 0, "header": "CRD"},
+                "full_name": {"index": 1, "header": "Full Name"},
+            },
+            "clarification_required": False,
+            "clarification_kind": None,
+            "clarification_question": None,
+        },
+        "validation": {"warnings": []},
+        "validation_error": None,
+    }
+
+    monkeypatch.setattr(
+        AdvisorMatchAPIClient,
+        "health",
+        lambda _self: {"status": "ok", "version": "test"},
+    )
+    monkeypatch.setattr(
+        AdvisorMatchAPIClient,
+        "map_advisors",
+        lambda *_args, **_kwargs: match_analysis,
+    )
+
+    app = AppTest.from_file(
+        str(Path(__file__).resolve().parents[1] / "streamlit_app.py"),
+        default_timeout=20,
+    ).run()
+    app.file_uploader[0].upload(
+        "advisors.csv",
+        b"CRD,Full Name,First Name,Last Name\n1001,Avery Stone,Avery,Stone\n",
+        "text/csv",
+    ).run()
+    _button(app, "Analyze columns").click().run()
+
+    assert app.segmented_control(key="match_name_mode").value == "One full-name column"
+    assert "Advisor full name" in _selectbox_labels(app)
+    assert "First name" not in _selectbox_labels(app)
+    assert "Last name" not in _selectbox_labels(app)
+
+    app.segmented_control(key="match_name_mode").select(
+        "Separate first and last name columns"
+    ).run()
+
+    assert "Advisor full name" not in _selectbox_labels(app)
+    assert "First name" in _selectbox_labels(app)
+    assert "Last name" in _selectbox_labels(app)
+
+
 def _button(app: AppTest, label: str):
     return next(button for button in app.button if button.label == label)
+
+
+def _selectbox_labels(app: AppTest) -> set[str]:
+    return {selectbox.label for selectbox in app.selectbox}
 
 
 def _profile(sheet_name: str | None, headers: list[str]) -> dict:

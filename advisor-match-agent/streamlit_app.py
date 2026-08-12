@@ -162,9 +162,10 @@ def _render_match_tab(client: AdvisorMatchAPIClient, max_upload_mb: int) -> None
     for warning in validation.get("warnings") or []:
         st.info(warning, icon=":material/info:")
 
+    st.markdown("#### Confirm column mapping")
+    name_mode = _name_mapping_mode(analysis)
     with st.form("match_configuration"):
-        st.markdown("#### Confirm column mapping")
-        mapping = _match_mapping_form(analysis)
+        mapping = _match_mapping_form(analysis, name_mode)
         st.markdown("#### Firm handling")
         firm_options = {
             "Automatic policy handling": "auto",
@@ -317,21 +318,36 @@ def _render_profile_tab(client: AdvisorMatchAPIClient, max_upload_mb: int) -> No
     _render_profile_result()
 
 
-def _match_mapping_form(analysis: dict[str, Any]) -> dict[str, Any] | None:
+def _name_mapping_mode(analysis: dict[str, Any]) -> str:
+    """Render the name-layout control outside the form so it reruns immediately."""
+
+    proposal = analysis["decision"].get("mapping") or {}
+    full_name_mode = "One full-name column"
+    split_name_mode = "Separate first and last name columns"
+    default = full_name_mode if proposal.get("full_name") else split_name_mode
+    return st.segmented_control(
+        "Name mapping",
+        [full_name_mode, split_name_mode],
+        default=default,
+        required=True,
+        key="match_name_mode",
+        help=(
+            "Choose one full-name column when the complete advisor name is stored in "
+            "a single column. Choose separate columns when first and last names are "
+            "stored in two columns."
+        ),
+    )
+
+
+def _match_mapping_form(
+    analysis: dict[str, Any], name_mode: str
+) -> dict[str, Any] | None:
     proposal = analysis["decision"].get("mapping") or {}
     sheet_name, header_row, columns = _table_selection(
         analysis["profile"], proposal, "match"
     )
     column_by_index = {int(column["index"]): column for column in columns}
 
-    name_default = "Full name" if proposal.get("full_name") else "First + last"
-    name_mode = st.radio(
-        "Name mapping",
-        ["Full name", "First + last"],
-        index=0 if name_default == "Full name" else 1,
-        horizontal=True,
-        key="match_name_mode",
-    )
     result: dict[str, Any] = {"sheet_name": sheet_name, "header_row": header_row}
     for field, label in MATCH_FIELDS:
         selected = _column_selector(
@@ -339,7 +355,7 @@ def _match_mapping_form(analysis: dict[str, Any]) -> dict[str, Any] | None:
         )
         if selected is not None:
             result[field] = _column_ref(column_by_index[selected], header_row)
-    if name_mode == "Full name":
+    if name_mode == "One full-name column":
         selected = _column_selector(
             "Advisor full name",
             columns,
