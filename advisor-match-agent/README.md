@@ -50,7 +50,24 @@ addresses for deployment. Logs are written to stdout/stderr.
   profiling/loading, reference adapter, workbook, and profile rendering.
 - `advisor_match/multipart.py` — bounded streaming multipart parser.
 - `streamlit_app.py` — ephemeral Advisor Matching and Profile Generation tabs.
+- `notebooks/advisor_match_stateless_workflow.ipynb` — interactive API-first
+  upload, mapping, matching, profile, preview, and download workflow.
 - `docs/contracts/` — behavior and output contracts.
+
+## Run the interactive notebook
+
+Start the API, then launch the checked-in Jupyter notebook:
+
+```bash
+uv sync --locked --all-groups
+uv run uvicorn advisor_match.api:app --host 127.0.0.1 --port 8001
+# In another terminal:
+uv run jupyter lab notebooks/advisor_match_stateless_workflow.ipynb
+```
+
+The notebook can also launch a local API from its kernel. It keeps uploaded
+bytes in kernel memory and creates download files only under the ignored
+`notebook_outputs/` directory.
 
 Matching policy: `docs/contracts/matching-policy.yaml` (policy version 5).
 
