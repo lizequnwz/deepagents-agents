@@ -1,243 +1,197 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from io import BytesIO
-from pathlib import Path
 
 import pytest
+from openpyxl import load_workbook
 
-from general_agent.advisor_matching.schemas import (
+from advisor_match.advisor_matching.index import ReferenceDataQualityError
+from advisor_match.advisor_matching.schemas import (
+    AdvisorRecord,
+    ColumnRef,
     CrdInputMapping,
     InputMapping,
-    MatchRunResult,
 )
-from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
-from general_agent.advisor_repository import AdvisorRepository
-from general_agent.advisor_service import AdvisorService, ServiceContext
-from general_agent.runtime_store import RuntimeStore
-from general_agent.workspace import Workspace
+from advisor_match.advisor_service import AdvisorService, SourceHashMismatch
+from advisor_match.files import InMemoryFile
+from advisor_match.firm import FirmResolutionError
 
 
-def test_service_validates_matches_and_publishes_workbook(settings) -> None:
-    corp_id = "A123456"
-    runtime = RuntimeStore()
-    repository = AdvisorRepository(settings.advisor_repository_db)
-    workspace = Workspace(settings.data_root)
-    conversation = runtime.create_conversation(corp_id=corp_id)
-    run_id, _ = runtime.create_run(conversation.conversation_id, "match", corp_id=corp_id)
-    attachment, protected = workspace.upload(
-        corp_id=corp_id,
-        conversation_id=conversation.conversation_id,
-        original_name="advisors.csv",
-        content_type="text/csv",
-        source=BytesIO(
-            b"CRD_NUMBER,FIRST_NAME,LAST_NAME,EMAIL\n"
-            b"99000001,Avery,Stone,avery.stone@example.com\n"
-            b",Mystery,Person,mystery.person@example.com\n"
-        ),
-        max_bytes=1024 * 1024,
-    )
-    repository.add_attachment(
-        corp_id=corp_id,
-        conversation_id=conversation.conversation_id,
-        run_id=run_id,
-        attachment=attachment,
-        protected_path=protected,
-    )
-    runtime.add_attachment(run_id, attachment, corp_id=corp_id)
-    service = AdvisorService(
+REFERENCE = [
+    AdvisorRecord(
+        crd_number="1001",
+        first_name="Avery",
+        last_name="Stone",
+        firm_name="Northstar Wealth",
+        email="avery@example.com",
+        city="Boston",
+        state="MA",
+    ),
+    AdvisorRecord(
+        crd_number="1002",
+        first_name="Robert",
+        last_name="Mercer",
+        firm_name="Cedar Grove Advisory",
+        email="robert@example.com",
+        city="Richmond",
+        state="VA",
+    ),
+]
+
+
+@dataclass
+class FakeReferenceSource:
+    records: list[AdvisorRecord]
+    source_kind: str = "snowflake"
+    schema_version: str = "test-v1"
+    query_id: str | None = "query-123"
+
+    def iter_records(self):
+        yield from self.records
+
+
+def _service(settings, records=None) -> AdvisorService:
+    return AdvisorService(
         settings,
-        workspace,
-        repository,
-        runtime,
-        SyntheticAdvisorReferenceSource(
-            Path(__file__).parents[1]
-            / "general_agent/advisor_matching/data/master_advisors.csv"
-        ),
+        lambda: FakeReferenceSource(records if records is not None else REFERENCE),
     )
-    context = ServiceContext(corp_id, conversation.conversation_id, run_id, "match")
-    mapping = InputMapping.model_validate(
-        {
-            "crd_number": {"columns": [{"index": 0, "header": "CRD_NUMBER"}]},
-            "first_name": {"columns": [{"index": 1, "header": "FIRST_NAME"}]},
-            "last_name": {"columns": [{"index": 2, "header": "LAST_NAME"}]},
-            "email": {"columns": [{"index": 3, "header": "EMAIL"}]},
-        }
-    )
-    validation = service.validate(context, attachment.attachment_id, mapping)
-    result = service.create_match(context, validation)
-    assert isinstance(result, MatchRunResult)
-    assert result.counts.matched == 1
-    assert result.counts.no_match == 1
-    path, name = repository.artifact_path(result.output_artifact_id, corp_id=corp_id)
-    assert path.is_file()
-    assert name == "advisor_matches.xlsx"
-    session = repository.get_advisor_match_session(
-        result.match_session_id,
-        corp_id=corp_id,
-        conversation_id=conversation.conversation_id,
-    )
-    assert session["status"] == "Matching Complete"
-    assert session["revision"] == 1
-    profile = service.create_profile_report_from_match(
-        context, result.match_session_id
-    )
-    assert profile.source_kind == "match_session"
-    assert profile.unique_crd_count == 1
-    report = repository.get_profile_report(
-        profile.profile_report_id,
-        corp_id=corp_id,
-        conversation_id=conversation.conversation_id,
-    )
-    assert report["crd_numbers"] == ["99000001"]
-    report_path, report_name = repository.artifact_path(
-        profile.output_artifact_id, corp_id=corp_id
-    )
-    assert report_name == "advisor_profile_report.html"
-    assert report_path.read_text(encoding="utf-8").startswith("<!doctype html>")
-    with pytest.raises(ValueError, match="current chat"):
-        service.create_profile_report_from_match(
-            ServiceContext("B654321", conversation.conversation_id, run_id, "profile"),
-            result.match_session_id,
-        )
-    with pytest.raises(ValueError, match="current chat"):
-        service.create_profile_report_from_match(
-            ServiceContext(corp_id, "another-conversation", run_id, "profile"),
-            result.match_session_id,
-        )
-    repository.close()
 
 
-def test_service_generates_profile_report_directly_from_crd_upload(
-    settings, monkeypatch
+def test_service_validates_matches_and_builds_verified_memory_workbook(
+    settings, tmp_path
 ) -> None:
-    corp_id = "A123456"
-    runtime = RuntimeStore()
-    repository = AdvisorRepository(settings.advisor_repository_db)
-    workspace = Workspace(settings.data_root)
-    conversation = runtime.create_conversation(corp_id=corp_id)
-    run_id, _ = runtime.create_run(
-        conversation.conversation_id, "profile", corp_id=corp_id
+    source = InMemoryFile(
+        "advisors.csv",
+        b"CRD,First,Last,Email\n"
+        b"1001,Avery,Stone,avery@example.com\n"
+        b",Mystery,Person,mystery@example.com\n",
     )
-    attachment, protected = workspace.upload(
-        corp_id=corp_id,
-        conversation_id=conversation.conversation_id,
-        original_name="profile-crds.csv",
-        content_type="text/csv",
-        source=BytesIO(
-            b"CRD,NOTE\n"
-            b" 00123 ,first\n"
-            b"FSA_ID:111,second\n"
-            b"00123,duplicate\n"
-            b",missing\n"
-        ),
-        max_bytes=1024 * 1024,
+    mapping = InputMapping(
+        crd_number=ColumnRef(index=0, header="CRD"),
+        first_name=ColumnRef(index=1, header="First"),
+        last_name=ColumnRef(index=2, header="Last"),
+        email=ColumnRef(index=3, header="Email"),
     )
-    repository.add_attachment(
-        corp_id=corp_id,
-        conversation_id=conversation.conversation_id,
-        run_id=run_id,
-        attachment=attachment,
-        protected_path=protected,
-    )
-    runtime.add_attachment(run_id, attachment, corp_id=corp_id)
-    service = AdvisorService(
-        settings,
-        workspace,
-        repository,
-        runtime,
-        SyntheticAdvisorReferenceSource(
-            Path(__file__).parents[1]
-            / "general_agent/advisor_matching/data/master_advisors.csv"
-        ),
-    )
-    context = ServiceContext(
-        corp_id, conversation.conversation_id, run_id, "profile"
-    )
-    mapping = CrdInputMapping.model_validate(
-        {"crd_number": {"columns": [{"index": 0, "header": "CRD"}]}}
+    before = list(tmp_path.rglob("*"))
+
+    result = _service(settings).match(
+        source, analyzed_source_sha256=source.sha256, mapping=mapping
     )
 
-    validation = service.validate_profile_input(
-        context, attachment.attachment_id, mapping
+    assert result.result.counts.matched == 1
+    assert result.result.counts.no_match == 1
+    assert result.result.reference.query_id == "query-123"
+    assert len(result.result.reference.sha256) == 64
+    assert result.workbook.startswith(b"PK")
+    assert list(tmp_path.rglob("*")) == before
+
+
+def test_profile_generation_is_file_driven_and_deduplicated(settings) -> None:
+    source = InMemoryFile(
+        "profile.csv",
+        b"CRD,Note\n 00123 ,first\nFSA_ID:111,second\n00123,again\n,blank\n",
     )
+    mapping = CrdInputMapping(crd_number=ColumnRef(index=0, header="CRD"))
+    service = _service(settings)
+
+    validation = service.validate_profile_input(source, mapping)
+    result = service.generate_profile(
+        source, analyzed_source_sha256=source.sha256, mapping=mapping
+    )
+
     assert validation.unique_crd_count == 2
     assert validation.blank_crd_count == 1
     assert validation.duplicate_crd_count == 1
-
-    result = service.create_profile_report_from_upload(context, validation)
-    report = repository.get_profile_report(
-        result.profile_report_id,
-        corp_id=corp_id,
-        conversation_id=conversation.conversation_id,
-    )
-    assert report["source_kind"] == "attachment"
-    assert report["crd_numbers"] == ["00123", "FSA_ID:111"]
-    assert report["blank_crd_count"] == 1
-    assert report["duplicate_crd_count"] == 1
-    assert runtime.get_conversation(
-        conversation.conversation_id, corp_id=corp_id
-    ).turns[0].artifacts[0].artifact_kind == "advisor_profile_report"
-
-    published = set(settings.data_root.rglob("advisor_profile_report.html"))
-
-    def fail_report_insert(**_kwargs) -> None:
-        raise RuntimeError("simulated report persistence failure")
-
-    monkeypatch.setattr(repository, "add_profile_report", fail_report_insert)
-    with pytest.raises(RuntimeError, match="simulated report persistence failure"):
-        service.create_profile_report_from_upload(context, validation)
-    assert set(settings.data_root.rglob("advisor_profile_report.html")) == published
-    assert not list(settings.data_root.rglob("*.building.html"))
-    repository.close()
+    assert result.unique_crd_count == 2
+    assert result.html.startswith("<!doctype html>")
+    assert "00123" not in result.html
 
 
-def test_profile_report_rejects_attachment_changed_after_validation(settings) -> None:
-    corp_id = "A123456"
-    runtime = RuntimeStore()
-    repository = AdvisorRepository(settings.advisor_repository_db)
-    workspace = Workspace(settings.data_root)
-    conversation = runtime.create_conversation(corp_id=corp_id)
-    run_id, _ = runtime.create_run(
-        conversation.conversation_id, "profile", corp_id=corp_id
-    )
-    attachment, protected = workspace.upload(
-        corp_id=corp_id,
-        conversation_id=conversation.conversation_id,
-        original_name="profile-crds.csv",
-        content_type="text/csv",
-        source=BytesIO(b"CRD\n00123\n"),
-        max_bytes=1024 * 1024,
-    )
-    repository.add_attachment(
-        corp_id=corp_id,
-        conversation_id=conversation.conversation_id,
-        run_id=run_id,
-        attachment=attachment,
-        protected_path=protected,
-    )
-    runtime.add_attachment(run_id, attachment, corp_id=corp_id)
-    service = AdvisorService(
-        settings,
-        workspace,
-        repository,
-        runtime,
-        SyntheticAdvisorReferenceSource(
-            Path(__file__).parents[1]
-            / "general_agent/advisor_matching/data/master_advisors.csv"
-        ),
-    )
-    context = ServiceContext(
-        corp_id, conversation.conversation_id, run_id, "profile"
-    )
-    mapping = CrdInputMapping.model_validate(
-        {"crd_number": {"columns": [{"index": 0, "header": "CRD"}]}}
-    )
-    validation = service.validate_profile_input(
-        context, attachment.attachment_id, mapping
-    )
-    protected.write_bytes(b"CRD\nCHANGED\n")
+def test_changed_source_is_rejected_before_reference_query(settings) -> None:
+    calls = 0
 
-    with pytest.raises(ValueError, match="integrity validation"):
-        service.create_profile_report_from_upload(context, validation)
-    assert not list(settings.data_root.rglob("advisor_profile_report.html"))
-    repository.close()
+    def factory():
+        nonlocal calls
+        calls += 1
+        return FakeReferenceSource(REFERENCE)
+
+    source = InMemoryFile("advisors.csv", b"CRD\n1001\n")
+    mapping = InputMapping(crd_number=ColumnRef(index=0, header="CRD"))
+
+    with pytest.raises(SourceHashMismatch):
+        AdvisorService(settings, factory).match(
+            source, analyzed_source_sha256="0" * 64, mapping=mapping
+        )
+
+    assert calls == 0
+
+
+def test_name_only_rows_require_form_driven_firm_resolution(settings) -> None:
+    source = InMemoryFile("advisors.csv", b"Name\nAvery Stone\n")
+    mapping = InputMapping(full_name=ColumnRef(index=0, header="Name"))
+    service = _service(settings)
+
+    with pytest.raises(FirmResolutionError) as raised:
+        service.match(source, analyzed_source_sha256=source.sha256, mapping=mapping)
+
+    assert raised.value.details.reason == "missing_firm"
+    assert raised.value.details.allowed_resolutions == [
+        "override_all",
+        "continue_without_firm",
+    ]
+
+
+def test_all_rows_firm_augments_only_copied_matching_values(settings) -> None:
+    source = InMemoryFile("advisors.csv", b"Name\nAvery Stone\n")
+    mapping = InputMapping(full_name=ColumnRef(index=0, header="Name"))
+
+    execution = _service(settings).match(
+        source,
+        analyzed_source_sha256=source.sha256,
+        mapping=mapping,
+        firm_resolution="override_all",
+        all_rows_firm="Northstar Wealth",
+    )
+
+    assert execution.result.counts.matched == 1
+    assert execution.result.firm_override_rows == 1
+    workbook = load_workbook(BytesIO(execution.workbook), data_only=True)
+    try:
+        original = list(workbook["Original Input"].values)
+        matched = list(workbook["Matched"].values)
+        summary = dict(workbook["Run Summary"].values)
+    finally:
+        workbook.close()
+    assert original == [("Source Row", "Name"), (2, "Avery Stone")]
+    assert matched[1][3] == "Northstar Wealth"
+    assert summary["User-Supplied Firm"] == "Northstar Wealth"
+    assert summary["Rows With Firm Override"] == 1
+
+
+def test_duplicate_reference_crds_are_a_controlled_blocker(settings) -> None:
+    source = InMemoryFile("advisors.csv", b"CRD\n1001\n")
+    mapping = InputMapping(crd_number=ColumnRef(index=0, header="CRD"))
+    duplicate = [REFERENCE[0], REFERENCE[0].model_copy()]
+
+    with pytest.raises(ReferenceDataQualityError) as raised:
+        _service(settings, duplicate).match(
+            source, analyzed_source_sha256=source.sha256, mapping=mapping
+        )
+
+    assert raised.value.duplicate_crds == {"1001": 2}
+
+
+def test_reference_digest_is_stable_for_identical_ordered_records(settings) -> None:
+    source = InMemoryFile("advisors.csv", b"CRD\n1001\n")
+    mapping = InputMapping(crd_number=ColumnRef(index=0, header="CRD"))
+    service = _service(settings)
+
+    first = service.match(
+        source, analyzed_source_sha256=source.sha256, mapping=mapping
+    )
+    second = service.match(
+        source, analyzed_source_sha256=source.sha256, mapping=mapping
+    )
+
+    assert first.result.reference.sha256 == second.result.reference.sha256

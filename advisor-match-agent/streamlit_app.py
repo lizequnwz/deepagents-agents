@@ -1,268 +1,522 @@
-"""Chat-first Streamlit frontend for Advisor Match Agent."""
+"""Two-workflow Streamlit UI for the stateless Advisor Match API."""
 
 from __future__ import annotations
 
+import hashlib
 import os
-from pathlib import Path
+from typing import Any
 
 import streamlit as st
-from dotenv import load_dotenv
 
-from general_agent.config import Settings
-from general_agent.ui.api_client import APIError, AgentAPIClient
-from general_agent.ui.components import (
-    reduce_live_events,
-    render_conversation_diagnostics_content,
-    render_diagnostics,
-    render_live_run,
-    render_turn,
+from advisor_match.ui.api_client import APIError, AdvisorMatchAPIClient
+
+MATCH_FIELDS = (
+    ("crd_number", "Advisor CRD"),
+    ("firm_name", "Firm"),
+    ("email", "Email"),
+    ("city", "City"),
+    ("state", "State"),
+    ("zip_code", "ZIP code"),
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-load_dotenv(PROJECT_ROOT / ".env")
-UI_DEBUG_MODE = Settings(project_root=PROJECT_ROOT).ui_debug_mode
-API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
-APP_BASE_URL = os.getenv(
-    "APP_BASE_URL",
-    f"http://{os.getenv('APP_HOST', '127.0.0.1')}:{os.getenv('APP_PORT', '8502')}",
-).rstrip("/")
-MATCH_TYPES = ["csv", "xlsx"]
-
-st.set_page_config(
-    page_title="Advisor Match Agent",
-    page_icon=":material/manage_search:",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-
-def initialize_state() -> None:
-    st.session_state.setdefault(
-        "corp_id", os.getenv("DEFAULT_CORP_ID", "A123456") or "A123456"
-    )
-    st.session_state.setdefault("current_conversation_id", None)
+st.set_page_config(page_title="Advisor Match", page_icon=":material/group:", layout="wide")
 
 
 @st.cache_resource
-def api_client(base_url: str, corp_id: str) -> AgentAPIClient:
-    return AgentAPIClient(base_url, corp_id)
+def api_client(base_url: str) -> AdvisorMatchAPIClient:
+    return AdvisorMatchAPIClient(base_url)
 
 
-def clear_current_chat_state() -> None:
-    """Drop polling state when starting a fresh browser chat."""
-
-    for key in list(st.session_state):
-        if key.startswith(("live_state_", "event_cursor_")):
-            del st.session_state[key]
-
-
-def create_current_conversation(client: AgentAPIClient) -> tuple[str, dict]:
-    created = client.create_conversation()
-    conversation_id = created["conversation_id"]
-    clear_current_chat_state()
-    st.session_state["current_conversation_id"] = conversation_id
-    st.query_params["conversation_id"] = conversation_id
-    return conversation_id, client.conversation(conversation_id)
-
-
-def get_or_create_current_conversation(
-    client: AgentAPIClient,
-) -> tuple[str, dict]:
-    """Resolve the one browser chat, mirroring the analytics app's model."""
-
-    requested = st.query_params.get("conversation_id")
-    if not requested:
-        requested = st.session_state.get("current_conversation_id")
-    if requested:
-        try:
-            conversation = client.conversation(str(requested))
-            st.session_state["current_conversation_id"] = str(requested)
-            if st.query_params.get("conversation_id") != str(requested):
-                st.query_params["conversation_id"] = str(requested)
-            return str(requested), conversation
-        except APIError as exc:
-            if exc.status_code != 404:
-                raise
-            st.query_params.pop("conversation_id", None)
-            st.session_state["current_conversation_id"] = None
-    return create_current_conversation(client)
+def _initialize_state() -> None:
+    defaults = {
+        "match_source": None,
+        "match_analysis": None,
+        "match_result": None,
+        "match_workbook": None,
+        "match_error": None,
+        "profile_source": None,
+        "profile_analysis": None,
+        "profile_result": None,
+        "profile_error": None,
+        "profile_auto_analyze": False,
+        "profile_handoff_notice": False,
+    }
+    for key, value in defaults.items():
+        st.session_state.setdefault(key, value)
 
 
-def render_page_header() -> None:
-    st.caption(":material/manage_search: TRUSTED ADVISOR WORKFLOW AGENT")
-    st.title("Match financial advisors and generate reports", anchor=False)
-    st.caption(
-        "Upload one CSV or XLSX, match its advisor rows against the master "
-        "advisor database, or generate a placeholder HTML profile report from a CRD "
-        "column."
+def _source_value(upload: Any) -> dict[str, Any]:
+    content = upload.getvalue()
+    return {
+        "filename": upload.name,
+        "content": content,
+        "content_type": getattr(upload, "type", None),
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "origin": "upload",
+    }
+
+
+def _set_source(kind: str, source: dict[str, Any]) -> None:
+    key = f"{kind}_source"
+    prior = st.session_state.get(key)
+    if prior and (
+        prior.get("sha256"), prior.get("filename"), prior.get("origin")
+    ) == (source["sha256"], source["filename"], source.get("origin")):
+        return
+    st.session_state[key] = source
+    st.session_state[f"{kind}_analysis"] = None
+    st.session_state[f"{kind}_result"] = None
+    st.session_state[f"{kind}_error"] = None
+    if kind == "match":
+        st.session_state.match_workbook = None
+
+
+def _clear_source(kind: str) -> None:
+    st.session_state[f"{kind}_source"] = None
+    st.session_state[f"{kind}_analysis"] = None
+    st.session_state[f"{kind}_result"] = None
+    st.session_state[f"{kind}_error"] = None
+    if kind == "match":
+        st.session_state.match_workbook = None
+
+
+def _analyze_match(client: AdvisorMatchAPIClient) -> None:
+    source = st.session_state.match_source
+    if not source:
+        return
+    try:
+        st.session_state.match_analysis = client.map_advisors(
+            source["filename"], source["content"], source["content_type"]
+        )
+        st.session_state.match_error = None
+    except APIError as exc:
+        st.session_state.match_error = exc
+
+
+def _analyze_profile(client: AdvisorMatchAPIClient) -> None:
+    source = st.session_state.profile_source
+    if not source:
+        return
+    try:
+        st.session_state.profile_analysis = client.map_profile(
+            source["filename"], source["content"], source["content_type"]
+        )
+        st.session_state.profile_error = None
+    except APIError as exc:
+        st.session_state.profile_error = exc
+
+
+def _continue_to_profile_generation() -> None:
+    """Hand the generated workbook to the profile tab before the next rerun."""
+
+    workbook = st.session_state.match_workbook
+    if not workbook:
+        return
+    st.session_state.pop("profile_upload", None)
+    _set_source(
+        "profile",
+        {
+            "filename": "advisor_matches.xlsx",
+            "content": workbook,
+            "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "sha256": hashlib.sha256(workbook).hexdigest(),
+            "origin": "handoff",
+        },
+    )
+    st.session_state.profile_auto_analyze = True
+    st.session_state.profile_handoff_notice = True
+    st.session_state.workflow_tabs = "Profile Generation"
+
+
+def _render_match_tab(client: AdvisorMatchAPIClient, max_upload_mb: int) -> None:
+    st.subheader("Advisor Matching")
+    st.caption("Upload and configure one file, then run deterministic matching.")
+    upload = st.file_uploader(
+        "Advisor CSV or Excel file",
+        type=["csv", "xlsx"],
+        key="match_upload",
+        max_upload_size=max_upload_mb,
+    )
+    if upload is not None:
+        _set_source("match", _source_value(upload))
+    elif st.session_state.match_source is not None:
+        _clear_source("match")
+    source = st.session_state.match_source
+    if source and st.button(
+        "Analyze columns", icon=":material/schema:", type="primary", key="match_analyze"
+    ):
+        with st.spinner("Inspecting the file and proposing column mappings…"):
+            _analyze_match(client)
+    _render_api_error(st.session_state.match_error)
+
+    analysis = st.session_state.match_analysis
+    if not analysis:
+        return
+    _render_profile_preview(analysis["profile"])
+    decision = analysis["decision"]
+    if decision.get("clarification_question"):
+        st.warning(decision["clarification_question"], icon=":material/help:")
+    if analysis.get("validation_error"):
+        st.warning(analysis["validation_error"], icon=":material/warning:")
+    validation = analysis.get("validation") or {}
+    for warning in validation.get("warnings") or []:
+        st.info(warning, icon=":material/info:")
+
+    with st.form("match_configuration"):
+        st.markdown("#### Confirm column mapping")
+        mapping = _match_mapping_form(analysis)
+        st.markdown("#### Firm handling")
+        firm_options = {
+            "Automatic policy handling": "auto",
+            "Keep firms from the mapped column": "use_source",
+            "Apply one firm to every row": "override_all",
+            "Continue without firm information": "continue_without_firm",
+        }
+        firm_label = st.selectbox("Resolution", list(firm_options), key="firm_resolution")
+        firm_resolution = firm_options[firm_label]
+        all_rows_firm = (
+            st.text_input("Firm applied to every row", max_chars=200).strip()
+            if firm_resolution == "override_all"
+            else None
+        )
+        submitted = st.form_submit_button(
+            "Start matching", icon=":material/play_arrow:", type="primary"
+        )
+    if submitted:
+        if mapping is None:
+            st.error("Map CRD, email, full name, or both first and last name.")
+        elif firm_resolution == "override_all" and not all_rows_firm:
+            st.error("Enter the firm that applies to every row.")
+        else:
+            configuration = {
+                "analyzed_source_sha256": analysis["source"]["sha256"],
+                "mapping": mapping,
+                "firm_resolution": firm_resolution,
+                "all_rows_firm": all_rows_firm,
+            }
+            try:
+                with st.spinner("Matching advisors and building the workbook…"):
+                    result, workbook = client.match_advisors(
+                        source["filename"],
+                        source["content"],
+                        configuration,
+                        source["content_type"],
+                    )
+                st.session_state.match_result = result
+                st.session_state.match_workbook = workbook
+                st.session_state.match_error = None
+            except APIError as exc:
+                st.session_state.match_error = exc
+                st.session_state.match_result = None
+                st.session_state.match_workbook = None
+            st.rerun()
+
+    _render_match_result()
+
+
+def _render_match_result() -> None:
+    result = st.session_state.match_result
+    workbook = st.session_state.match_workbook
+    if not result or not workbook:
+        return
+    st.success("Advisor matching is complete.", icon=":material/check_circle:")
+    counts = result["counts"]
+    columns = st.columns(3)
+    columns[0].metric("Matched", counts["matched"])
+    columns[1].metric("Ambiguous", counts["ambiguous_match"])
+    columns[2].metric("No match", counts["no_match"])
+    for warning in result.get("warnings") or []:
+        st.warning(warning, icon=":material/warning:")
+    with st.container(horizontal=True):
+        st.download_button(
+            "Download advisor_matches.xlsx",
+            data=workbook,
+            file_name="advisor_matches.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            icon=":material/download:",
+            type="primary",
+        )
+        st.button(
+            "Continue to profile generation",
+            icon=":material/description:",
+            key="continue_to_profiles",
+            on_click=_continue_to_profile_generation,
+        )
+
+
+def _render_profile_tab(client: AdvisorMatchAPIClient, max_upload_mb: int) -> None:
+    st.subheader("Profile Generation")
+    st.caption("Confirm one CRD column and generate a placeholder HTML report.")
+    upload = st.file_uploader(
+        "CRD CSV or Excel file",
+        type=["csv", "xlsx"],
+        key="profile_upload",
+        max_upload_size=max_upload_mb,
+    )
+    if upload is not None:
+        _set_source("profile", _source_value(upload))
+    elif (
+        st.session_state.profile_source
+        and st.session_state.profile_source.get("origin") == "upload"
+    ):
+        _clear_source("profile")
+    source = st.session_state.profile_source
+    if source:
+        st.caption(f"Current source: {source['filename']}")
+    if source and st.button(
+        "Analyze CRD column",
+        icon=":material/schema:",
+        type="primary",
+        key="profile_analyze",
+    ):
+        with st.spinner("Inspecting the file and locating the CRD column…"):
+            _analyze_profile(client)
+    if source and st.session_state.pop("profile_auto_analyze", False):
+        with st.spinner("Inspecting the matched-advisor workbook…"):
+            _analyze_profile(client)
+
+    _render_api_error(st.session_state.profile_error)
+    analysis = st.session_state.profile_analysis
+    if not analysis:
+        return
+    _render_profile_preview(analysis["profile"])
+    decision = analysis["decision"]
+    if decision.get("missing_crd_column"):
+        st.error("No plausible CRD column was found in this file.")
+    if decision.get("clarification_question"):
+        st.warning(decision["clarification_question"], icon=":material/help:")
+    if analysis.get("validation_error"):
+        st.warning(analysis["validation_error"], icon=":material/warning:")
+
+    with st.form("profile_configuration"):
+        st.markdown("#### Confirm CRD mapping")
+        mapping = _profile_mapping_form(analysis)
+        submitted = st.form_submit_button(
+            "Generate profile report", icon=":material/description:", type="primary"
+        )
+    if submitted:
+        if mapping is None:
+            st.error("Select the exact column containing advisor CRDs.")
+        else:
+            try:
+                with st.spinner("Generating the profile report…"):
+                    st.session_state.profile_result = client.generate_profile(
+                        source["filename"],
+                        source["content"],
+                        {
+                            "analyzed_source_sha256": analysis["source"]["sha256"],
+                            "mapping": mapping,
+                        },
+                        source["content_type"],
+                    )
+                st.session_state.profile_error = None
+            except APIError as exc:
+                st.session_state.profile_error = exc
+                st.session_state.profile_result = None
+            st.rerun()
+    _render_profile_result()
+
+
+def _match_mapping_form(analysis: dict[str, Any]) -> dict[str, Any] | None:
+    proposal = analysis["decision"].get("mapping") or {}
+    sheet_name, header_row, columns = _table_selection(
+        analysis["profile"], proposal, "match"
+    )
+    column_by_index = {int(column["index"]): column for column in columns}
+
+    name_default = "Full name" if proposal.get("full_name") else "First + last"
+    name_mode = st.radio(
+        "Name mapping",
+        ["Full name", "First + last"],
+        index=0 if name_default == "Full name" else 1,
+        horizontal=True,
+        key="match_name_mode",
+    )
+    result: dict[str, Any] = {"sheet_name": sheet_name, "header_row": header_row}
+    for field, label in MATCH_FIELDS:
+        selected = _column_selector(
+            label, columns, _proposal_index(proposal, field), f"match_{field}"
+        )
+        if selected is not None:
+            result[field] = _column_ref(column_by_index[selected], header_row)
+    if name_mode == "Full name":
+        selected = _column_selector(
+            "Advisor full name",
+            columns,
+            _proposal_index(proposal, "full_name"),
+            "match_full_name",
+        )
+        if selected is not None:
+            result["full_name"] = _column_ref(column_by_index[selected], header_row)
+    else:
+        for field, label in (("first_name", "First name"), ("last_name", "Last name")):
+            selected = _column_selector(
+                label, columns, _proposal_index(proposal, field), f"match_{field}"
+            )
+            if selected is not None:
+                result[field] = _column_ref(column_by_index[selected], header_row)
+    has_name = bool(result.get("full_name") or (result.get("first_name") and result.get("last_name")))
+    return result if result.get("crd_number") or result.get("email") or has_name else None
+
+
+def _profile_mapping_form(analysis: dict[str, Any]) -> dict[str, Any] | None:
+    proposal = analysis["decision"].get("mapping") or {}
+    sheet_name, header_row, columns = _table_selection(
+        analysis["profile"], proposal, "profile"
+    )
+    selected = _column_selector(
+        "Advisor CRD",
+        columns,
+        _proposal_index(proposal, "crd_number"),
+        "profile_crd_number",
+    )
+    if selected is None:
+        return None
+    column = next(item for item in columns if int(item["index"]) == selected)
+    return {
+        "sheet_name": sheet_name,
+        "header_row": header_row,
+        "crd_number": _column_ref(column, header_row),
+    }
+
+
+def _table_selection(
+    profile: dict[str, Any], proposal: dict[str, Any], prefix: str
+) -> tuple[str | None, int | None, list[dict[str, Any]]]:
+    sheets = profile["sheets"]
+    names = [sheet.get("name") for sheet in sheets]
+    proposed_sheet = proposal.get("sheet_name")
+    sheet_index = names.index(proposed_sheet) if proposed_sheet in names else 0
+    selected_name = st.selectbox(
+        "Worksheet",
+        names,
+        index=sheet_index,
+        format_func=lambda value: value or "CSV / first worksheet",
+        key=f"{prefix}_sheet",
+    )
+    sheet = next(item for item in sheets if item.get("name") == selected_name)
+    header_options = [item["row_number"] for item in sheet["header_candidates"]] + [None]
+    proposed_header = proposal.get("header_row", 1)
+    header_index = header_options.index(proposed_header) if proposed_header in header_options else 0
+    header_row = st.selectbox(
+        "Header row",
+        header_options,
+        index=header_index,
+        format_func=lambda value: "Headerless" if value is None else f"Row {value}",
+        key=f"{prefix}_header",
+    )
+    if header_row is None:
+        columns = sheet["headerless"]["columns"]
+    else:
+        candidate = next(
+            item for item in sheet["header_candidates"] if item["row_number"] == header_row
+        )
+        columns = candidate["columns"]
+    return selected_name, header_row, columns
+
+
+def _column_selector(
+    label: str,
+    columns: list[dict[str, Any]],
+    proposed_index: int | None,
+    key: str,
+) -> int | None:
+    options: list[int | None] = [None] + [int(item["index"]) for item in columns]
+    selected_index = options.index(proposed_index) if proposed_index in options else 0
+    by_index = {int(item["index"]): item for item in columns}
+    return st.selectbox(
+        label,
+        options,
+        index=selected_index,
+        format_func=lambda value: "Not mapped"
+        if value is None
+        else f"{by_index[value]['label']} (column {value + 1})",
+        key=key,
     )
 
 
-def load_starter_prompt(prompt_key: str, suggestions: dict[str, str]) -> None:
-    """Copy a selected example into the composer without submitting it."""
-
-    selected = st.session_state.get(prompt_key)
-    prompt = suggestions.get(selected)
-    if prompt:
-        st.session_state["chat_input"] = prompt
+def _column_ref(column: dict[str, Any], header_row: int | None) -> dict[str, Any]:
+    return {
+        "index": int(column["index"]),
+        "header": column.get("header") if header_row is not None else None,
+    }
 
 
-initialize_state()
-client = api_client(API_BASE_URL, st.session_state["corp_id"])
+def _proposal_index(proposal: dict[str, Any], field: str) -> int | None:
+    reference = proposal.get(field)
+    return int(reference["index"]) if reference else None
 
+
+def _render_profile_preview(profile: dict[str, Any]) -> None:
+    with st.expander("File preview", icon=":material/table_view:"):
+        for sheet in profile.get("sheets") or []:
+            st.markdown(f"**{sheet.get('name') or 'CSV'}**")
+            preview = sheet.get("preview_rows") or []
+            if preview:
+                st.dataframe(
+                    [
+                        {"Source row": row["row_number"], "Values": " | ".join(row["values"])}
+                        for row in preview
+                    ],
+                    hide_index=True,
+                    width="stretch",
+                )
+
+
+def _render_profile_result() -> None:
+    result = st.session_state.profile_result
+    if not result:
+        return
+    st.success(
+        f"Profile report generated for {result['unique_crd_count']} unique CRDs.",
+        icon=":material/check_circle:",
+    )
+    html = result["html"]
+    st.html(html, unsafe_allow_javascript=False)
+    st.download_button(
+        "Download advisor_profile_report.html",
+        data=html.encode("utf-8"),
+        file_name=result["filename"],
+        mime=result["media_type"],
+        icon=":material/download:",
+        type="primary",
+    )
+
+
+def _render_api_error(error: APIError | None) -> None:
+    if error is None:
+        return
+    st.error(str(error), icon=":material/error:")
+    if error.details:
+        st.json(error.details, expanded=False)
+
+
+_initialize_state()
+client = api_client(os.getenv("API_BASE_URL", "http://127.0.0.1:8001"))
 try:
     health = client.health()
-    conversation_id, conversation = get_or_create_current_conversation(client)
 except APIError as exc:
-    st.title("Advisor Match Agent", anchor=False)
     st.error(str(exc), icon=":material/cloud_off:")
-    st.caption("Run `./scripts/start.sh` from the advisor-match-agent directory, then refresh this page.")
     st.stop()
 
-with st.sidebar:
-    st.title("Advisor Match Agent", anchor=False)
-    st.caption(
-        f":material/corporate_fare: Corporation scope {st.session_state['corp_id']}"
-    )
-    st.caption(
-        "A trusted workflow for deterministic advisor matching and workbook export."
-    )
-    new_chat = st.button(
-        "New chat",
-        icon=":material/add_comment:",
-        type="primary",
-        width="stretch",
-        disabled=bool(conversation.get("active_run_id")),
-        help="Start a fresh chat. This browser shows one chat at a time.",
-    )
-    st.badge(
-        f"API ready · {health['model']}",
+st.title("Advisor Match")
+st.caption("Stateless advisor matching and placeholder profile generation")
+
+match_tab, profile_tab = st.tabs(
+    ["Advisor Matching", "Profile Generation"],
+    key="workflow_tabs",
+    default="Advisor Matching",
+    on_change="rerun",
+)
+if st.session_state.pop("profile_handoff_notice", False):
+    st.toast(
+        "Matched workbook loaded. Confirm the CRD mapping to generate profiles.",
         icon=":material/check_circle:",
-        color="green",
     )
-    if UI_DEBUG_MODE:
-        diagnostics = conversation.get("diagnostics") or {}
-        st.caption(f"Chat · `{conversation_id[:8]}`")
-        st.caption(":material/bug_report: UI debug mode enabled")
-        with st.expander(
-            "Conversation diagnostics",
-            icon=":material/monitoring:",
-            expanded=False,
-            key=f"conversation_diagnostics_{conversation_id}",
-        ):
-            render_conversation_diagnostics_content(
-                diagnostics,
-                run_count=len(conversation.get("turns") or []),
-                active=bool(conversation.get("active_run_id")),
-            )
-        with st.expander(
-            "Technical details",
-            icon=":material/info:",
-            expanded=False,
-        ):
-            st.info(
-                "The advisor graph has no shell, dynamic tools, or arbitrary code execution.",
-                icon=":material/security:",
-            )
-            st.markdown("**Chat ID**")
-            st.code(conversation_id, language=None)
-            st.markdown("**Refresh-safe link**")
-            st.code(
-                f"{APP_BASE_URL}/?conversation_id={conversation_id}",
-                language=None,
-            )
+max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "100"))
+with match_tab:
+    _render_match_tab(client, max_upload_mb)
+with profile_tab:
+    _render_profile_tab(client, max_upload_mb)
 
-if new_chat:
-    try:
-        create_current_conversation(client)
-        st.rerun()
-    except APIError as exc:
-        st.sidebar.error(str(exc), icon=":material/error:")
-
-render_page_header()
-
-if not conversation["turns"]:
-    suggestions = {
-        ":material/manage_search: Match uploaded advisors": (
-            "Help me match the advisors from the uploaded file against the master "
-            "advisor database and export the results as an auditable workbook. Put "
-            "ambiguous or unmatched records on the Review Required sheet for me to "
-            "review in Excel."
-        ),
-        ":material/description: Generate advisor profile report": (
-            "Generate an advisor profile report from the CRD numbers in the uploaded "
-            "file. Identify the exact CRD column, ignore blank values, and deduplicate "
-            "repeated CRDs."
-        ),
-    }
-    with st.container(border=True):
-        st.subheader("Start with a task", anchor=False)
-        st.caption(
-            "Attach one CSV or XLSX, choose an example, or write your own request."
-        )
-        starter_key = f"starter_prompt_{conversation_id}"
-        st.pills(
-            "Example tasks",
-            list(suggestions),
-            label_visibility="collapsed",
-            width="stretch",
-            key=starter_key,
-            on_change=load_starter_prompt,
-            args=(starter_key, suggestions),
-        )
-
-active_run_id = conversation.get("active_run_id")
-
-for turn in conversation["turns"]:
-    render_turn(
-        client,
-        turn,
-        conversation_id=conversation_id,
-        actions_disabled=bool(active_run_id),
-        debug_mode=UI_DEBUG_MODE,
-    )
-
-
-@st.fragment(run_every=0.5)
-def active_run_fragment(run_id: str) -> None:
-    state_key = f"live_state_{run_id}"
-    cursor_key = f"event_cursor_{run_id}"
-    state = st.session_state.setdefault(state_key, {})
-    cursor = int(st.session_state.get(cursor_key, 0))
-    try:
-        run = client.run(run_id, cursor)
-    except APIError as exc:
-        st.error(str(exc), icon=":material/error:")
-        return
-    reduce_live_events(state, run.get("events") or [])
-    st.session_state[cursor_key] = run.get("next_event_id", cursor)
-    render_live_run(client, run, state, debug_mode=UI_DEBUG_MODE)
-    if run["status"] in {"completed", "failed", "stopped"}:
-        st.session_state.pop(state_key, None)
-        st.session_state.pop(cursor_key, None)
-        st.rerun(scope="app")
-
-
-if active_run_id:
-    active_run_fragment(active_run_id)
-else:
-    submission = st.chat_input(
-        "Ask Advisor Match Agent or attach one CSV/XLSX",
-        key="chat_input",
-        accept_file=True,
-        file_type=MATCH_TYPES,
-        max_upload_size=int(health.get("max_upload_mb") or 100),
-        submit_mode="disable",
-    )
-    if submission:
-        try:
-            run = client.send_message(
-                conversation_id,
-                submission.text,
-                list(submission.files),
-            )
-            st.session_state[f"live_state_{run['run_id']}"] = {}
-            st.session_state[f"event_cursor_{run['run_id']}"] = 0
-            st.rerun()
-        except APIError as exc:
-            st.error(str(exc), icon=":material/error:")
+st.caption(f"API {health['version']} · In-progress files exist only in this browser session.")

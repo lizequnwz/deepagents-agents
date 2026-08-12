@@ -1,9 +1,28 @@
 # Column mapping
 
-Inspect bounded raw rows instead of assuming row 1 is a header. Consider one later header row or a headerless table. Automatically proceed only when one worksheet, header interpretation, and field mapping are clear. Ask when multiple interpretations are plausible.
+Inspect bounded raw rows instead of assuming row 1 is a header. A mapping names
+one exact worksheet (`null` only for CSV), a one-based physical header row (or `null`
+for headerless input), and at most one physical `ColumnRef` per canonical field.
+Headed references carry zero-based `index` plus the exact observed `header`;
+headerless references carry the index and `header=null`. The index disambiguates
+duplicate headers.
 
-`InputMapping.header_row` is the one-based physical header row, or `null` for headerless input. Headed `ColumnRef` values contain both the zero-based index and exact observed header. Headerless references contain the index and `header=null`; generated labels such as `Column A` are display aids only.
+Match identity must include at least one of CRD, email, full name, or the paired
+first-name and last-name fields. Full name and split names are alternatives.
+Profile mapping contains exactly one CRD binding.
 
-Call `validate_advisor_input` before retrieving the advisor reference. It reopens the source, validates the exact worksheet/index/header bindings, reports blank and preamble rows, and returns a fingerprint tied to the source hash and canonical mapping.
+The mapping model sees only the bounded profile and has at most three structured
+attempts. It may return a proposal or a clarification description. It must not
+silently guess among plausible choices. The UI can correct every proposal or
+provide a complete mapping itself.
 
-Preserve source column order and values. Skip entirely blank rows. Rows above a selected header are preamble. Never infer identity data from unrelated columns. A missing firm column alone does not block rows with CRD or valid email evidence. When a usable-name row lacks firm, CRD, and valid email, `create_advisor_match` explains why stronger identity evidence is needed and asks whether an exact existing column contains firm values, one firm applies to all rows, or matching should continue with weaker evidence. An exact user-selected firm column is added to the mapping and deterministically revalidated against the same immutable upload. An explicit all-rows firm is applied only to copied mapped values as an audited session override; the source attachment and fingerprint remain unchanged. Other source-data corrections require a new upload.
+Before reference retrieval or profile generation, deterministic validation
+reopens the resent in-memory bytes, checks SHA-256, worksheet, row, exact
+index/header bindings, row limits, and mapping fingerprint. Entirely blank rows
+are skipped, rows above the chosen header are preamble, and original source
+order and values are preserved.
+
+A missing firm does not block CRD or valid-email evidence. For weaker name-only
+rows, firm handling is an explicit form choice: use the source, apply one firm
+to all copied mapped rows, or continue without firm. An all-rows override never
+alters source bytes or `Original Input` and is recorded in output metadata.

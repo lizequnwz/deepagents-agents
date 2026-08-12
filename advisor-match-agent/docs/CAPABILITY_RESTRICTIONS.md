@@ -1,19 +1,17 @@
-# Capability Restrictions
+# Capability restrictions
 
-| Capability | Policy | Enforcement |
+| Capability | Status | Enforcement |
 |---|---|---|
-| Dynamic tools / ReAct loop | Not supported | Graph nodes call fixed services directly. |
-| Shell, code execution, package install | Not supported | No runtime node exposes them. |
-| Network browsing | Not supported | Only the configured advisor source adapter is used. |
-| Subagents / delegation | Not supported | The graph contains no agent or subgraph planner. |
-| Generic file access | Not supported | `Workspace` resolves protected corp-scoped IDs only. |
-| Full master table in model context | Forbidden | Matching and snapshot access stay deterministic. |
-| Row-by-row LLM identity decisions | Forbidden | Deterministic matching policy owns all application decisions. |
-| Conversational post-match review | Not supported | Review happens in the downloaded workbook; local edits are not re-ingested. |
-| Persistent conversations/checkpoints | Not supported | `InMemorySaver` and `RuntimeStore` are process-local. |
-| Advisor profile report | Placeholder only | Deterministic code emits static blank HTML from validated CRDs; no profile data is fetched or inferred. |
+| General-purpose chat or planning | Not supported | Only four purpose-built REST operations exist. |
+| Graph orchestration or interrupts | Not supported | Form submissions are independent synchronous requests. |
+| Conversations, runs, polling, or cancellation | Not supported | No corresponding models, routes, or stores exist. |
+| Database or local workflow persistence | Not supported | Inputs and outputs are in-memory request/response data. |
+| Pod affinity | Not required | Every configured request resends bytes and configuration. |
+| Shell, code execution, package installation | Not exposed | Mapping calls have no tools. |
+| Model-selected advisor matches | Not supported | Matching is deterministic policy version 5 code. |
+| Reference data sent to the model | Not supported | Only bounded upload profiles reach the mapper. |
+| Profile data fetching or simulation | Not supported | Reports are deterministic placeholders. |
 
-Prompts are not security boundaries. Corp scope, path validation, file
-integrity, row limits, matching policy, and workbook validation
-are enforced in application code. The services are loopback-only and corp IDs
-are not authentication.
+Multipart request sizes, inspection bounds, row limits, exact physical mapping,
+source hashes, reference schema, duplicate CRDs, text-safe workbook cells, and
+workbook reconciliation are enforced in application code.

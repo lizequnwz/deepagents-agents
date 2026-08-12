@@ -1,6 +1,6 @@
 # Advisor schema
 
-The authoritative matching snapshot is ordered as:
+The authoritative reference record is ordered as:
 
 `CRD_NUMBER, FIRST_NAME, LAST_NAME, FIRM_NAME, EMAIL, CITY, STATE, ZIP_CODE`
 

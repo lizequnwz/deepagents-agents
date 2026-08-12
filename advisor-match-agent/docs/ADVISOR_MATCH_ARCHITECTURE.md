@@ -1,104 +1,70 @@
-# Advisor Match and Profile Report Architecture
+# Advisor Match architecture
 
-## Decision
-
-The application uses one explicit LangGraph `StateGraph`, not Deep Agents. Its
-two bounded workflows share routing, checkpoints, cancellation, clarification,
-event streaming, protected storage, and artifact download behavior.
-
-Explicit Streamlit actions set `requested_workflow` and bypass intent
-classification. Conversational requests use the typed router. Structured model
-output may interpret a bounded upload profile, but deterministic code owns file
-validation, matching, CRD extraction, report generation, storage, and
-publication.
-
-## Component boundaries
+Advisor Match is a synchronous, stateless REST application. An API pod does not
+own a workflow: every operation receives the complete file bytes and confirmed
+configuration, performs its work, and returns the complete result.
 
 ```mermaid
 flowchart LR
-    UI[Streamlit chat and actions] --> API[FastAPI]
-    API --> RM[RunManager]
-    RM --> G[StateGraph]
-    G --> R[Typed router]
-    G --> MM[Typed match mapping]
-    G --> CM[Typed CRD mapping]
-    G --> S[AdvisorService]
-    S --> D[Deterministic matching and CRD core]
-    S --> A[Workbook and HTML publishers]
-    G <--> IM[InMemorySaver]
-    S <--> DB[(AdvisorRepository SQLite)]
-    S <--> FS[Protected corp-scoped files]
-    A --> OUT[Preview and downloads]
+    UI["Streamlit forms\nephemeral browser session"]
+    API["FastAPI\nstateless endpoints"]
+    MP["Bounded in-memory\nmultipart parser"]
+    MAP["Structured column mapper\nLangChain, max 3 attempts"]
+    SVC["Deterministic services"]
+    REF["Per-request advisor\nreference source"]
+    OUT["ZIP workbook/result\nor HTML JSON"]
+
+    UI -->|"original bytes + form config"| API
+    API --> MP
+    MP --> MAP
+    MP --> SVC
+    REF --> SVC
+    SVC --> OUT
+    OUT --> UI
 ```
 
-`RunManager` emits node, clarification, artifact, and run-status events. Model
-calls are non-streaming. The UI polls the existing run endpoint.
+## Request boundaries
 
-## Graph branches
+`/advisor-match/mapping` and `/advisor-profile/mapping` inspect bounded source
+profiles and call the configured model for typed proposals. The service never
+sends full files or reference rows to the model. A proposal is deterministically
+validated before it is returned where possible; the form remains editable.
 
-```mermaid
-flowchart TD
-    START([New user turn]) --> route[route]
-    route --> choice{workflow}
+`/advisor-match/match` resends the original bytes with their analysis SHA-256,
+confirmed mapping, and firm resolution. Hash and mapping validation happen
+before the reference source is called. The request obtains a fresh source,
+validates and indexes its streamed canonical rows, applies policy version 5,
+builds and verifies a four-sheet workbook, and returns an in-memory ZIP.
 
-    choice -->|match| inspect[inspect bounded upload]
-    inspect --> map_input[map_input]
-    map_input --> validate[validate]
-    validate --> match[match and publish XLSX]
-    match --> END([End turn])
+`/advisor-profile/generate` similarly revalidates resent bytes and an exact CRD
+mapping, then trims blanks and deduplicates opaque CRDs in first-seen order. It
+returns one deterministic placeholder HTML document; it performs no profile
+lookup.
 
-    choice -->|profile upload| inspect
-    inspect --> map_crd[map_crd_input]
-    map_crd --> validate_crd[validate_crd_input]
-    validate_crd --> report[generate_profile_report]
+## Multi-pod behavior
 
-    choice -->|profile match session| report
-    report --> publish[store immutable HTML]
-    publish --> END
+There is no affinity requirement. Mapping can run on pod A and matching on pod
+B because the second request includes the same file bytes and all confirmed
+configuration. Profile mapping and generation can likewise use different pods.
+No application database, local filesystem, conversation, checkpoint, cache, or
+in-memory workflow session is consulted between requests.
 
-    map_input -->|ambiguous| clarify[clarify interrupt]
-    map_crd -->|ambiguous| clarify
-    clarify --> resume[Command resume]
-    resume --> resolve{pending kind}
-    resolve --> resolve_mapping[resolve_mapping]
-    resolve --> resolve_crd[resolve_crd_mapping]
-```
+The Streamlit UI uses `st.session_state` only for browser convenience. Refresh,
+UI restart, or pod loss clears work in progress by design.
 
-Matching-specific firm clarification and remapping remain unchanged. Greeting,
-capabilities, reset, unsupported, and missing-profile-source paths are small
-terminal branches.
+## Reference source seam
 
-## State and handoff
+The FastAPI app factory accepts a `ReferenceSourceFactory`. Development and
+tests use the packaged synthetic source. Production may inject the existing
+Snowflake client through this seam. Each match asks the factory for a new source;
+records are streamed through schema and row-limit validation into the existing
+advisor index. A SHA-256 is computed from stable serialization of the eight
+ordered canonical fields. No rows are cached or persisted.
 
-Graph state contains scoped IDs, the current request, workflow hint/selection,
-bounded profile, exact mapping and validation metadata, result summaries,
-pending clarification, response, and error. It never contains a full input or
-master table, workbook/HTML bytes, or a CRD list.
+## Failure model
 
-Post-match report generation passes `match_session_id`, not workbook contents or
-copied CRDs. The service reloads the corporation- and conversation-scoped
-session, selects only automated `Matched` decisions, and deduplicates their CRDs.
-For direct uploads, the service reopens the immutable attachment and validates
-its hash, worksheet, header row, physical column index, exact header, row limit,
-and mapping fingerprint immediately before extraction.
-
-`InMemorySaver` and conversations/runs/events remain process-local. SQLite
-durably stores attachments, reference snapshots, match sessions, workbook
-artifacts, and additive `advisor_profile_reports` records. API restart therefore
-loses pending conversations and interrupts but not published audit evidence.
-
-## Authority and outputs
-
-The model may route and interpret bounded columns. It cannot select arbitrary
-tools, decide advisor identities, extract CRDs, or create artifacts. CRDs are
-opaque trimmed strings; blanks are ignored and duplicates retain first-seen
-order. Post-match reports exclude ambiguous, unmatched, and candidate-only CRDs.
-
-Matching publishes the verified four-sheet `advisor_matches.xlsx`. Profile
-report version 1 publishes a verified, deterministic
-`advisor_profile_report.html` with a valid shell and empty body. It performs no
-network access and does not simulate profile data. Both artifact types are
-immutable, hashed, corporation scoped, and downloaded through the existing API.
-
-The interactive workflow is
-[`advisor_match_workflow.html`](advisor_match_workflow.html).
+User-correctable mappings and firm choices are `422`; changed bytes are `409`;
+mapping provider failures after three attempts are `502`; reference failures
+are `503`. Unsupported, oversized, and unreadable uploads are `400`. Failed
+synchronous operations return no partial output and are restarted from the
+beginning when retried.

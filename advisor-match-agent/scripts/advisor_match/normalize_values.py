@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from general_agent.advisor_matching import normalization as n
+from advisor_match.advisor_matching import normalization as n
 
 if __name__ == "__main__":
     value = sys.argv[2]

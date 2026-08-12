@@ -1,10 +1,8 @@
 .DS_Store
 .env
 .venv/
-.data/*
-!.data/.gitkeep
-workspace/*
-!workspace/.gitkeep
+.data/
+workspace/
 __pycache__/
 *.py[cod]
 .pytest_cache/

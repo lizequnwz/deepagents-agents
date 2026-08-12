@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "examples" / "advisor-match"
@@ -78,12 +78,44 @@ def main() -> None:
         with (OUTPUT / name).open("w", newline="", encoding="utf-8") as handle:
             csv.writer(handle).writerows(rows)
     for name, rows in XLSX_FIXTURES.items():
+        target = OUTPUT / name
+        if _workbook_matches(target, rows):
+            continue
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Advisors"
         for row in rows:
             sheet.append(row)
-        workbook.save(OUTPUT / name)
+        workbook.save(target)
+
+
+def _workbook_matches(path: Path, expected_rows: list[list[str]]) -> bool:
+    """Avoid timestamp-only XLSX rewrites when fixture cells are unchanged."""
+
+    if not path.exists():
+        return False
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        sheet = workbook.active
+        width = max((len(row) for row in expected_rows), default=0)
+        expected = [tuple(row + [None] * (width - len(row))) for row in expected_rows]
+        observed = [
+            tuple(row)
+            for row in sheet.iter_rows(
+                min_row=1,
+                max_row=len(expected_rows),
+                max_col=width,
+                values_only=True,
+            )
+        ]
+        return (
+            sheet.title == "Advisors"
+            and sheet.max_row == len(expected_rows)
+            and sheet.max_column == width
+            and observed == expected
+        )
+    finally:
+        workbook.close()
 
 
 if __name__ == "__main__":

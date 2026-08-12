@@ -10,5 +10,5 @@ import pytest
     not os.getenv("RUN_LIVE_ADVISOR_MATCH_SMOKE"),
     reason="live provider smoke is explicitly opt-in",
 )
-def test_live_graph_smoke_is_opt_in() -> None:
-    pytest.skip("Run the documented API smoke manually with configured credentials.")
+def test_live_mapping_smoke_is_opt_in() -> None:
+    pytest.skip("Run the documented mapping API smoke with configured credentials.")

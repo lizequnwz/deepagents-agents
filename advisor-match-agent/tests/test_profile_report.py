@@ -2,39 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from general_agent.advisor_matching.profile_report import (
+from advisor_match.advisor_matching.profile_report import (
     collect_input_crds,
-    collect_matched_crds,
     generate_advisor_profile_report,
 )
-from general_agent.advisor_matching.schemas import MatchDecision
 
 
 def _input_row(number: int, crd: str) -> tuple[int, dict[str, object], dict[str, str]]:
     return number, {"CRD": crd}, {"crd_number": crd}
-
-
-def _decision(status: str, crd: str | None) -> MatchDecision:
-    advisor = None
-    if crd is not None:
-        advisor = {
-            "crd_number": crd,
-            "first_name": "Avery",
-            "last_name": "Stone",
-        }
-    return MatchDecision.model_validate(
-        {
-            "review_item_id": f"row-{status}-{crd}",
-            "source_row_number": 2,
-            "source_values": {},
-            "mapped_values": {},
-            "status": status,
-            "confidence": "High" if status == "Matched" else "None",
-            "rule_id": "TEST",
-            "explanation": "test",
-            "matched_advisor": advisor,
-        }
-    )
 
 
 def test_input_crds_are_opaque_trimmed_and_stably_deduplicated() -> None:
@@ -50,22 +25,6 @@ def test_input_crds_are_opaque_trimmed_and_stably_deduplicated() -> None:
     assert collected.crd_numbers == ["00123", "FSA_ID:111"]
     assert collected.input_count == 4
     assert collected.blank_count == 1
-    assert collected.duplicate_count == 1
-
-
-def test_only_automatic_matches_supply_profile_crds() -> None:
-    collected = collect_matched_crds(
-        [
-            _decision("Matched", "1001"),
-            _decision("Ambiguous Match", None),
-            _decision("No Match", None),
-            _decision("Matched", "1001"),
-            _decision("Matched", "FSA_ID:111"),
-        ]
-    )
-
-    assert collected.crd_numbers == ["1001", "FSA_ID:111"]
-    assert collected.input_count == 3
     assert collected.duplicate_count == 1
 
 

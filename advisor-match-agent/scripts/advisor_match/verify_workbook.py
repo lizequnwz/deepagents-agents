@@ -6,7 +6,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from general_agent.advisor_matching.workbook import verify_match_workbook
+from advisor_match.advisor_matching.workbook import verify_match_workbook
 
 if __name__ == "__main__":
-    print(json.dumps(verify_match_workbook(Path(sys.argv[1])), sort_keys=True))
+    print(
+        json.dumps(
+            verify_match_workbook(Path(sys.argv[1]).read_bytes()),
+            sort_keys=True,
+        )
+    )

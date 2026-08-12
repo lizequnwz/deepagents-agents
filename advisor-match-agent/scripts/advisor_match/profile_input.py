@@ -6,8 +6,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from general_agent.advisor_matching.profiler import inspect_advisor_upload
-from general_agent.config import Settings
+from advisor_match.advisor_matching.profiler import inspect_advisor_upload
+from advisor_match.config import Settings
+from advisor_match.files import InMemoryFile
 
 if __name__ == "__main__":
-    print(json.dumps(inspect_advisor_upload(Path(sys.argv[1]), Settings(project_root=Path.cwd(), model_name="developer")), indent=2, default=str))
+    source_path = Path(sys.argv[1])
+    source = InMemoryFile(source_path.name, source_path.read_bytes())
+    print(
+        json.dumps(
+            inspect_advisor_upload(
+                source,
+                Settings(project_root=Path.cwd(), model_name="developer"),
+            ),
+            indent=2,
+            default=str,
+        )
+    )

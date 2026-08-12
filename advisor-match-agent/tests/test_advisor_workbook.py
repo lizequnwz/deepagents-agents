@@ -1,24 +1,25 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from io import BytesIO
 
 from openpyxl import load_workbook
 
-from general_agent.advisor_matching.schemas import (
+from advisor_match.advisor_matching.schemas import (
     InputMapping,
     InputSummary,
     MatchCounts,
     MatchDecision,
-    ReferenceSnapshotManifest,
+    ReferenceManifest,
 )
-from general_agent.advisor_matching.workbook import (
+from advisor_match.advisor_matching.workbook import (
     SHEETS,
+    build_match_workbook,
     verify_match_workbook,
-    write_match_workbook,
 )
 
 
-def test_workbook_is_human_first_styled_auditable_and_formula_safe(tmp_path) -> None:
+def test_workbook_is_human_first_styled_auditable_and_formula_safe() -> None:
     decision = MatchDecision(
         review_item_id="ami_test",
         source_row_number=2,
@@ -34,23 +35,18 @@ def test_workbook_is_human_first_styled_auditable_and_formula_safe(tmp_path) -> 
         rule_id="NO_ACCEPTABLE_CANDIDATE",
         explanation="No advisor satisfied the accepted identity rules.",
     )
-    reference = ReferenceSnapshotManifest(
-        reference_snapshot_id="ars_" + "a" * 32,
+    reference = ReferenceManifest(
         row_count=40,
-        columns=["CRD_NUMBER"],
         source_kind="synthetic",
         schema_version="1",
         retrieved_at=datetime.now(UTC),
         sha256="a" * 64,
     )
-    output = tmp_path / "advisor_matches.xlsx"
-    write_match_workbook(
-        output,
-        session_id="ams_test",
+    output = build_match_workbook(
         decisions=[decision],
         counts=MatchCounts(no_match=1),
         mapping=InputMapping(
-            full_name={"columns": [{"index": 0, "header": "Name"}]}
+            full_name={"index": 0, "header": "Name"}
         ),
         input_summary=InputSummary(
             data_row_count=1,
@@ -72,7 +68,7 @@ def test_workbook_is_human_first_styled_auditable_and_formula_safe(tmp_path) -> 
         "original": 1,
     }
 
-    workbook = load_workbook(output, data_only=False)
+    workbook = load_workbook(BytesIO(output), data_only=False)
     assert tuple(workbook.sheetnames) == SHEETS
     original_value = workbook["Original Input"]["B2"]
     assert original_value.value.startswith("=")
@@ -119,5 +115,6 @@ def test_workbook_is_human_first_styled_auditable_and_formula_safe(tmp_path) -> 
     }
     assert "Review Required" in summary["Manual Review"]
     assert "not sent back to or validated" in summary["Local Edit Boundary"]
-    assert summary["Session Status"] == "Matching Complete"
+    assert summary["Reference Source"] == "synthetic"
+    assert summary["Firm Resolution"] == "auto"
     workbook.close()

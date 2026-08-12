@@ -1,22 +1,24 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 import yaml
 from openpyxl import Workbook, load_workbook
 
-from general_agent.advisor_matching import normalization as norm
-from general_agent.advisor_matching import policy
-from general_agent.advisor_matching.input_loader import validate_and_load_input
-from general_agent.advisor_matching.index import AdvisorIndex, ReferenceDataQualityError
-from general_agent.advisor_matching.matcher import run_matching
-from general_agent.advisor_matching.schemas import (
+from advisor_match.advisor_matching import normalization as norm
+from advisor_match.advisor_matching import policy
+from advisor_match.advisor_matching.input_loader import validate_and_load_input
+from advisor_match.advisor_matching.index import AdvisorIndex, ReferenceDataQualityError
+from advisor_match.advisor_matching.matcher import run_matching
+from advisor_match.advisor_matching.schemas import (
     AdvisorRecord,
     InputMapping,
     MatchDecision,
 )
-from general_agent.advisor_matching.source import SyntheticAdvisorReferenceSource
+from advisor_match.advisor_matching.source import SyntheticAdvisorReferenceSource
+from advisor_match.files import InMemoryFile
 
 
 ADVISORS = [
@@ -70,7 +72,11 @@ def _row(row_number: int, **mapped: str):
 
 
 def _binding(index: int, header: str | None) -> dict:
-    return {"columns": [{"index": index, "header": header}]}
+    return {"index": index, "header": header}
+
+
+def _memory_file(path: Path) -> InMemoryFile:
+    return InMemoryFile(path.name, path.read_bytes())
 
 
 def test_firm_normalization_removes_legal_suffix_variations() -> None:
@@ -564,7 +570,7 @@ def test_candidate_order_uses_explicit_evidence_precedence() -> None:
     ]
 
 
-def test_policy_v3_decision_backfills_candidate_count() -> None:
+def test_match_decision_backfills_candidate_count() -> None:
     legacy = MatchDecision.model_validate(
         {
             "review_item_id": "ami_legacy",
@@ -669,7 +675,7 @@ def test_loader_supports_later_headers_and_skips_blank_rows(tmp_path) -> None:
         full_name=_binding(0, "Name"),
         firm_name=_binding(1, "Firm"),
     )
-    loaded = validate_and_load_input(source, mapping, max_rows=100)
+    loaded = validate_and_load_input(_memory_file(source), mapping, max_rows=100)
     assert [row[0] for row in loaded.rows] == [4, 6]
     assert loaded.summary.data_row_count == 2
     assert loaded.summary.blank_row_count == 1
@@ -690,10 +696,39 @@ def test_loader_supports_headerless_input(tmp_path) -> None:
         last_name=_binding(2, None),
         firm_name=_binding(3, None),
     )
-    loaded = validate_and_load_input(source, mapping, max_rows=100)
+    loaded = validate_and_load_input(_memory_file(source), mapping, max_rows=100)
     assert loaded.rows[0][0] == 1
     assert loaded.rows[0][1]["Column A"] == "1001"
     assert loaded.columns[0] == {"index": 0, "header": None, "label": "Column A"}
+
+
+def test_loader_selects_exact_sheet_header_and_duplicate_column_index() -> None:
+    workbook = Workbook()
+    workbook.active.title = "Ignore"
+    workbook.active.append(["Not", "Advisors"])
+    advisors = workbook.create_sheet("Advisors")
+    advisors.append(["Quarterly export"])
+    advisors.append(["CRD", "CRD", "Name"])
+    advisors.append(["wrong", "1001", "Avery Stone"])
+    output = BytesIO()
+    workbook.save(output)
+    source = InMemoryFile("multi.xlsx", output.getvalue())
+    mapping = InputMapping(
+        sheet_name="Advisors",
+        header_row=2,
+        crd_number=_binding(1, "CRD"),
+        full_name=_binding(2, "Name"),
+    )
+
+    loaded = validate_and_load_input(source, mapping, max_rows=10)
+
+    assert loaded.selected_sheet == "Advisors"
+    assert loaded.rows[0][2]["crd_number"] == "1001"
+    assert [column["label"] for column in loaded.columns] == [
+        "CRD",
+        "CRD [2]",
+        "Name",
+    ]
 
 
 def test_loader_rejects_changed_exact_header(tmp_path) -> None:
@@ -701,10 +736,10 @@ def test_loader_rejects_changed_exact_header(tmp_path) -> None:
     source.write_text("Advisor\nRobert Mercer\n", encoding="utf-8")
     mapping = InputMapping(full_name=_binding(0, "Name"))
     with pytest.raises(ValueError, match="expected 'Name', observed 'Advisor'"):
-        validate_and_load_input(source, mapping, max_rows=100)
+        validate_and_load_input(_memory_file(source), mapping, max_rows=100)
 
 
-def test_missing_firm_checkpoint_is_row_based(tmp_path) -> None:
+def test_missing_firm_evidence_is_row_based(tmp_path) -> None:
     source = tmp_path / "missing-firm.csv"
     source.write_text(
         "Name,Firm,CRD,Email\n"
@@ -719,7 +754,7 @@ def test_missing_firm_checkpoint_is_row_based(tmp_path) -> None:
         crd_number=_binding(2, "CRD"),
         email=_binding(3, "Email"),
     )
-    loaded = validate_and_load_input(source, mapping, max_rows=100)
+    loaded = validate_and_load_input(_memory_file(source), mapping, max_rows=100)
     assert loaded.summary.missing_firm_row_count == 1
     assert loaded.missing_firm_sample[0]["source_row_number"] == 2
 
@@ -735,7 +770,7 @@ def test_missing_firm_column_does_not_require_confirmation_with_email(tmp_path) 
         email=_binding(1, "Email"),
     )
 
-    loaded = validate_and_load_input(source, mapping, max_rows=100)
+    loaded = validate_and_load_input(_memory_file(source), mapping, max_rows=100)
 
     assert loaded.summary.firm_column_missing is True
     assert loaded.summary.missing_firm_row_count == 0
@@ -747,7 +782,7 @@ def test_input_loader_stops_at_configured_row_limit(tmp_path) -> None:
     source.write_text("Name\nOne Person\nTwo Person\n", encoding="utf-8")
     mapping = InputMapping(full_name=_binding(0, "Name"))
     with pytest.raises(ValueError, match="limit is 1"):
-        validate_and_load_input(source, mapping, max_rows=1)
+        validate_and_load_input(_memory_file(source), mapping, max_rows=1)
 
 
 def test_blank_rows_cannot_hide_records_beyond_row_limit(tmp_path) -> None:
@@ -758,7 +793,7 @@ def test_blank_rows_cannot_hide_records_beyond_row_limit(tmp_path) -> None:
     )
     mapping = InputMapping(full_name=_binding(0, "Name"))
     with pytest.raises(ValueError, match="limit is 1"):
-        validate_and_load_input(source, mapping, max_rows=1)
+        validate_and_load_input(_memory_file(source), mapping, max_rows=1)
 
 
 def test_unreadable_xlsx_is_reported_as_a_structural_input_error(tmp_path) -> None:
@@ -766,7 +801,7 @@ def test_unreadable_xlsx_is_reported_as_a_structural_input_error(tmp_path) -> No
     source.write_bytes(b"not an Excel workbook")
     mapping = InputMapping(full_name=_binding(0, "Name"))
     with pytest.raises(ValueError, match="could not be read"):
-        validate_and_load_input(source, mapping, max_rows=100)
+        validate_and_load_input(_memory_file(source), mapping, max_rows=100)
 
 
 @pytest.mark.parametrize(
@@ -857,14 +892,14 @@ def test_generated_fixtures_have_expected_results(filename, mapping, expected) -
     advisors = list(
         SyntheticAdvisorReferenceSource(
             root
-            / "general_agent"
+            / "advisor_match"
             / "advisor_matching"
             / "data"
             / "master_advisors.csv"
         ).iter_records()
     )
     loaded = validate_and_load_input(
-        root / "examples" / "advisor-match" / filename,
+        _memory_file(root / "examples" / "advisor-match" / filename),
         InputMapping.model_validate(mapping),
         max_rows=100,
     )

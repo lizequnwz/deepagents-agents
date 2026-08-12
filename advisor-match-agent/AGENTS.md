@@ -1,75 +1,58 @@
-# Advisor Match Agent Repository Guidance
+# Advisor Match Repository Guidance
 
 ## Purpose and trust model
 
-- This is a loopback-only financial-advisor matching application built with
-  LangGraph, LangChain, FastAPI, Streamlit, and SQLite.
-- Its supported workflows are matching one uploaded CSV/XLSX against an
-  authoritative advisor source and generating a placeholder advisor profile
-  report from validated CRDs or a persisted match session.
-- The runtime agent has no shell, arbitrary Python/code execution, network,
-  package-installation, general file-write, or subagent capability.
-- Prompt instructions are not a security boundary. Enforce corporation scope,
-  path validation, row limits, and decision rules in application code.
+- This is a stateless financial-advisor matching application built with
+  LangChain, FastAPI, and Streamlit.
+- It matches one uploaded CSV/XLSX against an authoritative advisor source and
+  generates a placeholder profile report from a file containing CRDs.
+- Every API request carries its own source bytes and configuration. There are no
+  conversations, checkpoints, databases, workflow sessions, or local artifacts.
+- Model instructions are not a security boundary. Enforce upload, inspection,
+  row, schema, firm-resolution, and matching rules in application code.
 
 ## Start here
 
-- `general_agent/graph.py`: explicit nodes, edges, routing, and interrupts.
-- `general_agent/advisor_service.py`: deterministic workflow service boundary.
-- `general_agent/advisor_matching/`: schemas, normalization, policy, matching,
-  source adapter, input profiling/loading, and workbook generation.
-- `general_agent/runtime_store.py`: process-local conversations, runs, and events.
-- `general_agent/advisor_repository.py`: durable match and artifact persistence.
-- `general_agent/workspace.py`: minimal corporation-scoped protected attachment,
-  reference-snapshot, and workbook-artifact storage.
-- `docs/contracts/`: static policy and workbook contracts; never model skills.
-- `docs/SPECIALIZING_GENERAL_AGENT.md`: architecture rationale.
+- `advisor_match/api.py`: app factory, REST routes, errors, and result packaging.
+- `advisor_match/multipart.py`: bounded in-memory multipart parsing.
+- `advisor_match/mapping.py`: bounded structured column-mapping calls.
+- `advisor_match/advisor_service.py`: stateless deterministic service boundary.
+- `advisor_match/advisor_matching/`: schemas, normalization, policy, matching,
+  reference adapter, input profiling/loading, workbook, and profile generation.
+- `streamlit_app.py`: two-tab form workflow using ephemeral session state.
+- `docs/contracts/`: static policy and output contracts.
 
 ## Non-negotiable invariants
 
 - Never modify the sibling parent `general-agent` project.
-- Scope every conversation, run, upload, snapshot, match session, profile
-  report, workbook, and artifact by `corp_id`.
-- Keep both services loopback-only. Corporation IDs isolate storage but are not
-  authentication; do not present this app as safe for untrusted users.
-- Keep traversal/symlink rejection, protected storage roots,
-  attachment/reference/artifact IDs, structured-output retry limits,
-  cancellation, documented restart loss, and immutable workbook/HTML artifacts.
-- The model may inspect bounded upload profiles. It must never receive the
-  complete master table or full workbook and must never decide matches row by
-  row.
+- Do not add conversations, graph orchestration, interrupts, checkpoints,
+  persistence, or pod-local cross-request state.
+- The model may inspect only bounded upload profiles. It must never receive the
+  complete authoritative table or decide matches row by row.
 - Deterministic code owns normalization, candidate generation, scoring,
-  decisions, duplicate detection, and workbook generation.
+  decisions, duplicate detection, firm handling, and workbook generation.
 - Exact CRD is decisive with conflict warnings. Unique normalized email is
   strong. Name matching needs independent evidence. Nicknames and fuzzy names
   are candidate evidence only; a fuzzy name alone is never confirmed.
-- Never modify the original upload. Always generate and verify the four-sheet
-  `advisor_matches.xlsx` export from persisted structured decisions.
-- Matching ends after verified workbook publication. Ambiguous and unmatched
-  records are reviewed in a downloaded copy; local edits are not re-ingested or
-  validated by the application.
-- Advisor profile reporting is a supported placeholder-only workflow. It may
-  emit only deterministic static HTML from validated, opaque CRD identifiers;
-  it must not fetch or simulate advisor profile data.
-- Do not hand-edit `.data/` or other derived runtime state. The generic
-  chat/shared workspace is intentionally unsupported.
-
-## Graph prompts and contracts
-
-- Keep router and mapping prompts in `general_agent/graph_prompts.py` aligned
-  with their strict schemas in `general_agent/graph_state.py`.
-- Runtime skills and general-purpose tool selection are intentionally absent.
-- Keep static behavior contracts in `docs/contracts/`.
-- Treat prompt, tool schema, policy, and workbook changes as behavior changes;
-  add focused deterministic tests.
+- Never modify uploaded bytes. All-rows firm overrides affect copied mapped
+  values only and are recorded in workbook/result audit metadata.
+- Always generate and verify the four-sheet `advisor_matches.xlsx` export in
+  memory. Row-level decisions exist only in the workbook.
+- Matching ends after verified workbook generation. Downloaded review edits are
+  not re-ingested or validated.
+- Profile reporting emits only deterministic static HTML from validated opaque
+  CRDs; it must not fetch or simulate profile data.
+- The reference source is injected per request, schema/row-limit checked, and
+  never cached or persisted. Duplicate authoritative CRDs block matching.
+- Mapping makes at most three structured-output attempts and returns an explicit
+  failure rather than silently guessing.
 
 ## Development and validation
 
-- Preserve unrelated user changes and avoid broad refactors.
-- Use Python 3.11+ and absolute imports inside `general_agent`.
+- Preserve unrelated user changes and avoid speculative abstractions.
+- Use Python 3.11+ and absolute imports inside `advisor_match`.
 - Keep production settings environment-backed and validated.
-- Dependency changes belong in `pyproject.toml` and `uv.lock`; never install
-  packages from an agent workflow.
+- Dependency changes belong in `pyproject.toml` and `uv.lock`.
 - Do not commit, push, open a PR, or delete user data unless explicitly asked.
 
 Run the narrowest relevant test first, then:
@@ -81,7 +64,6 @@ uv run python scripts/generate_advisor_match_fixtures.py
 git diff --check
 ```
 
-Use the billable live smoke test only when intentionally requested. Review
-changes in this order: capability escape/network access, corporation leakage,
-path isolation, identity-policy correctness, audit/export correctness, then UI
-and documentation consistency.
+Use the billable live mapping smoke test only when intentionally requested.
+Review changes in this order: upload/capability escape, identity-policy
+correctness, reference integrity, audit/export correctness, then UI and docs.

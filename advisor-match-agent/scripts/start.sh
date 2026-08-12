@@ -5,7 +5,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 if ! command -v uv >/dev/null 2>&1; then
-  echo "Advisor Match Agent requires uv: https://docs.astral.sh/uv/" >&2
+  echo "Advisor Match requires uv: https://docs.astral.sh/uv/" >&2
   exit 1
 fi
 
@@ -27,13 +27,8 @@ APP_PORT="${APP_PORT:-8502}"
 uv sync --locked --all-groups
 
 if ! .venv/bin/python -c \
-  "from general_agent.config import load_settings; s=load_settings(); assert not s.readiness_errors(); print('Configuration ready')"; then
-  echo "Advisor Match Agent configuration is invalid." >&2
-  exit 1
-fi
-
-if [[ ! -w .data ]]; then
-  echo ".data/ must be writable." >&2
+  "from advisor_match.config import load_settings; s=load_settings(); assert not s.readiness_errors(); print('Configuration ready')"; then
+  echo "Advisor Match configuration is invalid." >&2
   exit 1
 fi
 
@@ -53,7 +48,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-.venv/bin/uvicorn general_agent.api:app \
+.venv/bin/uvicorn advisor_match.api:app \
   --host "$API_HOST" \
   --port "$API_PORT" \
   --workers 1 &
@@ -72,13 +67,13 @@ for _ in {1..60}; do
 done
 
 if [[ "$READY" -ne 1 ]]; then
-  echo "The Advisor Match Agent API did not become healthy." >&2
+  echo "The Advisor Match API did not become healthy." >&2
   exit 1
 fi
 
-echo "Advisor Match Agent UI: http://${APP_HOST}:${APP_PORT}"
-echo "Advisor Match Agent API: http://${API_HOST}:${API_PORT}"
-echo "Advisor Match Agent log: ${PROJECT_DIR}/.data/logs/api.log"
+echo "Advisor Match UI: http://${APP_HOST}:${APP_PORT}"
+echo "Advisor Match API: http://${API_HOST}:${API_PORT}"
+echo "Advisor Match logs are written to stdout/stderr."
 
 .venv/bin/streamlit run streamlit_app.py \
   --server.address "$APP_HOST" \

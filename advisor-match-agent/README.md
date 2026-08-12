@@ -1,62 +1,67 @@
-# Advisor Match Agent
+# Advisor Match
 
-Advisor Match Agent is a loopback-only LangGraph application that matches one
-uploaded advisor CSV/XLSX against an authoritative reference, publishes a
-verified `advisor_matches.xlsx` workbook for offline review, and generates a
-placeholder HTML profile report from validated CRDs.
+Advisor Match is a purpose-built, stateless service for matching advisor input
+files against an authoritative reference and generating placeholder profile
+reports from validated CRDs. FastAPI exposes synchronous REST operations and a
+two-tab Streamlit UI guides users through explicit forms.
 
-The control plane is one explicit `StateGraph`. Non-streaming structured model
-calls may route natural-language intent and interpret bounded match/CRD column
-mappings. Explicit UI actions bypass intent classification. Normalization,
-candidate generation, scoring, identity decisions, CRD extraction, report
-generation, and artifact publication remain deterministic Python.
+The service has no conversations, graph checkpoints, database, repository, or
+pod-local workflow storage. Each request contains the complete source bytes and
+configuration it needs. Matching, validation, firm handling, candidate
+generation, decisions, workbook generation, and profile rendering remain
+deterministic Python. LangChain is used only for bounded structured column
+mapping.
 
-## State and storage
+## API
 
-- `InMemorySaver` holds graph checkpoints and pending `interrupt()` calls.
-- Conversations, turns, runs, and progress events are process-local.
-- An API restart intentionally starts a fresh conversation and loses pending
-  progress.
-- `.data/advisor_repository.sqlite3` durably stores attachment metadata,
-  reference snapshots, match sessions, profile reports, and artifact metadata.
-- Older application/checkpoint databases are left untouched and are not read.
+| Endpoint | Purpose |
+|---|---|
+| `POST /advisor-match/mapping` | Profile a multipart CSV/XLSX and propose match columns. |
+| `POST /advisor-match/match` | Revalidate the resent file and return a ZIP containing `advisor_matches.xlsx` and `result.json`. |
+| `POST /advisor-profile/mapping` | Profile a multipart CSV/XLSX and propose its CRD column. |
+| `POST /advisor-profile/generate` | Revalidate the resent file and return placeholder report HTML as JSON. |
+| `GET /health` | Return process and API version status. |
+
+Configured operations use multipart parts named `file` and `configuration`.
+The file is parsed under a strict in-memory size limit; FastAPI disk-spooled
+uploads are not used. Mapping responses include a SHA-256 that must be resent
+in the next operation, preventing a changed file from being processed against a
+stale form configuration.
 
 ## Run locally
 
-Copy `.env.example` to `.env`, configure `MODEL_NAME` and provider credentials,
-then run:
+Copy `.env.example` to `.env`, configure the OpenAI `MODEL_NAME` and
+credentials, then run:
 
 ```bash
 uv sync --locked --all-groups
 ./scripts/start.sh
 ```
 
-The API and Streamlit UI must remain bound to loopback addresses. Corporation
-IDs provide storage isolation, not authentication.
+`API_HOST` and `APP_HOST` may be loopback addresses for development or pod
+addresses for deployment. Logs are written to stdout/stderr.
 
 ## Important files
 
-- `general_agent/graph.py` — nodes, edges, interrupts, and graph compilation.
-- `general_agent/graph_state.py` — graph state and structured LLM contracts.
-- `general_agent/user_messages.py` — deterministic user-facing workflow copy.
-- `general_agent/advisor_service.py` — explicit application-service boundary.
-- `general_agent/advisor_matching/` — deterministic matching, workbook, and
-  placeholder profile-report code.
-- `general_agent/runtime_store.py` — in-memory chat/run/event state.
-- `general_agent/advisor_repository.py` — durable match and artifact records.
-- `docs/contracts/` — matching, mapping, offline-review, workbook, and profile
-  report contracts.
-- `docs/advisor_match_workflow.html` — interactive workflow diagram.
+- `advisor_match/api.py` — the stateless FastAPI app factory and routes.
+- `advisor_match/mapping.py` — bounded structured mapping calls.
+- `advisor_match/advisor_service.py` — deterministic match/profile services.
+- `advisor_match/advisor_matching/` — schemas, policy, normalization, matching,
+  profiling/loading, reference adapter, workbook, and profile rendering.
+- `advisor_match/multipart.py` — bounded streaming multipart parser.
+- `streamlit_app.py` — ephemeral Advisor Matching and Profile Generation tabs.
+- `docs/contracts/` — behavior and output contracts.
 
-Matching policy: `docs/contracts/matching-policy.yaml`.
+Matching policy: `docs/contracts/matching-policy.yaml` (policy version 5).
 
 ## Validate
 
 ```bash
+uv sync --locked --all-groups
 uv run pytest
 uv run python scripts/generate_advisor_match_fixtures.py
 git diff --check
 ```
 
-The live provider smoke remains opt-in. Profile reports are intentionally blank
-placeholder HTML; no profile data is fetched or simulated.
+The live mapping-provider smoke test is opt-in. Profile reports intentionally
+contain no fetched or simulated profile data.
