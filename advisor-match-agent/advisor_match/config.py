@@ -58,7 +58,7 @@ class Settings:
     )
     log_level: str = field(default_factory=_log_level)
     max_upload_mb: int = field(
-        default_factory=lambda: _positive_int("MAX_UPLOAD_MB", 100)
+        default_factory=lambda: _positive_int("MAX_UPLOAD_MB", 50)
     )
     max_inspect_sheets: int = field(
         default_factory=lambda: _positive_int("MAX_INSPECT_SHEETS", 20)

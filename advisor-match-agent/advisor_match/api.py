@@ -8,10 +8,11 @@ import time
 import uuid
 from functools import partial
 from io import BytesIO
-from typing import Any
+from pathlib import PurePath
+from typing import Annotated, Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
@@ -34,14 +35,8 @@ from advisor_match.api_models import (
 )
 from advisor_match.config import Settings, load_settings
 from advisor_match.firm import FirmResolutionError
-from advisor_match.files import InvalidUploadError, UnsupportedUploadType
+from advisor_match.files import InMemoryFile, InvalidUploadError, UnsupportedUploadType
 from advisor_match.mapping import MappingModelError, MappingService
-from advisor_match.multipart import (
-    MultipartInputError,
-    UnsupportedMultipartMediaType,
-    UploadTooLarge,
-    parse_multipart_request,
-)
 from advisor_match.advisor_service import (
     AdvisorService,
     ReferenceSourceError,
@@ -51,72 +46,35 @@ from advisor_match.advisor_service import (
 
 logger = logging.getLogger("advisor_match.api")
 
-_FILE_REQUEST_BODY = {
-    "requestBody": {
-        "required": True,
-        "content": {
-            "multipart/form-data": {
-                "schema": {
-                    "type": "object",
-                    "required": ["file"],
-                    "properties": {
-                        "file": {
-                            "type": "string",
-                            "format": "binary",
-                            "description": "CSV or XLSX source file.",
-                        }
+SourceFile = Annotated[
+    UploadFile,
+    File(description="CSV or XLSX source file."),
+]
+ConfigurationForm = Annotated[
+    str,
+    Form(
+        max_length=64 * 1024,
+        description=(
+            "JSON containing the analyzed source SHA-256 and the confirmed mapping "
+            "from the corresponding mapping endpoint."
+        ),
+        examples=[
+            json.dumps(
+                {
+                    "analyzed_source_sha256": "0" * 64,
+                    "mapping": {
+                        "sheet_name": None,
+                        "header_row": 1,
+                        "crd_number": {"index": 0, "header": "CRD"},
                     },
                 }
-            }
-        },
-    }
-}
-
-_CONFIGURED_REQUEST_BODY = {
-    "requestBody": {
-        "required": True,
-        "content": {
-            "multipart/form-data": {
-                "schema": {
-                    "type": "object",
-                    "required": ["file", "configuration"],
-                    "properties": {
-                        "file": {
-                            "type": "string",
-                            "format": "binary",
-                            "description": (
-                                "The exact CSV or XLSX file previously analyzed."
-                            ),
-                        },
-                        "configuration": {
-                            "type": "string",
-                            "description": (
-                                "JSON containing the analyzed source SHA-256 and the "
-                                "confirmed mapping from the corresponding mapping endpoint."
-                            ),
-                            "example": json.dumps(
-                                {
-                                    "analyzed_source_sha256": "0" * 64,
-                                    "mapping": {
-                                        "sheet_name": None,
-                                        "header_row": 1,
-                                        "crd_number": {
-                                            "index": 0,
-                                            "header": "CRD",
-                                        },
-                                    },
-                                }
-                            ),
-                        },
-                    },
-                }
-            }
-        },
-    }
-}
+            )
+        ],
+    ),
+]
 
 _ERROR_DESCRIPTIONS = {
-    400: "Malformed multipart data or an unreadable upload.",
+    400: "The upload is unreadable or invalid.",
     409: "The source file changed after analysis.",
     413: "The upload exceeds the configured size limit.",
     415: "The request or uploaded file uses an unsupported media type.",
@@ -221,12 +179,10 @@ def create_app(
     @app.post(
         "/advisor-match/mapping",
         response_model=MatchMappingResponse,
-        openapi_extra=_FILE_REQUEST_BODY,
-        responses=_error_responses(400, 413, 415, 502, 500),
+        responses=_error_responses(400, 413, 415, 422, 502, 500),
     )
-    async def map_advisor_input(request: Request) -> MatchMappingResponse:
-        payload = await _parse_payload(request, active_settings, configured=False)
-        source = payload.file
+    async def map_advisor_input(file: SourceFile) -> MatchMappingResponse:
+        source = await _read_upload(file, active_settings)
         try:
             source.validate_table_type()
             profile = await run_in_threadpool(
@@ -259,7 +215,6 @@ def create_app(
     @app.post(
         "/advisor-match/match",
         response_class=Response,
-        openapi_extra=_CONFIGURED_REQUEST_BODY,
         responses={
             200: {
                 "description": (
@@ -274,11 +229,12 @@ def create_app(
             **_error_responses(400, 409, 413, 415, 422, 503, 500),
         },
     )
-    async def match_advisors(request: Request) -> Response:
-        payload = await _parse_payload(request, active_settings, configured=True)
+    async def match_advisors(
+        file: SourceFile, configuration: ConfigurationForm
+    ) -> Response:
         try:
-            configuration = MatchConfiguration.model_validate_json(
-                payload.configuration or ""
+            match_configuration = MatchConfiguration.model_validate_json(
+                configuration
             )
         except ValidationError as exc:
             raise _APIError(
@@ -287,15 +243,16 @@ def create_app(
                 "The match configuration is invalid.",
                 exc.errors(),
             ) from exc
+        source = await _read_upload(file, active_settings)
         try:
             execution = await run_in_threadpool(
                 partial(
                     service.match,
-                    payload.file,
-                    analyzed_source_sha256=configuration.analyzed_source_sha256,
-                    mapping=configuration.mapping,
-                    firm_resolution=configuration.firm_resolution,
-                    all_rows_firm=configuration.all_rows_firm,
+                    source,
+                    analyzed_source_sha256=match_configuration.analyzed_source_sha256,
+                    mapping=match_configuration.mapping,
+                    firm_resolution=match_configuration.firm_resolution,
+                    all_rows_firm=match_configuration.all_rows_firm,
                 )
             )
         except SourceHashMismatch as exc:
@@ -340,12 +297,10 @@ def create_app(
     @app.post(
         "/advisor-profile/mapping",
         response_model=ProfileMappingResponse,
-        openapi_extra=_FILE_REQUEST_BODY,
-        responses=_error_responses(400, 413, 415, 502, 500),
+        responses=_error_responses(400, 413, 415, 422, 502, 500),
     )
-    async def map_profile_input(request: Request) -> ProfileMappingResponse:
-        payload = await _parse_payload(request, active_settings, configured=False)
-        source = payload.file
+    async def map_profile_input(file: SourceFile) -> ProfileMappingResponse:
+        source = await _read_upload(file, active_settings)
         try:
             source.validate_table_type()
             profile = await run_in_threadpool(
@@ -378,14 +333,14 @@ def create_app(
     @app.post(
         "/advisor-profile/generate",
         response_model=ProfileGenerationResult,
-        openapi_extra=_CONFIGURED_REQUEST_BODY,
         responses=_error_responses(400, 409, 413, 415, 422, 500),
     )
-    async def generate_profile(request: Request) -> ProfileGenerationResult:
-        payload = await _parse_payload(request, active_settings, configured=True)
+    async def generate_profile(
+        file: SourceFile, configuration: ConfigurationForm
+    ) -> ProfileGenerationResult:
         try:
-            configuration = ProfileConfiguration.model_validate_json(
-                payload.configuration or ""
+            profile_configuration = ProfileConfiguration.model_validate_json(
+                configuration
             )
         except ValidationError as exc:
             raise _APIError(
@@ -394,13 +349,14 @@ def create_app(
                 "The profile configuration is invalid.",
                 exc.errors(),
             ) from exc
+        source = await _read_upload(file, active_settings)
         try:
             result = await run_in_threadpool(
                 partial(
                     service.generate_profile,
-                    payload.file,
-                    analyzed_source_sha256=configuration.analyzed_source_sha256,
-                    mapping=configuration.mapping,
+                    source,
+                    analyzed_source_sha256=profile_configuration.analyzed_source_sha256,
+                    mapping=profile_configuration.mapping,
                 )
             )
         except SourceHashMismatch as exc:
@@ -416,21 +372,23 @@ def create_app(
     return app
 
 
-async def _parse_payload(
-    request: Request, settings: Settings, *, configured: bool
-):
-    try:
-        return await parse_multipart_request(
-            request,
-            max_upload_bytes=settings.max_upload_bytes,
-            configuration_required=configured,
+async def _read_upload(file: UploadFile, settings: Settings) -> InMemoryFile:
+    filename = _upload_filename(file.filename)
+    content = await file.read(settings.max_upload_bytes + 1)
+    if len(content) > settings.max_upload_bytes:
+        raise _APIError(
+            413,
+            "UPLOAD_TOO_LARGE",
+            f"The uploaded file exceeds the {settings.max_upload_mb} MB limit.",
         )
-    except UploadTooLarge as exc:
-        raise _APIError(413, "UPLOAD_TOO_LARGE", str(exc)) from exc
-    except UnsupportedMultipartMediaType as exc:
-        raise _APIError(415, "UNSUPPORTED_MEDIA_TYPE", str(exc)) from exc
-    except MultipartInputError as exc:
-        raise _APIError(400, "INVALID_MULTIPART", str(exc)) from exc
+    return InMemoryFile(filename, content, file.content_type)
+
+
+def _upload_filename(value: str | None) -> str:
+    name = PurePath((value or "").replace("\\", "/")).name.strip()
+    if not name or name in {".", ".."}:
+        raise _APIError(400, "INVALID_UPLOAD", "The uploaded filename is invalid.")
+    return name
 
 
 class _APIError(Exception):

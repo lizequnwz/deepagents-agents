@@ -23,10 +23,10 @@ mapping.
 | `GET /health` | Return process and API version status. |
 
 Configured operations use multipart parts named `file` and `configuration`.
-The file is parsed under a strict in-memory size limit; FastAPI disk-spooled
-uploads are not used. Mapping responses include a SHA-256 that must be resent
-in the next operation, preventing a changed file from being processed against a
-stale form configuration.
+FastAPI handles uploads with its native spooled-file support, and the API
+rejects files above the configured 50 MB default. Mapping responses include a
+SHA-256 that must be resent in the next operation, preventing a changed file
+from being processed against a stale form configuration.
 
 ## Run locally
 
@@ -41,6 +41,12 @@ uv sync --locked --all-groups
 `API_HOST` and `APP_HOST` may be loopback addresses for development or pod
 addresses for deployment. Logs are written to stdout/stderr.
 
+For EKS, deploy the API and Streamlit as separate workloads. API replicas need
+no session affinity because every configured request resends its file and
+configuration. Set the ingress body limit slightly above `MAX_UPLOAD_MB` for
+multipart overhead, and set its response timeout above the longest synchronous
+matching request.
+
 ## Important files
 
 - `advisor_match/api.py` — the stateless FastAPI app factory and routes.
@@ -48,7 +54,6 @@ addresses for deployment. Logs are written to stdout/stderr.
 - `advisor_match/advisor_service.py` — deterministic match/profile services.
 - `advisor_match/advisor_matching/` — schemas, policy, normalization, matching,
   profiling/loading, reference adapter, workbook, and profile rendering.
-- `advisor_match/multipart.py` — bounded streaming multipart parser.
 - `streamlit_app.py` — ephemeral Advisor Matching and Profile Generation tabs.
 - `notebooks/advisor_match_stateless_workflow.ipynb` — interactive API-first
   upload, mapping, matching, profile, preview, and download workflow.

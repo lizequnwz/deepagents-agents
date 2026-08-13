@@ -294,19 +294,24 @@ def test_openapi_documents_real_multipart_and_response_contracts(settings) -> No
     schema = _client(settings).get("/openapi.json").json()
     paths = schema["paths"]
 
-    for path in ("/advisor-match/mapping", "/advisor-profile/mapping"):
+    def multipart_schema(path: str) -> dict:
         body = paths[path]["post"]["requestBody"]
-        multipart = body["content"]["multipart/form-data"]["schema"]
+        reference = body["content"]["multipart/form-data"]["schema"]["$ref"]
         assert body["required"] is True
+        return schema["components"]["schemas"][reference.rsplit("/", 1)[-1]]
+
+    for path in ("/advisor-match/mapping", "/advisor-profile/mapping"):
+        multipart = multipart_schema(path)
         assert multipart["required"] == ["file"]
-        assert multipart["properties"]["file"]["format"] == "binary"
+        assert multipart["properties"]["file"]["contentMediaType"] == (
+            "application/octet-stream"
+        )
 
     for path in ("/advisor-match/match", "/advisor-profile/generate"):
-        multipart = paths[path]["post"]["requestBody"]["content"][
-            "multipart/form-data"
-        ]["schema"]
+        multipart = multipart_schema(path)
         assert multipart["required"] == ["file", "configuration"]
         assert multipart["properties"]["configuration"]["type"] == "string"
+        assert multipart["properties"]["configuration"]["maxLength"] == 64 * 1024
 
     match_success = paths["/advisor-match/match"]["post"]["responses"]["200"]
     assert set(match_success["content"]) == {"application/zip"}
@@ -326,14 +331,7 @@ def test_openapi_documents_real_multipart_and_response_contracts(settings) -> No
     assert mapping_profile == {"$ref": "#/components/schemas/UploadProfile"}
 
 
-def test_uploads_do_not_use_starlette_disk_spooling(settings, monkeypatch) -> None:
-    import starlette.formparsers
-
-    def fail_spool(*_args, **_kwargs):
-        raise AssertionError("default spooled upload parser was used")
-
-    monkeypatch.setattr(starlette.formparsers, "SpooledTemporaryFile", fail_spool)
-
+def test_native_fastapi_file_upload_is_accepted(settings) -> None:
     response = _client(settings).post(
         "/advisor-match/mapping",
         files={
@@ -347,7 +345,17 @@ def test_uploads_do_not_use_starlette_disk_spooling(settings, monkeypatch) -> No
     assert response.status_code == 200
 
 
-def test_upload_limit_is_enforced_while_parsing(settings) -> None:
+def test_native_fastapi_form_requires_configuration(settings) -> None:
+    response = _client(settings).post(
+        "/advisor-match/match",
+        files={"file": ("advisors.csv", b"CRD\n1001\n", "text/csv")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_upload_limit_is_enforced_when_reading_native_upload(settings) -> None:
     limited = settings.__class__(
         project_root=settings.project_root,
         model_name=settings.model_name,
@@ -385,15 +393,15 @@ def test_mapping_rejects_unsupported_or_corrupt_uploads(
     }
 
 
-def test_mapping_rejects_non_multipart_requests_as_unsupported_media(settings) -> None:
+def test_mapping_rejects_non_multipart_requests_as_invalid_contract(settings) -> None:
     response = _client(settings).post(
         "/advisor-match/mapping",
         content=b"CRD\n1001\n",
         headers={"Content-Type": "text/csv"},
     )
 
-    assert response.status_code == 415
-    assert response.json()["error"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_REQUEST"
 
 
 def test_match_reports_reference_provider_unavailability_as_503(settings) -> None:

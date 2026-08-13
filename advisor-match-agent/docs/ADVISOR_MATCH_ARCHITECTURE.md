@@ -8,7 +8,7 @@ configuration, performs its work, and returns the complete result.
 flowchart LR
     UI["Streamlit forms\nephemeral browser session"]
     API["FastAPI\nstateless endpoints"]
-    MP["Bounded in-memory\nmultipart parser"]
+    MP["FastAPI native\nfile upload"]
     MAP["Structured column mapper\nLangChain, max 3 attempts"]
     SVC["Deterministic services"]
     REF["Per-request advisor\nreference source"]
@@ -46,8 +46,9 @@ lookup.
 There is no affinity requirement. Mapping can run on pod A and matching on pod
 B because the second request includes the same file bytes and all confirmed
 configuration. Profile mapping and generation can likewise use different pods.
-No application database, local filesystem, conversation, checkpoint, cache, or
-in-memory workflow session is consulted between requests.
+No application database, persistent local file, conversation, checkpoint,
+cache, or in-memory workflow session is consulted between requests. Native
+uploads may use request-scoped pod-local temporary storage.
 
 The Streamlit UI uses `st.session_state` only for browser convenience. Refresh,
 UI restart, or pod loss clears work in progress by design.
@@ -64,7 +65,7 @@ ordered canonical fields. No rows are cached or persisted.
 ## Failure model
 
 User-correctable mappings and firm choices are `422`; changed bytes are `409`;
-mapping provider failures after three attempts are `502`; reference failures
-are `503`. Unsupported, oversized, and unreadable uploads are `400`. Failed
+oversized uploads are `413`; unsupported file types are `415`; mapping provider
+failures after three attempts are `502`; reference failures are `503`. Failed
 synchronous operations return no partial output and are restarted from the
 beginning when retried.

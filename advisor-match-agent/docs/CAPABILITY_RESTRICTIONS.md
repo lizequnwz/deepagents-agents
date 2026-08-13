@@ -5,7 +5,7 @@
 | General-purpose chat or planning | Not supported | Only four purpose-built REST operations exist. |
 | Graph orchestration or interrupts | Not supported | Form submissions are independent synchronous requests. |
 | Conversations, runs, polling, or cancellation | Not supported | No corresponding models, routes, or stores exist. |
-| Database or local workflow persistence | Not supported | Inputs and outputs are in-memory request/response data. |
+| Database or local workflow persistence | Not supported | Request-scoped uploads may spool locally but are never reused or persisted by the application. |
 | Pod affinity | Not required | Every configured request resends bytes and configuration. |
 | Shell, code execution, package installation | Not exposed | Mapping calls have no tools. |
 | Model-selected advisor matches | Not supported | Matching is deterministic policy version 5 code. |

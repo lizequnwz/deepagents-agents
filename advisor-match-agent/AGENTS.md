@@ -7,14 +7,14 @@
 - It matches one uploaded CSV/XLSX against an authoritative advisor source and
   generates a placeholder profile report from a file containing CRDs.
 - Every API request carries its own source bytes and configuration. There are no
-  conversations, checkpoints, databases, workflow sessions, or local artifacts.
+  conversations, checkpoints, databases, workflow sessions, or persistent local
+  artifacts.
 - Model instructions are not a security boundary. Enforce upload, inspection,
   row, schema, firm-resolution, and matching rules in application code.
 
 ## Start here
 
 - `advisor_match/api.py`: app factory, REST routes, errors, and result packaging.
-- `advisor_match/multipart.py`: bounded in-memory multipart parsing.
 - `advisor_match/mapping.py`: bounded structured column-mapping calls.
 - `advisor_match/advisor_service.py`: stateless deterministic service boundary.
 - `advisor_match/advisor_matching/`: schemas, normalization, policy, matching,

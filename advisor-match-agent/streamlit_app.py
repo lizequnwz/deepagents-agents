@@ -529,7 +529,7 @@ if st.session_state.pop("profile_handoff_notice", False):
         "Matched workbook loaded. Confirm the CRD mapping to generate profiles.",
         icon=":material/check_circle:",
     )
-max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "100"))
+max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "50"))
 with match_tab:
     _render_match_tab(client, max_upload_mb)
 with profile_tab:
