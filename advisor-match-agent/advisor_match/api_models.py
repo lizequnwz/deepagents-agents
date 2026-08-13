@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from advisor_match.advisor_matching.schemas import (
+    ColumnRef,
     CrdInputMapping,
     CrdInputValidationResult,
     FirmResolution,
@@ -38,9 +39,62 @@ class SourceDescription(BaseModel):
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class ProfilePreviewRow(BaseModel):
+    row_number: int = Field(ge=1)
+    values: list[str]
+
+
+class ProfileSampleRow(BaseModel):
+    row_number: int = Field(ge=1)
+    values: dict[str, str]
+
+
+class ProfileColumn(BaseModel):
+    index: int = Field(ge=0)
+    header: str
+    label: str
+    non_null_sample: int = Field(ge=0)
+    pattern: Literal["email", "numeric", "text"]
+
+
+class HeaderCandidate(BaseModel):
+    row_number: int = Field(ge=1)
+    columns: list[ProfileColumn]
+    sample_rows: list[ProfileSampleRow]
+    mapping_suggestions: dict[str, list[ColumnRef]]
+
+
+class HeaderlessColumn(BaseModel):
+    index: int = Field(ge=0)
+    header: None = None
+    label: str
+    pattern: Literal["email", "numeric", "text"]
+
+
+class HeaderlessProfile(BaseModel):
+    columns: list[HeaderlessColumn]
+    sample_rows: list[ProfileSampleRow]
+
+
+class ProfileSheet(BaseModel):
+    name: str | None
+    preview_row_count: int = Field(ge=0)
+    preview_truncated: bool
+    preview_rows: list[ProfilePreviewRow]
+    header_candidates: list[HeaderCandidate]
+    headerless: HeaderlessProfile
+
+
+class UploadProfile(BaseModel):
+    format: Literal["csv", "xlsx"]
+    source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    sheets: list[ProfileSheet]
+    warnings: list[str]
+
+
 class MatchMappingResponse(BaseModel):
     source: SourceDescription
-    profile: dict[str, Any]
+    profile: UploadProfile
     decision: MappingDecision
     validation: MappingValidationResult | None = None
     validation_error: str | None = None
@@ -48,7 +102,7 @@ class MatchMappingResponse(BaseModel):
 
 class ProfileMappingResponse(BaseModel):
     source: SourceDescription
-    profile: dict[str, Any]
+    profile: UploadProfile
     decision: CrdMappingDecision
     validation: CrdInputValidationResult | None = None
     validation_error: str | None = None

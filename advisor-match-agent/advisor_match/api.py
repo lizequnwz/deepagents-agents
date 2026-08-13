@@ -19,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 
 from advisor_match.advisor_matching.index import ReferenceDataQualityError
 from advisor_match.advisor_matching.profiler import inspect_advisor_upload
+from advisor_match.advisor_matching.schemas import ProfileGenerationResult
 from advisor_match.advisor_matching.source import (
     SyntheticAdvisorReferenceSource,
 )
@@ -33,10 +34,11 @@ from advisor_match.api_models import (
 )
 from advisor_match.config import Settings, load_settings
 from advisor_match.firm import FirmResolutionError
-from advisor_match.files import InvalidUploadError
+from advisor_match.files import InvalidUploadError, UnsupportedUploadType
 from advisor_match.mapping import MappingModelError, MappingService
 from advisor_match.multipart import (
     MultipartInputError,
+    UnsupportedMultipartMediaType,
     UploadTooLarge,
     parse_multipart_request,
 )
@@ -48,6 +50,88 @@ from advisor_match.advisor_service import (
 )
 
 logger = logging.getLogger("advisor_match.api")
+
+_FILE_REQUEST_BODY = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "multipart/form-data": {
+                "schema": {
+                    "type": "object",
+                    "required": ["file"],
+                    "properties": {
+                        "file": {
+                            "type": "string",
+                            "format": "binary",
+                            "description": "CSV or XLSX source file.",
+                        }
+                    },
+                }
+            }
+        },
+    }
+}
+
+_CONFIGURED_REQUEST_BODY = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "multipart/form-data": {
+                "schema": {
+                    "type": "object",
+                    "required": ["file", "configuration"],
+                    "properties": {
+                        "file": {
+                            "type": "string",
+                            "format": "binary",
+                            "description": (
+                                "The exact CSV or XLSX file previously analyzed."
+                            ),
+                        },
+                        "configuration": {
+                            "type": "string",
+                            "description": (
+                                "JSON containing the analyzed source SHA-256 and the "
+                                "confirmed mapping from the corresponding mapping endpoint."
+                            ),
+                            "example": json.dumps(
+                                {
+                                    "analyzed_source_sha256": "0" * 64,
+                                    "mapping": {
+                                        "sheet_name": None,
+                                        "header_row": 1,
+                                        "crd_number": {
+                                            "index": 0,
+                                            "header": "CRD",
+                                        },
+                                    },
+                                }
+                            ),
+                        },
+                    },
+                }
+            }
+        },
+    }
+}
+
+_ERROR_DESCRIPTIONS = {
+    400: "Malformed multipart data or an unreadable upload.",
+    409: "The source file changed after analysis.",
+    413: "The upload exceeds the configured size limit.",
+    415: "The request or uploaded file uses an unsupported media type.",
+    422: "The configuration or mapped input is invalid.",
+    502: "The mapping model could not return a valid mapping.",
+    503: "The authoritative advisor source is unavailable or invalid.",
+    500: "Unexpected server error.",
+}
+
+
+def _error_responses(*statuses: int) -> dict[int, dict[str, Any]]:
+    return {
+        status: {"model": ErrorResponse, "description": _ERROR_DESCRIPTIONS[status]}
+        for status in statuses
+    }
 
 
 def create_app(
@@ -111,9 +195,11 @@ def create_app(
             exc.errors(),
         )
 
-    @app.exception_handler(_ResponseException)
-    async def multipart_error(_request: Request, exc: _ResponseException):
-        return exc.response
+    @app.exception_handler(_APIError)
+    async def api_error(request: Request, exc: _APIError):
+        return _error_response(
+            request, exc.status, exc.code, exc.message, exc.details
+        )
 
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception):
@@ -132,8 +218,13 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok", "service": "advisor-match", "version": "1.0.0"}
 
-    @app.post("/advisor-match/mapping", response_model=MatchMappingResponse)
-    async def map_advisor_input(request: Request):
+    @app.post(
+        "/advisor-match/mapping",
+        response_model=MatchMappingResponse,
+        openapi_extra=_FILE_REQUEST_BODY,
+        responses=_error_responses(400, 413, 415, 502, 500),
+    )
+    async def map_advisor_input(request: Request) -> MatchMappingResponse:
         payload = await _parse_payload(request, active_settings, configured=False)
         source = payload.file
         try:
@@ -143,11 +234,11 @@ def create_app(
             )
             decision = await mapper.propose_match(profile)
         except MappingModelError as exc:
-            return _error_response(
-                request, 502, "MAPPING_MODEL_FAILED", str(exc)
-            )
+            raise _APIError(502, "MAPPING_MODEL_FAILED", str(exc)) from exc
+        except UnsupportedUploadType as exc:
+            raise _APIError(415, "UNSUPPORTED_UPLOAD_TYPE", str(exc)) from exc
         except ValueError as exc:
-            return _error_response(request, 400, "INVALID_UPLOAD", str(exc))
+            raise _APIError(400, "INVALID_UPLOAD", str(exc)) from exc
         validation = None
         validation_error = None
         if decision.mapping is not None:
@@ -165,21 +256,37 @@ def create_app(
             validation_error=validation_error,
         )
 
-    @app.post("/advisor-match/match")
-    async def match_advisors(request: Request):
+    @app.post(
+        "/advisor-match/match",
+        response_class=Response,
+        openapi_extra=_CONFIGURED_REQUEST_BODY,
+        responses={
+            200: {
+                "description": (
+                    "ZIP containing advisor_matches.xlsx and result.json."
+                ),
+                "content": {
+                    "application/zip": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                },
+            },
+            **_error_responses(400, 409, 413, 415, 422, 503, 500),
+        },
+    )
+    async def match_advisors(request: Request) -> Response:
         payload = await _parse_payload(request, active_settings, configured=True)
         try:
             configuration = MatchConfiguration.model_validate_json(
                 payload.configuration or ""
             )
         except ValidationError as exc:
-            return _error_response(
-                request,
+            raise _APIError(
                 422,
                 "INVALID_CONFIGURATION",
                 "The match configuration is invalid.",
                 exc.errors(),
-            )
+            ) from exc
         try:
             execution = await run_in_threadpool(
                 partial(
@@ -192,18 +299,16 @@ def create_app(
                 )
             )
         except SourceHashMismatch as exc:
-            return _error_response(request, 409, "SOURCE_CHANGED", str(exc))
+            raise _APIError(409, "SOURCE_CHANGED", str(exc)) from exc
         except FirmResolutionError as exc:
-            return _error_response(
-                request,
+            raise _APIError(
                 422,
                 "FIRM_RESOLUTION_REQUIRED",
                 str(exc),
                 exc.details.model_dump(mode="json"),
-            )
+            ) from exc
         except ReferenceDataQualityError as exc:
-            return _error_response(
-                request,
+            raise _APIError(
                 503,
                 exc.code,
                 "The authoritative advisor source contains duplicate CRDs.",
@@ -214,15 +319,15 @@ def create_app(
                         for crd, count in list(exc.duplicate_crds.items())[:10]
                     ],
                 },
-            )
+            ) from exc
         except ReferenceSourceError as exc:
-            return _error_response(
-                request, 503, "REFERENCE_SOURCE_INVALID", str(exc)
-            )
+            raise _APIError(503, "REFERENCE_SOURCE_INVALID", str(exc)) from exc
+        except UnsupportedUploadType as exc:
+            raise _APIError(415, "UNSUPPORTED_UPLOAD_TYPE", str(exc)) from exc
         except InvalidUploadError as exc:
-            return _error_response(request, 400, "INVALID_UPLOAD", str(exc))
+            raise _APIError(400, "INVALID_UPLOAD", str(exc)) from exc
         except ValueError as exc:
-            return _error_response(request, 422, "INVALID_MATCH_INPUT", str(exc))
+            raise _APIError(422, "INVALID_MATCH_INPUT", str(exc)) from exc
         content = _match_zip(execution.workbook, execution.result.model_dump(mode="json"))
         return Response(
             content=content,
@@ -232,8 +337,13 @@ def create_app(
             },
         )
 
-    @app.post("/advisor-profile/mapping", response_model=ProfileMappingResponse)
-    async def map_profile_input(request: Request):
+    @app.post(
+        "/advisor-profile/mapping",
+        response_model=ProfileMappingResponse,
+        openapi_extra=_FILE_REQUEST_BODY,
+        responses=_error_responses(400, 413, 415, 502, 500),
+    )
+    async def map_profile_input(request: Request) -> ProfileMappingResponse:
         payload = await _parse_payload(request, active_settings, configured=False)
         source = payload.file
         try:
@@ -243,11 +353,11 @@ def create_app(
             )
             decision = await mapper.propose_crd(profile)
         except MappingModelError as exc:
-            return _error_response(
-                request, 502, "MAPPING_MODEL_FAILED", str(exc)
-            )
+            raise _APIError(502, "MAPPING_MODEL_FAILED", str(exc)) from exc
+        except UnsupportedUploadType as exc:
+            raise _APIError(415, "UNSUPPORTED_UPLOAD_TYPE", str(exc)) from exc
         except ValueError as exc:
-            return _error_response(request, 400, "INVALID_UPLOAD", str(exc))
+            raise _APIError(400, "INVALID_UPLOAD", str(exc)) from exc
         validation = None
         validation_error = None
         if decision.mapping is not None:
@@ -265,21 +375,25 @@ def create_app(
             validation_error=validation_error,
         )
 
-    @app.post("/advisor-profile/generate")
-    async def generate_profile(request: Request):
+    @app.post(
+        "/advisor-profile/generate",
+        response_model=ProfileGenerationResult,
+        openapi_extra=_CONFIGURED_REQUEST_BODY,
+        responses=_error_responses(400, 409, 413, 415, 422, 500),
+    )
+    async def generate_profile(request: Request) -> ProfileGenerationResult:
         payload = await _parse_payload(request, active_settings, configured=True)
         try:
             configuration = ProfileConfiguration.model_validate_json(
                 payload.configuration or ""
             )
         except ValidationError as exc:
-            return _error_response(
-                request,
+            raise _APIError(
                 422,
                 "INVALID_CONFIGURATION",
                 "The profile configuration is invalid.",
                 exc.errors(),
-            )
+            ) from exc
         try:
             result = await run_in_threadpool(
                 partial(
@@ -290,14 +404,14 @@ def create_app(
                 )
             )
         except SourceHashMismatch as exc:
-            return _error_response(request, 409, "SOURCE_CHANGED", str(exc))
+            raise _APIError(409, "SOURCE_CHANGED", str(exc)) from exc
+        except UnsupportedUploadType as exc:
+            raise _APIError(415, "UNSUPPORTED_UPLOAD_TYPE", str(exc)) from exc
         except InvalidUploadError as exc:
-            return _error_response(request, 400, "INVALID_UPLOAD", str(exc))
+            raise _APIError(400, "INVALID_UPLOAD", str(exc)) from exc
         except ValueError as exc:
-            return _error_response(
-                request, 422, "INVALID_PROFILE_INPUT", str(exc)
-            )
-        return result.model_dump(mode="json")
+            raise _APIError(422, "INVALID_PROFILE_INPUT", str(exc)) from exc
+        return result
 
     return app
 
@@ -312,20 +426,26 @@ async def _parse_payload(
             configuration_required=configured,
         )
     except UploadTooLarge as exc:
-        return _raise_response(request, 400, "UPLOAD_TOO_LARGE", str(exc))
+        raise _APIError(413, "UPLOAD_TOO_LARGE", str(exc)) from exc
+    except UnsupportedMultipartMediaType as exc:
+        raise _APIError(415, "UNSUPPORTED_MEDIA_TYPE", str(exc)) from exc
     except MultipartInputError as exc:
-        return _raise_response(request, 400, "INVALID_MULTIPART", str(exc))
+        raise _APIError(400, "INVALID_MULTIPART", str(exc)) from exc
 
 
-class _ResponseException(Exception):
-    def __init__(self, response: JSONResponse) -> None:
-        self.response = response
-
-
-def _raise_response(
-    request: Request, status: int, code: str, message: str
-) -> Any:
-    raise _ResponseException(_error_response(request, status, code, message))
+class _APIError(Exception):
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        message: str,
+        details: Any | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.code = code
+        self.message = message
+        self.details = details
 
 
 def _source_description(source) -> SourceDescription:

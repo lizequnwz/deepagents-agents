@@ -24,6 +24,10 @@ class UploadTooLarge(MultipartInputError):
     pass
 
 
+class UnsupportedMultipartMediaType(MultipartInputError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class MultipartPayload:
     file: InMemoryFile
@@ -50,7 +54,9 @@ async def parse_multipart_request(
     content_type = request.headers.get("content-type", "")
     media_type, options = parse_options_header(content_type)
     if media_type != b"multipart/form-data" or b"boundary" not in options:
-        raise MultipartInputError("Content-Type must be multipart/form-data.")
+        raise UnsupportedMultipartMediaType(
+            "Content-Type must be multipart/form-data."
+        )
 
     request_limit = max_upload_bytes + _REQUEST_OVERHEAD_LIMIT
     declared_length = request.headers.get("content-length")

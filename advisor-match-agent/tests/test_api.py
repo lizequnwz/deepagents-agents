@@ -290,6 +290,42 @@ def test_health_is_minimal_and_has_no_state_claims(settings) -> None:
     assert body == {"status": "ok", "service": "advisor-match", "version": "1.0.0"}
 
 
+def test_openapi_documents_real_multipart_and_response_contracts(settings) -> None:
+    schema = _client(settings).get("/openapi.json").json()
+    paths = schema["paths"]
+
+    for path in ("/advisor-match/mapping", "/advisor-profile/mapping"):
+        body = paths[path]["post"]["requestBody"]
+        multipart = body["content"]["multipart/form-data"]["schema"]
+        assert body["required"] is True
+        assert multipart["required"] == ["file"]
+        assert multipart["properties"]["file"]["format"] == "binary"
+
+    for path in ("/advisor-match/match", "/advisor-profile/generate"):
+        multipart = paths[path]["post"]["requestBody"]["content"][
+            "multipart/form-data"
+        ]["schema"]
+        assert multipart["required"] == ["file", "configuration"]
+        assert multipart["properties"]["configuration"]["type"] == "string"
+
+    match_success = paths["/advisor-match/match"]["post"]["responses"]["200"]
+    assert set(match_success["content"]) == {"application/zip"}
+    assert match_success["content"]["application/zip"]["schema"] == {
+        "type": "string",
+        "format": "binary",
+    }
+    profile_success = paths["/advisor-profile/generate"]["post"]["responses"][
+        "200"
+    ]
+    assert profile_success["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ProfileGenerationResult"
+    }
+    mapping_profile = schema["components"]["schemas"]["MatchMappingResponse"][
+        "properties"
+    ]["profile"]
+    assert mapping_profile == {"$ref": "#/components/schemas/UploadProfile"}
+
+
 def test_uploads_do_not_use_starlette_disk_spooling(settings, monkeypatch) -> None:
     import starlette.formparsers
 
@@ -323,27 +359,41 @@ def test_upload_limit_is_enforced_while_parsing(settings) -> None:
         files={"file": ("advisors.csv", b"x" * (1024 * 1024 + 1))},
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] in {
-        "UPLOAD_TOO_LARGE",
-        "INVALID_MULTIPART",
-    }
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "UPLOAD_TOO_LARGE"
 
 
 @pytest.mark.parametrize(
-    ("filename", "content"),
-    [("advisors.txt", b"CRD\n1001\n"), ("advisors.xlsx", b"not-an-xlsx")],
+    ("filename", "content", "expected_status"),
+    [
+        ("advisors.txt", b"CRD\n1001\n", 415),
+        ("advisors.xlsx", b"not-an-xlsx", 400),
+    ],
 )
 def test_mapping_rejects_unsupported_or_corrupt_uploads(
-    settings, filename, content
+    settings, filename, content, expected_status
 ) -> None:
     response = _client(settings).post(
         "/advisor-match/mapping",
         files={"file": (filename, content)},
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "INVALID_UPLOAD"
+    assert response.status_code == expected_status
+    assert response.json()["error"]["code"] in {
+        "INVALID_UPLOAD",
+        "UNSUPPORTED_UPLOAD_TYPE",
+    }
+
+
+def test_mapping_rejects_non_multipart_requests_as_unsupported_media(settings) -> None:
+    response = _client(settings).post(
+        "/advisor-match/mapping",
+        content=b"CRD\n1001\n",
+        headers={"Content-Type": "text/csv"},
+    )
+
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
 
 
 def test_match_reports_reference_provider_unavailability_as_503(settings) -> None:

@@ -12,6 +12,10 @@ class InvalidUploadError(ValueError):
     """The uploaded bytes or declared table format cannot be processed."""
 
 
+class UnsupportedUploadType(InvalidUploadError):
+    """The uploaded filename declares an unsupported table format."""
+
+
 @dataclass(frozen=True, slots=True)
 class InMemoryFile:
     filename: str
@@ -31,6 +35,6 @@ class InMemoryFile:
 
     def validate_table_type(self) -> None:
         if self.suffix not in {".csv", ".xlsx"}:
-            raise InvalidUploadError(
+            raise UnsupportedUploadType(
                 "Advisor Match accepts only CSV or XLSX files."
             )
