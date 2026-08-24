@@ -34,7 +34,7 @@ therefore declare an empty `target` mapping.
 
 - readiness and target-access diagnostics;
 - `snowflake` dialect validation;
-- exact reviewed-query execution;
+- exact validated-query execution;
 - provider-native timeout/cancellation;
 - bounded fetch and accurate truncation;
 - JSON-safe value normalization;

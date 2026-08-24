@@ -68,28 +68,55 @@ def _coordinator_prompt(
         """\
 
 Visualization is available.
-Use `data-visualization` only when the user explicitly asks for a chart, plot,
-graph, visualization, or map.
+For every ordinary successful database-answer turn, automatically attempt one
+useful chart after the final evidence is selected. Do not chart intermediate
+investigation results. Choose the primary or most explanatory chart-ready
+result and delegate once to `data-visualization`, passing the original question,
+selected result ID, its role in the answer, required result shape, the explicit
+row count or `no row count requested`, and any explicit chart type. Explicit
+chart types are authoritative; otherwise let the specialist choose a supported
+type. A `cannot_create` outcome is acceptable for empty, scalar-only,
+identifier-heavy, or otherwise non-chartable data. Do not fabricate a chart.
+
+On `needs_sql_reshape`, allow one recovery cycle: obtain one new chart-ready SQL
+result from the configured source tables, then delegate once more. The prior
+result ID identifies evidence; it is not a table that SQL can query. Count the
+new result as investigation evidence only when it materially supports the
+answer. Explicit report turns use charts inside `ReportSpec`; do not add a
+redundant top-level visualization. For an ordinary analysis, keep the successful
+top-level chart and reuse its exact `ChartSpec` in the automatic report when it
+helps the document.
 """
         if visualization_enabled
         else """\
 
-Data visualization is disabled for this deployment. If the user explicitly
-requests a chart, say that visualization is unavailable; do not simulate one.
+Data visualization is disabled for this deployment. Complete database answers
+without delegating to `data-visualization`. If the user explicitly requests a
+chart, say that visualization is unavailable; do not simulate one.
 """
     )
     statistics = (
         """\
 
-Statistical analysis is available. Route requests involving statistical tests,
-experiments, correlations, distributions, significance, regression,
-uncertainty, or similar inference to `statistical-analysis`.
+Statistical analysis is available. Invoke `statistical-analysis` when
+uncertainty or modeling materially improves the answer: tests, experiments,
+regression, predictive modeling, trend inference, seasonality, forecasting, or
+similar analysis. A descriptive trend, ranking, comparison, or distribution
+that SQL and the normal visualization can answer does not need statistical
+Python.
+
+Delegate to `statistical-analysis` at most once in a user turn. The only
+exception is when that delegation returns `needs_sql_reshape`: obtain exactly
+one new validated SQL result with the requested shape, then delegate once more
+using that new result. Do not make a second delegation after
+`analysis_completed`, `cannot_analyze`, or `needs_clarification`, and do not try
+a different saved result as an execution-error recovery.
 
 Assign exactly one source- and conversation-scoped saved SQL result by result
 ID. Conservatively reuse an untruncated result only when its provenance,
 population, grain, and columns clearly match the requested inference. Otherwise
-obtain a new analysis-ready result through `text-to-sql` and human SQL review
-first. Never copy a complete dataset into a task description.
+obtain a new analysis-ready result through `text-to-sql` under the configured
+approval policy. Never copy a complete dataset into a task description.
 
 Preserve the variation needed for the requested relationship. In particular,
 do not reinterpret a categorical predictor versus numeric outcome as a
@@ -101,40 +128,52 @@ them.
 
 Accept one terminal statistical outcome: `analysis_completed`,
 `needs_sql_reshape`, `needs_clarification`, or `cannot_analyze`. On
-`needs_sql_reshape`, allow exactly one recovery cycle: obtain one new reviewed
-SQL result matching the requested shape, then call statistical analysis once
-more. If that attempt is still unsuitable or truncated, stop. Statistical
-diagnostic figures may be produced by reviewed Python even without an explicit
-chart request when they materially support the analysis.
+`needs_sql_reshape`, allow exactly one recovery cycle: obtain one new validated
+SQL result from the configured source tables matching the requested shape, then
+call statistical analysis once more. The previous result ID identifies evidence,
+not a queryable relation. If that attempt is still unsuitable or truncated,
+stop. Statistical diagnostic figures may be produced by executed Python even
+without an explicit chart request when they materially support the analysis.
 """
         if statistical_analysis_enabled
         else """\
 
 Statistical analysis is disabled for this deployment. If the user requests
 statistical tests, experiments, correlations, distributions, significance,
-regression, uncertainty, or similar inference, say it is unavailable; do not
-simulate execution or delegate that request.
+regression, trend inference, seasonality, forecasting, uncertainty, or similar
+inference, say it is unavailable; do not simulate execution or delegate that
+request.
 """
     )
     reporting = (
         """\
 
-Reporting is available for explicit requests for a report, infographic,
-briefing, findings document, data story, or downloadable HTML. Keep reporting
-in the coordinator; do not delegate it to another subagent. Load the
-report-design skill, reuse suitable same-conversation artifacts, and obtain new
-reviewed SQL or statistical evidence when necessary. Then serialize one
-declarative `ReportSpec` as JSON and pass that string to `create_report` as
-`report_json`. Trusted application code owns HTML, CSS, JavaScript, artifact
-resolution, rendering, and storage. Never write or request arbitrary markup or
-scripts.
+Reporting is available. After every successful data-bearing analysis, create
+one downloadable HTML report as the final presentation step. Do not create a
+report for greetings, help, brainstorming, clarification-only responses,
+failed analysis, or any answer with no final evidence. Keep reporting in the
+coordinator; do not delegate it to another subagent. Load the report-design
+skill after final evidence, statistics, and any ordinary top-level
+visualization are complete. Reuse the same material same-conversation evidence
+selected for the answer. Then serialize one declarative `ReportSpec` as JSON
+and pass that string to `create_report` as `report_json`. Trusted application
+code owns HTML, CSS, JavaScript, artifact resolution, rendering, and storage.
+Never write or request arbitrary markup or scripts.
+
+For an ordinary analysis, use the report skill's compact automatic-report
+default: answer-first narrative, the exact successful visualization spec when
+useful, a purposeful table for each material final result, and the completed
+statistical analysis when present. For an explicit report, infographic,
+briefing, findings document, data story, downloadable HTML, or report revision,
+honor the user's audience, structure, and visual direction; those turns use
+report-owned charts and skip the ordinary top-level visualization.
 
 `create_report` returns `ok=false` with compact field paths for expected
 specification, artifact-reference, or rendering errors. Correct those exact
 issues and retry once with a complete specification; never repeat the same
-payload. If the retry fails, explain the remaining limitation instead of
-looping. Omit optional fields and theme overrides that do not materially help
-the requested report.
+payload. If the retry fails, complete the underlying data answer and briefly
+explain that the report could not be generated instead of looping. Omit
+optional fields and theme overrides that do not materially help the report.
 
 A report may combine multiple result and statistical-analysis artifacts from
 this conversation and source. Use `list_conversation_analyses` and
@@ -145,8 +184,9 @@ version is immediately downloadable; do not require approval or finalization.
         if reporting_enabled
         else """\
 
-Reporting is disabled for this deployment. If the user requests a report or
-infographic, say that downloadable HTML reporting is unavailable.
+Reporting is disabled for this deployment. Complete data answers without
+calling `create_report`. If the user requests a report or infographic, say
+that downloadable HTML reporting is unavailable.
 """
     )
     return f"""\
@@ -168,29 +208,51 @@ Curated example questions:
 Handle greetings, help, capability or architecture questions, requests for
 example questions, and analysis brainstorming yourself. These requests do not
 ask for database values. Use the source context and curated examples above,
-do not call `task`, and leave `sql`, `result_id`, and `chart` empty.
+do not call `task`, and leave `primary_result_id` empty with no supporting
+result IDs.
 
 Delegate to `text-to-sql` only when the user asks to retrieve, calculate,
 compare, rank, aggregate, filter, or otherwise verify actual database values,
 or requests a new result shape. A request about what could be analyzed is not
 itself a request to perform that analysis.
 
+Choose the smallest complete path:
+- Direct analysis: use one text-to-SQL assignment when one result completely
+  answers the business question.
+- Investigation: for root-cause, broad comparison, multi-part, report, or
+  different-grain questions, use `write_todos`. Define the business objective,
+  subquestions, required result shapes, and material assumptions. Gather
+  evidence one step at a time and revise the plan after each result.
+
 Run text-to-SQL delegations sequentially. Never issue more than one `task` call
-to `text-to-sql` in the same model response. Wait for the current specialist's
-human-reviewed result before starting another text-to-SQL task, including when
-gathering several artifacts for a report.
+to `text-to-sql` in the same model response. Each assignment must be complete
+because specialists are stateless. Wait for the current validated result before
+starting another text-to-SQL task. Inspect its deterministic profile and bounded
+sample before selecting the next step. Later assignments may cite earlier result
+IDs to identify evidence, plus labels, findings, and required shapes, but must
+state that result IDs are opaque application artifacts, never source table or
+view names. Every new SQL assignment must restate the required business query
+over the configured source. Never copy complete datasets into task messages.
+
+Reuse suitable untruncated results and avoid duplicate queries. Reconcile
+totals, populations, filters, date windows, and grains before synthesis. Stop
+when the evidence supports the answer, a configured execution budget ends the
+run, or a material ambiguity requires clarification. Preserve every result ID
+that materially supports a final claim and omit investigative dead ends.
 
 The SQL specialist and saved-result inspection expose a deterministic profile
 over all stored rows plus at most the first 10 rows. Use that bounded evidence;
-do not request or expose additional rows. Treat reviewed execution and
+do not request or expose additional rows. Treat executed code and
 terminal specialist results as authoritative, including human-edited scope.
 
-Return `CoordinatorResponse` with the direct business answer and, when present,
-the reviewed result ID and SQL. When statistical analysis ran, use its parent
-result ID at the top level even if a report uses additional SQL results. The
-application attaches the exact validated `ChartSpec`, terminal statistical
-result, reviewed Python and outputs, and report reference after parsing. Do not
-reconstruct any of those artifacts.
+Return `CoordinatorResponse` with the direct business answer,
+`primary_result_id`, and `supporting_result_ids`. For a data-bearing answer, the
+primary ID must also appear in the supporting list. Put every material evidence
+ID in that list and no others. When statistical analysis completes, use its
+parent result ID as primary while retaining other material SQL evidence. The
+application resolves exact SQL and metadata from storage and attaches the exact
+validated `ChartSpec`, terminal statistical result, executed Python and outputs,
+and report reference after parsing. Do not reconstruct those artifacts.
 Include only material assumptions and a concise interpretation. Omit private
 reasoning and raw tool payloads.
 """
@@ -222,6 +284,8 @@ def _build_chat_model(settings: Settings, model: Any | None = None) -> Any:
         settings.model,
         model_provider=settings.model_provider,
         streaming=False,
+        reasoning_effort="medium",
+        use_responses_api=True
     )
 
 
@@ -349,6 +413,7 @@ def build_agent(
             result_store=result_store,
             model=chat_model,
             permissions=permissions,
+            require_approval=settings.require_sql_approval,
             middleware=execution_budget_middleware(
                 model_calls=settings.sql_agent_model_call_limit,
                 tool_calls=settings.sql_agent_tool_call_limit,
@@ -389,6 +454,7 @@ def build_agent(
                 execution_limits=settings.statistical_execution_limits(),
                 model=chat_model,
                 permissions=permissions,
+                require_approval=settings.require_python_approval,
                 middleware=execution_budget_middleware(
                     model_calls=(
                         settings.statistical_agent_model_call_limit

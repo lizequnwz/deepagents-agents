@@ -33,7 +33,9 @@ from data_analytics_agent.run_manager import (
 )
 from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.schemas import (
+    CoordinatorResponse,
     FinalAnswer,
+    ResultReference,
     SQLAnalysisResult,
     SavedResult,
 )
@@ -80,6 +82,15 @@ def _bar_spec(**updates) -> ChartSpec:
     }
     values.update(updates)
     return ChartSpec.model_validate(values)
+
+
+def _reference(result_id: str = "result-1") -> ResultReference:
+    return ResultReference(
+        result_id=result_id,
+        executed_sql="SELECT category, amount FROM metrics",
+        originating_question="Show metrics",
+        short_label="Show metrics",
+    )
 
 
 def test_chart_spec_is_constrained_and_rejects_ambiguous_wide_color() -> None:
@@ -471,15 +482,14 @@ def test_exact_visualization_subagent_result_overrides_coordinator_chart() -> No
     }
     answer = FinalAnswer(
         answer="Made a chart.",
-        result_id=approved.result_id,
+        primary_result_id=approved.result_id,
+        results=[_reference(approved.result_id)],
         chart=_bar_spec(title="Stale title"),
     )
 
     authoritative = _apply_visualization(answer, output)
     assert authoritative.chart == approved
-    assert authoritative.answer == (
-        "Chart generated successfully: bar chart 'Generated title'."
-    )
+    assert authoritative.answer == "Made a chart."
 
 
 def test_terminal_visualization_failure_clears_stale_chart() -> None:
@@ -501,13 +511,14 @@ def test_terminal_visualization_failure_clears_stale_chart() -> None:
     authoritative = _apply_visualization(
         FinalAnswer(
             answer="Working.",
-            result_id="result-1",
+            primary_result_id="result-1",
+            results=[_reference()],
             chart=_bar_spec(),
         ),
         output,
     )
 
-    assert authoritative.answer == outcome.answer
+    assert authoritative.answer == "Working."
     assert authoritative.chart is None
 
 
@@ -644,15 +655,16 @@ def test_chart_request_preserves_coordinator_answer_with_exact_sql_result() -> N
             AIMessage(content="Here is the generated chart."),
         ]
     }
-    answer = FinalAnswer(
+    answer = CoordinatorResponse(
         answer="Here is the generated chart.",
-        result_id=approved.result_id,
-        chart=approved,
+        primary_result_id=approved.result_id,
+        supporting_result_ids=[approved.result_id],
     )
 
     authoritative = _apply_sql_analysis(answer, output)
     assert authoritative.answer == "Here is the generated chart."
-    assert authoritative.sql == sql_result.sql
+    assert authoritative.primary_result_id == sql_result.result_id
+    assert authoritative.supporting_result_ids == [sql_result.result_id]
 
 
 def test_answer_chart_must_match_saved_result_provenance() -> None:
@@ -677,12 +689,85 @@ def test_answer_chart_must_match_saved_result_provenance() -> None:
     answer = manager._validate_answer_provenance(
         FinalAnswer(
             answer="Chart.",
-            result_id=saved.result_id,
+            primary_result_id=saved.result_id,
+            results=[
+                ResultReference(
+                    result_id=saved.result_id,
+                    executed_sql="SELECT stale",
+                    originating_question="Stale",
+                    short_label="Stale",
+                )
+            ],
             chart=spec,
         ),
         "thread-1",
         "source-1",
     )
 
-    assert answer.sql == saved.executed_sql
+    assert answer.results[0].executed_sql == saved.executed_sql
     assert answer.chart == spec
+
+
+def test_chart_may_reference_scoped_supporting_evidence() -> None:
+    results = ResultStore()
+    primary = results.save(
+        thread_id="thread-1",
+        source_id="source-1",
+        executed_sql="SELECT category, total FROM summary",
+        columns=["category", "total"],
+        rows=[{"category": "A", "total": 10}],
+        truncated=False,
+        elapsed_ms=1,
+    )
+    chart_result = results.save(
+        thread_id="thread-1",
+        source_id="source-1",
+        executed_sql="SELECT category, amount FROM metrics",
+        columns=["category", "amount"],
+        rows=[{"category": "A", "amount": 1}],
+        truncated=False,
+        elapsed_ms=1,
+    )
+    outside = results.save(
+        thread_id="thread-1",
+        source_id="source-1",
+        executed_sql="SELECT category, amount FROM unused_metrics",
+        columns=["category", "amount"],
+        rows=[{"category": "A", "amount": 2}],
+        truncated=False,
+        elapsed_ms=1,
+    )
+    manager = RunManager(
+        agent=object(),
+        conversations=ConversationStore(),
+        runs=RunStore(),
+        results=results,
+    )
+    answer = FinalAnswer(
+        answer="Supporting evidence explains the primary result.",
+        primary_result_id=primary.result_id,
+        results=[
+            _reference(primary.result_id),
+            _reference(chart_result.result_id),
+        ],
+        chart=_bar_spec(result_id=chart_result.result_id),
+    )
+
+    validated = manager._validate_answer_provenance(
+        answer,
+        "thread-1",
+        "source-1",
+    )
+
+    assert validated.primary_result_id == primary.result_id
+    assert validated.chart is not None
+    assert validated.chart.result_id == chart_result.result_id
+
+    with pytest.raises(RuntimeError, match="outside the final evidence"):
+        manager._validate_answer_provenance(
+            answer.model_copy(
+                update={"chart": _bar_spec(result_id=outside.result_id)}
+            ),
+            "thread-1",
+            "source-1",
+        )

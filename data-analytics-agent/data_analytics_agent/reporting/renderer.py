@@ -480,7 +480,7 @@ body[data-theme='dark'] {{ --surface: #111827; --background: #020617; --text: #F
 
 
 def _sql_queries(results: Mapping[str, SavedResult]) -> str:
-    """Render exact reviewed SQL without exposing opaque artifact IDs."""
+    """Render exact executed SQL without exposing opaque artifact IDs."""
 
     if not results:
         return ""
@@ -501,7 +501,7 @@ def _sql_queries(results: Mapping[str, SavedResult]) -> str:
     return (
         '<section class="report-block sql-queries">'
         "<h2>SQL queries</h2>"
-        '<p class="sql-queries-intro">Run these exact reviewed queries against '
+        '<p class="sql-queries-intro">Run these exact executed queries against '
         "the report data source to reproduce its inputs.</p>"
         f"{query_items}</section>"
     )

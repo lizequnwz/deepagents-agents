@@ -5,13 +5,19 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from langchain_core.messages import AIMessage
+from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
 
-from data_analytics_agent.backends import SQLiteBackend
+from data_analytics_agent.backends import SQLExecutionError, SQLiteBackend
 from data_analytics_agent.config import Settings
 from data_analytics_agent.data_sources import DataSource, ExecutionLimits
 from data_analytics_agent.agents.text_to_sql.tools import (
+    AnalyticsAgentState,
     MAX_RESULT_ROWS,
     SQLValidationError,
+    create_execute_sql_tool,
+    create_validate_sql_tool,
     execute_query,
     validate_readonly_sql,
 )
@@ -99,6 +105,77 @@ def test_exact_sql_cap_truncation_and_model_sample(database: Path) -> None:
         "thread-a",
         source_id="chinook",
     ).rows[-1]["value"] == 499
+
+
+def test_missing_relation_is_a_backend_execution_error(database: Path) -> None:
+    backend = SQLiteBackend(database)
+    query = (
+        "SELECT * FROM "
+        "result_50ceb129_c903_407c_bd53_f7293621065d"
+    )
+
+    backend.validate_sql(query)
+    with pytest.raises(
+        SQLExecutionError,
+        match="no such table: result_50ceb129",
+    ):
+        backend.execute(query, timeout_seconds=2, max_rows=10)
+
+
+def test_sql_tool_errors_are_recoverable_model_observations(
+    database: Path,
+) -> None:
+    source = _source()
+    backend = SQLiteBackend(database)
+    validate_tool = create_validate_sql_tool(backend)
+    execute_tool = create_execute_sql_tool(
+        source,
+        backend,
+        ResultStore(),
+    )
+
+    assert validate_tool.handle_tool_error is True
+    assert execute_tool.handle_tool_error is True
+    assert validate_tool.run({"query": "DELETE FROM numbers"}).startswith(
+        "SQL validation failed:"
+    )
+
+    builder = StateGraph(AnalyticsAgentState)
+    builder.add_node("tools", ToolNode([execute_tool]))
+    builder.add_edge(START, "tools")
+    builder.add_edge("tools", END)
+    graph = builder.compile()
+    output = graph.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "execute_sql",
+                            "args": {
+                                "query": (
+                                    "SELECT * FROM "
+                                    "result_50ceb129_c903_407c_bd53_f7293621065d"
+                                )
+                            },
+                            "id": "execute-invalid-relation",
+                        }
+                    ],
+                )
+            ],
+            "thread_id": "thread-a",
+            "run_id": "run-a",
+            "source_id": source.source_id,
+            "question": "Analyze the saved result",
+        }
+    )
+
+    observation = output["messages"][-1]
+    assert observation.status == "error"
+    assert "Saved result IDs are evidence handles, not source tables" in (
+        observation.content
+    )
 
 
 def test_readonly_database_remains_unchanged(database: Path) -> None:

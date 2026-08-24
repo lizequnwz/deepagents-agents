@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Analytics Agent — Architecture</title>
+  <style>
+    :root {
+      --paper: #f5f5f5;
+      --paper-2: #ececec;
+      --ink: #2d3142;
+      --muted: #4f5d75;
+      --soft: #7a8399;
+      --rule: rgba(45, 49, 66, 0.12);
+      --rule-solid: #bfc0c0;
+      --accent: #eb6c36;
+      --accent-tint: rgba(235, 108, 54, 0.08);
+      --link: #2e5aa8;
+    }
+
+    [data-theme="dark"] {
+      --paper: #2d3142;
+      --paper-2: #393e53;
+      --ink: #f5f5f5;
+      --muted: #bfc0c0;
+      --soft: #8e98ac;
+      --rule: rgba(245, 245, 245, 0.12);
+      --rule-solid: rgba(191, 192, 192, 0.25);
+      --accent: #f08a59;
+      --accent-tint: rgba(240, 138, 89, 0.10);
+      --link: #6a95d8;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Geist, Inter, "Avenir Next", system-ui, sans-serif;
+    }
+    .page { max-width: 1680px; margin: 0 auto; padding: 28px 28px 18px; }
+    .toolbar {
+      display: flex; justify-content: space-between; align-items: end; gap: 20px;
+      padding: 0 8px 18px; border-bottom: 1px solid var(--rule);
+    }
+    h1 { margin: 0; font: 400 32px/1.05 Georgia, "Times New Roman", serif; letter-spacing: -0.02em; }
+    .subtitle { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    figure { margin: 22px 0 0; }
+    svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .caption {
+      display: flex; justify-content: space-between; gap: 20px; margin: 12px 8px 0;
+      color: var(--soft); font: 400 10px/1.4 Geist Mono, monospace;
+    }
+    .caption span:last-child { text-align: right; }
+    @media (max-width: 900px) {
+      .toolbar { align-items: start; flex-direction: column; }
+      .caption { flex-direction: column; gap: 4px; }
+      .caption span:last-child { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="toolbar">
+      <div>
+        <h1>Data Analytics Agent</h1>
+        <p class="subtitle">Source-bound, human-reviewed analysis from question to portable artifact.</p>
+      </div>
+    </header>
+
+    <figure>
+      <svg id="architecture" viewBox="0 0 1600 1000" role="img" aria-labelledby="diagram-title diagram-desc" xmlns="http://www.w3.org/2000/svg">
+        <title id="diagram-title">Data Analytics Agent architecture</title>
+        <desc id="diagram-desc">An architecture overview showing the analyst and Streamlit experience flowing through FastAPI and a source-bound coordinator into reviewed SQL, visualization, statistical analysis, and reporting capabilities, backed by SQL providers and scoped artifact stores.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="var(--muted)"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="var(--link)"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="var(--accent)"/></marker>
+          <style>
+            svg { --paper: #f5f5f5; --paper-2: #ececec; --ink: #2d3142; --muted: #4f5d75; --soft: #7a8399; --rule: rgba(45,49,66,.12); --rule-solid: #bfc0c0; --accent: #eb6c36; --accent-tint: rgba(235,108,54,.08); --link: #2e5aa8; }
+            svg.dark { --paper: #2d3142; --paper-2: #393e53; --ink: #f5f5f5; --muted: #bfc0c0; --soft: #8e98ac; --rule: rgba(245,245,245,.12); --rule-solid: rgba(191,192,192,.25); --accent: #f08a59; --accent-tint: rgba(240,138,89,.10); --link: #6a95d8; }
+            .title { fill: var(--ink); font: 600 18px Geist, Inter, sans-serif; }
+            .zone-label, .eyebrow, .tag { fill: var(--soft); font: 500 10px "SFMono-Regular", Menlo, monospace; letter-spacing: .16em; }
+            .zone-label { font-size: 11px; }
+            .node-name { fill: var(--ink); font: 600 15px Geist, Inter, sans-serif; }
+            .node-sub { fill: var(--muted); font: 400 10px "SFMono-Regular", Menlo, monospace; }
+            .node-note { fill: var(--soft); font: 400 9px "SFMono-Regular", Menlo, monospace; }
+            .edge-label { fill: var(--muted); font: 400 9px "SFMono-Regular", Menlo, monospace; letter-spacing: .04em; }
+            .callout { fill: var(--muted); font: italic 16px Georgia, serif; }
+            .zone { fill: rgba(45,49,66,.02); stroke: var(--rule); stroke-width: 1; }
+            .dark .zone { fill: rgba(245,245,245,.02); }
+            .zone-mask, .edge-mask { fill: var(--paper); }
+            .backend { fill: #fff; stroke: var(--ink); stroke-width: 1.2; }
+            .dark .backend { fill: #35394b; }
+            .focal { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 1.4; }
+            .store { fill: rgba(45,49,66,.05); stroke: var(--muted); stroke-width: 1.1; }
+            .dark .store { fill: rgba(245,245,245,.05); }
+            .external { fill: rgba(45,49,66,.03); stroke: rgba(45,49,66,.34); stroke-width: 1; }
+            .dark .external { fill: rgba(245,245,245,.03); stroke: rgba(245,245,245,.34); }
+            .input { fill: rgba(79,93,117,.10); stroke: var(--soft); stroke-width: 1; }
+            .edge { fill: none; stroke: var(--muted); stroke-width: 1.2; marker-end: url(#arrow); }
+            .edge-link { fill: none; stroke: var(--link); stroke-width: 1.2; marker-end: url(#arrow-link); }
+            .edge-accent { fill: none; stroke: var(--accent); stroke-width: 1.3; marker-end: url(#arrow-accent); }
+            .edge-dashed { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 5 4; marker-end: url(#arrow); }
+            .boundary { fill: var(--accent); fill-opacity: .05; stroke: var(--accent); stroke-opacity: .5; stroke-width: 1; stroke-dasharray: 5 4; }
+          </style>
+        </defs>
+
+        <rect width="1600" height="1000" fill="var(--paper)"/>
+        <text x="72" y="128" class="callout">The coordinator owns the conversation; specialists own the narrow, reviewable work.</text>
+
+        <!-- Zones: experience → agent runtime → data and artifact plane -->
+        <rect x="72" y="168" width="252" height="672" rx="8" class="zone"/>
+        <rect x="360" y="168" width="620" height="672" rx="8" class="zone"/>
+        <rect x="1016" y="168" width="512" height="672" rx="8" class="zone"/>
+        <rect x="84" y="172" width="118" height="16" rx="2" class="zone-mask"/>
+        <text x="92" y="184" class="zone-label">EXPERIENCE</text>
+        <rect x="372" y="172" width="252" height="16" rx="2" class="zone-mask"/>
+        <text x="380" y="184" class="zone-label">SOURCE-BOUND AGENT RUNTIME</text>
+        <rect x="1028" y="172" width="232" height="16" rx="2" class="zone-mask"/>
+        <text x="1036" y="184" class="zone-label">DATA + ARTIFACT PLANE</text>
+
+        <!-- Trust boundary is deliberately separate from the tier zones. -->
+        <rect x="1028" y="236" width="488" height="432" rx="8" class="boundary"/>
+        <rect x="1040" y="240" width="300" height="16" rx="2" class="zone-mask"/>
+        <text x="1048" y="252" class="zone-label">REVIEWED EXECUTION + SCOPED PROVENANCE</text>
+
+        <!-- Connections are drawn before nodes. All off-axis paths use rounded elbows. -->
+        <path class="edge" d="M196 388 V448"/>
+        <path class="edge-link" d="M284 484 H336 Q344 484 344 476 V320 Q344 312 352 312 H400"/>
+        <path class="edge-accent" d="M580 308 H660"/>
+        <path class="edge-accent" d="M700 360 V420 Q700 428 692 428 H512 Q504 428 504 436 V500"/>
+        <path class="edge-accent" d="M836 360 V460 Q836 468 828 468 H748 Q740 468 740 476 V500"/>
+        <path class="edge-accent" d="M680 360 V388 Q680 396 672 396 H384 Q376 396 376 404 V612 Q376 620 384 620 H496 Q504 620 504 628 V640"/>
+        <path class="edge-accent" d="M800 360 V388 Q800 396 808 396 H920 Q928 396 928 404 V612 Q928 620 920 620 H748 Q740 620 740 628 V640"/>
+        <path class="edge-link" d="M604 536 V588 Q604 596 612 596 H1008 Q1016 596 1016 588 V316 Q1016 308 1024 308 H1040"/>
+        <path class="edge-link" d="M1240 308 H1280"/>
+        <path class="edge" d="M1172 340 V456 Q1172 464 1180 464 H1244 Q1252 464 1252 472 V500"/>
+        <path class="edge-dashed" d="M840 536 H968 Q976 536 976 544 V552 Q976 560 984 560 H1132"/>
+        <path class="edge-dashed" d="M504 712 V744 Q504 752 512 752 H1092 Q1100 752 1100 744 V628 Q1100 620 1108 620 V584 Q1108 576 1116 576 H1132"/>
+        <path class="edge-dashed" d="M740 712 V780 Q740 788 748 788 H1244 Q1252 788 1252 780 V620"/>
+
+        <!-- Connector labels sit on opaque masks with visible clearance from strokes. -->
+        <rect x="288" y="374" width="44" height="16" rx="2" class="edge-mask"/>
+        <text x="310" y="385" text-anchor="middle" class="edge-label">HTTP</text>
+        <rect x="612" y="396" width="56" height="16" rx="2" class="edge-mask"/>
+        <text x="640" y="407" text-anchor="middle" class="edge-label">task()</text>
+        <rect x="916" y="328" width="88" height="16" rx="2" class="edge-mask"/>
+        <text x="960" y="339" text-anchor="middle" class="edge-label">reviewed SQL</text>
+        <rect x="1180" y="400" width="108" height="16" rx="2" class="edge-mask"/>
+        <text x="1234" y="411" text-anchor="middle" class="edge-label">cap + profile</text>
+        <rect x="876" y="508" width="96" height="16" rx="2" class="edge-mask"/>
+        <text x="924" y="519" text-anchor="middle" class="edge-label">result ID</text>
+
+        <!-- Experience -->
+        <g>
+          <rect x="104" y="300" width="184" height="88" rx="6" class="input"/>
+          <text x="124" y="326" class="eyebrow">INPUT</text>
+          <text x="124" y="350" class="node-name">Analyst</text>
+          <text x="124" y="370" class="node-sub">question • report request</text>
+        </g>
+        <g>
+          <rect x="104" y="448" width="184" height="88" rx="6" class="backend"/>
+          <text x="124" y="474" class="eyebrow">UI</text>
+          <text x="124" y="498" class="node-name">Streamlit</text>
+          <text x="124" y="518" class="node-sub">chat • review • results</text>
+        </g>
+
+        <!-- Runtime -->
+        <g>
+          <rect x="400" y="272" width="180" height="72" rx="6" class="backend"/>
+          <text x="420" y="296" class="eyebrow">SERVICE</text>
+          <text x="420" y="320" class="node-name">FastAPI + RunManager</text>
+          <text x="420" y="336" class="node-sub">source catalog • lifecycle</text>
+        </g>
+        <g>
+          <rect x="660" y="256" width="220" height="104" rx="6" class="focal"/>
+          <text x="684" y="284" class="eyebrow">ORCHESTRATION</text>
+          <text x="684" y="312" class="node-name">Coordinator</text>
+          <text x="684" y="334" class="node-sub">routing • synthesis • answer</text>
+          <text x="684" y="350" class="node-note">bound to one source + thread</text>
+        </g>
+        <g>
+          <rect x="404" y="500" width="200" height="72" rx="6" class="backend"/>
+          <text x="424" y="524" class="eyebrow">SPECIALIST</text>
+          <text x="424" y="548" class="node-name">Text-to-SQL</text>
+          <text x="424" y="564" class="node-sub">OSI-guided SQL • HITL</text>
+        </g>
+        <g>
+          <rect x="640" y="500" width="200" height="72" rx="6" class="backend"/>
+          <text x="660" y="524" class="eyebrow">SPECIALIST</text>
+          <text x="660" y="548" class="node-name">Visualization</text>
+          <text x="660" y="564" class="node-sub">result ID → validated ChartSpec</text>
+        </g>
+        <g>
+          <rect x="404" y="640" width="200" height="72" rx="6" class="backend"/>
+          <text x="424" y="664" class="eyebrow">SPECIALIST</text>
+          <text x="424" y="688" class="node-name">Statistical analysis</text>
+          <text x="424" y="704" class="node-sub">reviewed Python • bounded runner</text>
+        </g>
+        <g>
+          <rect x="640" y="640" width="200" height="72" rx="6" class="backend"/>
+          <text x="660" y="664" class="eyebrow">CAPABILITY</text>
+          <text x="660" y="688" class="node-name">Report design + renderer</text>
+          <text x="660" y="704" class="node-sub">ReportSpec → standalone HTML</text>
+        </g>
+
+        <!-- Data and artifact plane -->
+        <g>
+          <rect x="1040" y="260" width="200" height="80" rx="6" class="focal"/>
+          <text x="1060" y="286" class="eyebrow">CONTRACT</text>
+          <text x="1060" y="312" class="node-name">SQLBackend</text>
+          <text x="1060" y="330" class="node-sub">validate • cap • execute</text>
+        </g>
+        <g>
+          <rect x="1280" y="260" width="184" height="80" rx="6" class="external"/>
+          <text x="1300" y="286" class="eyebrow">PROVIDER</text>
+          <text x="1300" y="312" class="node-name">SQLite / Snowflake</text>
+          <text x="1300" y="330" class="node-sub">read-only data source</text>
+        </g>
+        <g>
+          <rect x="1132" y="500" width="240" height="120" rx="6" class="store"/>
+          <text x="1156" y="528" class="eyebrow">PROCESS-LOCAL STORES</text>
+          <text x="1156" y="558" class="node-name">Scoped artifacts</text>
+          <text x="1156" y="580" class="node-sub">ResultStore • analysis • report</text>
+          <text x="1156" y="600" class="node-note">rows • profiles • code • HTML</text>
+        </g>
+
+        <!-- Small editorial annotations outside the main flow. -->
+        <text x="104" y="792" class="node-note">The UI never owns the graph or credentials.</text>
+        <text x="404" y="792" class="node-note">Specialists receive narrow contracts, not open-ended access.</text>
+        <text x="1132" y="704" class="node-note">Every artifact carries thread + source provenance.</text>
+        <line x1="72" y1="872" x2="1528" y2="872" stroke="var(--rule-solid)" stroke-width="1"/>
+        <text x="72" y="904" class="eyebrow">DESIGN INVARIANTS</text>
+        <text x="72" y="932" class="node-sub">Coordinator does not execute SQL</text>
+        <text x="388" y="932" class="node-sub">Human review gates SQL and Python</text>
+        <text x="736" y="932" class="node-sub">Saved results stay source-bound</text>
+        <text x="1084" y="932" class="node-sub">Reports are trusted, portable HTML</text>
+      </svg>
+      <figcaption class="caption">
+        <span>Architecture overview · generated from the repository’s documented runtime topology</span>
+        <span>Default Diagram Design skin · 1600 × 1000 viewBox</span>
+      </figcaption>
+    </figure>
+  </main>
+
+</body>
+</html>

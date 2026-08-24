@@ -2,19 +2,21 @@
 
 ## Status
 
-Reporting is implemented as a feature-flagged coordinator capability with a
-lazy-loaded report-design skill, strict declarative contracts, scoped artifact
-resolution, a trusted HTML renderer, process-local versioned storage, and
-Streamlit preview/download. The analytical topology remains one coordinator
-and three specialists.
+Reporting is implemented as an automatic, feature-flagged coordinator
+capability with a lazy-loaded report-design skill, strict declarative contracts,
+scoped artifact resolution, a trusted HTML renderer, process-local versioned
+storage, and Streamlit preview/download. Every successful data-bearing turn
+creates one compact report after analysis is complete; the analytical topology
+remains one coordinator and three specialists.
 
 ## Product goal
 
-A user can ask for a report at any point in a conversation. The request may use
-analysis that already exists or require the coordinator to plan additional SQL,
-visualization, or statistical work first. The result is a professional,
-responsive, self-contained HTML document that Streamlit can preview and the
-user can immediately download.
+Every successful evidence-backed analysis produces a professional, responsive,
+self-contained HTML document that Streamlit can preview and the user can
+immediately download. A user can also ask for a tailored report at any point in
+a conversation. That request may use analysis that already exists or require
+the coordinator to plan additional SQL, visualization, or statistical work
+first.
 
 The request language stays open-ended. Examples include:
 
@@ -63,36 +65,50 @@ without establishing a useful isolation boundary.
 
 | Component | Responsibility |
 | --- | --- |
-| Coordinator | Understand the report request, retain conversational context, identify evidence gaps, invoke existing specialists, ask material clarifications, and own user-facing wording |
+| Coordinator | Create a compact report after ordinary analysis, understand explicit report requests, retain conversational context, identify evidence gaps, invoke existing specialists, and own user-facing wording |
 | Report-design skill | Turn free-form requirements and available evidence into a `ReportBrief` and validated `ReportSpec`; apply layout, visual, accessibility, and content-quality guidance |
-| Existing specialists | Produce reviewed SQL results, chart specifications, and reviewed statistical outputs through their existing contracts |
+| Existing specialists | Produce validated SQL results, chart specifications, and statistical outputs through their configured approval contracts |
 | Artifact resolver | Resolve only same-thread, same-source artifact references and supply full required data to trusted application code without copying it through model messages |
 | Trusted renderer | Convert the validated specification and resolved artifacts into one deterministic, self-contained HTML file |
 | `ReportStore` | Retain report ID, thread/source provenance, specification, HTML, version lineage, input references, renderer version, and content hash for the process-local POC |
-| Streamlit | Show an isolated preview, collect optional feedback, request revisions or further analysis, and offer the current safe version for download |
+| Streamlit | Show an isolated preview and full-page reading view, collect optional feedback, request revisions or further analysis, and offer the current safe version for download |
 
 The report skill does not execute SQL or statistical Python. When evidence is
-missing, the coordinator invokes the existing specialist and preserves its
-ordinary review boundary. Report generation itself is read-only and does not
+missing, the coordinator invokes existing specialists sequentially and
+preserves each deployment-configured approval boundary. Report generation
+itself is read-only and does not
 need a new security approval step.
 
 ## User and orchestration flow
 
-1. The user asks for a report or infographic, optionally specifying audience,
-   purpose, content, tone, style, structure, or visual treatment.
-2. The coordinator discovers relevant artifacts from the current conversation
-   and source. A report may combine multiple compatible artifacts, but never
-   cross a thread or source boundary.
-3. If evidence is missing, the coordinator briefly states the analysis plan
-   and invokes text-to-SQL, visualization, or statistical analysis. Existing
-   SQL and Python approve/edit/reject flows remain authoritative.
-4. The coordinator loads the report-design skill and produces a structured
+1. The user asks a data-bearing question. The coordinator completes direct or
+   multi-step analysis, selects final evidence, runs materially useful
+   statistics, and attempts one ordinary top-level chart when appropriate.
+2. After the analysis is sufficient, the coordinator loads the report skill
+   and creates a compact report from the same material current-conversation,
+   current-source evidence. It does not run extra analysis merely to decorate
+   an automatic report.
+3. If the user explicitly requests a report, infographic, or revision, the
+   coordinator applies the requested audience, purpose, content, tone, style,
+   structure, or visual treatment. If evidence is missing, it maintains an
+   analysis plan and
+   invokes one text-to-SQL assignment at a time, then at most one new statistical
+   analysis when uncertainty or modeling is materially useful. A second
+   statistical delegation is reserved for the existing one-time SQL-reshape
+   recovery. Existing SQL and Python approval modes remain authoritative. Report
+   charts are declared in `ReportSpec`; the ordinary automatic top-level chart
+   is skipped.
+4. The coordinator produces a structured
    brief and specification. It does not write arbitrary executable HTML.
 5. Application code validates the specification, resolves its scoped artifact
    references, and renders self-contained HTML.
-6. Streamlit presents the safe preview and an immediately available HTML
-   download. The coordinator may invite feedback, propose further analysis, or
-   create a revised version; no mandatory approval or finalization state exists.
+6. Streamlit presents the safe preview, a full-page view, and an immediately
+   available HTML download. All three use the same hashed stored bytes. The
+   coordinator may invite feedback, propose further analysis, or create a
+   revised version; no mandatory approval or finalization state exists.
+
+Greetings, help, brainstorming, clarification-only responses, failed analyses,
+and other turns without final evidence do not generate empty reports.
 
 Every revision is independently downloadable. Version metadata should retain
 the previous report ID or version, its inputs, and renderer version so the
@@ -145,9 +161,12 @@ HTML.
 
 - Reports may combine multiple artifacts only when every artifact belongs to
   the current conversation and immutable source.
+- The conversational `FinalAnswer` exposes primary-first `ResultReference`
+  evidence independently from the report's own complete multi-artifact input
+  list; both are resolved from the same scoped stores.
 - Every evidence-bearing block retains its input artifact references for
   internal scope checks and inspection. Reader-facing reports show the exact
-  reviewed SQL instead of opaque artifact IDs.
+  executed SQL instead of opaque artifact IDs.
 - Full result rows remain outside model messages. The model works from bounded
   samples and profiles; the trusted renderer resolves referenced data directly
   from application stores.
@@ -184,7 +203,7 @@ The renderer should also provide:
 - print CSS even though first-class PDF or PNG export is deferred;
 - locale-aware number, date, and currency formatting;
 - deterministic output for the same spec, renderer version, and artifacts;
-- visible generation metadata plus the exact reviewed SQL needed to reproduce
+- visible generation metadata plus the exact executed SQL needed to reproduce
   the report inputs, without exposing opaque result IDs as reader-facing
   provenance;
 - safe failure output when a referenced artifact is missing or out of scope.
@@ -226,9 +245,9 @@ Render dynamic report HTML in an isolated frame. Do not inject model-influenced
 report markup into the main Streamlit DOM with `st.html`: that API is not
 iframed, and JavaScript requires an explicitly unsafe mode. For the first
 implementation, use a tall `st.iframe` with the trusted rendered HTML inside an
-expanded-by-default, collapsible preview, plus `st.download_button` for the
-exact same HTML bytes. Keep the download control available when the preview is
-collapsed.
+expanded-by-default, collapsible preview, a link to the API's inline full-page
+HTML response, plus `st.download_button` for the exact same HTML bytes. Keep the
+open and download controls available when the preview is collapsed.
 
 Keep review lightweight:
 
@@ -262,9 +281,10 @@ application code and is not a sandbox for model-authored JavaScript.
 - `StatisticalAnalysisStore` and `ReportStore` retain reusable analyses and
   exact report bytes with source/thread provenance, version lineage, renderer
   version, and SHA-256 content hash.
-- FastAPI exposes report metadata/content and byte-identical download routes;
-  Streamlit verifies the hash, previews in a tall collapsible `st.iframe`, and
-  downloads those exact bytes. Statistical notes are deduplicated and grouped
+- FastAPI exposes report metadata/content, inline view, and byte-identical
+  download routes; Streamlit verifies the hash, previews in a tall collapsible
+  `st.iframe`, and opens or downloads those exact bytes. Statistical notes are
+  deduplicated and grouped
   in collapsed disclosure panels in both the chat result and report HTML.
 - `ENABLE_REPORTING=false` removes the reporting tools and skill namespace
   without changing SQL, visualization, or statistical behavior.
@@ -272,12 +292,43 @@ application code and is not a sandbox for model-authored JavaScript.
 The automated suite covers schema and contrast rejection, text escaping,
 self-contained output, full-row inclusion when requested, scoped artifact
 rejection, revision lineage, statistical figure embedding, authoritative tool
-result attachment, API byte identity, and Streamlit preview/download.
+result attachment, automatic-report routing, preservation of ordinary charts,
+API byte identity, and Streamlit preview/download.
+
+## Current gaps and design choices
+
+Automatic reporting improves every completed analysis, but it also makes the
+remaining limitations more visible:
+
+- `ReportStore` is process-local. API reloads remove reports and their revision
+  history just as they remove conversations and saved results. Durable,
+  authorized artifact storage is the largest production gap.
+- Report composition adds coordinator tool calls and latency after the analysis
+  is already complete. The compact automatic mode uses renderer defaults and
+  avoids extra SQL or Python so this remains a presentation cost, not a second
+  analysis workflow.
+- Scope and executable provenance are deterministic, but semantic completeness
+  is still model-owned: the coordinator chooses hierarchy, wording, and which
+  final evidence deserves emphasis. The system deliberately does not add a
+  second planner or report-quality verifier. Real-model routing and content
+  evaluations should justify any added control.
+- `create_report` gets one corrected attempt for malformed specifications or
+  missing artifacts. If both attempts fail, the underlying data answer still
+  completes without a report; trusted-local tool-result logs provide the repair
+  details.
+- The canonical export is HTML. First-class PDF, slide, and image export are not
+  implemented, and offline report maps remain unsupported because geographic
+  topology is not embedded.
+- Renderer tests validate contracts and content, but automated browser-based
+  accessibility checks and responsive visual regression are still absent.
+- Preview is an isolated iframe, with a separate full-page reading view, and the
+  download is the primary portable artifact. There is no two-way report
+  interaction or persistent report editor.
 
 Useful follow-up hardening includes browser-based accessibility and responsive
 visual regression, durable authorized artifact storage, offline geographic
 topology embedding for map blocks, and routing evaluations over real-model
-report requests.
+automatic and explicit report turns.
 
 ## Explicit non-goals for the first release
 

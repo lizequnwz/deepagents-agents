@@ -125,8 +125,10 @@ def test_every_project_model_bound_schema_uses_bedrock_subset(
         ),
         create_inspect_result_for_statistics_tool(
             results,
+            runs,
             source_id=source.source_id,
             sample_rows=10,
+            maximum_attempts=2,
         ),
         create_execute_statistical_python_tool(
             results,
@@ -243,6 +245,7 @@ def test_bedrock_configuration_uses_injected_or_factory_model(
         "model": "us.anthropic.claude-sonnet-4-6",
         "model_provider": "bedrock_converse",
         "streaming": False,
+        "reasoning_effort": "low",
     }
 
 

@@ -7,9 +7,14 @@ from typing import Any
 
 from deepagents.graph import DeepAgentState
 from langchain.tools import ToolRuntime, tool
+from langchain_core.tools import ToolException
 from sqlglot import exp
 
-from data_analytics_agent.backends import SQLBackend, SQLValidationError
+from data_analytics_agent.backends import (
+    SQLBackend,
+    SQLExecutionError,
+    SQLValidationError,
+)
 from data_analytics_agent.backends.validation import (
     validate_readonly_sql as _validate_readonly_sql,
 )
@@ -129,13 +134,17 @@ def create_validate_sql_tool(backend: SQLBackend):
     def validate_sql(query: str) -> dict[str, Any]:
         """Validate one query structurally without submitting it to the database."""
 
-        backend.validate_sql(query)
+        try:
+            backend.validate_sql(query)
+        except SQLValidationError as exc:
+            raise ToolException(f"SQL validation failed: {exc}") from exc
         return {
             "valid": True,
             "dialect": backend.dialect,
             "message": "The query is one structurally read-only statement.",
         }
 
+    validate_sql.handle_tool_error = True
     return validate_sql
 
 
@@ -146,7 +155,7 @@ def create_execute_sql_tool(
 ):
     @tool
     def execute_sql(query: str, runtime: ToolRuntime) -> dict[str, Any]:
-        """Execute one human-reviewed, source-bound, read-only query.
+        """Execute one validated, source-bound, read-only query.
 
         The complete capped result is stored as an application artifact. Only a
         small sample and an opaque result ID are returned to the model.
@@ -157,16 +166,24 @@ def create_execute_sql_tool(
             raise ValueError(
                 "The conversation source does not match this SQL backend."
             )
-        result = execute_query(
-            backend=backend,
-            source=source,
-            query=query,
-            thread_id=context.thread_id,
-            result_store=result_store,
-            originating_question=context.question,
-        )
+        try:
+            result = execute_query(
+                backend=backend,
+                source=source,
+                query=query,
+                thread_id=context.thread_id,
+                result_store=result_store,
+                originating_question=context.question,
+            )
+        except (SQLValidationError, SQLExecutionError, TimeoutError) as exc:
+            raise ToolException(
+                f"SQL execution failed: {exc}. Revise the query using the "
+                "configured source's physical tables and fields. Saved result "
+                "IDs are evidence handles, not source tables."
+            ) from exc
         return result.model_dump(mode="json")
 
+    execute_sql.handle_tool_error = True
     return execute_sql
 
 

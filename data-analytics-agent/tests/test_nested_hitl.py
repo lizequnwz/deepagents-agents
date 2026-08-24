@@ -58,6 +58,7 @@ def disable_langsmith_tracing(monkeypatch: pytest.MonkeyPatch) -> None:
 @dataclass
 class ScriptState:
     executed: list[str] = field(default_factory=list)
+    coordinator_assignments: list[str] = field(default_factory=list)
     rejection_feedback: str | None = None
     validation_retry_seen: bool = False
 
@@ -193,37 +194,53 @@ class ScriptedChatModel(BaseChatModel):
         )
 
 
-class ParallelCoordinatorModel(ScriptedChatModel):
-    """Issue two SQL assignments to reproduce parallel nested interrupts."""
+class SequentialInvestigationModel(ScriptedChatModel):
+    """Issue a dependent two-query investigation one assignment at a time."""
 
     def _coordinator_response(
         self,
         messages: list[BaseMessage],
     ) -> AIMessage:
-        if any(
-            isinstance(message, ToolMessage) and message.name == "task"
+        task_results = [
+            message
             for message in messages
-        ):
+            if isinstance(message, ToolMessage) and message.name == "task"
+        ]
+        if len(task_results) >= 2:
             return AIMessage(content="Both SQL analyses completed.")
+        if len(task_results) == 1:
+            description = (
+                "Use prior result result-1 as evidence context. Compare its "
+                "finding with customer counts by country; do not copy full "
+                "rows from the prior result."
+            )
+            self.script_state.coordinator_assignments.append(description)
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "task",
+                        "args": {
+                            "description": description,
+                            "subagent_type": "text-to-sql",
+                        },
+                        "id": "task-call-b",
+                    }
+                ],
+            )
+        description = "Establish the baseline database result with SQL."
+        self.script_state.coordinator_assignments.append(description)
         return AIMessage(
             content="",
             tool_calls=[
                 {
                     "name": "task",
                     "args": {
-                        "description": "Answer database question A with SQL.",
+                        "description": description,
                         "subagent_type": "text-to-sql",
                     },
                     "id": "task-call-a",
-                },
-                {
-                    "name": "task",
-                    "args": {
-                        "description": "Answer database question B with SQL.",
-                        "subagent_type": "text-to-sql",
-                    },
-                    "id": "task-call-b",
-                },
+                }
             ],
         )
 
@@ -232,6 +249,7 @@ def _build_graph(
     state: ScriptState,
     *,
     coordinator_model: BaseChatModel | None = None,
+    require_approval: bool = True,
 ):
     @tool
     def execute_sql(query: str) -> dict[str, Any]:
@@ -248,22 +266,23 @@ def _build_graph(
             "truncated": False,
         }
 
-    sql_subagent = {
+    sql_subagent: dict[str, Any] = {
         "name": "text-to-sql",
         "description": "Generate and execute reviewed SQL.",
         "system_prompt": "Use execute_sql and finish only after it succeeds.",
         "tools": [execute_sql],
         "model": ScriptedChatModel(role="sql", script_state=state),
-        "interrupt_on": {
-            "execute_sql": {
-                "allowed_decisions": ["approve", "edit", "reject"]
-            }
-        },
         "response_format": ToolStrategy(
             SQLAnalysisResult,
             handle_errors=SQL_OUTPUT_RETRY_MESSAGE,
         ),
     }
+    if require_approval:
+        sql_subagent["interrupt_on"] = {
+            "execute_sql": {
+                "allowed_decisions": ["approve", "edit", "reject"]
+            }
+        }
     return create_deep_agent(
         model=coordinator_model
         or ScriptedChatModel(role="coordinator", script_state=state),
@@ -344,24 +363,23 @@ def test_rejection_feedback_forces_revision_and_invalid_completion_retries() -> 
     assert state.executed == [REVISED_SQL]
 
 
-def test_parallel_sql_interrupts_are_reviewed_sequentially_by_id() -> None:
+def test_multi_step_sql_assignments_pause_and_resume_sequentially() -> None:
     state = ScriptState()
     graph = _build_graph(
         state,
-        coordinator_model=ParallelCoordinatorModel(
+        coordinator_model=SequentialInvestigationModel(
             role="coordinator",
             script_state=state,
         ),
     )
-    config = _config("parallel-sql-reviews")
+    config = _config("sequential-sql-reviews")
 
     interrupted = graph.invoke(
         {"messages": [{"role": "user", "content": "Create a report"}]},
         config,
     )
     pending = interrupted["__interrupt__"]
-    assert len(pending) == 2
-    assert pending[0].id != pending[1].id
+    assert len(pending) == 1
     assert state.executed == []
 
     first_approval = _extract_approval([pending[0]])
@@ -370,16 +388,55 @@ def test_parallel_sql_interrupts_are_reviewed_sequentially_by_id() -> None:
         config,
     )
 
-    remaining = after_first["__interrupt__"]
-    assert len(remaining) == 1
-    assert remaining[0].id == pending[1].id
+    second_pending = after_first["__interrupt__"]
+    assert len(second_pending) == 1
+    assert state.executed == [GENERATED_SQL]
+    assert len(state.coordinator_assignments) == 2
+    assert "prior result result-1" in state.coordinator_assignments[1]
+    assert "do not copy full rows" in state.coordinator_assignments[1]
+
+    second_approval = _extract_approval(list(second_pending))
+    revised_second = graph.invoke(
+        decisions_to_command(
+            second_approval,
+            [
+                Decision(
+                    action="reject",
+                    feedback="Use country-level grouping for this step.",
+                )
+            ],
+        ),
+        config,
+    )
+    assert revised_second["__interrupt__"]
     assert state.executed == [GENERATED_SQL]
 
-    second_approval = _extract_approval(list(remaining))
+    revised_approval = _extract_approval(revised_second["__interrupt__"])
     completed = graph.invoke(
-        decisions_to_command(second_approval, [Decision(action="approve")]),
+        decisions_to_command(revised_approval, [Decision(action="approve")]),
         config,
     )
 
     assert "__interrupt__" not in completed
+    assert state.executed == [GENERATED_SQL, REVISED_SQL]
+
+
+def test_multi_step_sql_assignments_complete_autonomously() -> None:
+    state = ScriptState()
+    graph = _build_graph(
+        state,
+        coordinator_model=SequentialInvestigationModel(
+            role="coordinator",
+            script_state=state,
+        ),
+        require_approval=False,
+    )
+
+    completed = graph.invoke(
+        {"messages": [{"role": "user", "content": "Investigate changes"}]},
+        _config("autonomous-investigation"),
+    )
+
+    assert "__interrupt__" not in completed
     assert state.executed == [GENERATED_SQL, GENERATED_SQL]
+    assert len(state.coordinator_assignments) == 2

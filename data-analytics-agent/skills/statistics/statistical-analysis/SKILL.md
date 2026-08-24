@@ -1,86 +1,62 @@
 ---
 name: statistical-analysis
-description: Conduct robust, reproducible statistical analysis with general Python over a reviewed saved dataset. Use for experiments, hypothesis tests, correlations, distributions, regression, effect estimation, uncertainty, significance, diagnostics, and related inferential or exploratory statistical questions.
+description: Analyze uncertainty or fit statistical models with general Python over one saved dataset. Use for experiments, inference, regression, predictive modeling, trend inference, seasonality, forecasting, and diagnostics; ordinary descriptive summaries and charts do not need this skill.
 ---
 
 # Statistical analysis
 
-## Establish the analysis design
+## Design the smallest useful analysis
 
-1. Restate the estimand or analytical question in operational terms.
-2. Identify the outcome, predictors or groups, observational unit, population,
-   time scope, and whether observations are independent, paired, clustered, or
-   repeated.
-3. Inspect result provenance, profile, and bounded sample. Never infer against a
-   result marked `truncated`.
-4. Confirm the dataset retains the variation and grain needed for the method.
-   Request SQL reshaping rather than analyzing aggregates that destroy the
-   experimental unit or within-group variation.
-   A categorical predictor with one aggregate row per category is not adequate
-   for estimating a category effect or its uncertainty; do not substitute a
-   correlation between two category-level totals.
-5. Ask for clarification when plausible choices would materially change the
-   dataset, estimand, or method. Otherwise choose and justify an appropriate
-   method without forcing the user to name a test.
+1. State the analytical question in operational terms: outcome, predictors or
+   groups, observational unit, population, and time scope.
+2. Inspect provenance, the full-result profile, and the bounded sample. Never
+   analyze a result marked `truncated`.
+3. Confirm the dataset preserves the grain and variation the method needs.
+   Request SQL reshaping when aggregates have destroyed the observational unit,
+   time order, within-group variation, or required population.
+4. Use statistical Python only when uncertainty or modeling changes the answer.
+   Leave ordinary totals, rankings, descriptive trends, and chartable
+   distributions to SQL and visualization.
+5. Choose the simplest defensible method. Ask for clarification only when a
+   choice would materially change the data or conclusion.
 
-## Use robust statistical practice
+For regression or predictive modeling, read
+[regression guidance](references/regression.md). For trend inference,
+seasonality, anomaly detection, or forecasting, read
+[time-series guidance](references/time-series.md). Read
+[statistical graphics](references/statistical-graphics.md) only when a figure
+materially improves diagnosis or interpretation.
 
-- Default to 95% confidence intervals, two-sided tests, and alpha 0.05 only when
-  the user has not specified alternatives. State these defaults in assumptions.
-- Report effect sizes and uncertainty whenever applicable. Never use a p-value
-  alone as the conclusion, and distinguish statistical from practical
-  significance.
-- Check method assumptions with quantitative diagnostics and useful plots.
-  When assumptions are doubtful, use a justified transformation, robust model,
-  nonparametric method, permutation procedure, or bootstrap rather than silently
-  proceeding.
-- Handle missingness deliberately. Report counts and the rule used; do not let a
-  library's implicit row dropping determine the analysis unnoticed.
-- Treat outliers as observations to investigate, not values to delete by
-  default. Disclose exclusions and, when material, compare sensitivity with and
-  without influential points.
-- Address multiplicity when testing several hypotheses, outcomes, subgroups, or
-  model terms. Name the correction or hierarchical strategy.
-- Respect dependence, clustering, repeated measures, weights, censoring, and
-  time ordering when present. Do not treat correlated observations as
-  independent.
-- Separate predictive validation from in-sample fit. Use suitable holdout or
-  cross-validation for predictive claims, but do not confuse prediction with
-  causal identification.
-- Describe association as association unless the study design and assumptions
-  support a causal claim. State material confounding and selection limitations.
-- Set an explicit random seed for stochastic methods. Use seed `0` unless the
-  user requests another value, and report it.
+## Apply relevant statistical practice
 
-## Write reviewed Python
+- Report magnitude and uncertainty when applicable; do not make a p-value the
+  conclusion.
+- Handle missingness explicitly and report the analyzed sample size. Investigate
+  influential observations rather than deleting them by default.
+- Check only the assumptions that matter for the selected method and claim. Use
+  a robust, nonparametric, permutation, or bootstrap alternative when justified.
+- Address multiplicity only when several hypotheses, outcomes, subgroups, or
+  model terms are being interpreted together.
+- Respect pairing, clustering, repeated measures, weights, censoring, and time
+  ordering when present.
+- Separate explanatory, predictive, and causal questions. Use temporal or group
+  validation when random row splitting would leak information.
+- Use seed `0` for stochastic methods unless the user requests another value.
+
+## Execute once, compactly
 
 - Work from the preloaded pandas DataFrame `df`; `pd` and `np` are also
-  preloaded. Import other guaranteed statistical libraries as needed.
-- Keep the submitted code self-contained and readable. Use meaningful variable
-  names and short comments for analytical choices that a reviewer must verify.
-- Preserve the requested population. Derive fields, reshape, and handle missing
-  values inside the reviewed code so the executed transformation is auditable.
-- Assign a named dictionary to `analysis_outputs`. Values may be compact text,
-  scalars, pandas DataFrames or Series, JSON record lists, or matplotlib Figures
-  or Axes. Never place the complete input `df` in the outputs.
-- Make tables compact and decision-relevant: estimates, uncertainty intervals,
-  test statistics, adjusted p-values, fit diagnostics, or sensitivity results.
-- After an execution error, use the bounded traceback to make a targeted repair.
-  Every revision requires another review. Do not repeat unchanged failing code.
+  preloaded. Use the available SciPy, statsmodels, scikit-learn, matplotlib, and
+  seaborn libraries as needed.
+- Write one self-contained program that performs the analysis and necessary
+  diagnostics. Do not use executions as staged data exploration.
+- Assign a named dictionary to `analysis_outputs`. Return only compact,
+  decision-relevant text, scalars, tables, or figures; never return the complete
+  input dataset.
+- After a repairable execution error, use the bounded failure details for one
+  targeted repair. Do not repeat unchanged code or start another analysis after
+  the run has no attempts remaining.
 
-## Produce expert conclusions
-
-Return a concise answer, method description, assumptions, interpretation,
-warnings, and compact outputs. Include sample sizes and exclusions. Explain
-direction, magnitude, uncertainty, and limitations in domain language. Avoid
-claims stronger than the design or data support.
-
-When a figure is requested or materially improves diagnostics or interpretation,
-read [statistical graphics](references/statistical-graphics.md) before writing
-code.
-
-For a categorical predictor and numeric outcome, a distribution or effect plot
-normally materially improves interpretation. Preserve repeated observations
-within each category, read the graphics reference, and return a compact figure
-alongside the inferential table unless the data or user request makes a figure
-inappropriate.
+Return a concise answer, method, material assumptions, interpretation, warnings,
+sample sizes, exclusions, and limitations. Describe association as association
+unless the data and design support a stronger claim.

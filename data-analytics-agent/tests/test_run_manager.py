@@ -17,9 +17,15 @@ from data_analytics_agent.run_manager import (
     _bounded_debug_value,
     _current_sql_analysis,
     _sanitize_state_snapshot,
+    _statistical_execution_completion,
 )
 from data_analytics_agent.profiling import profile_result
-from data_analytics_agent.schemas import FinalAnswer, SQLAnalysisResult
+from data_analytics_agent.schemas import (
+    CoordinatorResponse,
+    FinalAnswer,
+    ResultReference,
+    SQLAnalysisResult,
+)
 from data_analytics_agent.stores import ConversationStore, ResultStore, RunStore
 
 
@@ -29,6 +35,15 @@ def _manager(results: ResultStore) -> RunManager:
         conversations=ConversationStore(),
         runs=RunStore(),
         results=results,
+    )
+
+
+def _reference(result: object, *, executed_sql: str | None = None) -> ResultReference:
+    return ResultReference(
+        result_id=result.result_id,
+        executed_sql=executed_sql or result.executed_sql,
+        originating_question=result.originating_question,
+        short_label=result.short_label,
     )
 
 
@@ -83,8 +98,8 @@ def test_stored_executed_sql_overrides_stale_model_sql() -> None:
     )
     answer = FinalAnswer(
         answer="One artist was returned.",
-        sql="SELECT stale_model_sql",
-        result_id=saved.result_id,
+        primary_result_id=saved.result_id,
+        results=[_reference(saved, executed_sql="SELECT stale_model_sql")],
     )
 
     canonical = _manager(results)._validate_answer_provenance(
@@ -93,8 +108,8 @@ def test_stored_executed_sql_overrides_stale_model_sql() -> None:
         "source-a",
     )
 
-    assert canonical.sql == saved.executed_sql
-    assert canonical.result_id == saved.result_id
+    assert canonical.results[0].executed_sql == saved.executed_sql
+    assert canonical.primary_result_id == saved.result_id
 
 
 def test_unknown_or_cross_conversation_result_fails_safely() -> None:
@@ -110,8 +125,8 @@ def test_unknown_or_cross_conversation_result_fails_safely() -> None:
     )
     answer = FinalAnswer(
         answer="A result was returned.",
-        sql="SELECT 1",
-        result_id=saved.result_id,
+        primary_result_id=saved.result_id,
+        results=[_reference(saved)],
     )
 
     with pytest.raises(
@@ -135,15 +150,81 @@ def test_unknown_or_cross_conversation_result_fails_safely() -> None:
         )
 
 
-def test_sql_without_result_id_is_not_presented_as_executed() -> None:
+def test_multi_result_claims_are_deduplicated_and_primary_first() -> None:
+    results = ResultStore()
+    first = results.save(
+        thread_id="thread-a",
+        source_id="source-a",
+        executed_sql="SELECT category, total FROM summary",
+        columns=["category", "total"],
+        rows=[{"category": "A", "total": 10}],
+        truncated=False,
+        elapsed_ms=1.0,
+        originating_question="Compare categories",
+    )
+    primary = results.save(
+        thread_id="thread-a",
+        source_id="source-a",
+        executed_sql="SELECT month, total FROM trend",
+        columns=["month", "total"],
+        rows=[{"month": "2026-01", "total": 10}],
+        truncated=False,
+        elapsed_ms=1.0,
+        originating_question="Show the trend",
+    )
+
+    answer = _manager(results)._answer_from_coordinator(
+        CoordinatorResponse(
+            answer="The trend explains the category change.",
+            primary_result_id=primary.result_id,
+            supporting_result_ids=[
+                first.result_id,
+                primary.result_id,
+                first.result_id,
+            ],
+        ),
+        thread_id="thread-a",
+        source_id="source-a",
+    )
+
+    assert answer.primary_result_id == primary.result_id
+    assert [item.result_id for item in answer.results] == [
+        primary.result_id,
+        first.result_id,
+    ]
+    assert answer.results[0].executed_sql == primary.executed_sql
+    assert answer.results[1].originating_question == "Compare categories"
+
+
+def test_primary_must_appear_in_supporting_result_claims() -> None:
+    with pytest.raises(RuntimeError, match="missing from supporting results"):
+        _manager(ResultStore())._answer_from_coordinator(
+            CoordinatorResponse(
+                answer="Invalid evidence.",
+                primary_result_id="result-1",
+                supporting_result_ids=[],
+            ),
+            thread_id="thread-a",
+            source_id="source-a",
+        )
+
+
+def test_supporting_results_without_primary_fail_safely() -> None:
     answer = FinalAnswer(
-        answer="Here is a proposed query.",
-        sql="SELECT Name FROM Artist",
+        answer="Here is a result.",
+        results=[
+            ResultReference(
+                result_id="result-1",
+                executed_sql="SELECT 1",
+                originating_question="Question",
+                short_label="Result",
+            )
+        ],
     )
 
     with pytest.raises(
         RuntimeError,
-        match="SQL without an executed result",
+        match="supporting results without a primary result",
     ):
         _manager(ResultStore())._validate_answer_provenance(
             answer,
@@ -152,7 +233,7 @@ def test_sql_without_result_id_is_not_presented_as_executed() -> None:
         )
 
 
-def test_no_query_answer_may_omit_sql_and_result_id() -> None:
+def test_no_query_answer_may_omit_evidence() -> None:
     answer = FinalAnswer(answer="What would you like to analyze?")
 
     validated = _manager(ResultStore())._validate_answer_provenance(
@@ -188,17 +269,57 @@ def test_current_sql_subagent_result_overrides_stale_coordinator_narrative() -> 
             AIMessage(content="Top 5 artists were returned."),
         ]
     }
-    coordinator_answer = FinalAnswer(
+    coordinator_answer = CoordinatorResponse(
         answer="Top 5 artists were returned.",
-        sql=analysis.sql,
-        result_id=analysis.result_id,
+        primary_result_id=analysis.result_id,
+        supporting_result_ids=[analysis.result_id],
     )
 
     authoritative = _apply_sql_analysis(coordinator_answer, output)
 
     assert authoritative.answer == analysis.answer
     assert authoritative.interpretation == analysis.interpretation
-    assert authoritative.result_id == analysis.result_id
+    assert authoritative.primary_result_id == analysis.result_id
+    assert authoritative.supporting_result_ids == [analysis.result_id]
+
+
+def test_investigation_synthesis_is_not_replaced_by_last_sql_result() -> None:
+    rows = [{"category": "A", "total": 10}]
+    latest = SQLAnalysisResult(
+        answer="Category A totals 10.",
+        sql="SELECT category, total FROM latest_step",
+        result_id="latest-result",
+        columns=["category", "total"],
+        sample_rows=rows,
+        profile=profile_result(["category", "total"], rows),
+        row_count=1,
+        truncated=False,
+        assumptions=["Latest step only"],
+        interpretation="This describes only the latest subquestion.",
+    )
+    output = {
+        "messages": [
+            HumanMessage(content="Investigate the change"),
+            ToolMessage(
+                content=latest.model_dump_json(),
+                tool_call_id="latest-task",
+            ),
+            AIMessage(content="Synthesis across both results."),
+        ]
+    }
+    coordinator_answer = CoordinatorResponse(
+        answer="Synthesis across both results.",
+        primary_result_id="primary-result",
+        supporting_result_ids=["primary-result", latest.result_id],
+        assumptions=["Common date window"],
+        interpretation="The two grains reconcile.",
+    )
+
+    authoritative = _apply_sql_analysis(coordinator_answer, output)
+
+    assert authoritative.answer == coordinator_answer.answer
+    assert authoritative.assumptions == coordinator_answer.assumptions
+    assert authoritative.interpretation == coordinator_answer.interpretation
 
 
 def test_previous_turn_sql_analysis_is_not_reused_for_a_followup() -> None:
@@ -257,6 +378,44 @@ def test_activity_names_specific_skill_and_curates_known_arguments() -> None:
         "inspect_result_for_chart", {"result_id": "1234567890abcdef"}
     ) == {"result": "12345678"}
     assert _activity_arguments("unknown_tool", {"rows": [1, 2]}) == {}
+
+
+def test_statistical_activity_distinguishes_success_failure_and_no_execution(
+) -> None:
+    assert _statistical_execution_completion(
+        {"ok": True, "attempt": 1}
+    ) == (
+        "Statistical Python succeeded · attempt 1",
+        False,
+        {"attempt": 1},
+    )
+    assert _statistical_execution_completion(
+        {
+            "ok": False,
+            "code": "python_execution_failed",
+            "attempt": 1,
+            "remaining_attempts": 1,
+        }
+    ) == (
+        "Statistical Python execution failed · attempt 1",
+        True,
+        {
+            "attempt": 1,
+            "remaining_attempts": 1,
+            "code": "python_execution_failed",
+        },
+    )
+    assert _statistical_execution_completion(
+        {
+            "ok": False,
+            "code": "execution_attempts_exhausted",
+            "remaining_attempts": 0,
+        }
+    ) == (
+        "Statistical Python was not run · execution budget exhausted",
+        True,
+        {"remaining_attempts": 0, "code": "execution_attempts_exhausted"},
+    )
 
 
 def test_debug_tool_input_is_secret_redacted_and_bounded() -> None:

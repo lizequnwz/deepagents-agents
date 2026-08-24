@@ -26,13 +26,19 @@ import pytest
 from data_analytics_agent.agents.text_to_sql.agent import (
     build_text_to_sql_subagent,
 )
+from data_analytics_agent.agents.statistical_analysis.agent import (
+    build_statistical_analysis_subagent,
+)
+from data_analytics_agent.agents.statistical_analysis.runner import (
+    PythonExecutionLimits,
+)
 from data_analytics_agent.backends import create_backend
 from data_analytics_agent.config import Settings
 from data_analytics_agent.data_sources import load_data_source_catalog
 from data_analytics_agent.execution_budget import (
     execution_budget_middleware,
 )
-from data_analytics_agent.stores import ResultStore
+from data_analytics_agent.stores import ResultStore, RunStore
 
 
 @pytest.fixture(autouse=True)
@@ -164,6 +170,61 @@ def test_settings_use_confirmed_budget_defaults(
     assert settings.statistical_agent_tool_call_limit == 24
 
 
+def test_settings_use_independent_approval_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("REQUIRE_SQL_APPROVAL", raising=False)
+    monkeypatch.delenv("REQUIRE_PYTHON_APPROVAL", raising=False)
+
+    settings = Settings()
+
+    assert settings.require_sql_approval is False
+    assert settings.require_python_approval is True
+
+
+@pytest.mark.parametrize(
+    ("sql_approval", "python_approval"),
+    [(False, False), (False, True), (True, False), (True, True)],
+)
+def test_execution_approval_modes_construct_independently(
+    test_settings: Settings,
+    sql_approval: bool,
+    python_approval: bool,
+) -> None:
+    source = test_settings.load_catalog().get("test")
+    result_store = ResultStore()
+    sql_spec = build_text_to_sql_subagent(
+        source=source,
+        backend=create_backend(source, test_settings.project_root),
+        result_store=result_store,
+        model=ReviewingModel(),
+        permissions=[],
+        require_approval=sql_approval,
+    )
+    python_spec = build_statistical_analysis_subagent(
+        source=source,
+        result_store=result_store,
+        run_store=RunStore(),
+        execution_limits=PythonExecutionLimits(),
+        model=ReviewingModel(),
+        permissions=[],
+        require_approval=python_approval,
+    )
+
+    assert any(
+        isinstance(item, HumanInTheLoopMiddleware)
+        for item in sql_spec["middleware"]
+    ) is sql_approval
+    assert any(
+        isinstance(item, HumanInTheLoopMiddleware)
+        for item in python_spec["middleware"]
+    ) is python_approval
+    assert ("pauses for human" in sql_spec["system_prompt"]) is sql_approval
+    assert (
+        "pauses for human" in python_spec["system_prompt"]
+    ) is python_approval
+
+
 @pytest.mark.parametrize("value", ["0", "-1", "invalid"])
 def test_budget_settings_require_positive_integers(
     monkeypatch: pytest.MonkeyPatch,
@@ -214,6 +275,7 @@ def test_sql_agent_checks_budgets_before_requesting_review(
         result_store=ResultStore(),
         model=ReviewingModel(),
         permissions=[],
+        require_approval=True,
         middleware=budget_middleware,
     )
 

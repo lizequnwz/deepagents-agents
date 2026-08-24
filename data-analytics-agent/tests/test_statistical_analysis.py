@@ -26,7 +26,6 @@ from data_analytics_agent.agents.statistical_analysis.tools import (
 )
 from data_analytics_agent.config import Settings
 from data_analytics_agent.run_manager import (
-    _apply_sql_analysis,
     _apply_statistical_analysis,
     _conversation_history_answer,
     _current_statistical_analysis,
@@ -34,6 +33,7 @@ from data_analytics_agent.run_manager import (
 )
 from data_analytics_agent.schemas import (
     FinalAnswer,
+    ResultReference,
     SQLAnalysisResponse,
 )
 from data_analytics_agent.stores import ResultStore, RunStore
@@ -45,24 +45,38 @@ def test_statistical_prompt_prevents_retry_loops_and_redundant_payloads(
     test_settings: Settings,
 ) -> None:
     source = test_settings.load_catalog().get("test")
-    prompt = _statistical_subagent_prompt(source, maximum_attempts=3)
+    prompt = _statistical_subagent_prompt(
+        source,
+        maximum_attempts=2,
+        require_approval=True,
+    )
     normalized = " ".join(prompt.split())
 
     assert "inspect_result_for_statistics` exactly once" in normalized
-    assert (
-        "`result_not_found`, return `cannot_analyze` immediately" in normalized
-    )
+    assert "`result_not_found` or `execution_attempts_exhausted`" in normalized
     assert "Do not copy the code, binary figures, or outputs" in normalized
     assert "two-sided alpha 0.05" in normalized
     assert "random seed 0" in normalized
     assert "require repeated observations within categories" in normalized
+    assert "one complete execution" in normalized
+    assert "execution_attempts_exhausted" in normalized
+    assert "references/regression.md" in normalized
+    assert "references/time-series.md" in normalized
 
     skill = (
         PROJECT_ROOT / "skills/statistics/statistical-analysis/SKILL.md"
     ).read_text(encoding="utf-8")
     normalized_skill = " ".join(skill.split())
-    assert "one aggregate row per category is not adequate" in normalized_skill
-    assert "return a compact figure" in normalized_skill
+    assert "descriptive trends" in normalized_skill
+    assert "Do not use executions as staged data exploration" in normalized_skill
+    assert (
+        PROJECT_ROOT
+        / "skills/statistics/statistical-analysis/references/regression.md"
+    ).is_file()
+    assert (
+        PROJECT_ROOT
+        / "skills/statistics/statistical-analysis/references/time-series.md"
+    ).is_file()
 
 
 def test_runner_executes_exact_code_with_scoped_dataframe_and_compact_outputs(
@@ -123,6 +137,47 @@ analysis_outputs = {"Relationship diagnostic": fig}
     assert "image_base64" not in result.model_facing()["outputs"][0]
 
 
+def test_runner_supports_regression_and_seasonal_decomposition() -> None:
+    code = """\
+import statsmodels.api as sm
+from statsmodels.tsa.seasonal import STL
+
+ordered = df.sort_values("period").reset_index(drop=True)
+fit = sm.OLS(ordered["value"], sm.add_constant(ordered[["time_index"]])).fit()
+decomposition = STL(ordered["value"], period=12, robust=True).fit()
+analysis_outputs = {
+    "Trend coefficient": float(fit.params["time_index"]),
+    "Trend confidence interval": fit.conf_int().loc[["time_index"]],
+    "Seasonal component": pd.DataFrame({
+        "period": ordered["period"].tail(12),
+        "seasonal": decomposition.seasonal.tail(12),
+    }),
+}
+"""
+    periods = pd.date_range("2023-01-01", periods=36, freq="MS")
+    values = [100 + index * 2 + (index % 12) * 3 for index in range(36)]
+
+    result = execute_reviewed_python(
+        dataframe=pd.DataFrame(
+            {
+                "period": periods,
+                "time_index": range(36),
+                "value": values,
+            }
+        ),
+        code=code,
+        parent_result_id="result-time-series",
+        attempt=1,
+        limits=PythonExecutionLimits(timeout_seconds=30),
+    )
+
+    assert result.outputs[0].kind == "scalar"
+    assert result.outputs[0].value is not None
+    assert result.outputs[1].kind == "table"
+    assert result.outputs[2].kind == "table"
+    assert len(result.outputs[2].rows) == 12
+
+
 def test_runner_fails_instead_of_silently_truncating_outputs() -> None:
     with pytest.raises(StatisticalExecutionError, match="compact it"):
         execute_reviewed_python(
@@ -174,8 +229,10 @@ def test_statistical_tools_enforce_scope_and_refuse_truncated_data() -> None:
     )
     inspect = create_inspect_result_for_statistics_tool(
         results,
+        runs,
         source_id="source-1",
         sample_rows=10,
+        maximum_attempts=2,
     )
     inspected = inspect.func(saved.result_id, runtime)
     assert inspected["truncated"] is True
@@ -207,6 +264,57 @@ def test_statistical_tools_enforce_scope_and_refuse_truncated_data() -> None:
         "result_id": saved.result_id,
         "error": (
             "That result does not exist in this data-source conversation."
+        ),
+    }
+
+
+def test_statistical_inspection_reports_and_stops_at_run_attempt_budget() -> None:
+    results = ResultStore()
+    runs = RunStore()
+    saved = results.save(
+        thread_id="thread-1",
+        source_id="source-1",
+        executed_sql="SELECT value FROM measurements",
+        columns=["value"],
+        rows=[{"value": 1}, {"value": 2}],
+        truncated=False,
+        elapsed_ms=1,
+    )
+    run_id = runs.create("thread-1", "source-1", "Analyze")
+    runtime = SimpleNamespace(
+        state={
+            "thread_id": "thread-1",
+            "run_id": run_id,
+            "source_id": "source-1",
+            "question": "Analyze",
+        }
+    )
+    inspect = create_inspect_result_for_statistics_tool(
+        results,
+        runs,
+        source_id="source-1",
+        sample_rows=10,
+        maximum_attempts=2,
+    )
+
+    available = inspect.func(saved.result_id, runtime)
+    assert available["ok"] is True
+    assert available["attempts_used"] == 0
+    assert available["remaining_attempts"] == 2
+
+    runs.reserve_statistical_execution_attempt(run_id, maximum=2)
+    runs.reserve_statistical_execution_attempt(run_id, maximum=2)
+    exhausted = inspect.func(saved.result_id, runtime)
+    assert exhausted == {
+        "ok": False,
+        "code": "execution_attempts_exhausted",
+        "repairable": False,
+        "result_id": saved.result_id,
+        "attempts_used": 2,
+        "remaining_attempts": 0,
+        "error": (
+            "This run has no statistical Python execution attempts "
+            "remaining. Return cannot_analyze without proposing code."
         ),
     }
 
@@ -300,7 +408,15 @@ def test_successful_execution_is_authoritative_in_final_result() -> None:
     )
     answer = FinalAnswer(
         answer="Coordinator wording retained.",
-        result_id="result-1",
+        primary_result_id="result-1",
+        results=[
+            ResultReference(
+                result_id="result-1",
+                executed_sql="SELECT value FROM measurements",
+                originating_question="Compare the groups",
+                short_label="Group measurements",
+            )
+        ],
     )
 
     authoritative = _apply_statistical_analysis(answer, output, execution)
@@ -356,13 +472,26 @@ def test_statistical_parent_is_canonical_when_run_has_multiple_sql_results(
     )
     answer = FinalAnswer(
         answer="Coordinator report summary.",
-        result_id="report-result",
+        primary_result_id="report-result",
+        results=[
+            ResultReference(
+                result_id="report-result",
+                executed_sql=later_sql_result.sql,
+                originating_question="Report summary",
+                short_label="Report summary",
+            ),
+            ResultReference(
+                result_id="statistics-result",
+                executed_sql="SELECT group_name, value FROM observations",
+                originating_question="Compare groups",
+                short_label="Group observations",
+            ),
+        ],
     )
 
-    answer = _apply_sql_analysis(answer, output)
     authoritative = _apply_statistical_analysis(answer, output, execution)
 
-    assert authoritative.result_id == "statistics-result"
+    assert authoritative.primary_result_id == "statistics-result"
     assert authoritative.statistical_analysis is not None
     assert (
         authoritative.statistical_analysis.parent_result_id
@@ -374,7 +503,15 @@ def test_sparse_coordinator_statistical_result_is_tolerated_and_completed() -> N
     answer = FinalAnswer.model_validate(
         {
             "answer": "There is evidence of a difference.",
-            "result_id": "result-1",
+            "primary_result_id": "result-1",
+            "results": [
+                {
+                    "result_id": "result-1",
+                    "executed_sql": "SELECT value FROM measurements",
+                    "originating_question": "Compare groups",
+                    "short_label": "Measurements",
+                }
+            ],
             "statistical_analysis": {
                 "outcome": "analysis_completed",
                 "parent_result_id": "result-1",
@@ -410,22 +547,30 @@ def test_sparse_coordinator_statistical_result_is_tolerated_and_completed() -> N
     assert authoritative.statistical_analysis.outputs == execution.outputs
 
 
-def test_run_store_enforces_three_actual_execution_attempts() -> None:
+def test_run_store_enforces_two_actual_execution_attempts() -> None:
     runs = RunStore()
     run_id = runs.create("thread-1", "source-1", "Analyze")
 
     assert [
-        runs.reserve_statistical_execution_attempt(run_id, maximum=3)
-        for _ in range(3)
-    ] == [1, 2, 3]
-    with pytest.raises(RuntimeError, match="all 3"):
-        runs.reserve_statistical_execution_attempt(run_id, maximum=3)
+        runs.reserve_statistical_execution_attempt(run_id, maximum=2)
+        for _ in range(2)
+    ] == [1, 2]
+    with pytest.raises(RuntimeError, match="all 2"):
+        runs.reserve_statistical_execution_attempt(run_id, maximum=2)
 
 
 def test_conversation_history_omits_binary_figure_payload() -> None:
     answer = FinalAnswer(
         answer="A diagnostic figure was produced.",
-        result_id="result-1",
+        primary_result_id="result-1",
+        results=[
+            ResultReference(
+                result_id="result-1",
+                executed_sql="SELECT value FROM measurements",
+                originating_question="Check diagnostics",
+                short_label="Measurements",
+            )
+        ],
         statistical_analysis=StatisticalAnalysisResult(
             outcome="analysis_completed",
             parent_result_id="result-1",

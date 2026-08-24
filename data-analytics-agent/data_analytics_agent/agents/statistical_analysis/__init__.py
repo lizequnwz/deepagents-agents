@@ -1,4 +1,4 @@
-"""Human-reviewed statistical-analysis specialist."""
+"""Approval-configurable statistical-analysis specialist."""
 
 from data_analytics_agent.agents.statistical_analysis.schemas import (
     PythonExecutionResult,

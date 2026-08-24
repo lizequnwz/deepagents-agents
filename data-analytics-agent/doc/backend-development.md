@@ -2,7 +2,7 @@
 
 ## Purpose and mental model
 
-`SQLBackend` is the database-provider boundary. The agent supplies reviewed SQL
+`SQLBackend` is the database-provider boundary. The agent supplies validated SQL
 and execution limits; the adapter validates, executes, caps, normalizes, and
 returns metadata through stable Python values.
 
@@ -22,6 +22,12 @@ adapters do not need to subclass a base class if they satisfy the contract.
 | `list_tables()` | List queryable tables/views in the source context |
 | `get_table_schema(table_names)` | Return normalized table and column metadata |
 
+`execute` raises `SQLExecutionError` for expected provider rejection of a safe
+query and `TimeoutError` for its deadline. The text-to-SQL tool converts those
+two outcomes into model-visible error observations so the specialist can revise
+within its existing budget. Unexpected adapter or application defects must not
+be relabeled as query errors.
+
 Execution returns:
 
 ```text
@@ -37,7 +43,7 @@ BackendExecutionResult
 Every adapter must:
 
 1. Validate inside `execute` even if the caller already validated.
-2. Execute the exact reviewed query without invisible rewriting.
+2. Execute the exact submitted or human-edited query without invisible rewriting.
 3. Enforce `timeout_seconds` using provider-native cancellation or deadline
    controls.
 4. fetch at most `max_rows + 1` when practical;
@@ -45,7 +51,8 @@ Every adapter must:
 6. report `truncated` accurately;
 7. close/release cursors and connections in success and failure paths;
 8. normalize provider-native values;
-9. propagate an actionable provider error without exposing credentials.
+9. wrap expected query rejection as `SQLExecutionError` with an actionable,
+   credential-free message.
 
 Use [`normalize_result_value`](../data_analytics_agent/backends/base.py) for common
 values:
@@ -153,6 +160,7 @@ Provider-specific tests should also cover:
 - table and schema introspection;
 - quoted/case-sensitive identifiers;
 - provider error sanitization.
+- provider query rejection wrapped as `SQLExecutionError`.
 
 Do not require live cloud credentials in the normal suite. Put live smoke tests
 behind an explicit marker and environment opt-in.

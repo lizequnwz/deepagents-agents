@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import replace
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,7 @@ from data_analytics_agent.agents.visualization.schemas import (
 )
 from data_analytics_agent.api import Services, create_app
 from data_analytics_agent.config import Settings
-from data_analytics_agent.schemas import FinalAnswer
+from data_analytics_agent.schemas import CoordinatorResponse, FinalAnswer
 
 
 class FakeStream:
@@ -26,7 +27,7 @@ class FakeStream:
         *,
         approval_sql: str | None = None,
         interrupt_id: str = "fake-review",
-        answer: FinalAnswer | None = None,
+        answer: CoordinatorResponse | FinalAnswer | None = None,
     ) -> None:
         self.approval_sql = approval_sql
         self.interrupt_id = interrupt_id
@@ -160,9 +161,10 @@ class FakeAutoChartStream(FakeStream):
         chart_spec: ChartSpec,
     ) -> None:
         super().__init__(
-            answer=FinalAnswer(
+            answer=CoordinatorResponse(
                 answer="Coordinator chart response.",
-                result_id=chart_spec.result_id,
+                primary_result_id=chart_spec.result_id,
+                supporting_result_ids=[chart_spec.result_id],
             )
         )
         self.chart_spec = chart_spec
@@ -221,18 +223,6 @@ class DebugStateStream(FakeStream):
                         "limit": 1000,
                         "api_key": "never-show",
                     },
-                },
-            },
-        }
-        yield {
-            "method": "tools",
-            "params": {
-                "namespace": ["text-to-sql:abc"],
-                "data": {
-                    "event": "tool-finished",
-                    "tool_call_id": "skill-call",
-                    "tool_name": "read_file",
-                    "output": "private skill contents",
                 },
             },
         }
@@ -300,6 +290,58 @@ class DebugStateStream(FakeStream):
                 },
             },
         }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["text-to-sql:abc"],
+                "data": {
+                    "event": "tool-finished",
+                    "tool_call_id": "skill-call",
+                    "tool_name": "read_file",
+                    "output": "private skill contents",
+                },
+            },
+        }
+
+
+class FailedStatisticalExecutionStream(FakeStream):
+    def __init__(self) -> None:
+        super().__init__(answer=FinalAnswer(answer="Analysis could not run."))
+
+    async def __aiter__(self):
+        tool_input = {
+            "result_id": "result-12345678",
+            "code": "analysis_outputs = {}",
+        }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["statistical-analysis:abc"],
+                "data": {
+                    "event": "tool-started",
+                    "tool_call_id": "python-call",
+                    "tool_name": "execute_statistical_python",
+                    "input": tool_input,
+                },
+            },
+        }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["statistical-analysis:abc"],
+                "data": {
+                    "event": "tool-finished",
+                    "tool_call_id": "python-call",
+                    "tool_name": "execute_statistical_python",
+                    "output": {
+                        "ok": False,
+                        "code": "python_execution_failed",
+                        "attempt": 1,
+                        "remaining_attempts": 1,
+                    },
+                },
+            },
+        }
 
 
 def test_api_approval_rejection_reapproval_and_rehydration(
@@ -346,10 +388,10 @@ def test_api_approval_rejection_reapproval_and_rehydration(
         truncated=False,
         elapsed_ms=1.0,
     )
-    final_stream.answer = FinalAnswer(
+    final_stream.answer = CoordinatorResponse(
         answer="Five artists were returned.",
-        sql="SELECT stale_model_sql",
-        result_id=saved.result_id,
+        primary_result_id=saved.result_id,
+        supporting_result_ids=[saved.result_id],
         assumptions=["Artist names use catalog spelling."],
         interpretation="The rows are alphabetically ordered.",
     )
@@ -432,7 +474,17 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     assert conversation["run_ids"] == [run_id]
     assert len(conversation["turns"]) == 1
     assert conversation["turns"][0]["answer"]["answer"].startswith("Five")
-    assert conversation["turns"][0]["answer"]["sql"] == executed_sql
+    assert conversation["turns"][0]["answer"]["primary_result_id"] == (
+        saved.result_id
+    )
+    assert conversation["turns"][0]["answer"]["results"] == [
+        {
+            "result_id": saved.result_id,
+            "executed_sql": executed_sql,
+            "originating_question": "",
+            "short_label": "SQL result",
+        }
+    ]
     assert conversation["diagnostics"]["run_count"] == 1
     assert conversation["diagnostics"]["tool_calls"] == 3
     assert conversation["diagnostics"]["has_active_run"] is False
@@ -504,9 +556,11 @@ def test_health_reports_visualization_feature_state(
     health = TestClient(create_app(services)).get("/health")
 
     assert health.status_code == 200
-    assert health.json()["api_contract_version"] == 5
+    assert health.json()["api_contract_version"] == 6
     assert health.json()["reporting_enabled"] is True
     assert health.json()["visualization_enabled"] is True
+    assert health.json()["sql_approval_required"] is False
+    assert health.json()["python_approval_required"] is True
     assert health.json()["statistical_analysis_enabled"] is True
 
 
@@ -609,7 +663,9 @@ def test_debug_activity_and_latest_agent_states_persist_in_history(
     debug_input = tool_events[0]["tool"]["debug_input"]
     assert debug_input["api_key"] == "[REDACTED]"
     assert "never-show" not in str(debug_input)
-    assert "private skill contents" not in str(tool_events)
+    assert tool_events[1]["tool"]["debug_output"] == (
+        "private skill contents"
+    )
     failed = next(
         event
         for event in run["events"]
@@ -617,7 +673,22 @@ def test_debug_activity_and_latest_agent_states_persist_in_history(
         and event["phase"] == "failed"
     )
     assert failed["label"] == "Tool failed · grep"
-    assert "private backend failure" not in str(failed)
+    assert failed["tool"]["debug_output"] == {
+        "error": "private backend failure"
+    }
+
+    package_logger = logging.getLogger("data_analytics_agent")
+    for handler in package_logger.handlers:
+        handler.flush()
+    log_text = (
+        test_settings.project_root / "logs" / "api.log"
+    ).read_text(encoding="utf-8")
+    assert "tool.debug.started" in log_text
+    assert "tool.result.completed" in log_text
+    assert "tool.result.failed" in log_text
+    assert "private skill contents" in log_text
+    assert "never-show" not in log_text
+    assert "[REDACTED]" in log_text
 
     states = {snapshot["agent"]: snapshot for snapshot in run["debug_states"]}
     assert set(states) == {"coordinator", "text-to-sql"}
@@ -661,8 +732,61 @@ def test_debug_state_and_raw_inputs_are_absent_when_disabled(
     assert run["debug_states"] == []
     assert all(
         (event.get("tool") or {}).get("debug_input") is None
+        and (event.get("tool") or {}).get("debug_output") is None
         for event in run["events"]
     )
+
+    package_logger = logging.getLogger("data_analytics_agent")
+    for handler in package_logger.handlers:
+        handler.flush()
+    log_text = (
+        test_settings.project_root / "logs" / "api.log"
+    ).read_text(encoding="utf-8")
+    assert "tool.result.completed" in log_text
+    assert "private skill contents" in log_text
+    assert "tool.result.failed" in log_text
+    assert "private backend failure" in log_text
+    assert "tool.debug.started" not in log_text
+
+
+def test_handled_statistical_failure_is_not_presented_as_executed(
+    test_settings: Settings,
+) -> None:
+    services = Services(
+        settings=test_settings,
+        agent=FakeAgent([FailedStatisticalExecutionStream()]),
+    )
+    client = TestClient(create_app(services))
+    thread_id = client.post("/api/conversations").json()["thread_id"]
+
+    created = client.post(
+        f"/api/conversations/{thread_id}/messages",
+        json={"message": "Fit a model"},
+    ).json()
+    run = client.get(f"/api/runs/{created['run_id']}").json()
+
+    events = [
+        event
+        for event in run["events"]
+        if (event.get("tool") or {}).get("call_id") == "python-call"
+    ]
+    assert [event["phase"] for event in events] == ["started", "failed"]
+    assert events[1]["label"] == (
+        "Statistical Python execution failed · attempt 1"
+    )
+    assert events[1]["tool"]["arguments"] == {
+        "code_lines": 1,
+        "result": "result-1",
+        "attempt": 1,
+        "remaining_attempts": 1,
+        "code": "python_execution_failed",
+    }
+    statistical = next(
+        agent
+        for agent in run["run_diagnostics"]["agents"]
+        if agent["agent"] == "statistical-analysis"
+    )
+    assert statistical["tool_call_errors"] == 1
 
 
 def test_api_chart_generation_is_automatic_and_completes_conversation(
@@ -692,22 +816,20 @@ def test_api_chart_generation_is_automatic_and_completes_conversation(
 
     created = client.post(
         f"/api/conversations/{thread_id}/messages",
-        json={"message": "Chart the saved artists"},
+        json={"message": "List the saved artists"},
     )
     run_id = created.json()["run_id"]
     assert len(fake.inputs) == 1
     assert fake.inputs[0]["thread_id"] == thread_id
     assert fake.inputs[0]["run_id"] == run_id
     assert fake.inputs[0]["source_id"] == "test"
-    assert fake.inputs[0]["question"] == "Chart the saved artists"
+    assert fake.inputs[0]["question"] == "List the saved artists"
     assert fake.configs[0]["configurable"]["thread_id"] == run_id
     completed = client.get(f"/api/runs/{run_id}").json()
     assert completed["status"] == "completed"
     assert completed["approval"] is None
     assert completed["answer"]["chart"] == spec.model_dump(mode="json")
-    assert completed["answer"]["answer"] == (
-        "Chart generated successfully: bar chart 'Artist IDs'."
-    )
+    assert completed["answer"]["answer"] == "Coordinator chart response."
     assert any(
         event["label"] == "Generating bar chart · x=Name · y=ArtistId"
         for event in completed["events"]
@@ -719,8 +841,10 @@ def test_api_chart_generation_is_automatic_and_completes_conversation(
     turn = client.get(f"/api/conversations/{thread_id}").json()["turns"][0]
     assert turn["answer"]["chart"] == spec.model_dump(mode="json")
     assert turn["answer"]["answer"] == completed["answer"]["answer"]
-    assert turn["answer"]["result_id"] == saved.result_id
-    assert turn["answer"]["sql"] == saved.executed_sql
+    assert turn["answer"]["primary_result_id"] == saved.result_id
+    assert turn["answer"]["results"][0]["executed_sql"] == (
+        saved.executed_sql
+    )
     decision = client.post(
         f"/api/runs/{run_id}/decisions",
         json={"decisions": [{"action": "approve"}]},

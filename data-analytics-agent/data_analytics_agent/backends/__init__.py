@@ -4,6 +4,7 @@ from data_analytics_agent.backends.base import (
     BackendExecutionResult,
     ColumnInfo,
     SQLBackend,
+    SQLExecutionError,
     TableInfo,
 )
 from data_analytics_agent.backends.factory import create_backend
@@ -22,6 +23,7 @@ __all__ = [
     "BackendExecutionResult",
     "ColumnInfo",
     "SQLBackend",
+    "SQLExecutionError",
     "SQLValidationError",
     "SnowflakeBackend",
     "SnowflakeClient",

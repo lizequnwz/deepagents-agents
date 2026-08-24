@@ -256,6 +256,12 @@ def create_app(services: Services | None = None) -> FastAPI:
             api_contract_version=API_CONTRACT_VERSION,
             default_source_id=default_source_id,
             ready_source_count=ready_count,
+            sql_approval_required=(
+                container.settings.require_sql_approval
+            ),
+            python_approval_required=(
+                container.settings.require_python_approval
+            ),
             visualization_enabled=(
                 container.settings.enable_data_visualization
             ),
@@ -442,6 +448,21 @@ def create_app(services: Services | None = None) -> FastAPI:
     @app.get("/api/reports/{report_id}", response_model=ReportResponse)
     async def get_report(report_id: str) -> ReportResponse:
         return container.reports.response_unscoped(report_id)
+
+    @app.get("/api/reports/{report_id}/view")
+    async def view_report(report_id: str) -> Response:
+        report = container.reports.get_unscoped(report_id)
+        return Response(
+            content=report.html.encode("utf-8"),
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'inline; filename="report-{report.report_id[:8]}-'
+                    f'v{report.version}.html"'
+                ),
+                "ETag": f'"{report.html_sha256}"',
+            },
+        )
 
     @app.get("/api/reports/{report_id}/download")
     async def download_report(report_id: str) -> Response:

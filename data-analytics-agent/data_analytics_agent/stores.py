@@ -778,7 +778,7 @@ class RunStore:
         *,
         maximum: int,
     ) -> int:
-        """Count actual reviewed executions, excluding review rejections."""
+        """Count actual executions, excluding review rejections."""
 
         with self._lock:
             item = self._get_mutable(run_id)
@@ -789,6 +789,12 @@ class RunStore:
                 )
             item.statistical_execution_attempts += 1
             return item.statistical_execution_attempts
+
+    def statistical_execution_attempt_count(self, run_id: str) -> int:
+        """Return actual statistical Python executions used by this run."""
+
+        with self._lock:
+            return self._get_mutable(run_id).statistical_execution_attempts
 
     def record_statistical_execution(
         self,

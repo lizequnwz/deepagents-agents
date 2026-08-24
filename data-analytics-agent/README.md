@@ -1,33 +1,39 @@
 # Data Analytics Agent
 
-A source-aware, human-reviewed conversational analytics POC built with Deep
+A source-aware, approval-configurable conversational analytics POC built with Deep
 Agents, FastAPI, and Streamlit.
 
 The Data Analytics Agent delegates database questions to an isolated
 text-to-SQL specialist. The specialist reads the selected OSI semantic model,
-prepares one read-only query, and pauses for approve/edit/reject review before a
-source-bound backend executes the exact reviewed SQL.
+prepares one read-only query, validates it, and either executes immediately or
+pauses for approve/edit/reject according to `REQUIRE_SQL_APPROVAL`.
 
-When—and only when—the user explicitly requests a chart, the coordinator can
-delegate one saved, chart-ready result to an optional visualization specialist.
-That specialist receives an immutable full-result profile plus at most 10 rows,
+For broader questions, the coordinator plans a sequential investigation and
+combines several source/thread-scoped SQL results. Every ordinary data-bearing
+answer then attempts one useful chart over the most explanatory final result.
+The optional visualization specialist receives an immutable full-result profile
+plus at most 10 rows,
 validates one constrained Plotly `ChartSpec`, and returns an explicit terminal
 outcome to the coordinator.
 
-For statistical tests, experiments, correlations, distributions, regression,
-and related inference, an optional statistical-analysis specialist consumes one
-source/thread-scoped saved result by ID. It writes general Python, pauses for
-approve/edit/reject review, then executes the exact reviewed code with the
+When uncertainty or modeling materially improves the answer, an optional
+statistical-analysis specialist handles experiments, regression, trend
+inference, seasonality, forecasting, and related analysis over one
+source/thread-scoped saved result by ID. It writes general Python, then either
+pauses for approve/edit/reject or executes immediately according to
+`REQUIRE_PYTHON_APPROVAL`; the exact submitted or edited code runs with the
 saved data preloaded as pandas `df`. Compact tables, text, and bounded
 matplotlib/seaborn figures return to the coordinator; the complete DataFrame
 never enters an agent message.
 
-For an explicit report, infographic, briefing, or data-story request, the
-coordinator loads its report-design skill, reuses compatible artifacts or runs
-missing analysis through the existing review flows, and produces a strict
-`ReportSpec`. Trusted code renders one self-contained HTML file for isolated
-Streamlit preview and immediate download; revisions remain conversational and
-do not require an approve/finalize ceremony.
+Every successful evidence-backed analysis also produces a compact HTML report.
+After final evidence, optional statistics, and the ordinary automatic chart are
+complete, the coordinator loads its report-design skill and produces a strict
+`ReportSpec` over those same artifacts. Trusted code renders one self-contained
+file for isolated Streamlit preview and immediate download. Explicit report,
+infographic, briefing, and data-story requests can still control audience,
+structure, and visual direction; revisions remain conversational and do not
+require an approve/finalize ceremony.
 
 Included local sources:
 
@@ -51,21 +57,21 @@ model.
 - Source-specific agent graph, OSI model, dialect, limits, and backend
 - Generic `SQLBackend` protocol with a hardened SQLite adapter
 - Dialect-aware structural validation with SQLGlot
-- Mandatory human review of every SQL execution
+- Independently configurable SQL and statistical-Python approval
 - Repeated rejection, revision, and reapproval cycles
 - Exact edited-SQL execution and result provenance
 - Optional, feature-flagged statistical-analysis specialist
-- Mandatory review of every statistical Python execution and exact edited-code
-  execution
+- Exact autonomous or human-edited SQL/Python execution provenance
 - General pandas/NumPy/SciPy/statsmodels/scikit-learn analysis with bounded
   matplotlib/seaborn figures
-- Truncated-result refusal, one SQL-reshape recovery, and three actual Python
-  execution attempts at most
+- Truncated-result refusal, one SQL-reshape recovery, and one targeted Python
+  repair after the initial execution at most
 - Optional, feature-flagged visualization specialist using the existing model
-- One automatically executed, constrained chart tool
+- One automatically selected, constrained chart per ordinary data answer
 - Bar, line, area, scatter, pie/donut, histogram, box, heatmap, and map charts
 - Deterministic Plotly rendering with saved-result reconstruction
 - Full capped results and eager column profiles stored outside model context
+- Multi-result final evidence with trusted primary-first scoped references
 - At most `head(10)` rows visible to the coordinator and specialists
 - No generated SQL limit unless the user explicitly requests one
 - Streamlit result tables, CSV downloads, warnings, and source diagnostics
@@ -73,11 +79,12 @@ model.
   curated tool arguments
 - In-memory run and conversation diagnostics for provider-reported tokens,
   elapsed/active/review time, per-agent aggregates, and tool durations
-- Rotating privacy-bounded API logs in `logs/api.log`
-- Optional trusted-local debug views for redacted tool inputs and bounded
+- Rotating bounded API logs with redacted tool results in every mode
+- Optional trusted-local debug views for bounded tool inputs/results and
   per-agent state snapshots
 - Optional Snowflake adapter over an injected `snowlib` client
-- Feature-flagged coordinator reporting skill with open-ended design direction
+- Automatic feature-flagged coordinator reporting with open-ended explicit
+  design direction
 - Accessible self-contained HTML reports with reproducible SQL, scoped
   provenance, versioning,
   isolated preview, and byte-identical download
@@ -125,17 +132,21 @@ API_AUTO_RELOAD=false ./scripts/start.sh
 ## Use the agent
 
 1. Select a ready source in the sidebar.
-2. Ask a business question.
-3. Inspect joins, filters, measures, dates, ordering, and row limit in the SQL
-   review.
-4. Approve, edit, or reject with feedback.
-5. For statistical inference, review the complete proposed Python and immutable
-   input-result provenance before execution.
-6. To visualize a regular saved result, explicitly ask for one chart.
+2. Choose a source example to prefill the chat box for editing, or write your
+   own business question, then send it.
+3. When SQL approval is enabled, inspect joins, filters, measures, dates,
+   ordering, and row limits, then approve, edit, or reject with feedback.
+4. For statistical inference, review the complete proposed Python when Python
+   approval is enabled.
+5. Let the coordinator choose one useful chart automatically, or name an exact
+   chart type to make it authoritative.
+6. Open the automatically generated report in a full-page reading view or
+   download its identical HTML, and optionally request a different audience,
+   structure, or visual treatment.
 7. Expand progress steps to inspect loaded skills, context files, tools, and
    curated arguments such as chart mappings.
-8. Inspect statistical outputs or the rendered Plotly chart, parent table/CSV,
-   exact Python, and executed SQL.
+8. Inspect every supporting table/CSV, exact SQL, statistical outputs, rendered
+   Plotly chart, and exact executed Python.
 9. Expand run diagnostics, or the sidebar conversation diagnostics, to inspect
    operational usage and timing.
 
@@ -200,13 +211,13 @@ See [Backend development](doc/backend-development.md) and the
 - Registry targets and semantic files are trusted server configuration.
 - SQLGlot permits one `SELECT`/CTE/set-operation query.
 - Validation does not submit a preflight query.
-- Every `execute_sql` action pauses for human review.
-- Every `execute_statistical_python` action pauses for human review.
+- SQL and Python interrupts are controlled independently by deployment settings;
+  autonomous mode preserves every validation and execution limit.
 - `create_chart` executes automatically only after strict schema and
   result-scoped validation.
 - Edited SQL is validated again.
-- The backend executes the exact reviewed SQL.
-- A bounded subprocess executes the exact reviewed Python with service secrets
+- The backend executes the exact validated or human-edited SQL.
+- A bounded subprocess executes the exact submitted or human-edited Python with service secrets
   removed from its environment. It is not a production sandbox.
 - SQLite uses read-only mode, an authorizer, deadline, and capped fetch.
 - Per-agent model and tool-call budgets stop runaway loops and continue across
@@ -215,6 +226,9 @@ See [Backend development](doc/backend-development.md) and the
 - Only the full-result profile and at most the first 10 rows enter model
   context.
 - Statistical execution refuses saved results marked `truncated`.
+- Saved result IDs are opaque evidence handles, never database table names.
+- Expected SQL validation and provider query errors return to the specialist
+  for bounded repair instead of failing the whole run immediately.
 
 Read [SQL safety and human review](doc/safety-and-hitl.md) before changing
 validation, approval, execution, or result access.
@@ -256,9 +270,9 @@ This remains a local, single-user POC:
 - there is no authentication or durable persistence;
 - Snowflake requires the external `snowlib` package, its environment/config,
   and a least-privilege default role/database/schema context;
-- visualization is intentionally limited to one validated chart over one saved
-  result, without arbitrary Python or custom Plotly layout code;
-- reviewed statistical Python is trusted-local code with filesystem, process,
+- visualization is intentionally limited to one validated top-level chart over
+  one final evidence result, without arbitrary Python or custom Plotly layout;
+- statistical Python is trusted-local code with filesystem, process,
   and network capabilities; production sandboxing is out of scope;
 - completed statistical outputs and report versions are process-local reusable
   artifacts and disappear on API reload;

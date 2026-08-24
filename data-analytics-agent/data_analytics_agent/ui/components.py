@@ -91,6 +91,11 @@ def consolidate_activity_events(
                 if existing_tool.get("debug_input") is not None
                 else new_tool.get("debug_input")
             ),
+            "debug_output": (
+                new_tool.get("debug_output")
+                if new_tool.get("debug_output") is not None
+                else existing_tool.get("debug_output")
+            ),
         }
     return consolidated
 
@@ -335,7 +340,8 @@ def render_activity_timeline(
         tool = event.get("tool") or {}
         arguments = tool.get("arguments") or {}
         debug_input = tool.get("debug_input")
-        if not arguments and debug_input is None:
+        debug_output = tool.get("debug_output")
+        if not arguments and debug_input is None and debug_output is None:
             continue
         tool_name = str(tool.get("name") or "tool")
         tool_seen[tool_name] = tool_seen.get(tool_name, 0) + 1
@@ -360,6 +366,11 @@ def render_activity_timeline(
                     "Redacted and bounded raw input · trusted local debug only"
                 )
                 st.json(debug_input)
+            if debug_output is not None:
+                st.caption(
+                    "Redacted and bounded raw result · trusted local debug only"
+                )
+                st.json(debug_output)
 
     render_debug_states(
         debug_states or [],
@@ -450,8 +461,9 @@ def render_sidebar(
     with st.sidebar:
         st.title("Data Analytics Agent")
         st.caption(
-            "Human-reviewed SQL and statistical Python, optional constrained "
-            "charts, semantic grounding, and local in-memory conversation state."
+            "Approval-configurable SQL and statistical Python, automatic "
+            "constrained charts, semantic grounding, and local in-memory "
+            "conversation state."
         )
         ready_sources = [
             source for source in data_sources["sources"] if source["ready"]
@@ -499,24 +511,22 @@ def render_sidebar(
                 icon=":material/check_circle:",
                 color="green",
             )
-            if health.get("visualization_enabled"):
-                st.badge(
-                    "Charts enabled",
-                    icon=":material/bar_chart:",
-                    color="blue",
+            st.caption(
+                "SQL execution · "
+                + (
+                    "review required"
+                    if health.get("sql_approval_required")
+                    else "automatic"
                 )
-            if health.get("statistical_analysis_enabled"):
-                st.badge(
-                    "Statistics enabled",
-                    icon=":material/functions:",
-                    color="violet",
+            )
+            st.caption(
+                "Statistical Python · "
+                + (
+                    "review required"
+                    if health.get("python_approval_required")
+                    else "automatic"
                 )
-            if health.get("reporting_enabled"):
-                st.badge(
-                    "HTML reports enabled",
-                    icon=":material/article:",
-                    color="blue",
-                )
+            )
         elif health:
             st.warning("API setup incomplete", icon=":material/warning:")
             for error in health.get("errors", []):
@@ -580,10 +590,24 @@ def render_sidebar(
         return new_conversation, diagnostics_slot
 
 
+def _prefill_chat_input(
+    selector_key: str,
+    chat_input_key: str,
+    question_by_label: dict[str, str],
+) -> None:
+    """Copy one selected example into the composer without submitting it."""
+
+    selection = st.session_state.get(selector_key)
+    if selection in question_by_label:
+        st.session_state[chat_input_key] = question_by_label[selection]
+
+
 def render_empty_state(
     thread_id: str,
     source: dict[str, Any],
-) -> str | None:
+    *,
+    chat_input_key: str,
+) -> None:
     examples = source.get("examples") or FALLBACK_EXAMPLES
     question_by_label = {
         f":material/lightbulb: {item['label']}": item["question"]
@@ -595,17 +619,19 @@ def render_empty_state(
             anchor=False,
         )
         st.caption(
-            "Try an example or write your own question below. You will always "
-            "see and review generated SQL before it runs."
+            "Choose an example to place it in the chat box, then edit or send "
+            "it. Every result retains its exact validated SQL and provenance."
         )
-        selection = st.pills(
+        selector_key = f"starter_question_{thread_id}"
+        st.pills(
             "Example questions",
             options=list(question_by_label),
-            key=f"starter_question_{thread_id}",
+            key=selector_key,
             label_visibility="collapsed",
             width="stretch",
+            on_change=_prefill_chat_input,
+            args=(selector_key, chat_input_key, question_by_label),
         )
-    return question_by_label.get(selection) if selection else None
 
 
 def _render_result(
@@ -615,6 +641,8 @@ def _render_result(
     widget_key: str,
     source_id: str,
     chart: dict[str, Any] | None = None,
+    reference: dict[str, Any] | None = None,
+    expanded: bool = False,
 ) -> None:
     try:
         result = client.get_result(result_id)
@@ -676,6 +704,20 @@ def _render_result(
             key=f"download_{result_id}_{widget_key}",
         )
 
+    def render_provenance() -> None:
+        if reference:
+            question = str(reference.get("originating_question") or "")
+            if question:
+                st.caption(f"Originating question · {question}")
+            st.markdown("**Executed SQL**")
+            st.code(
+                str(reference.get("executed_sql") or result["executed_sql"]),
+                language="sql",
+            )
+        else:
+            st.markdown("**Executed SQL**")
+            st.code(result["executed_sql"], language="sql")
+
     if chart and result["rows"]:
         try:
             spec = ChartSpec.model_validate(chart)
@@ -711,13 +753,20 @@ def _render_result(
                 icon=":material/warning:",
             )
         with st.expander(
-            "Underlying data",
+            "Evidence data and provenance",
             icon=":material/table_chart:",
-            expanded=False,
+            expanded=expanded,
         ):
             render_table()
+            render_provenance()
     else:
-        render_table()
+        with st.expander(
+            "Evidence data and provenance",
+            icon=":material/table_chart:",
+            expanded=expanded,
+        ):
+            render_table()
+            render_provenance()
 
 
 def _render_report(
@@ -760,18 +809,25 @@ def _render_report(
                 color="blue",
             )
             st.caption(str(report["title"]))
-        st.download_button(
-            "Download HTML report",
-            data=html.encode("utf-8"),
-            file_name=(
-                f"report-{report_id[:8]}-v{report['version']}.html"
-            ),
-            mime="text/html",
-            icon=":material/download:",
-            on_click="ignore",
-            width="content",
-            key=f"download_report_{report_id}_{widget_key}",
-        )
+        with st.container(horizontal=True, gap="small"):
+            st.link_button(
+                "Open full report",
+                client.report_view_url(report_id),
+                icon=":material/open_in_new:",
+                width="content",
+            )
+            st.download_button(
+                "Download HTML report",
+                data=html.encode("utf-8"),
+                file_name=(
+                    f"report-{report_id[:8]}-v{report['version']}.html"
+                ),
+                mime="text/html",
+                icon=":material/download:",
+                on_click="ignore",
+                width="content",
+                key=f"download_report_{report_id}_{widget_key}",
+            )
         with st.expander(
             "Report preview",
             icon=":material/preview:",
@@ -827,22 +883,31 @@ def render_turn(
                 widget_key=turn_key,
             )
 
-        if answer.get("result_id"):
+        results = answer.get("results") or []
+        chart = answer.get("chart")
+        for index, reference in enumerate(results):
+            result_id = str(reference.get("result_id") or "")
+            label = str(reference.get("short_label") or "SQL evidence")
+            st.markdown(f"**Evidence {index + 1} · {label}**")
+            if result_id == answer.get("primary_result_id"):
+                st.badge(
+                    "Primary evidence",
+                    icon=":material/verified:",
+                    color="green",
+                )
             _render_result(
                 client,
-                answer["result_id"],
-                widget_key=turn_key,
+                result_id,
+                widget_key=f"{turn_key}_{index}",
                 source_id=source_id,
-                chart=answer.get("chart"),
+                chart=(
+                    chart
+                    if chart and chart.get("result_id") == result_id
+                    else None
+                ),
+                reference=reference,
+                expanded=index == 0 and chart is None,
             )
-
-        if answer.get("sql"):
-            with st.expander(
-                "Executed SQL",
-                icon=":material/code:",
-                expanded=False,
-            ):
-                st.code(answer["sql"], language="sql")
 
         activities = turn.get("activities") or []
         debug_states = turn.get("debug_states") or []
@@ -945,7 +1010,7 @@ def _render_statistical_analysis(
             st.markdown(str(interpretation))
 
     with st.expander(
-        "Reviewed statistical Python and provenance",
+        "Executed statistical Python and provenance",
         icon=":material/code:",
         expanded=False,
     ):

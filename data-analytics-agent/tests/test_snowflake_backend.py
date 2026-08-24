@@ -10,6 +10,7 @@ import pytest
 from data_analytics_agent import api
 from data_analytics_agent.api import Services
 from data_analytics_agent.backends import (
+    SQLExecutionError,
     SnowflakeBackend,
     SQLValidationError,
     create_backend,
@@ -117,6 +118,24 @@ def test_execute_translates_cancel_and_closes_cursor() -> None:
     with pytest.raises(TimeoutError, match="exceeded 3 seconds"):
         backend.execute(
             "SELECT value FROM facts",
+            timeout_seconds=3,
+            max_rows=10,
+        )
+
+    assert cursor.closed is True
+
+
+def test_execute_wraps_expected_provider_query_errors() -> None:
+    cursor = FakeCursor(
+        ["VALUE"],
+        [],
+        fetch_error=FakeSnowflakeError("unknown table", errno=2003),
+    )
+    backend = SnowflakeBackend(FakeSnowflakeClient([cursor]))
+
+    with pytest.raises(SQLExecutionError, match=r"\[2003\] unknown table"):
+        backend.execute(
+            "SELECT value FROM missing_facts",
             timeout_seconds=3,
             max_rows=10,
         )

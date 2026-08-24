@@ -1,6 +1,6 @@
 ---
 name: report-design
-description: Create or revise professional, accessible, self-contained HTML analytical reports and infographics from conversation-scoped SQL results, chart specifications, and statistical analyses. Use for explicit requests for a report, infographic, briefing, analysis document, findings summary, data story, or downloadable HTML presentation.
+description: Create or revise professional, accessible, self-contained HTML analytical reports from conversation-scoped SQL results, chart specifications, and statistical analyses. Use automatically after successful evidence-backed analysis and for explicit reports, infographics, briefings, findings summaries, data stories, or downloadable HTML presentations.
 ---
 
 # Report design
@@ -20,15 +20,20 @@ scope and renders the standalone document.
 
 ## Workflow
 
-1. Interpret the purpose, audience, key questions, evidence, and requested
-   visual direction. Infer professional defaults when intent is clear. Ask one
-   focused question only when ambiguity would materially change the report.
+1. Choose the report mode. For an ordinary completed analysis, use the compact
+   automatic default below without asking questions. For an explicit report or
+   revision, interpret the purpose, audience, key questions, evidence, and
+   requested visual direction. Infer professional defaults when intent is
+   clear. Ask one focused question only when ambiguity would materially change
+   an explicitly requested report.
 2. Discover relevant saved results. Reuse only artifacts from this conversation
    and source. A report may synthesize several compatible result IDs.
 3. Identify evidence gaps. Obtain new reviewed SQL or reviewed statistical
    analysis through the existing specialists when needed. Do not fabricate
    values from samples or profiles.
-4. Choose an information hierarchy and coherent design system. Read
+4. Choose an information hierarchy and coherent design system. For a compact
+   automatic report, use the renderer defaults and skip custom theme fields.
+   For an explicitly designed report, read
    [design-quality.md](references/design-quality.md) before selecting theme,
    layout, charts, or infographic composition.
 5. Read [report-spec.md](references/report-spec.md), then build one declarative
@@ -45,6 +50,23 @@ scope and renders the standalone document.
    missing requirement to the user.
 8. Tell the user the preview is ready and invite optional feedback or further
    analysis. Do not require approval or finalization.
+
+## Compact automatic report
+
+After an ordinary successful data-bearing analysis, create one concise report
+from the exact final evidence without expanding the investigation:
+
+- lead with a short narrative that states the answer and material assumptions;
+- reuse the exact successful top-level `ChartSpec` when it adds decision value;
+- include one purposeful table block for every material final result, normally
+  with a small row limit rather than all rows;
+- include the current completed statistical analysis when present;
+- use the default theme and omit decorative metrics, callouts, or infographic
+  blocks unless they materially improve comprehension.
+
+Do not generate a report for a response without final evidence. Report creation
+is presentation, not a reason to run extra SQL or Python after the analysis is
+already sufficient.
 
 ## Content and artifact rules
 

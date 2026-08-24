@@ -1,4 +1,4 @@
-"""Child-process entry point for reviewed statistical Python."""
+"""Child-process entry point for validated statistical Python."""
 
 from __future__ import annotations
 

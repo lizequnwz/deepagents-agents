@@ -141,13 +141,22 @@ def test_create_report_returns_compact_repair_guidance() -> None:
     assert any(issue.path.startswith("blocks.0") for issue in invalid.issues)
 
 
-def test_create_report_accepts_fenced_legacy_wrapper() -> None:
-    reports = ReportStore()
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '```json\n{"title":"Fenced","blocks":[]}\n```',
+        '"{\\"title\\":\\"Double encoded\\",\\"blocks\\":[]}"',
+        '{"spec":{"title":"Wrapped","blocks":[]}}',
+    ],
+)
+def test_create_report_rejects_obsolete_transport_wrappers(
+    payload: str,
+) -> None:
     tool = create_create_report_tool(
         ResultStore(),
         StatisticalAnalysisStore(),
         RunStore(),
-        reports,
+        ReportStore(),
         source_id="source-1",
     )
     runtime = SimpleNamespace(
@@ -157,18 +166,9 @@ def test_create_report_accepts_fenced_legacy_wrapper() -> None:
             "source_id": "source-1",
         }
     )
-    payload = '''```json
-{"spec":{"title":"Quoted \\"report\\"","blocks":[{"type":"narrative","body":"Line one\\nLine two"}]}}
-```'''
+    result = ReportToolFailure.model_validate_json(tool.func(payload, runtime))
 
-    result = ReportToolResult.model_validate_json(tool.func(payload, runtime))
-
-    assert result.report.title == 'Quoted "report"'
-    assert "Line one<br>Line two" in reports.get(
-        result.report.report_id,
-        "thread-1",
-        source_id="source-1",
-    ).html
+    assert result.code in {"invalid_report_json", "invalid_report_spec"}
 
 
 def test_renderer_escapes_model_text_and_includes_all_requested_rows() -> None:
@@ -458,7 +458,7 @@ def test_stored_statistical_analysis_can_be_embedded_with_figure() -> None:
     assert artifact.html.count("Small sample.") == 1
 
 
-def test_authoritative_report_tool_result_overrides_coordinator_copy() -> None:
+def test_authoritative_report_tool_result_preserves_ordinary_chart() -> None:
     reports = ReportStore()
     spec = ReportSpec.model_validate(
         {"title": "Trusted", "blocks": [{"type": "narrative", "body": "Body"}]}
@@ -485,9 +485,34 @@ def test_authoritative_report_tool_result_overrides_coordinator_copy() -> None:
         ]
     }
 
-    answer = _apply_report(FinalAnswer(answer="Ready."), output)
+    answer = _apply_report(
+        FinalAnswer.model_validate(
+            {
+                "answer": "Ready.",
+                "primary_result_id": "result-1",
+                "results": [
+                    {
+                        "result_id": "result-1",
+                        "executed_sql": "SELECT category, amount FROM metrics",
+                        "originating_question": "Compare categories",
+                        "short_label": "Category comparison",
+                    }
+                ],
+                "chart": {
+                    "result_id": "result-1",
+                    "chart_type": "bar",
+                    "title": "Redundant top-level chart",
+                    "x": "category",
+                    "y": ["amount"],
+                },
+            }
+        ),
+        output,
+    )
 
     assert answer.report == artifact.reference()
+    assert answer.chart is not None
+    assert answer.chart.result_id == "result-1"
 
 
 def test_report_api_returns_identical_preview_and_download_bytes(
@@ -509,10 +534,15 @@ def test_report_api_returns_identical_preview_and_download_bytes(
     client = TestClient(create_app(services))
 
     preview = client.get(f"/api/reports/{artifact.report_id}")
+    view = client.get(f"/api/reports/{artifact.report_id}/view")
     download = client.get(f"/api/reports/{artifact.report_id}/download")
 
     assert preview.status_code == 200
+    assert view.status_code == 200
+    assert view.content == download.content
     assert preview.json()["html"].encode("utf-8") == download.content
+    assert view.headers["etag"] == f'"{artifact.html_sha256}"'
+    assert "inline" in view.headers["content-disposition"]
     assert download.headers["etag"] == f'"{artifact.html_sha256}"'
     assert "attachment" in download.headers["content-disposition"]
 
@@ -535,6 +565,9 @@ class Client:
             "html": {html!r},
             "html_sha256": {digest!r},
         }}
+
+    def report_view_url(self, report_id):
+        return f"http://api.test/api/reports/{{report_id}}/view"
 
 render_turn(
     Client(),
@@ -560,4 +593,6 @@ render_turn(
 
     assert not app.exception
     assert len(app.get("download_button")) == 1
+    assert len(app.get("link_button")) == 1
+    assert app.get("link_button")[0].label == "Open full report"
     assert [panel.label for panel in app.get("status")] == ["Report preview"]

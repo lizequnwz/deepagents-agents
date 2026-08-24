@@ -16,13 +16,13 @@ inside an adapter.
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
-| Streamlit | Source selection, conversation URL, polling, SQL/Python review, progress, statistical/result/Plotly presentation | Agent graph, credentials, SQL or Python execution |
+| Streamlit | Source selection, conversation URL, polling, conditional SQL/Python review, progress, multi-result/statistical/Plotly presentation | Agent graph, credentials, SQL or Python execution |
 | FastAPI | Source catalog, conversations, runs, SQL decisions, result endpoint, service construction | Open-ended business interpretation |
-| Coordinator | Conversational context, delegation, model-generated structured answers | Direct SQL execution |
+| Coordinator | Conversational context, direct-versus-investigation planning, sequential delegation, evidence selection, structured answers | Direct SQL execution |
 | Text-to-SQL specialist | OSI reading, query design, structural validation, execution request, interpretation | Source switching |
 | Visualization specialist | One constrained chart spec over one scoped saved result | SQL, arbitrary Python, source switching |
-| Statistical specialist | General reviewed Python over one scoped saved SQL result | SQL, source switching, unreviewed execution |
-| HITL middleware | Pause and approve/edit/reject resume shape for SQL and Python | Database authorization or a production code sandbox |
+| Statistical specialist | General validated Python over one scoped saved SQL result | SQL, source switching |
+| HITL middleware | Deployment-configurable pause and approve/edit/reject resume shape for SQL and Python | Database authorization or a production code sandbox |
 | `SQLBackend` | Provider dialect, validation, execution, metadata, native safety controls | Business semantics |
 | OSI model | Curated entities, physical expressions, relationships, metrics, AI context | Credentials or connection lifecycle |
 | Process-local stores | Conversation, run, event, and result artifacts | Durable or multi-user persistence |
@@ -85,11 +85,15 @@ thread/source provenance.
 - provider/tool structured-output contracts;
 - a source-specific in-memory LangGraph checkpointer.
 
-The coordinator delegates through the built-in `task` tool. It can read saved
-results but cannot execute SQL. `agents/text_to_sql/` owns database analysis;
-`agents/visualization/` owns the chart schema, result-scoped tools, validation,
-geocoding, and deterministic renderer. The root `agent.py` remains a thin
-compatibility import for Deep Agents tooling.
+The coordinator delegates through the built-in `task` tool. Direct questions
+use one SQL assignment; investigations use `write_todos` and sequential atomic
+assignments whose later steps can depend on earlier evidence. It can inspect
+saved results but cannot execute SQL. Result IDs are opaque application evidence
+handles, not relations in the configured source. Every later SQL assignment is
+therefore restated as a complete source query. `agents/text_to_sql/` owns
+database analysis; `agents/visualization/` owns the chart schema, result-scoped
+tools, validation, geocoding, and deterministic renderer. The root `agent.py`
+remains a thin compatibility import for Deep Agents tooling.
 
 `agents/statistical_analysis/` owns result inspection, the Python HITL tool,
 bounded subprocess execution, typed statistical outputs, and the terminal
@@ -104,44 +108,60 @@ message.
    state containing the conversation, run, and source IDs.
 4. The coordinator delegates database work.
 5. The specialist reads OSI context, validates SQL, and calls `execute_sql`.
-6. HITL pauses before the tool runs.
-7. Approve/edit resumes execution; reject returns feedback to the specialist.
+   Expected validation or provider query errors return as tool observations so
+   the specialist can revise within the existing execution budget.
+6. When `REQUIRE_SQL_APPROVAL=true`, HITL pauses before the tool runs;
+   otherwise the same validated tool executes immediately.
+7. In review mode, approve/edit resumes execution and reject returns feedback.
 8. The backend fetches `cap + 1`, returns at most the configured cap, and uses
    the extra row only to detect truncation.
 9. `ResultStore` saves the rows and an eager immutable full-artifact profile
    with thread/source provenance.
 10. The SQL specialist and coordinator see the profile plus at most the first
-    10 rows and the result ID.
-11. `RunManager` verifies final-answer provenance and records the turn.
-12. Streamlit retrieves and displays the full capped artifact.
-13. On an explicit chart request, the visualization specialist inspects the
-    same profile plus at most 10 rows and proposes one `ChartSpec`.
+    10 rows and the result ID. Investigations may repeat steps 4–10 sequentially.
+11. The coordinator returns a primary result ID and every material supporting
+    result ID. `RunManager` resolves exact primary-first `ResultReference`
+    objects from current-thread/current-source storage.
+12. Streamlit retrieves and displays every final evidence artifact.
+13. For an ordinary data answer, the visualization specialist inspects the
+    selected final chart-ready result and proposes one `ChartSpec`; report turns
+    keep chart composition inside `ReportSpec`.
 14. `create_chart` validates the constrained spec and completes the
     visualization subagent directly, without a second model packaging step.
 15. Progress shows the chart type and a bounded subset of safe mappings.
 16. A terminal `chart_created`, `needs_sql_reshape`, or `cannot_create` result
-    returns to the coordinator. A reshape outcome permits one reviewed SQL
+    returns to the coordinator. A reshape outcome permits one validated SQL
     recovery cycle.
-17. `RunManager` preserves the exact generated spec and canonical success
-    message with result provenance.
-18. Streamlit reconstructs Plotly and exposes the underlying table/CSV.
-19. For a statistical request, the coordinator conservatively reuses an
-    untruncated suitable result or obtains a new reviewed SQL result.
+17. `RunManager` preserves the business answer, attaches the exact generated
+    spec, and verifies that its result belongs to final evidence.
+18. Streamlit reconstructs Plotly and exposes every evidence table/CSV and SQL.
+19. When inference materially improves an answer, the coordinator conservatively
+    reuses an untruncated suitable result or obtains a new validated SQL result.
 20. The statistical specialist inspects bounded provenance/profile/sample data,
     writes Python, and calls `execute_statistical_python` with the result ID.
-21. HITL exposes the complete code and immutable dataset provenance. The exact
-    approved or edited code runs in a secret-stripped subprocess where `df`,
+21. With `REQUIRE_PYTHON_APPROVAL=true`, HITL exposes complete code and immutable
+    dataset provenance; otherwise execution proceeds immediately. The exact
+    submitted or edited code runs in a secret-stripped subprocess where `df`,
     `pd`, and `np` are preloaded.
 22. The runner returns bounded text, scalars, compact tables, and PNG figures;
     `RunManager` attaches the authoritative code and outputs while the
     coordinator retains final-answer wording.
+23. For each successful data-bearing turn, the coordinator loads the report
+    skill after final analysis and creates one `ReportSpec` over the same
+    material evidence. Ordinary turns may reuse the exact automatic
+    `ChartSpec`; explicit report turns keep chart composition in the report.
+24. Trusted code resolves the scoped artifacts, renders and stores one
+    self-contained HTML file, and returns immutable report metadata.
+25. `RunManager` attaches the report without discarding an ordinary top-level
+    chart. Streamlit verifies the content hash before isolated preview and
+    byte-identical download.
 
 LangGraph checkpoints are isolated by `run_id`. Typed graph state retains the
 conversation `thread_id`, `run_id`, `source_id`, and current question for
 artifact scoping and is inherited by inline subagents. `RunManager.start`
 reconstructs completed
-human/assistant turns for each new run, including the chart success message and
-exact spec.
+human/assistant turns for each new run, including all evidence references and
+the exact chart spec.
 
 See [Safety and HITL](safety-and-hitl.md) for the detailed sequence.
 
@@ -182,16 +202,21 @@ US state choropleths, and ISO-country choropleths.
 
 `ENABLE_STATISTICAL_ANALYSIS` defaults to `true`. Disabling it removes the
 specialist and makes the coordinator report statistical execution as
-unavailable. The specialist is not limited to a catalog of tests: reviewed code
+unavailable. The specialist is not limited to a catalog of tests: validated code
 may use pandas, NumPy, SciPy, statsmodels, scikit-learn, matplotlib, and seaborn.
+The coordinator leaves ordinary descriptive trends and comparisons to SQL and
+visualization, and invokes Python only when uncertainty or modeling matters.
+The skill progressively loads regression or time-series guidance for predictive
+models, trend inference, seasonality, anomaly detection, and forecasting.
 
 The input contract is one source/thread-scoped saved result ID. The execution
-tool loads its rows as pandas `df` only after approval. `pd` and `np` are
-preloaded. Reviewed code must assign a named `analysis_outputs` dictionary;
+tool loads its rows as pandas `df` after optional approval. `pd` and `np` are
+preloaded. Executed code must assign a named `analysis_outputs` dictionary;
 supported values normalize to bounded text, scalar, table, or figure outputs.
-Truncated inputs cannot execute. `needs_sql_reshape` permits one reviewed SQL
-recovery cycle; execution failures permit two reviewed repairs after the first
-attempt.
+Truncated inputs cannot execute. `needs_sql_reshape` permits one validated SQL
+recovery cycle; an execution failure permits one targeted repair after the
+first attempt. Dataset inspection exposes attempts already used by the run, so
+a fresh recovery specialist cannot propose code after the budget is exhausted.
 
 ## Adding specialist capabilities
 
@@ -201,7 +226,8 @@ pattern rather than expanding the text-to-SQL prompt indefinitely.
 Recommended rules:
 
 1. Give each specialist a narrow description and explicit input/output schema.
-2. Reuse saved result IDs instead of copying full row sets into prompts.
+2. Reuse saved result IDs as artifact references instead of copying full row
+   sets into prompts; never reinterpret them as source relations.
 3. Require thread and source provenance when reading an artifact.
 4. Assign skills and filesystem permissions explicitly; custom subagents do
    not inherit all coordinator capabilities automatically.
@@ -214,15 +240,18 @@ Recommended rules:
 
 Reporting is implemented without adding another specialist. The coordinator
 already owns the conversation and receives evidence from all three specialists,
-so it lazy-loads the `report-design` skill and calls a trusted deterministic
-HTML renderer.
+so every successful data-bearing turn ends by lazy-loading the `report-design`
+skill and calling a trusted deterministic HTML renderer. Conversational or
+failed turns with no final evidence do not create empty reports.
 
-The coordinator may reuse multiple same-thread, same-source artifacts and may
-invoke SQL, visualization, or statistical analysis when evidence is missing.
-It produces a structured `ReportSpec`; application code resolves full required
-data outside model context and renders canonical, self-contained HTML. Every
-safe preview is downloadable in Streamlit and can be revised conversationally,
-without an approval or finalization ceremony.
+The coordinator uses the same material same-thread, same-source evidence as the
+final answer. Ordinary turns get a compact default report after analysis is
+already sufficient; explicit report requests may invoke additional SQL,
+visualization, or statistics when evidence is missing. It produces a structured
+`ReportSpec`; application code resolves full required data outside model context
+and renders canonical, self-contained HTML. Every safe preview is downloadable
+in Streamlit and can be revised conversationally, without an approval or
+finalization ceremony.
 
 This capability introduces an artifact-composition seam rather than an execution
 seam. A future reporting subagent is justified only if report context pressure,

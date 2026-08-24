@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Data Analytics Agent Architecture",
-    "subtitle": "Three analytical specialists plus coordinator-owned self-contained HTML reporting",
+    "subtitle": "Sequential evidence planning, configurable approval, automatic charts, and coordinator-owned reporting",
     "output": "system-architecture.html",
     "animation": "none",
     "visual_preset": "signal-flow",
@@ -12,15 +12,15 @@
     "views": [
       {
         "id": "sql-path",
-        "label": "Reviewed SQL path",
+        "label": "SQL evidence path",
         "focus": ["streamlit", "api", "coordinator", "sql_agent", "sql_backend", "result_store"],
-        "note": "OSI-guided SQL pauses for review before the provider-neutral backend stores scoped rows and profile metadata."
+        "note": "OSI-guided SQL uses optional approval, then the provider-neutral backend stores scoped rows, profiles, and exact executed SQL."
       },
       {
         "id": "statistics-path",
-        "label": "Reviewed statistics",
+        "label": "Selective statistics",
         "focus": ["coordinator", "statistical", "result_store", "run_store", "streamlit"],
-        "note": "The statistical specialist sees bounded context; exact reviewed Python runs over the complete scoped result."
+        "note": "When inference materially helps, exact approved or autonomous Python runs over one complete result from bounded model context."
       },
       {
         "id": "reporting-path",
@@ -59,7 +59,7 @@
       "id": "coordinator",
       "type": "backend",
       "label": "Coordinator",
-      "sublabel": "routing + synthesis + answer",
+      "sublabel": "planning + synthesis + evidence",
       "pos": [660, 400],
       "size": [185, 68]
     },
@@ -67,7 +67,7 @@
       "id": "sql_agent",
       "type": "backend",
       "label": "Text-to-SQL",
-      "sublabel": "OSI-guided SQL + review",
+      "sublabel": "OSI SQL + optional approval",
       "pos": [900, 230],
       "size": [175, 68]
     },
@@ -95,16 +95,16 @@
       "sublabel": "result ID to ChartSpec",
       "pos": [920, 400],
       "size": [175, 68],
-      "tag": "explicit request"
+      "tag": "automatic final evidence"
     },
     {
       "id": "statistical",
       "type": "backend",
       "label": "Statistical analysis",
-      "sublabel": "reviewed Python + runner",
+      "sublabel": "Python + optional approval",
       "pos": [900, 590],
       "size": [185, 68],
-      "tag": "three executions max"
+      "tag": "one repair max"
     },
     {
       "id": "run_store",
@@ -142,7 +142,7 @@
     },
     {
       "kind": "security-group",
-      "label": "Reviewed execution and scoped artifact boundary",
+      "label": "Validated execution and scoped artifact boundary",
       "wraps": ["sql_backend", "result_store", "run_store", "report_store"]
     }
   ],
@@ -220,9 +220,9 @@
       "dot": "cyan",
       "title": "One coordinator, three analytical specialists",
       "items": [
-        "Text-to-SQL retrieves source-bound evidence",
-        "Visualization produces validated ChartSpec artifacts",
-        "Statistical analysis runs exact human-reviewed Python"
+        "Text-to-SQL runs sequential assignments under one run budget",
+        "Visualization charts one decision-relevant final evidence result",
+        "Statistical analysis runs exact approved or autonomous Python"
       ]
     },
     {

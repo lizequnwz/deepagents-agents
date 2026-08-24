@@ -94,6 +94,12 @@ class Settings:
     model_sample_rows: int = field(
         default_factory=lambda: int(os.getenv("MODEL_SAMPLE_ROWS", "10"))
     )
+    require_sql_approval: bool = field(
+        default_factory=lambda: _env_bool("REQUIRE_SQL_APPROVAL", False)
+    )
+    require_python_approval: bool = field(
+        default_factory=lambda: _env_bool("REQUIRE_PYTHON_APPROVAL", True)
+    )
     enable_data_visualization: bool = field(
         default_factory=lambda: _env_bool(
             "ENABLE_DATA_VISUALIZATION",
@@ -162,11 +168,6 @@ class Settings:
     statistical_max_figure_height: int = field(
         default_factory=lambda: _env_positive_int(
             "STATISTICAL_MAX_FIGURE_HEIGHT", 1_200
-        )
-    )
-    statistical_max_execution_attempts: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_EXECUTION_ATTEMPTS", 3
         )
     )
     coordinator_model_call_limit: int = field(
@@ -247,9 +248,6 @@ class Settings:
             ),
             max_figure_width=self.statistical_max_figure_width,
             max_figure_height=self.statistical_max_figure_height,
-            max_execution_attempts=(
-                self.statistical_max_execution_attempts
-            ),
         )
 
     def readiness_errors(self) -> list[str]:

@@ -9,6 +9,7 @@ from pathlib import Path
 from data_analytics_agent.backends.base import (
     BackendExecutionResult,
     ColumnInfo,
+    SQLExecutionError,
     TableInfo,
     normalize_result_value,
 )
@@ -130,7 +131,7 @@ class SQLiteBackend:
                 raise TimeoutError(
                     f"SQL execution exceeded {timeout_seconds:g} seconds."
                 ) from exc
-            raise
+            raise SQLExecutionError(str(exc)) from exc
         finally:
             connection.close()
 

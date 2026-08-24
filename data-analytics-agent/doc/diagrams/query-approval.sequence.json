@@ -2,8 +2,8 @@
   "schema_version": 1,
   "diagram_type": "sequence",
   "meta": {
-    "title": "SQL and Statistical Python Review Sequence",
-    "subtitle": "One source-bound analysis with rejection, exact reviewed execution, and authoritative output attachment",
+    "title": "Configurable SQL and Python Approval Sequence",
+    "subtitle": "Optional review branches and autonomous execution share validation, scope, budgets, and exact provenance",
     "output": "query-approval.html",
     "animation": "none",
     "visual_preset": "signal-flow",
@@ -14,19 +14,19 @@
         "id": "sql-review",
         "label": "SQL review and evidence",
         "focus": ["user", "ui", "api", "coordinator", "sql_agent", "review", "backend", "result_store"],
-        "note": "Rejection returns to the SQL specialist; approval or edit executes the exact reviewed query."
+        "note": "With SQL approval enabled, rejection returns to the specialist and approve/edit runs exact code; autonomous mode skips only the interrupt."
       },
       {
         "id": "python-review",
         "label": "Python review and execution",
         "focus": ["coordinator", "statistics", "result_store", "review", "python_runtime"],
-        "note": "The statistical specialist delegates by result ID and every actual Python execution requires review."
+        "note": "Python approval is independent; autonomous execution keeps the same scoped result, sandbox, validation, caps, and provenance."
       },
       {
         "id": "authoritative-answer",
         "label": "Authoritative answer attachment",
         "focus": ["statistics", "python_runtime", "coordinator", "api", "ui", "user"],
-        "note": "RunManager attaches the exact reviewed code and captured outputs before Streamlit presents the answer."
+        "note": "RunManager attaches the exact executed code and captured outputs before Streamlit presents the answer."
       }
     ]
   },
@@ -96,12 +96,12 @@
     {
       "from": 150,
       "to": 690,
-      "label": "Reviewed SQL evidence"
+      "label": "SQL validation and optional review"
     },
     {
       "from": 710,
       "to": 1300,
-      "label": "Reviewed statistical Python"
+      "label": "Python validation and optional review"
     },
     {
       "from": 1320,
@@ -171,7 +171,7 @@
       "from": "sql_agent",
       "to": "backend",
       "y": 530,
-      "label": "execute reviewed SQL",
+      "label": "execute exact approved or submitted SQL",
       "variant": "emphasis"
     },
     {
@@ -250,7 +250,7 @@
       "y": 1055,
       "label": "execute over complete scoped df",
       "variant": "emphasis",
-      "note": "Rejections do not count; no more than three actual executions may run."
+      "note": "Rejections do not count; one initial execution and one targeted repair may run."
     },
     {
       "from": "python_runtime",
@@ -354,11 +354,11 @@
   "cards": [
     {
       "dot": "rose",
-      "title": "Two reviewed execution boundaries",
+      "title": "Two configurable approval boundaries",
       "items": [
-        "SQL review happens before the database is touched",
-        "Python review happens before code runs over the complete DataFrame",
-        "An edit replaces the proposal as the authoritative executable"
+        "Approval middleware is installed independently for SQL and Python",
+        "Enabled review supports reject, edit, approve, and repeated resume",
+        "Autonomous mode bypasses interrupts but keeps every execution control"
       ]
     },
     {
@@ -375,7 +375,7 @@
       "title": "Authoritative presentation",
       "items": [
         "The statistical specialist returns one explicit terminal outcome",
-        "RunStore retains the exact reviewed code and bounded outputs",
+        "RunStore retains the exact executed code and bounded outputs",
         "RunManager attaches those artifacts before Streamlit renders them"
       ]
     }

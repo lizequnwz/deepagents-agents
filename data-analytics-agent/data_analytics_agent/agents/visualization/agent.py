@@ -27,7 +27,12 @@ its existing columns. Do not write SQL, query the database, switch results,
 generate code, or reconstruct business logic.
 
 Honor an explicitly requested chart type. Build a strict `ChartSpec` with the
-assigned `result_id`, then call `validate_chart`.
+assigned `result_id`, then call `validate_chart`. When no chart type was
+requested, choose the supported type that best communicates the assigned
+result's role: prefer line or area for temporal trends and bar for categorical
+comparisons. Return `cannot_create` for empty, scalar-only, identifier-heavy, or
+otherwise non-chartable results rather than creating a misleading one-mark
+chart.
 
 - If valid, call `create_chart` exactly once.
 - If only the field mapping or a supported presentation option is wrong,
@@ -73,9 +78,9 @@ def build_visualization_subagent(
     return {
         "name": "data-visualization",
         "description": (
-            "Use only when the user explicitly asks to visualize, chart, "
-            "plot, graph, or map a saved result. It inspects one chart-ready "
-            "result and returns one terminal outcome: a validated declarative "
+            "Use after final analytical evidence is selected to visualize one "
+            "chart-ready saved result, automatically or for an explicit chart "
+            "request. It returns one terminal outcome: a validated declarative "
             "chart, a SQL-reshape request, or a clear impossibility."
         ),
         "system_prompt": _visualization_prompt(source),

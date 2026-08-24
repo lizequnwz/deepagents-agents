@@ -21,16 +21,40 @@ from data_analytics_agent.data_sources import DataSource
 from data_analytics_agent.schemas import SQLAnalysisResponse
 from data_analytics_agent.stores import ResultStore
 
-SQL_OUTPUT_RETRY_MESSAGE = """\
-Finish only after `execute_sql` succeeds. After rejection, apply the feedback,
-validate the revision, and submit it for review. Copy `result_id` and
-`executed_sql` from the successful `QueryResult`, using `executed_sql` as
-`sql`. The application owns the saved rows, columns, profile, count, and
-truncation state.
-"""
+
+def _sql_output_retry_message(require_approval: bool) -> str:
+    review_recovery = (
+        "After rejection, apply the feedback, validate the revision, and "
+        "submit it for review. "
+        if require_approval
+        else "Repair validation or execution failures before retrying. "
+    )
+    return (
+        "Finish only after `execute_sql` succeeds. "
+        f"{review_recovery}"
+        "Copy `result_id` and `executed_sql` from the successful "
+        "`QueryResult`, using `executed_sql` as `sql`. The application owns "
+        "the saved rows, columns, profile, count, and truncation state."
+    )
 
 
-def _sql_subagent_prompt(source: DataSource) -> str:
+SQL_OUTPUT_RETRY_MESSAGE = _sql_output_retry_message(True)
+
+
+def _sql_subagent_prompt(
+    source: DataSource,
+    *,
+    require_approval: bool,
+) -> str:
+    execution_mode = (
+        "Execution pauses for human approve/edit/reject after validation. A "
+        "rejection requires revision and another review. A human-edited "
+        "execution replaces stale scope from the assignment."
+        if require_approval
+        else "After validation, execution proceeds immediately without a "
+        "human interrupt. Repair validation or execution failures before "
+        "retrying."
+    )
     return f"""\
 You are the isolated text-to-SQL specialist for {source.name!r}, permanently
 bound to source ID {source.source_id!r}, SQL dialect {source.dialect!r}, and OSI
@@ -40,19 +64,23 @@ Before analysis, read the OSI file and the `query-writing` skill with
 `limit=1000`. Issue these two independent reads in one tool-call batch when
 possible, and read each path at most once per assignment. Re-read only if the
 earlier content was truncated or compacted, or if needed content fell outside
-the returned range. Apply the skill to produce one reviewed result that
+the returned range. Apply the skill to produce one validated result that
 answers the assignment and is chart-ready when requested. The OSI model is
 authoritative; use live schema tools only for a concrete gap or suspected
 drift.
 
 Hard boundaries:
 - Submit exactly one read-only SELECT, CTE, or set-operation statement.
+- Query only physical sources from the OSI model or CTEs defined inside the
+  proposed query. Saved result IDs are opaque application evidence handles,
+  never database table or view names. If an assignment mentions a prior result
+  ID, use its stated findings only as context and write fresh source SQL for the
+  requested business shape.
 - Do not add `LIMIT` unless the user explicitly requests a row count. Ranking
   words require deterministic ordering but do not imply a row count.
 - Call `validate_sql` before `execute_sql`. Validation does not query the
-  database; execution pauses for human approval.
-- A rejection requires revision and another review. A human-edited execution
-  replaces stale scope from the assignment.
+  database. If either tool returns an error observation, revise the query while
+  attempts remain. {execution_mode}
 
 Finish only after `execute_sql` succeeds. Return `SQLAnalysisResponse` using the
 successful `QueryResult`: copy its exact `executed_sql` to `sql` and its result
@@ -71,18 +99,24 @@ def build_text_to_sql_subagent(
     result_store: ResultStore,
     model: Any,
     permissions: list[Any],
+    require_approval: bool,
     middleware: list[Any] | None = None,
 ) -> dict[str, Any]:
-    """Build the source-bound, human-reviewed SQL specialist."""
+    """Build the source-bound SQL specialist."""
 
     execute_sql = create_execute_sql_tool(source, backend, result_store)
-    review_middleware = HumanInTheLoopMiddleware(
-        interrupt_on={
-            "execute_sql": {
-                "allowed_decisions": ["approve", "edit", "reject"]
-            }
-        }
-    )
+    agent_middleware: list[Any] = []
+    if require_approval:
+        agent_middleware.append(
+            HumanInTheLoopMiddleware(
+                interrupt_on={
+                    "execute_sql": {
+                        "allowed_decisions": ["approve", "edit", "reject"]
+                    }
+                }
+            )
+        )
+    agent_middleware.extend([TodoListMiddleware(), *(middleware or [])])
     fallback_tools = [
         create_list_tables_tool(backend),
         create_get_table_schema_tool(backend),
@@ -93,26 +127,30 @@ def build_text_to_sql_subagent(
         "description": (
             f"Use for every {source.name} database question and whenever a "
             "visualization needs a new chart-ready result. It reads the "
-            "selected OSI model, writes and validates SQL, requests human "
-            "review, executes, and interprets results."
+            "selected OSI model, writes and validates SQL, "
+            + (
+                "requests human review, "
+                if require_approval
+                else "executes automatically, "
+            )
+            + "and interprets results."
         ),
-        "system_prompt": _sql_subagent_prompt(source),
+        "system_prompt": _sql_subagent_prompt(
+            source,
+            require_approval=require_approval,
+        ),
         "tools": [*fallback_tools, execute_sql],
         "model": model,
         "skills": ["/project/skills/text-to-sql/"],
         "permissions": permissions,
-        # after_model hooks run in reverse registration order. Keep HITL first
-        # so execution-budget checks run before an approval is presented.
-        "middleware": [
-            review_middleware,
-            TodoListMiddleware(),
-            *(middleware or []),
-        ],
+        # after_model hooks run in reverse registration order. When present,
+        # keep HITL first so budget checks run before approval is presented.
+        "middleware": agent_middleware,
         "response_format": ToolStrategy(
             SQLAnalysisResponse,
-            handle_errors=SQL_OUTPUT_RETRY_MESSAGE,
+            handle_errors=_sql_output_retry_message(require_approval),
             tool_message_content=(
-                "SQL analysis completed from a reviewed execution."
+                "SQL analysis completed from a validated execution."
             ),
         ),
     }

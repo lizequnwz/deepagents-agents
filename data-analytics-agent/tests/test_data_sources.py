@@ -111,22 +111,87 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
         source,
         visualization_enabled=True,
     )
-    assert "only when the user explicitly asks" in enabled_prompt.lower()
+    normalized_enabled_prompt = " ".join(enabled_prompt.lower().split())
+    assert "automatically attempt one useful chart" in normalized_enabled_prompt
     assert "follow the coordinator policy in agents.md" in (
         " ".join(enabled_prompt.lower().split())
     )
 
-    sql_prompt = _sql_subagent_prompt(source)
+    sql_prompt = _sql_subagent_prompt(source, require_approval=True)
     normalized_sql_prompt = " ".join(sql_prompt.lower().split())
     assert "do not add `limit` unless the user explicitly requests" in (
         normalized_sql_prompt
     )
     assert "do not imply a row count" in normalized_sql_prompt
+    assert "saved result ids are opaque application evidence handles" in (
+        normalized_sql_prompt
+    )
+    assert "write fresh source sql" in normalized_sql_prompt
+    assert "if either tool returns an error observation" in (
+        normalized_sql_prompt
+    )
 
     visualization_prompt = _visualization_prompt(source)
-    assert "read the `chart-design` skill" in visualization_prompt.lower()
+    normalized_visualization = " ".join(
+        visualization_prompt.lower().split()
+    )
+    assert "read the `chart-design` skill" in normalized_visualization
+    assert "prefer line or area for temporal trends" in (
+        normalized_visualization
+    )
+    assert "bar for categorical comparisons" in normalized_visualization
+    assert "scalar-only" in normalized_visualization
     assert "`create_chart` and `finish_visualization` are terminal" in (
-        visualization_prompt.lower()
+        normalized_visualization
+    )
+    assert "do not chart intermediate investigation results" in (
+        normalized_enabled_prompt
+    )
+    assert "it is not a table that sql can query" in (
+        normalized_enabled_prompt
+    )
+    assert "explicit report turns use charts inside `reportspec`" in (
+        normalized_enabled_prompt
+    )
+    assert "keep the successful top-level chart" in normalized_enabled_prompt
+    assert "after every successful data-bearing analysis" in (
+        normalized_enabled_prompt
+    )
+    assert "compact automatic-report default" in normalized_enabled_prompt
+    assert "any answer with no final evidence" in normalized_enabled_prompt
+
+
+def test_reporting_feature_flag_controls_automatic_reports(
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = test_settings.load_catalog().get("test")
+    enabled = _coordinator_prompt(
+        source,
+        visualization_enabled=True,
+        reporting_enabled=True,
+    )
+    normalized = " ".join(enabled.lower().split())
+
+    assert "create one downloadable html report" in normalized
+    assert "after final evidence, statistics" in normalized
+    assert "skip the ordinary top-level visualization" in normalized
+
+    monkeypatch.setenv("ENABLE_REPORTING", "false")
+    disabled = Settings(
+        project_root=test_settings.project_root,
+        data_sources_config_path=test_settings.data_sources_config_path,
+    )
+    prompt = _coordinator_prompt(
+        source,
+        visualization_enabled=True,
+        reporting_enabled=disabled.enable_reporting,
+    )
+
+    assert disabled.enable_reporting is False
+    assert "reporting is disabled" in prompt.lower()
+    assert "complete data answers without calling `create_report`" in (
+        " ".join(prompt.lower().split())
     )
 
 
@@ -142,10 +207,23 @@ def test_statistical_feature_flag_defaults_enabled_and_can_be_disabled(
         statistical_analysis_enabled=True,
     )
     normalized_enabled = " ".join(enabled.lower().split())
-    assert "route requests involving statistical tests" in normalized_enabled
+    assert "uncertainty or modeling materially improves" in normalized_enabled
+    assert "descriptive trend" in normalized_enabled
+    assert "does not need statistical python" in normalized_enabled
+    assert "at most once in a user turn" in normalized_enabled
+    assert "do not make a second delegation after" in normalized_enabled
     assert "exactly one recovery cycle" in normalized_enabled
-    assert "do not reconstruct any of those artifacts" in normalized_enabled
-    assert "application attaches the exact validated" in normalized_enabled
+    assert "do not reconstruct those artifacts" in normalized_enabled
+    assert "application resolves exact sql and metadata" in normalized_enabled
+    assert "direct analysis: use one text-to-sql assignment" in (
+        normalized_enabled
+    )
+    assert "investigation:" in normalized_enabled
+    assert "use `write_todos`" in normalized_enabled
+    assert "never issue more than one `task` call" in normalized_enabled
+    assert "reconcile totals, populations, filters" in normalized_enabled
+    assert "result ids are opaque application artifacts" in normalized_enabled
+    assert "every new sql assignment must restate" in normalized_enabled
     assert (
         "do not reinterpret a categorical predictor versus numeric outcome"
         in normalized_enabled
@@ -170,7 +248,9 @@ def test_sql_context_reads_are_batched_and_unique(
     test_settings: Settings,
 ) -> None:
     source = test_settings.load_catalog().get("test")
-    normalized = " ".join(_sql_subagent_prompt(source).split())
+    normalized = " ".join(
+        _sql_subagent_prompt(source, require_approval=True).split()
+    )
 
     assert (
         "Issue these two independent reads in one tool-call batch when "
@@ -282,8 +362,8 @@ def test_coordinator_uses_small_non_strict_provider_schema() -> None:
     assert "$defs" not in response_format["schema"]
     assert set(response_format["schema"]["properties"]) == {
         "answer",
-        "sql",
-        "result_id",
+        "primary_result_id",
+        "supporting_result_ids",
         "assumptions",
         "interpretation",
     }

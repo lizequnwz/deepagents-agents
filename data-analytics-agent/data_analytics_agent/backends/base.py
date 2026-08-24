@@ -31,6 +31,10 @@ class BackendExecutionResult:
     elapsed_ms: float
 
 
+class SQLExecutionError(RuntimeError):
+    """Expected database rejection of an otherwise read-only SQL query."""
+
+
 @runtime_checkable
 class SQLBackend(Protocol):
     """Minimal contract required by the data analytics agent."""
@@ -51,7 +55,7 @@ class SQLBackend(Protocol):
         timeout_seconds: float,
         max_rows: int,
     ) -> BackendExecutionResult:
-        """Execute exact validated SQL and normalize the result."""
+        """Execute exact SQL or raise ``SQLExecutionError``/``TimeoutError``."""
 
     def list_tables(self) -> list[str]:
         """List queryable tables and views."""

@@ -1,4 +1,4 @@
-"""Bounded subprocess runner for human-reviewed statistical Python."""
+"""Bounded subprocess runner for validated statistical Python."""
 
 from __future__ import annotations
 
@@ -36,11 +36,11 @@ class PythonExecutionLimits:
     max_total_figure_bytes: int = 3_145_728
     max_figure_width: int = 1_600
     max_figure_height: int = 1_200
-    max_execution_attempts: int = 3
+    max_execution_attempts: int = 2
 
 
 class StatisticalExecutionError(RuntimeError):
-    """Bounded, model-presentable failure from reviewed Python."""
+    """Bounded, model-presentable failure from executed Python."""
 
     def __init__(
         self,

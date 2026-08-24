@@ -146,3 +146,8 @@ class AgentAPIClient:
         """Fetch the exact stored HTML and immutable report metadata."""
 
         return self.request("GET", f"/api/reports/{report_id}", timeout=30)
+
+    def report_view_url(self, report_id: str) -> str:
+        """Return the browser-facing full-page report URL."""
+
+        return f"{self.base_url.rstrip('/')}/api/reports/{report_id}/view"

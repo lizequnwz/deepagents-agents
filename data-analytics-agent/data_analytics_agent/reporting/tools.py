@@ -48,18 +48,6 @@ def _report_failure(
     ).model_dump_json()
 
 
-def _strip_json_fence(value: str) -> str:
-    """Accept an accidental Markdown JSON fence without weakening validation."""
-
-    stripped = value.strip()
-    if not stripped.startswith("```"):
-        return stripped
-    lines = stripped.splitlines()
-    if len(lines) >= 3 and lines[-1].strip() == "```":
-        return "\n".join(lines[1:-1]).strip()
-    return stripped
-
-
 def _validation_issues(error: ValidationError) -> list[ReportToolIssue]:
     issues: list[ReportToolIssue] = []
     for item in error.errors(
@@ -77,14 +65,10 @@ def _validation_issues(error: ValidationError) -> list[ReportToolIssue]:
 
 
 def _parse_report_spec(report_json: str) -> ReportSpec | str:
-    """Parse common transport variations, then apply the strict internal model."""
+    """Parse the documented JSON string, then apply the strict model."""
 
-    candidate: Any = _strip_json_fence(report_json)
     try:
-        candidate = json.loads(candidate)
-        # Be tolerant of one accidental extra JSON encoding layer.
-        if isinstance(candidate, str):
-            candidate = json.loads(candidate)
+        candidate: Any = json.loads(report_json)
     except (TypeError, json.JSONDecodeError) as exc:
         return _report_failure(
             "invalid_report_json",
@@ -98,15 +82,6 @@ def _parse_report_spec(report_json: str) -> ReportSpec | str:
             if isinstance(exc, json.JSONDecodeError)
             else None,
         )
-
-    # Accept the obsolete {"spec": {...}} wrapper used by the first prototype.
-    if (
-        isinstance(candidate, dict)
-        and "title" not in candidate
-        and "blocks" not in candidate
-        and isinstance(candidate.get("spec"), dict)
-    ):
-        candidate = candidate["spec"]
 
     try:
         return ReportSpec.model_validate(candidate)

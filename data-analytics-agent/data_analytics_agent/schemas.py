@@ -14,7 +14,7 @@ from data_analytics_agent.agents.statistical_analysis.schemas import (
 from data_analytics_agent.agents.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 5
+API_CONTRACT_VERSION = 6
 
 
 class StrictModel(BaseModel):
@@ -94,7 +94,7 @@ class QueryResult(StrictModel):
 
 
 class SQLAnalysisResult(StrictModel):
-    """Successful SQL analysis backed by a reviewed, saved execution."""
+    """Successful SQL analysis backed by an exact, saved execution."""
 
     answer: str
     sql: str
@@ -109,7 +109,7 @@ class SQLAnalysisResult(StrictModel):
 
 
 class SQLAnalysisResponse(StrictModel):
-    """Provider-facing narrative for a reviewed SQL result.
+    """Provider-facing narrative for a validated SQL result.
 
     Exact rows, columns, profiles, counts, and truncation state remain in
     ``ResultStore`` and are resolved from ``result_id`` by trusted code.
@@ -126,16 +126,25 @@ class CoordinatorResponse(StrictModel):
     """Small provider-facing response; trusted artifacts are attached later."""
 
     answer: str
-    sql: str | None = None
-    result_id: str | None = None
+    primary_result_id: str | None = None
+    supporting_result_ids: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     interpretation: str = ""
 
 
+class ResultReference(StrictModel):
+    """Application-owned provenance for one saved SQL result."""
+
+    result_id: str
+    executed_sql: str
+    originating_question: str
+    short_label: str
+
+
 class FinalAnswer(StrictModel):
     answer: str
-    sql: str | None = None
-    result_id: str | None = None
+    primary_result_id: str | None = None
+    results: list[ResultReference] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     interpretation: str = ""
     chart: ChartSpec | None = None
@@ -274,6 +283,7 @@ class ActivityTool(StrictModel):
     name: str
     arguments: dict[str, Any] = Field(default_factory=dict)
     debug_input: Any | None = None
+    debug_output: Any | None = None
 
 
 class ActivityEvent(StrictModel):
@@ -397,6 +407,8 @@ class HealthResponse(StrictModel):
     api_contract_version: int = API_CONTRACT_VERSION
     default_source_id: str | None = None
     ready_source_count: int = 0
+    sql_approval_required: bool = False
+    python_approval_required: bool = True
     visualization_enabled: bool = False
     statistical_analysis_enabled: bool = False
     reporting_enabled: bool = False

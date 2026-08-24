@@ -27,7 +27,7 @@ class StatisticalOutputKind(StrEnum):
 
 
 class StatisticalOutput(StrictModel):
-    """One bounded, named output from reviewed statistical Python."""
+    """One bounded, named output from executed statistical Python."""
 
     name: str = Field(min_length=1, max_length=200)
     kind: StatisticalOutputKind
@@ -95,7 +95,7 @@ class StatisticalAnalysisResult(StrictModel):
     parent_result_id: str
     executed_python: str | None = None
     # RunManager guarantees that the final user-facing contract has an answer
-    # and attaches the reviewed code and bounded execution outputs.
+    # and attaches the exact executed code and bounded execution outputs.
     answer: str = ""
     method: str = ""
     assumptions: list[str] = Field(default_factory=list)

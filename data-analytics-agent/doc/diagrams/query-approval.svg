@@ -4532,8 +4532,8 @@ svg {
 rect.c-bg-rect { fill: var(--bg); }
 ]]></style>
 <rect class="c-bg-rect" width="100%" height="100%"/>
-        <title id="archify-diagram-title">SQL and Statistical Python Review Sequence</title>
-        <desc id="archify-diagram-description">One source-bound analysis with rejection, exact reviewed execution, and authoritative output attachment</desc>
+        <title id="archify-diagram-title">Configurable SQL and Python Approval Sequence</title>
+        <desc id="archify-diagram-description">Optional review branches and autonomous execution share validation, scope, budgets, and exact provenance</desc>
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -4661,11 +4661,11 @@ rect.c-bg-rect { fill: var(--bg); }
         </g>
         </g>
 
-        <g data-edge-from="sql_agent" data-edge-to="backend" data-edge-label="execute reviewed SQL" data-edge-key="8">
+        <g data-edge-from="sql_agent" data-edge-to="backend" data-edge-label="execute exact approved or submitted SQL" data-edge-key="8">
           <path data-composition-edge-from="sql_agent" data-composition-edge-to="backend" data-composition-points="501,530;703,530" d="M 501 530 L 703 530" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <g data-detail="context">
-          <rect x="544" y="510" width="116" height="16" rx="3" class="c-mask"/>
-          <text x="602" y="520" class="t-backend" font-size="9" text-anchor="middle">execute reviewed SQL</text>
+          <rect x="494.6" y="510" width="214.8" height="16" rx="3" class="c-mask"/>
+          <text x="602" y="520" class="t-backend" font-size="9" text-anchor="middle">execute exact approved or submitted SQL</text>
         </g>
         </g>
 
@@ -4755,7 +4755,7 @@ rect.c-bg-rect { fill: var(--bg); }
           <rect x="893.4" y="1035" width="173.20000000000002" height="16" rx="3" class="c-mask"/>
           <text x="980" y="1045" class="t-backend" font-size="9" text-anchor="middle">execute over complete scoped df</text>
         </g>
-        <text data-detail="fine" x="945" y="1073" class="t-dim" font-size="7">Rejections do not count; no more than three actual executions may run.</text>
+        <text data-detail="fine" x="945" y="1073" class="t-dim" font-size="7">Rejections do not count; one initial execution and one targeted repair may run.</text>
         </g>
 
         <g data-edge-from="python_runtime" data-edge-to="statistics" data-edge-label="bounded tables, text, scalars, figures" data-edge-key="20">
@@ -4808,12 +4808,12 @@ rect.c-bg-rect { fill: var(--bg); }
 
         <!-- Segment Labels -->
         <g data-graph-role="segment-label" data-segment-id="0">
-          <rect x="56" y="128" width="123.2" height="18" rx="3" class="c-mask"/>
-          <text x="62" y="141" class="t-dim" font-size="9" font-weight="600">Reviewed SQL evidence</text>
+          <rect x="56" y="128" width="190.8" height="18" rx="3" class="c-mask"/>
+          <text x="62" y="141" class="t-dim" font-size="9" font-weight="600">SQL validation and optional review</text>
         </g>
         <g data-graph-role="segment-label" data-segment-id="1">
-          <rect x="56" y="688" width="154.4" height="18" rx="3" class="c-mask"/>
-          <text x="62" y="701" class="t-dim" font-size="9" font-weight="600">Reviewed statistical Python</text>
+          <rect x="56" y="688" width="206.4" height="18" rx="3" class="c-mask"/>
+          <text x="62" y="701" class="t-dim" font-size="9" font-weight="600">Python validation and optional review</text>
         </g>
         <g data-graph-role="segment-label" data-segment-id="2">
           <rect x="56" y="1298" width="149.20000000000002" height="18" rx="3" class="c-mask"/>

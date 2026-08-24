@@ -5,6 +5,7 @@ from streamlit.testing.v1 import AppTest
 from data_analytics_agent.ui.components import (
     consolidate_activity_events,
     conversation_url,
+    render_empty_state,
     rows_to_csv,
     python_review_decision,
     sql_review_decision,
@@ -25,8 +26,50 @@ def test_conversation_url_replaces_existing_thread_and_preserves_query() -> None
     )
 
 
+def test_example_question_prefills_chat_input_without_submitting() -> None:
+    app = AppTest.from_string(
+        '''
+import streamlit as st
+from data_analytics_agent.ui.components import render_empty_state
+
+render_empty_state(
+    "thread-1",
+    {
+        "examples": [{
+            "label": "Compare regions",
+            "question": "Which regions grew fastest?",
+        }]
+    },
+    chat_input_key="chat_input_thread-1",
+)
+submitted = st.chat_input(
+    "Ask a question",
+    key="chat_input_thread-1",
+)
+if submitted:
+    st.write(f"submitted: {submitted}")
+'''
+    ).run()
+
+    app.pills[0].set_value(
+        ":material/lightbulb: Compare regions"
+    ).run()
+
+    assert app.chat_input[0].value == "Which regions grew fastest?"
+    assert not any("submitted:" in item.value for item in app.markdown)
+
+    app.chat_input[0].set_value(
+        "Which regions grew fastest last year?"
+    ).run()
+
+    assert any(
+        "submitted: Which regions grew fastest last year?" in item.value
+        for item in app.markdown
+    )
+
+
 def test_api_contract_mismatch_requires_service_restart() -> None:
-    assert api_contract_error({"api_contract_version": 5}) is None
+    assert api_contract_error({"api_contract_version": 6}) is None
     missing = api_contract_error({})
     stale = api_contract_error({"api_contract_version": 2})
 
@@ -106,6 +149,7 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
                 "call_id": "call-1",
                 "name": "read_file",
                 "arguments": {"skill": "query-writing"},
+                "debug_output": {"content": "skill text"},
             },
         },
         {
@@ -130,6 +174,9 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
     assert consolidated[0]["tool"]["debug_input"] == {
         "file_path": "SKILL.md"
     }
+    assert consolidated[0]["tool"]["debug_output"] == {
+        "content": "skill text"
+    }
     assert consolidated[0]["duration_ms"] == 250
     assert consolidated[1]["tool"]["call_id"] == "call-2"
 
@@ -151,6 +198,7 @@ render_activity_timeline(
             "name": "read_file",
             "arguments": {"skill": "query-writing"},
             "debug_input": {"file_path": "SKILL.md"},
+            "debug_output": {"content": "skill text"},
         },
     }],
     debug_states=[{
@@ -361,12 +409,17 @@ class Client:
 
 render_turn(
     Client(),
-    {
-        "user_message": "Estimate the mean",
-        "answer": {
-            "answer": "The estimated mean is 1.5.",
-            "result_id": "result-1",
-            "sql": "SELECT value FROM measurements",
+        {
+            "user_message": "Estimate the mean",
+            "answer": {
+                "answer": "The estimated mean is 1.5.",
+                "primary_result_id": "result-1",
+                "results": [{
+                    "result_id": "result-1",
+                    "executed_sql": "SELECT value FROM measurements",
+                    "originating_question": "Estimate the mean",
+                    "short_label": "Mean measurements",
+                }],
             "assumptions": [],
             "interpretation": "",
             "statistical_analysis": {
@@ -430,8 +483,13 @@ turn = {
     "user_message": "Show the saved result",
     "answer": {
         "answer": "One row.",
-        "result_id": "result-1",
-        "sql": "SELECT 1",
+        "primary_result_id": "result-1",
+        "results": [{
+            "result_id": "result-1",
+            "executed_sql": "SELECT 1",
+            "originating_question": "Show the saved result",
+            "short_label": "Saved result",
+        }],
         "assumptions": [],
         "interpretation": "",
     },
@@ -465,12 +523,17 @@ class Client:
 
 render_turn(
     Client(),
-    {
-        "user_message": "Chart it",
-        "answer": {
-            "answer": "One chart.",
-            "result_id": "result-1",
-            "sql": "SELECT category, amount FROM metrics",
+        {
+            "user_message": "Chart it",
+            "answer": {
+                "answer": "One chart.",
+                "primary_result_id": "result-1",
+                "results": [{
+                    "result_id": "result-1",
+                    "executed_sql": "SELECT category, amount FROM metrics",
+                    "originating_question": "Chart it",
+                    "short_label": "Metrics",
+                }],
             "assumptions": [],
             "interpretation": "",
             "chart": {

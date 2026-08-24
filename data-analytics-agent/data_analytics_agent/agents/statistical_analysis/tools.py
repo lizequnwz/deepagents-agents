@@ -38,9 +38,11 @@ def _get_result(
 
 def create_inspect_result_for_statistics_tool(
     result_store: ResultStore,
+    run_store: RunStore,
     *,
     source_id: str,
     sample_rows: int,
+    maximum_attempts: int,
 ):
     @tool
     def inspect_result_for_statistics(
@@ -49,6 +51,7 @@ def create_inspect_result_for_statistics_tool(
     ) -> dict[str, Any]:
         """Inspect provenance, profile, and a bounded sample before analysis."""
 
+        context = _runtime_context(runtime)
         try:
             result = _get_result(
                 result_store,
@@ -64,6 +67,23 @@ def create_inspect_result_for_statistics_tool(
                 "result_id": result_id,
                 "error": str(exc),
             }
+        attempts_used = run_store.statistical_execution_attempt_count(
+            context.run_id
+        )
+        remaining_attempts = max(0, maximum_attempts - attempts_used)
+        if remaining_attempts == 0:
+            return {
+                "ok": False,
+                "code": "execution_attempts_exhausted",
+                "repairable": False,
+                "result_id": result.result_id,
+                "attempts_used": attempts_used,
+                "remaining_attempts": 0,
+                "error": (
+                    "This run has no statistical Python execution attempts "
+                    "remaining. Return cannot_analyze without proposing code."
+                ),
+            }
         return {
             "ok": True,
             "result_id": result.result_id,
@@ -74,6 +94,8 @@ def create_inspect_result_for_statistics_tool(
             "row_count": result.row_count,
             "sample_rows": result.rows[:sample_rows],
             "truncated": result.truncated,
+            "attempts_used": attempts_used,
+            "remaining_attempts": remaining_attempts,
         }
 
     return inspect_result_for_statistics
@@ -92,10 +114,10 @@ def create_execute_statistical_python_tool(
         code: str,
         runtime: ToolRuntime,
     ) -> dict[str, Any]:
-        """Execute exact human-reviewed Python against ``df`` from result_id.
+        """Execute exact validated Python against ``df`` from result_id.
 
         The runtime preloads the complete scoped saved result as pandas
-        ``df`` and also provides ``pd`` and ``np``. The reviewed code must set
+        ``df`` and also provides ``pd`` and ``np``. The executed code must set
         ``analysis_outputs`` to a named dictionary of compact values, tables,
         or matplotlib figures. The DataFrame itself is never returned to the
         model.

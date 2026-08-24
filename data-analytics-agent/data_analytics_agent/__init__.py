@@ -1,1 +1,1 @@
-"""Source-aware analytics with reviewed execution and standalone HTML reports."""
+"""Source-aware analytics with configurable approval and HTML reports."""

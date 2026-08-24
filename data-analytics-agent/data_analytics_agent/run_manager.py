@@ -38,9 +38,6 @@ from data_analytics_agent.agents.visualization.schemas import (
     VisualizationOutcome,
     VisualizationResult,
 )
-from data_analytics_agent.agents.visualization.tools import (
-    chart_success_message,
-)
 from data_analytics_agent.agents.visualization.validation import (
     validate_chart_spec,
 )
@@ -51,9 +48,11 @@ from data_analytics_agent.schemas import (
     AgentStateSnapshot,
     ApprovalRequest,
     ChatTurn,
+    CoordinatorResponse,
     Decision,
     ExecutionBudgetDiagnostics,
     FinalAnswer,
+    ResultReference,
     RunStatus,
     SQLAnalysisResult,
     SQLAnalysisResponse,
@@ -924,7 +923,7 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
     if tool_name == "validate_sql":
         return ("sql_check", "Checking generated SQL")
     if tool_name == "execute_sql":
-        return ("execution", "Executing approved SQL")
+        return ("execution", "Executing validated SQL")
     if tool_name == "list_conversation_results":
         return ("result", "Listing saved conversation results")
     if tool_name == "list_conversation_analyses":
@@ -938,7 +937,7 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
     if tool_name == "inspect_result_for_statistics":
         return ("statistics_data", "Inspecting statistical-analysis data")
     if tool_name == "execute_statistical_python":
-        return ("statistics", "Executing reviewed statistical Python")
+        return ("statistics", "Executing statistical Python")
     if tool_name == "validate_chart":
         return ("chart_check", "Checking the chart specification")
     if tool_name == "create_chart":
@@ -971,6 +970,72 @@ def _completed_activity_label(label: str) -> str:
         if label.startswith(prefix):
             return replacement + label[len(prefix) :]
     return label
+
+
+def _tool_output_mapping(value: Any) -> Mapping[str, Any] | None:
+    """Extract a structured tool result from the event payload."""
+
+    if isinstance(value, BaseModel):
+        value = value.model_dump(mode="python")
+    if isinstance(value, Mapping):
+        if "ok" in value:
+            return value
+        for key in ("output", "content"):
+            nested = _tool_output_mapping(value.get(key))
+            if nested is not None:
+                return nested
+        return None
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return None
+        return _tool_output_mapping(parsed)
+    return None
+
+
+def _statistical_execution_completion(
+    output: Any,
+) -> tuple[str, bool, dict[str, Any]]:
+    """Describe an execution result without calling handled errors success."""
+
+    payload = _tool_output_mapping(output)
+    if payload is None:
+        return ("Statistical Python attempt finished", False, {})
+
+    details: dict[str, Any] = {}
+    for field in ("attempt", "remaining_attempts"):
+        value = payload.get(field)
+        if isinstance(value, int) and not isinstance(value, bool):
+            details[field] = value
+    code = payload.get("code")
+    if code is not None:
+        details["code"] = _safe_activity_value(code, limit=80)
+
+    if payload.get("ok") is True:
+        attempt = payload.get("attempt")
+        label = "Statistical Python succeeded"
+        if isinstance(attempt, int):
+            label += f" · attempt {attempt}"
+        return (label, False, details)
+
+    no_execution_labels = {
+        "execution_attempts_exhausted": "execution budget exhausted",
+        "truncated_dataset": "dataset is truncated",
+    }
+    code_text = str(payload.get("code") or "")
+    if code_text in no_execution_labels:
+        return (
+            "Statistical Python was not run · "
+            f"{no_execution_labels[code_text]}",
+            True,
+            details,
+        )
+    attempt = payload.get("attempt")
+    label = "Statistical Python execution failed"
+    if isinstance(attempt, int):
+        label += f" · attempt {attempt}"
+    return (label, True, details)
 
 
 def _extract_approval(
@@ -1074,7 +1139,7 @@ def _extract_approval(
 def _current_sql_analysis(
     output: dict[str, Any],
 ) -> SQLAnalysisResult | SQLAnalysisResponse | None:
-    """Find the reviewed SQL subagent result from the current user turn."""
+    """Find the executed SQL subagent result from the current user turn."""
 
     messages = output.get("messages")
     if not isinstance(messages, list):
@@ -1177,25 +1242,34 @@ def _current_report(output: dict[str, Any]) -> ReportToolResult | None:
 
 
 def _apply_sql_analysis(
-    answer: FinalAnswer,
+    answer: CoordinatorResponse,
     output: dict[str, Any],
-) -> FinalAnswer:
-    """Prefer the current reviewed SQL result over coordinator paraphrasing."""
+) -> CoordinatorResponse:
+    """Prefer current direct-result metadata over coordinator paraphrasing."""
 
     analysis = _current_sql_analysis(output)
     if analysis is None:
         return answer
-    if answer.result_id is not None and analysis.result_id != answer.result_id:
+    supporting_ids = list(answer.supporting_result_ids)
+    primary_id = answer.primary_result_id
+    if primary_id is None and not supporting_ids:
+        primary_id = analysis.result_id
+        supporting_ids = [analysis.result_id]
+    elif analysis.result_id not in supporting_ids:
         return answer
+    single_result = len(dict.fromkeys(supporting_ids)) == 1
     updates = {
-        "sql": analysis.sql,
-        "result_id": analysis.result_id,
-        "assumptions": analysis.assumptions,
-        "interpretation": analysis.interpretation,
+        "primary_result_id": primary_id,
+        "supporting_result_ids": supporting_ids,
     }
+    if single_result:
+        updates["assumptions"] = analysis.assumptions
+        updates["interpretation"] = analysis.interpretation
     if (
-        _current_visualization(output) is None
+        single_result
+        and _current_visualization(output) is None
         and _current_statistical_analysis(output) is None
+        and _current_report(output) is None
     ):
         updates["answer"] = analysis.answer
     return answer.model_copy(update=updates)
@@ -1206,7 +1280,7 @@ def _apply_statistical_analysis(
     output: dict[str, Any],
     execution: PythonExecutionResult | None,
 ) -> FinalAnswer:
-    """Attach reviewed outputs and make their parent result canonical."""
+    """Attach executed outputs and make their parent result canonical."""
 
     analysis = _current_statistical_analysis(output)
     if analysis is None:
@@ -1214,14 +1288,14 @@ def _apply_statistical_analysis(
     if analysis is None:
         if execution is not None:
             raise RuntimeError(
-                "Reviewed statistical Python executed without a terminal "
+                "Statistical Python executed without a terminal "
                 "statistical result."
             )
         return answer
     if analysis.outcome is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED:
         if execution is None:
             raise RuntimeError(
-                "Statistical analysis claimed completion without a reviewed "
+                "Statistical analysis claimed completion without an executed "
                 "execution."
             )
         if analysis.parent_result_id != execution.parent_result_id:
@@ -1239,53 +1313,34 @@ def _apply_statistical_analysis(
         )
     elif execution is not None:
         raise RuntimeError(
-            "Reviewed statistical Python succeeded but the specialist returned "
+            "Statistical Python succeeded but the specialist returned "
             "a non-completed outcome."
         )
     if not analysis.answer.strip():
         analysis = analysis.model_copy(update={"answer": answer.answer})
-    return answer.model_copy(
-        update={
-            "result_id": analysis.parent_result_id,
-            "statistical_analysis": analysis,
-        }
-    )
+    updates: dict[str, Any] = {"statistical_analysis": analysis}
+    if analysis.outcome is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED:
+        updates["primary_result_id"] = analysis.parent_result_id
+    return answer.model_copy(update=updates)
 
 
 def _apply_visualization(
     answer: FinalAnswer,
     output: dict[str, Any],
 ) -> FinalAnswer:
-    """Attach the exact generated chart and authoritative success message."""
+    """Attach the exact generated chart without replacing the business answer."""
 
     visualization = _current_visualization(output)
     if visualization is None:
         return answer
     if visualization.outcome is not VisualizationOutcome.CHART_CREATED:
-        return answer.model_copy(
-            update={
-                "answer": visualization.answer,
-                "result_id": visualization.result_id or answer.result_id,
-                "chart": None,
-            }
-        )
+        return answer.model_copy(update={"chart": None})
     assert visualization.chart is not None
-    if (
-        answer.result_id is not None
-        and answer.result_id != visualization.chart.result_id
-    ):
-        return answer
-    return answer.model_copy(
-        update={
-            "answer": chart_success_message(visualization.chart),
-            "result_id": visualization.chart.result_id,
-            "chart": visualization.chart,
-        }
-    )
+    return answer.model_copy(update={"chart": visualization.chart})
 
 
 def _apply_report(answer: FinalAnswer, output: dict[str, Any]) -> FinalAnswer:
-    """Attach only the exact report reference returned by trusted rendering."""
+    """Attach the trusted report without discarding an ordinary answer chart."""
 
     report = _current_report(output)
     if report is None:
@@ -1336,6 +1391,74 @@ class RunManager:
         self.debug_details = debug_details
         self._diagnostic_events: dict[str, deque[dict[str, Any]]] = {}
 
+    def _resolve_result_references(
+        self,
+        *,
+        primary_result_id: str | None,
+        result_ids: Sequence[str],
+        thread_id: str,
+        source_id: str,
+    ) -> list[ResultReference]:
+        """Resolve ordered, scoped evidence from application-owned storage."""
+
+        unique_ids = list(dict.fromkeys(result_ids))
+        if primary_result_id is None:
+            if unique_ids:
+                raise RuntimeError(
+                    "Agent returned supporting results without a primary result."
+                )
+            return []
+        if primary_result_id not in unique_ids:
+            raise RuntimeError(
+                "Agent primary result is missing from supporting results."
+            )
+        ordered_ids = [
+            primary_result_id,
+            *(item for item in unique_ids if item != primary_result_id),
+        ]
+        references: list[ResultReference] = []
+        for result_id in ordered_ids:
+            try:
+                result = self.results.get(
+                    result_id,
+                    thread_id,
+                    source_id=source_id,
+                )
+            except StoreNotFound as exc:
+                raise RuntimeError(
+                    "Agent returned an unknown or out-of-conversation result."
+                ) from exc
+            references.append(
+                ResultReference(
+                    result_id=result.result_id,
+                    executed_sql=result.executed_sql,
+                    originating_question=result.originating_question,
+                    short_label=result.short_label,
+                )
+            )
+        return references
+
+    def _answer_from_coordinator(
+        self,
+        response: CoordinatorResponse,
+        *,
+        thread_id: str,
+        source_id: str,
+    ) -> FinalAnswer:
+        references = self._resolve_result_references(
+            primary_result_id=response.primary_result_id,
+            result_ids=response.supporting_result_ids,
+            thread_id=thread_id,
+            source_id=source_id,
+        )
+        return FinalAnswer(
+            answer=response.answer,
+            primary_result_id=response.primary_result_id,
+            results=references,
+            assumptions=response.assumptions,
+            interpretation=response.interpretation,
+        )
+
     def _validate_answer_provenance(
         self,
         answer: FinalAnswer,
@@ -1361,14 +1484,14 @@ class RunManager:
                     "stored artifact."
                 )
 
-        if answer.result_id is None:
+        if answer.primary_result_id is None:
+            if answer.results:
+                raise RuntimeError(
+                    "Agent returned supporting results without a primary result."
+                )
             if answer.chart is not None:
                 raise RuntimeError(
                     "Agent returned a chart without an executed result."
-                )
-            if answer.sql is not None:
-                raise RuntimeError(
-                    "Agent returned SQL without an executed result."
                 )
             if answer.statistical_analysis is not None:
                 raise RuntimeError(
@@ -1376,27 +1499,41 @@ class RunManager:
                 )
             return answer
 
-        try:
-            result = self.results.get(
-                answer.result_id,
+        references = self._resolve_result_references(
+            primary_result_id=answer.primary_result_id,
+            result_ids=[item.result_id for item in answer.results],
+            thread_id=thread_id,
+            source_id=source_id,
+        )
+        results_by_id = {
+            reference.result_id: self.results.get(
+                reference.result_id,
                 thread_id,
                 source_id=source_id,
             )
-        except StoreNotFound as exc:
-            raise RuntimeError(
-                "Agent returned an unknown or out-of-conversation result."
-            ) from exc
+            for reference in references
+        }
         if answer.chart is not None:
-            if answer.chart.result_id != result.result_id:
+            result = results_by_id.get(answer.chart.result_id)
+            if result is None:
                 raise RuntimeError(
-                    "Agent returned a chart for a different result."
+                    "Agent returned a chart outside the final evidence."
                 )
             validate_chart_spec(answer.chart, result)
         if answer.statistical_analysis is not None:
             analysis = answer.statistical_analysis
-            if analysis.parent_result_id != result.result_id:
+            result = results_by_id.get(analysis.parent_result_id)
+            if result is None:
                 raise RuntimeError(
-                    "Agent returned statistical analysis for a different result."
+                    "Agent returned statistical analysis outside the final evidence."
+                )
+            if (
+                analysis.outcome
+                is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED
+                and analysis.parent_result_id != answer.primary_result_id
+            ):
+                raise RuntimeError(
+                    "Completed statistical analysis parent must be primary."
                 )
             if (
                 result.truncated
@@ -1406,7 +1543,7 @@ class RunManager:
                 raise RuntimeError(
                     "Agent returned statistical analysis for a truncated result."
                 )
-        return answer.model_copy(update={"sql": result.executed_sql})
+        return answer.model_copy(update={"results": references})
 
     async def start(self, run_id: str) -> None:
         snapshot = self.runs.get(run_id)
@@ -1570,6 +1707,17 @@ class RunManager:
                                 ),
                             ),
                         )
+                        if self.debug_details:
+                            logger.info(
+                                "tool.debug.started run_id=%s agent=%s "
+                                "tool=%s call_id=%s input=%s",
+                                run_id,
+                                event_agent,
+                                tool_name,
+                                call_id,
+                                _serialize_debug_value(data.get("input"))
+                                or "null",
+                            )
                     elif lifecycle in {"tool-finished", "tool-error"}:
                         call_id = raw_call_id
                         if not call_id:
@@ -1591,6 +1739,27 @@ class RunManager:
                             ) = recorded
                             tool_name = recorded_tool_name
                         failed = lifecycle == "tool-error"
+                        completion_label = (
+                            f"Tool failed · {tool_name}"
+                            if failed
+                            else _completed_activity_label(label)
+                        )
+                        if (
+                            lifecycle == "tool-finished"
+                            and tool_name == "execute_statistical_python"
+                        ):
+                            (
+                                completion_label,
+                                handled_failure,
+                                completion_arguments,
+                            ) = _statistical_execution_completion(
+                                data.get("output")
+                            )
+                            failed = failed or handled_failure
+                            arguments = {
+                                **arguments,
+                                **completion_arguments,
+                            }
                         if not call_id:
                             tool_sequence += 1
                             call_id = f"tool-{tool_sequence}"
@@ -1600,14 +1769,20 @@ class RunManager:
                             agent=recorded_agent,
                             failed=failed,
                         )
+                        debug_output = None
+                        if self.debug_details:
+                            debug_output = _bounded_debug_value(
+                                data.get("output")
+                                if lifecycle == "tool-finished"
+                                else {
+                                    "error": data.get("message")
+                                    or "Tool call failed."
+                                }
+                            )
                         self.runs.add_event(
                             run_id,
                             kind,
-                            (
-                                f"Tool failed · {tool_name}"
-                                if failed
-                                else _completed_activity_label(label)
-                            ),
+                            completion_label,
                             phase="failed" if failed else "completed",
                             agent=recorded_agent,
                             duration_ms=duration_ms,
@@ -1615,6 +1790,7 @@ class RunManager:
                                 call_id=call_id or None,
                                 name=tool_name,
                                 arguments=arguments,
+                                debug_output=debug_output,
                             ),
                         )
                         logger.info(
@@ -1624,6 +1800,24 @@ class RunManager:
                             recorded_agent,
                             tool_name,
                             duration_ms,
+                        )
+                        logger.info(
+                            "tool.result.%s run_id=%s agent=%s tool=%s "
+                            "call_id=%s result=%s",
+                            "failed" if failed else "completed",
+                            run_id,
+                            recorded_agent,
+                            tool_name,
+                            call_id,
+                            _serialize_debug_value(
+                                data.get("output")
+                                if lifecycle == "tool-finished"
+                                else {
+                                    "error": data.get("message")
+                                    or "Tool call failed."
+                                }
+                            )
+                            or "null",
                         )
                         if call_id:
                             candidates = open_tool_calls.get(tool_name) or []
@@ -1784,13 +1978,26 @@ class RunManager:
             answer_value = output["structured_response"]
             if isinstance(answer_value, FinalAnswer):
                 answer = answer_value
-            elif isinstance(answer_value, BaseModel):
-                answer = FinalAnswer.model_validate(
-                    answer_value.model_dump(mode="python")
-                )
             else:
-                answer = FinalAnswer.model_validate(answer_value)
-            answer = _apply_sql_analysis(answer, output)
+                if isinstance(answer_value, CoordinatorResponse):
+                    coordinator_response = answer_value
+                elif isinstance(answer_value, BaseModel):
+                    coordinator_response = CoordinatorResponse.model_validate(
+                        answer_value.model_dump(mode="python")
+                    )
+                else:
+                    coordinator_response = CoordinatorResponse.model_validate(
+                        answer_value
+                    )
+                coordinator_response = _apply_sql_analysis(
+                    coordinator_response,
+                    output,
+                )
+                answer = self._answer_from_coordinator(
+                    coordinator_response,
+                    thread_id=thread_id,
+                    source_id=source_id,
+                )
             answer = _apply_statistical_analysis(
                 answer,
                 output,

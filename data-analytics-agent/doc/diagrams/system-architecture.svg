@@ -4533,7 +4533,7 @@ rect.c-bg-rect { fill: var(--bg); }
 ]]></style>
 <rect class="c-bg-rect" width="100%" height="100%"/>
         <title id="archify-diagram-title">Data Analytics Agent Architecture</title>
-        <desc id="archify-diagram-description">Three analytical specialists plus coordinator-owned self-contained HTML reporting</desc>
+        <desc id="archify-diagram-description">Sequential evidence planning, configurable approval, automatic charts, and coordinator-owned reporting</desc>
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -4561,7 +4561,7 @@ rect.c-bg-rect { fill: var(--bg); }
         <text x="638" y="48" class="t-cloud" font-size="9" font-weight="600">Source-bound agent runtime</text>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="1" x="1100" y="30" width="475" height="648" rx="8" class="c-security-group" stroke-width="1"/>
-        <text x="1108" y="48" class="t-security" font-size="9" font-weight="600">Reviewed execution and scoped artifact boundary</text>
+        <text x="1108" y="48" class="t-security" font-size="9" font-weight="600">Validated execution and scoped artifact boundary</text>
 
         <!-- Connection paths (before components for correct z-order) -->
         <path data-edge-from="user" data-edge-to="streamlit" data-edge-key="0" data-edge-id="analyst-to-ui" data-composition-points="175,434;215,434" d="M 175 434 L 215 434" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
@@ -4614,30 +4614,30 @@ rect.c-bg-rect { fill: var(--bg); }
         <text data-detail="context" x="525" y="448" class="t-muted" font-size="9" text-anchor="middle">source-bound lifecycle</text>
         </g>
 
-        <g id="node-coordinator" data-node-id="coordinator" data-node-label="Coordinator" tabindex="0" role="button" aria-label="Focus Coordinator, routing + synthesis + answer, Source-bound agent runtime" aria-pressed="false" data-node-kind="backend" data-node-sublabel="routing + synthesis + answer" data-node-context="Source-bound agent runtime">
-          <title>Coordinator · routing + synthesis + answer · Source-bound agent runtime</title>
+        <g id="node-coordinator" data-node-id="coordinator" data-node-label="Coordinator" tabindex="0" role="button" aria-label="Focus Coordinator, planning + synthesis + evidence, Source-bound agent runtime" aria-pressed="false" data-node-kind="backend" data-node-sublabel="planning + synthesis + evidence" data-node-context="Source-bound agent runtime">
+          <title>Coordinator · planning + synthesis + evidence · Source-bound agent runtime</title>
           <rect x="660" y="400" width="185" height="68" rx="6" class="c-mask"/>
           <rect x="660" y="400" width="185" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(666 406) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor="true" x="752.5" y="432" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Coordinator</text>
-        <text data-detail="context" x="752.5" y="448" class="t-muted" font-size="9" text-anchor="middle">routing + synthesis + answer</text>
+        <text data-detail="context" x="752.5" y="448" class="t-muted" font-size="9" text-anchor="middle">planning + synthesis + evidence</text>
         </g>
 
-        <g id="node-sql_agent" data-node-id="sql_agent" data-node-label="Text-to-SQL" tabindex="0" role="button" aria-label="Focus Text-to-SQL, OSI-guided SQL + review, Source-bound agent runtime" aria-pressed="false" data-node-kind="backend" data-node-sublabel="OSI-guided SQL + review" data-node-context="Source-bound agent runtime">
-          <title>Text-to-SQL · OSI-guided SQL + review · Source-bound agent runtime</title>
+        <g id="node-sql_agent" data-node-id="sql_agent" data-node-label="Text-to-SQL" tabindex="0" role="button" aria-label="Focus Text-to-SQL, OSI SQL + optional approval, Source-bound agent runtime" aria-pressed="false" data-node-kind="backend" data-node-sublabel="OSI SQL + optional approval" data-node-context="Source-bound agent runtime">
+          <title>Text-to-SQL · OSI SQL + optional approval · Source-bound agent runtime</title>
           <rect x="900" y="230" width="175" height="68" rx="6" class="c-mask"/>
           <rect x="900" y="230" width="175" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(906 236) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor="true" x="987.5" y="262" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Text-to-SQL</text>
-        <text data-detail="context" x="987.5" y="278" class="t-muted" font-size="9" text-anchor="middle">OSI-guided SQL + review</text>
+        <text data-detail="context" x="987.5" y="278" class="t-muted" font-size="9" text-anchor="middle">OSI SQL + optional approval</text>
         </g>
 
-        <g id="node-sql_backend" data-node-id="sql_backend" data-node-label="SQLBackend" tabindex="0" role="button" aria-label="Focus SQLBackend, provider-neutral contract, Reviewed execution and scoped artifact boundary" aria-pressed="false" data-node-kind="database" data-node-sublabel="provider-neutral contract" data-node-context="Reviewed execution and scoped artifact boundary">
-          <title>SQLBackend · provider-neutral contract · Reviewed execution and scoped artifact boundary</title>
+        <g id="node-sql_backend" data-node-id="sql_backend" data-node-label="SQLBackend" tabindex="0" role="button" aria-label="Focus SQLBackend, provider-neutral contract, Validated execution and scoped artifact boundary" aria-pressed="false" data-node-kind="database" data-node-sublabel="provider-neutral contract" data-node-context="Validated execution and scoped artifact boundary">
+          <title>SQLBackend · provider-neutral contract · Validated execution and scoped artifact boundary</title>
           <rect x="1130" y="230" width="175" height="68" rx="6" class="c-mask"/>
           <rect x="1130" y="230" width="175" height="68" rx="6" class="c-database" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(1136 236) scale(0.6875)">
@@ -4648,8 +4648,8 @@ rect.c-bg-rect { fill: var(--bg); }
         <text data-detail="context" x="1217.5" y="278" class="t-muted" font-size="9" text-anchor="middle">provider-neutral contract</text>
         </g>
 
-        <g id="node-result_store" data-node-id="result_store" data-node-label="ResultStore" tabindex="0" role="button" aria-label="Focus ResultStore, rows + profile + provenance, Reviewed execution and scoped artifact boundary" aria-pressed="false" data-node-kind="database" data-node-sublabel="rows + profile + provenance" data-node-tag="process memory" data-node-context="Reviewed execution and scoped artifact boundary">
-          <title>ResultStore · rows + profile + provenance · Reviewed execution and scoped artifact boundary · process memory</title>
+        <g id="node-result_store" data-node-id="result_store" data-node-label="ResultStore" tabindex="0" role="button" aria-label="Focus ResultStore, rows + profile + provenance, Validated execution and scoped artifact boundary" aria-pressed="false" data-node-kind="database" data-node-sublabel="rows + profile + provenance" data-node-tag="process memory" data-node-context="Validated execution and scoped artifact boundary">
+          <title>ResultStore · rows + profile + provenance · Validated execution and scoped artifact boundary · process memory</title>
           <rect x="1360" y="230" width="185" height="68" rx="6" class="c-mask"/>
           <rect x="1360" y="230" width="185" height="68" rx="6" class="c-database" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(1366 236) scale(0.6875)">
@@ -4661,8 +4661,8 @@ rect.c-bg-rect { fill: var(--bg); }
         <text data-detail="fine" x="1452.5" y="290" class="t-database" font-size="7" text-anchor="middle">process memory</text>
         </g>
 
-        <g id="node-visualization" data-node-id="visualization" data-node-label="Visualization" tabindex="0" role="button" aria-label="Focus Visualization, result ID to ChartSpec, Source-bound agent runtime" aria-pressed="false" data-node-kind="backend" data-node-sublabel="result ID to ChartSpec" data-node-tag="explicit request" data-node-context="Source-bound agent runtime">
-          <title>Visualization · result ID to ChartSpec · Source-bound agent runtime · explicit request</title>
+        <g id="node-visualization" data-node-id="visualization" data-node-label="Visualization" tabindex="0" role="button" aria-label="Focus Visualization, result ID to ChartSpec, Source-bound agent runtime" aria-pressed="false" data-node-kind="backend" data-node-sublabel="result ID to ChartSpec" data-node-tag="automatic final evidence" data-node-context="Source-bound agent runtime">
+          <title>Visualization · result ID to ChartSpec · Source-bound agent runtime · automatic final evidence</title>
           <rect x="920" y="400" width="175" height="68" rx="6" class="c-mask"/>
           <rect x="920" y="400" width="175" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(926 406) scale(0.6875)">
@@ -4670,23 +4670,23 @@ rect.c-bg-rect { fill: var(--bg); }
           </g>
           <text data-detail-anchor="true" x="1007.5" y="432" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Visualization</text>
         <text data-detail="context" x="1007.5" y="448" class="t-muted" font-size="9" text-anchor="middle">result ID to ChartSpec</text>
-        <text data-detail="fine" x="1007.5" y="460" class="t-backend" font-size="7" text-anchor="middle">explicit request</text>
+        <text data-detail="fine" x="1007.5" y="460" class="t-backend" font-size="7" text-anchor="middle">automatic final evidence</text>
         </g>
 
-        <g id="node-statistical" data-node-id="statistical" data-node-label="Statistical analysis" tabindex="0" role="button" aria-label="Focus Statistical analysis, reviewed Python + runner, Source-bound agent runtime" aria-pressed="false" data-node-kind="backend" data-node-sublabel="reviewed Python + runner" data-node-tag="three executions max" data-node-context="Source-bound agent runtime">
-          <title>Statistical analysis · reviewed Python + runner · Source-bound agent runtime · three executions max</title>
+        <g id="node-statistical" data-node-id="statistical" data-node-label="Statistical analysis" tabindex="0" role="button" aria-label="Focus Statistical analysis, Python + optional approval, Source-bound agent runtime" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Python + optional approval" data-node-tag="one repair max" data-node-context="Source-bound agent runtime">
+          <title>Statistical analysis · Python + optional approval · Source-bound agent runtime · one repair max</title>
           <rect x="900" y="590" width="185" height="68" rx="6" class="c-mask"/>
           <rect x="900" y="590" width="185" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(906 596) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor="true" x="992.5" y="622" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Statistical analysis</text>
-        <text data-detail="context" x="992.5" y="638" class="t-muted" font-size="9" text-anchor="middle">reviewed Python + runner</text>
-        <text data-detail="fine" x="992.5" y="650" class="t-backend" font-size="7" text-anchor="middle">three executions max</text>
+        <text data-detail="context" x="992.5" y="638" class="t-muted" font-size="9" text-anchor="middle">Python + optional approval</text>
+        <text data-detail="fine" x="992.5" y="650" class="t-backend" font-size="7" text-anchor="middle">one repair max</text>
         </g>
 
-        <g id="node-run_store" data-node-id="run_store" data-node-label="RunStore + analysis IDs" tabindex="0" role="button" aria-label="Focus RunStore + analysis IDs, exact code + outputs, Reviewed execution and scoped artifact boundary" aria-pressed="false" data-node-kind="database" data-node-sublabel="exact code + outputs" data-node-tag="authoritative" data-node-context="Reviewed execution and scoped artifact boundary">
-          <title>RunStore + analysis IDs · exact code + outputs · Reviewed execution and scoped artifact boundary · authoritative</title>
+        <g id="node-run_store" data-node-id="run_store" data-node-label="RunStore + analysis IDs" tabindex="0" role="button" aria-label="Focus RunStore + analysis IDs, exact code + outputs, Validated execution and scoped artifact boundary" aria-pressed="false" data-node-kind="database" data-node-sublabel="exact code + outputs" data-node-tag="authoritative" data-node-context="Validated execution and scoped artifact boundary">
+          <title>RunStore + analysis IDs · exact code + outputs · Validated execution and scoped artifact boundary · authoritative</title>
           <rect x="1200" y="590" width="205" height="68" rx="6" class="c-mask"/>
           <rect x="1200" y="590" width="205" height="68" rx="6" class="c-database" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(1206 596) scale(0.6875)">
@@ -4710,8 +4710,8 @@ rect.c-bg-rect { fill: var(--bg); }
         <text data-detail="fine" x="1007.5" y="120" class="t-backend" font-size="7" text-anchor="middle">coordinator skill</text>
         </g>
 
-        <g id="node-report_store" data-node-id="report_store" data-node-label="ReportStore" tabindex="0" role="button" aria-label="Focus ReportStore, HTML + spec + provenance, Reviewed execution and scoped artifact boundary" aria-pressed="false" data-node-kind="database" data-node-sublabel="HTML + spec + provenance" data-node-tag="versioned" data-node-context="Reviewed execution and scoped artifact boundary">
-          <title>ReportStore · HTML + spec + provenance · Reviewed execution and scoped artifact boundary · versioned</title>
+        <g id="node-report_store" data-node-id="report_store" data-node-label="ReportStore" tabindex="0" role="button" aria-label="Focus ReportStore, HTML + spec + provenance, Validated execution and scoped artifact boundary" aria-pressed="false" data-node-kind="database" data-node-sublabel="HTML + spec + provenance" data-node-tag="versioned" data-node-context="Validated execution and scoped artifact boundary">
+          <title>ReportStore · HTML + spec + provenance · Validated execution and scoped artifact boundary · versioned</title>
           <rect x="1200" y="60" width="190" height="68" rx="6" class="c-mask"/>
           <rect x="1200" y="60" width="190" height="68" rx="6" class="c-database" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(1206 66) scale(0.6875)">

@@ -41,9 +41,11 @@ Application defaults:
 | `SQL_TIMEOUT_SECONDS` | `10` | Global execution deadline |
 | `SQL_MAX_RESULT_ROWS` | `10000` | Global stored-result cap; truncated results cannot be statistically analyzed |
 | `MODEL_SAMPLE_ROWS` | `10` | Rows exposed to models |
+| `REQUIRE_SQL_APPROVAL` | `false` | Pause validated SQL for approve/edit/reject before execution |
+| `REQUIRE_PYTHON_APPROVAL` | `true` | Pause statistical Python with immutable input provenance |
 | `ENABLE_DATA_VISUALIZATION` | `true` | Plug the chart specialist into each source graph |
-| `ENABLE_STATISTICAL_ANALYSIS` | `true` | Plug the reviewed statistical Python specialist into each source graph |
-| `ENABLE_REPORTING` | `true` | Add the coordinator report-design skill and trusted HTML renderer |
+| `ENABLE_STATISTICAL_ANALYSIS` | `true` | Plug the statistical Python specialist into each source graph |
+| `ENABLE_REPORTING` | `true` | Automatically render one HTML report after each successful evidence-backed analysis |
 
 Statistical Python settings are configurable in `.env`:
 
@@ -60,7 +62,9 @@ Statistical Python settings are configurable in `.env`:
 | `STATISTICAL_MAX_TOTAL_FIGURE_BYTES` | `3145728` | Combined PNG bytes |
 | `STATISTICAL_MAX_FIGURE_WIDTH` | `1600` | Maximum rendered width |
 | `STATISTICAL_MAX_FIGURE_HEIGHT` | `1200` | Maximum rendered height |
-| `STATISTICAL_MAX_EXECUTION_ATTEMPTS` | `3` | Actual runs, excluding review rejections |
+
+Each user run permits one statistical Python execution and one targeted repair.
+Review rejections do not consume either attempt.
 
 Execution budgets use positive integer settings and cannot be disabled at
 runtime:
@@ -75,22 +79,34 @@ runtime:
 Each new user message starts a fresh coordinator budget. The same coordinator
 budget continues across approve, edit, and reject resumptions for that run.
 Each specialist assignment has its own budget, which continues across that
-assignment's review resumptions. The coordinator model allowance is larger
+assignment's review resumptions. Repeated sequential assignments remain part of
+the same user run and cannot reset coordinator or task-call limits. The
+coordinator model allowance is larger
 than its all-tool allowance so it can still produce the final structured answer
 after the last permitted tool call. Exceeding a limit fails the run with
 `execution_budget_exceeded` rather than relying on a very high graph recursion
 limit.
 
+Normal `logs/api.log` records include tool completion summaries and every
+bounded, recursively secret-key-redacted tool result, including handled and
+unhandled failures. This is independent of debug mode.
+
 Failed runs always expose safe diagnostics: agent, budget type, limit,
 attempted count, run ID, and the specific tool when applicable. Set
-`AGENT_DEBUG_DETAILS=true` only for trusted local debugging. It enables:
+`AGENT_DEBUG_DETAILS=true` only for trusted local debugging. It additionally
+enables:
 
 - bounded, recursively secret-key-redacted raw inputs on activity tool calls;
+- bounded, recursively secret-key-redacted tool results on completed and failed
+  activity calls in the API and Streamlit timeline;
+- detailed tool-start records and inputs in the rotating `logs/api.log` file;
 - a rolling window of the last five tool payloads on execution-budget errors;
 - the latest bounded `values` state snapshot for the coordinator and each
   observed specialist, retained with the completed turn.
 
-State snapshots retain at most 10 recent messages per agent, bound strings and
+Logged and debug payloads are bounded to 4,000 serialized characters per input
+or result;
+state snapshots retain at most 10 recent messages per agent, bound strings and
 collections, replace memory contents with path/size metadata, and are capped at
 20,000 serialized characters. Debug payloads can still contain SQL, questions,
 model text, sampled business data, and unrecognized secrets; never enable this
@@ -220,12 +236,15 @@ The normal suite covers:
 - SQL safety and SQLite native controls;
 - caps, timeout, and normalization;
 - source/thread result isolation;
-- approval, edit, rejection, and repeated interrupts;
+- all four SQL/Python approval combinations, autonomous execution, edit,
+  rejection, and repeated interrupts;
 - per-agent execution budgets, all-or-nothing parallel tool limits, and budget
   continuity across review resumptions;
 - same-thread resume;
-- exact SQL provenance;
-- exact reviewed statistical Python, result scope, truncation refusal, output
+- primary-first multi-result evidence, exact SQL provenance, and source/thread
+  rejection;
+- sequential multi-query investigations under autonomous and reviewed modes;
+- exact executed statistical Python, result scope, truncation refusal, output
   bounds, figure capture, and repair-attempt limits;
 - API rehydration and concurrent-run rejection;
 - provider-reported token aggregation, per-agent timing, approval wait, and
@@ -233,7 +252,10 @@ The normal suite covers:
 - rotating API log initialization and access-log suppression;
 - Streamlit helper behavior;
 - constrained chart schema and presentation limits;
-- automatic chart execution, safe progress arguments, and result provenance;
+- automatic chart selection for ordinary data questions, explicit-type
+  authority, safe progress arguments, and final-evidence provenance;
+- opaque result IDs plus recoverable validation, missing-relation, timeout, and
+  provider query failures under the existing SQL execution budget;
 - Plotly rendering, partial map resolution, and saved-turn reconstruction.
 
 The live OpenAI smoke test is opt-in:

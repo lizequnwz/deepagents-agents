@@ -69,6 +69,7 @@ def clear_conversation_state() -> None:
         "review_feedback_",
         "review_phase_",
         "starter_question_",
+        "chat_input_",
     )
     for key in list(st.session_state):
         if key.startswith(removable_prefixes):
@@ -524,22 +525,26 @@ if active_run_id:
         st.rerun()
 
 if not active_run_id:
-    starter_question = None
+    chat_input_key = f"chat_input_{thread_id}"
     if not conversation["turns"]:
-        starter_question = render_empty_state(thread_id, source)
+        render_empty_state(
+            thread_id,
+            source,
+            chat_input_key=chat_input_key,
+        )
 
     typed_question = st.chat_input(
         f"Ask a business question about {source['name']}",
+        key=chat_input_key,
         submit_mode="disable",
     )
-    question = starter_question or typed_question
-    if question:
+    if typed_question:
         try:
             st.session_state["last_run_error"] = None
             st.session_state["last_run_diagnostics"] = None
             st.session_state["last_run_debug_states"] = None
             st.session_state["last_run_metrics"] = None
-            run = client.send_message(thread_id, question)
+            run = client.send_message(thread_id, typed_question)
             st.session_state["active_run_id"] = run["run_id"]
             st.rerun()
         except APIError as exc:

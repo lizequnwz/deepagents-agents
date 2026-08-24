@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from data_analytics_agent.backends.base import (
     BackendExecutionResult,
     ColumnInfo,
+    SQLExecutionError,
     TableInfo,
     normalize_result_value,
 )
@@ -191,7 +192,7 @@ class SnowflakeBackend:
                 raise TimeoutError(
                     f"SQL execution exceeded {timeout_seconds:g} seconds."
                 ) from exc
-            raise
+            raise SQLExecutionError(_provider_error_message(exc)) from exc
         finally:
             if cursor is not None:
                 cursor.close()
