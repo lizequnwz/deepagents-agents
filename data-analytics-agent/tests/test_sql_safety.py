@@ -9,17 +9,19 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from data_analytics_agent.backends import SQLExecutionError, SQLiteBackend
+from data_analytics_agent.backends import (
+    SQLExecutionError,
+    SQLValidationError,
+    SQLiteBackend,
+    validate_readonly_sql,
+)
 from data_analytics_agent.config import Settings
 from data_analytics_agent.data_sources import DataSource, ExecutionLimits
 from data_analytics_agent.agents.text_to_sql.tools import (
     AnalyticsAgentState,
     MAX_RESULT_ROWS,
-    SQLValidationError,
     create_execute_sql_tool,
-    create_validate_sql_tool,
     execute_query,
-    validate_readonly_sql,
 )
 from data_analytics_agent.stores import ResultStore
 
@@ -62,7 +64,7 @@ def _source(
     ],
 )
 def test_accepts_readonly_query_forms(query: str) -> None:
-    assert validate_readonly_sql(query) is not None
+    assert validate_readonly_sql(query, dialect="sqlite") is not None
 
 
 @pytest.mark.parametrize(
@@ -83,7 +85,7 @@ def test_accepts_readonly_query_forms(query: str) -> None:
 )
 def test_rejects_unsafe_or_multiple_sql(query: str) -> None:
     with pytest.raises(SQLValidationError):
-        validate_readonly_sql(query)
+        validate_readonly_sql(query, dialect="sqlite")
 
 
 def test_exact_sql_cap_truncation_and_model_sample(database: Path) -> None:
@@ -114,7 +116,6 @@ def test_missing_relation_is_a_backend_execution_error(database: Path) -> None:
         "result_50ceb129_c903_407c_bd53_f7293621065d"
     )
 
-    backend.validate_sql(query)
     with pytest.raises(
         SQLExecutionError,
         match="no such table: result_50ceb129",
@@ -127,18 +128,13 @@ def test_sql_tool_errors_are_recoverable_model_observations(
 ) -> None:
     source = _source()
     backend = SQLiteBackend(database)
-    validate_tool = create_validate_sql_tool(backend)
     execute_tool = create_execute_sql_tool(
         source,
         backend,
         ResultStore(),
     )
 
-    assert validate_tool.handle_tool_error is True
     assert execute_tool.handle_tool_error is True
-    assert validate_tool.run({"query": "DELETE FROM numbers"}).startswith(
-        "SQL validation failed:"
-    )
 
     builder = StateGraph(AnalyticsAgentState)
     builder.add_node("tools", ToolNode([execute_tool]))
@@ -154,12 +150,9 @@ def test_sql_tool_errors_are_recoverable_model_observations(
                         {
                             "name": "execute_sql",
                             "args": {
-                                "query": (
-                                    "SELECT * FROM "
-                                    "result_50ceb129_c903_407c_bd53_f7293621065d"
-                                )
+                                "query": "DELETE FROM numbers"
                             },
-                            "id": "execute-invalid-relation",
+                            "id": "execute-invalid-query",
                         }
                     ],
                 )
@@ -173,9 +166,7 @@ def test_sql_tool_errors_are_recoverable_model_observations(
 
     observation = output["messages"][-1]
     assert observation.status == "error"
-    assert "Saved result IDs are evidence handles, not source tables" in (
-        observation.content
-    )
+    assert "Only read-only SELECT" in observation.content
 
 
 def test_readonly_database_remains_unchanged(database: Path) -> None:

@@ -107,11 +107,12 @@ message.
 3. `RunManager` invokes the source-specific coordinator with typed run-scope
    state containing the conversation, run, and source IDs.
 4. The coordinator delegates database work.
-5. The specialist reads OSI context, validates SQL, and calls `execute_sql`.
-   Expected validation or provider query errors return as tool observations so
-   the specialist can revise within the existing execution budget.
+5. The specialist reads OSI context and calls `execute_sql`. The backend
+   validates once immediately before execution. Expected validation or provider
+   query errors return as tool observations so the specialist can revise within
+   the existing execution budget.
 6. When `REQUIRE_SQL_APPROVAL=true`, HITL pauses before the tool runs;
-   otherwise the same validated tool executes immediately.
+   otherwise the same tool executes immediately.
 7. In review mode, approve/edit resumes execution and reject returns feedback.
 8. The backend fetches `cap + 1`, returns at most the configured cap, and uses
    the extra row only to detect truncation.
@@ -167,14 +168,11 @@ See [Safety and HITL](safety-and-hitl.md) for the detailed sequence.
 
 ## Backend boundary
 
-[`backends/base.py`](../data_analytics_agent/backends/base.py) defines five required
-operations:
+[`backends/base.py`](../data_analytics_agent/backends/base.py) defines two
+required operations:
 
-- readiness diagnostics;
-- read-only SQL validation;
-- capped execution;
-- table listing;
-- normalized table-schema inspection.
+- validated capped execution;
+- targeted table-schema inspection for OSI readiness.
 
 The current [`SQLiteBackend`](../data_analytics_agent/backends/sqlite.py) owns
 SQLite-specific read-only URI handling, authorizer rules, timeout progress

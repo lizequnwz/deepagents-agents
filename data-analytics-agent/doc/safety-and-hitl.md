@@ -17,16 +17,15 @@ sufficient by itself.
 | Trusted source catalog | Users cannot submit arbitrary targets or semantic files |
 | Semantic model | Curated tables, fields, joins, metrics, and caveats |
 | Agent permissions | Read access limited to required project context |
-| Prompt contract | One read-only query; OSI first; fallback metadata only when needed |
+| Prompt contract | One read-only query grounded only in the complete OSI model |
 | Structural parser | SQLGlot parses one dialect-specific statement |
 | Allowed query class | One `SELECT`, CTE, or set operation |
 | Forbidden operations | DDL, DML, transactions, commands, procedures, administrative/session and metadata operations |
 | SQL approval | `REQUIRE_SQL_APPROVAL` optionally pauses `execute_sql` for approve/edit/reject |
 | Python approval | `REQUIRE_PYTHON_APPROVAL` optionally pauses with complete code and immutable input provenance |
 | Chart execution | `create_chart` auto-runs a constrained, result-scoped spec |
-| Edit validation | Edited text is parsed again before resume |
 | Chart validation | Strict schema, known columns/types, readability limits, immutable result ID |
-| Backend validation | Adapter validates again immediately before execution |
+| Backend validation | Adapter validates once immediately before execution |
 | Native database control | Adapter-enforced read-only access, provider timeout/cancellation, and capped retrieval |
 | Limits | Per-run agent execution budgets, timeout, capped fetch, bounded model sample |
 | Python limits | Secret-stripped subprocess, hard timeout, initial attempt plus one repair, bounded stdout/tables/figures |
@@ -83,11 +82,12 @@ The validator:
 Validation is deliberately conservative. Expanding allowed query classes must
 be treated as a security change and covered by adversarial tests.
 
-Validation is structural rather than a database preflight. Expected validation,
-timeout, and provider query errors are returned to the SQL specialist as handled
-tool observations. This permits bounded repair without weakening read-only
-enforcement or resetting budgets. Saved result IDs remain opaque evidence
-handles and are never exposed as database relations.
+Validation is structural rather than a database preflight. It runs inside the
+backend immediately before every submitted or human-edited query. Expected
+validation, timeout, and provider query errors are returned to the SQL
+specialist as handled tool observations. This permits bounded repair without
+weakening read-only enforcement or resetting budgets. Saved result IDs remain
+opaque evidence handles and are never exposed as database relations.
 
 ## Configurable HITL lifecycle
 
@@ -128,18 +128,20 @@ data; treat the log file as sensitive application data.
 
 ### Approve
 
-The pending SQL is validated and the tool resumes unchanged.
+The tool resumes unchanged. The backend validates the pending SQL immediately
+before execution.
 
 ### Edit
 
-The edited SQL is required, validated, and replaces the pending tool arguments.
-The exact editor content becomes the executed query.
+The edited SQL is required and replaces the pending tool arguments. The backend
+validates it immediately before execution, and the exact editor content becomes
+the executed query.
 
 ### Reject
 
 Feedback is returned to the specialist. The query is not executed. The
-specialist must revise, validate, and call `execute_sql` again. That call creates
-a new interrupt. Rejection is a loop, not a terminal run state.
+specialist must revise and call `execute_sql` again. That call creates a new
+interrupt. Rejection is a loop, not a terminal run state.
 
 ## Backend enforcement
 

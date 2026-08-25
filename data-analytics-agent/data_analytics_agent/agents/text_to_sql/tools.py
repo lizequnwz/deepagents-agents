@@ -2,21 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any
 
 from deepagents.graph import DeepAgentState
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import ToolException
-from sqlglot import exp
 
 from data_analytics_agent.backends import (
     SQLBackend,
     SQLExecutionError,
     SQLValidationError,
-)
-from data_analytics_agent.backends.validation import (
-    validate_readonly_sql as _validate_readonly_sql,
 )
 from data_analytics_agent.data_sources import DataSource
 from data_analytics_agent.schemas import QueryResult
@@ -58,15 +54,6 @@ def _runtime_context(runtime: ToolRuntime) -> AgentContext:
         raise RuntimeError("The agent run scope is unavailable.") from exc
 
 
-def validate_readonly_sql(
-    query: str,
-    dialect: str = "sqlite",
-) -> exp.Query:
-    """Compatibility wrapper around the backend-neutral structural validator."""
-
-    return _validate_readonly_sql(query, dialect=dialect)
-
-
 def execute_query(
     *,
     backend: SQLBackend,
@@ -76,9 +63,8 @@ def execute_query(
     result_store: ResultStore,
     originating_question: str = "",
 ) -> QueryResult:
-    """Execute exact validated SQL and persist its capped normalized artifact."""
+    """Validate and execute exact SQL, then persist its capped artifact."""
 
-    backend.validate_sql(query)
     execution = backend.execute(
         query,
         timeout_seconds=source.limits.timeout_seconds,
@@ -108,46 +94,6 @@ def execute_query(
     )
 
 
-def create_list_tables_tool(backend: SQLBackend):
-    @tool
-    def list_tables() -> dict[str, Any]:
-        """List live database tables and views as a schema-drift fallback."""
-
-        return {"tables": backend.list_tables()}
-
-    return list_tables
-
-
-def create_get_table_schema_tool(backend: SQLBackend):
-    @tool
-    def get_table_schema(table_names: list[str]) -> dict[str, Any]:
-        """Inspect live columns for named tables as a schema-drift fallback."""
-
-        tables = backend.get_table_schema(table_names)
-        return {"tables": [asdict(table) for table in tables]}
-
-    return get_table_schema
-
-
-def create_validate_sql_tool(backend: SQLBackend):
-    @tool
-    def validate_sql(query: str) -> dict[str, Any]:
-        """Validate one query structurally without submitting it to the database."""
-
-        try:
-            backend.validate_sql(query)
-        except SQLValidationError as exc:
-            raise ToolException(f"SQL validation failed: {exc}") from exc
-        return {
-            "valid": True,
-            "dialect": backend.dialect,
-            "message": "The query is one structurally read-only statement.",
-        }
-
-    validate_sql.handle_tool_error = True
-    return validate_sql
-
-
 def create_execute_sql_tool(
     source: DataSource,
     backend: SQLBackend,
@@ -155,7 +101,7 @@ def create_execute_sql_tool(
 ):
     @tool
     def execute_sql(query: str, runtime: ToolRuntime) -> dict[str, Any]:
-        """Execute one validated, source-bound, read-only query.
+        """Validate and execute one source-bound, read-only query.
 
         The complete capped result is stored as an application artifact. Only a
         small sample and an opaque result ID are returned to the model.

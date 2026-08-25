@@ -127,44 +127,6 @@ class SnowflakeBackend:
             if cursor is not None:
                 cursor.close()
 
-    def readiness_errors(self) -> list[str]:
-        query = """
-            SELECT
-                CURRENT_ROLE() AS ROLE_NAME,
-                CURRENT_DATABASE() AS DATABASE_NAME,
-                CURRENT_SCHEMA() AS SCHEMA_NAME
-        """
-        try:
-            columns, rows = self._fetch_all_metadata(query)
-        except Exception as exc:
-            return [
-                "Snowflake is not ready: " + _provider_error_message(exc)
-            ]
-        if not rows:
-            return ["Snowflake readiness query returned no context."]
-
-        context = {
-            column: _row_value(rows[0], index, column)
-            for index, column in enumerate(columns)
-        }
-        missing = [
-            label
-            for label, column in (
-                ("role", "ROLE_NAME"),
-                ("database", "DATABASE_NAME"),
-                ("schema", "SCHEMA_NAME"),
-            )
-            if not context.get(column)
-        ]
-        if missing:
-            return [
-                "Snowflake has no active " + ", ".join(missing) + "."
-            ]
-        return []
-
-    def validate_sql(self, query: str) -> None:
-        validate_readonly_sql(query, dialect=self.dialect)
-
     def execute(
         self,
         query: str,
@@ -172,7 +134,7 @@ class SnowflakeBackend:
         timeout_seconds: float,
         max_rows: int,
     ) -> BackendExecutionResult:
-        self.validate_sql(query)
+        validate_readonly_sql(query, dialect=self.dialect)
         started = time.monotonic()
         cursor: SnowflakeCursor | None = None
         try:
@@ -204,55 +166,31 @@ class SnowflakeBackend:
             elapsed_ms=(time.monotonic() - started) * 1_000,
         )
 
-    def list_tables(self) -> list[str]:
-        query = """
-            SELECT TABLE_NAME
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_SCHEMA = CURRENT_SCHEMA()
-              AND TABLE_TYPE IN ('BASE TABLE', 'VIEW')
-            ORDER BY TABLE_NAME
-        """
-        columns, rows = self._fetch_all_metadata(query)
-        if not columns:
-            return []
-        return [str(_row_value(row, 0, columns[0])) for row in rows]
-
     def get_table_schema(self, table_names: list[str]) -> list[TableInfo]:
-        available = {name.casefold(): name for name in self.list_tables()}
-        unknown = [
-            name for name in table_names if name.casefold() not in available
-        ]
-        if unknown:
-            raise ValueError(
-                "Unknown table(s): " + ", ".join(sorted(unknown))
-            )
         if not table_names:
             return []
 
-        physical_names = [available[name.casefold()] for name in table_names]
         literals = ", ".join(
-            _sql_string_literal(name) for name in physical_names
+            _sql_string_literal(name.upper()) for name in table_names
         )
         query = f"""
             SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = CURRENT_SCHEMA()
-              AND TABLE_NAME IN ({literals})
+              AND UPPER(TABLE_NAME) IN ({literals})
             ORDER BY TABLE_NAME, ORDINAL_POSITION
         """
         columns, rows = self._fetch_all_metadata(query)
         positions = {name: index for index, name in enumerate(columns)}
-        by_table: dict[str, list[ColumnInfo]] = {
-            name: [] for name in physical_names
-        }
-        table_lookup = {name.casefold(): name for name in physical_names}
+        actual_names: dict[str, str] = {}
+        by_table: dict[str, list[ColumnInfo]] = {}
         for row in rows:
             raw_table = str(
                 _row_value(row, positions["TABLE_NAME"], "TABLE_NAME")
             )
-            physical_name = table_lookup.get(raw_table.casefold())
-            if physical_name is None:
-                continue
+            folded_name = raw_table.casefold()
+            actual_names[folded_name] = raw_table
+            by_table.setdefault(folded_name, [])
             nullable = str(
                 _row_value(
                     row,
@@ -260,7 +198,7 @@ class SnowflakeBackend:
                     "IS_NULLABLE",
                 )
             ).upper()
-            by_table[physical_name].append(
+            by_table[folded_name].append(
                 ColumnInfo(
                     name=str(
                         _row_value(
@@ -280,7 +218,17 @@ class SnowflakeBackend:
                 )
             )
 
+        unknown = [
+            name for name in table_names if name.casefold() not in actual_names
+        ]
+        if unknown:
+            raise ValueError(
+                "Unknown table(s): " + ", ".join(sorted(unknown))
+            )
         return [
-            TableInfo(name=name, columns=tuple(by_table[name]))
-            for name in physical_names
+            TableInfo(
+                name=actual_names[name.casefold()],
+                columns=tuple(by_table[name.casefold()]),
+            )
+            for name in table_names
         ]

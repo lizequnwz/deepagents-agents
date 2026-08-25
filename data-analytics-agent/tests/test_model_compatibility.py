@@ -19,11 +19,8 @@ from data_analytics_agent.agents.statistical_analysis.tools import (
 )
 from data_analytics_agent.agents.text_to_sql.tools import (
     create_execute_sql_tool,
-    create_get_table_schema_tool,
     create_inspect_conversation_result_tool,
     create_list_conversation_results_tool,
-    create_list_tables_tool,
-    create_validate_sql_tool,
 )
 from data_analytics_agent.agents.visualization.schemas import ChartSpec
 from data_analytics_agent.agents.visualization.tools import (
@@ -110,9 +107,6 @@ def test_every_project_model_bound_schema_uses_bedrock_subset(
     source = test_settings.load_catalog().get("test")
     backend = object()
     tools = [
-        create_list_tables_tool(backend),
-        create_get_table_schema_tool(backend),
-        create_validate_sql_tool(backend),
         create_execute_sql_tool(source, backend, results),
         create_list_conversation_results_tool(
             results,

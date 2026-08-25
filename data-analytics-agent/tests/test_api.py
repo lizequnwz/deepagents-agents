@@ -120,8 +120,8 @@ class BudgetFailureStream(FakeStream):
                 "namespace": ["text-to-sql"],
                 "data": {
                     "event": "tool-started",
-                    "tool_call_id": "validation-1",
-                    "tool_name": "validate_sql",
+                    "tool_call_id": "execution-1",
+                    "tool_name": "execute_sql",
                     "input": {
                         "query": "SELECT Name FROM Artist",
                         "api_key": "must-not-leak",
@@ -135,12 +135,12 @@ class BudgetFailureStream(FakeStream):
                 "namespace": ["text-to-sql"],
                 "data": {
                     "event": "tool-finished",
-                    "tool_call_id": "validation-1",
-                    "tool_name": "validate_sql",
+                    "tool_call_id": "execution-1",
+                    "tool_name": "execute_sql",
                     "output": (
                         "x" * 10_000
                         if self.include_large_payload
-                        else {"valid": True}
+                        else {"result_id": "result-1"}
                     ),
                 },
             },
@@ -619,7 +619,7 @@ def test_debug_budget_failure_redacts_and_truncates_tool_payloads(
 
     recent = run["diagnostics"]["recent_tool_calls"]
     assert len(recent) == 1
-    assert recent[0]["tool_name"] == "validate_sql"
+    assert recent[0]["tool_name"] == "execute_sql"
     assert "SELECT Name FROM Artist" in recent[0]["input"]
     assert "must-not-leak" not in recent[0]["input"]
     assert "[REDACTED]" in recent[0]["input"]

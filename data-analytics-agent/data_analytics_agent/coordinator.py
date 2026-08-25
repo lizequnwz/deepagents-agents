@@ -339,14 +339,6 @@ def build_agent(
 ):
     """Build one cached coordinator graph bound to one registered source."""
 
-    if not source.semantic_model_path.is_file():
-        raise FileNotFoundError(
-            f"OSI semantic model not found at {source.semantic_model_path}"
-        )
-    backend_errors = backend.readiness_errors()
-    if backend_errors:
-        raise RuntimeError(" ".join(backend_errors))
-
     chat_model = _build_chat_model(settings, model)
     _configure_harness_profile(chat_model, settings)
 

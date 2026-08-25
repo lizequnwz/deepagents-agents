@@ -22,12 +22,6 @@ class FakeClientBackend:
     def __init__(self) -> None:
         self.executed: list[str] = []
 
-    def readiness_errors(self) -> list[str]:
-        return []
-
-    def validate_sql(self, query: str) -> None:
-        validate_readonly_sql(query, dialect=self.dialect)
-
     def execute(
         self,
         query: str,
@@ -35,6 +29,7 @@ class FakeClientBackend:
         timeout_seconds: float,
         max_rows: int,
     ) -> BackendExecutionResult:
+        validate_readonly_sql(query, dialect=self.dialect)
         assert timeout_seconds > 0
         self.executed.append(query)
         rows: list[dict[str, Any]] = [
@@ -46,9 +41,6 @@ class FakeClientBackend:
             truncated=len(rows) > max_rows,
             elapsed_ms=2.5,
         )
-
-    def list_tables(self) -> list[str]:
-        return ["facts"]
 
     def get_table_schema(self, table_names: list[str]) -> list[TableInfo]:
         assert table_names == ["facts"]

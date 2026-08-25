@@ -123,8 +123,6 @@ class Services:
                         backend = self.backend_for_source(source_id)
                     except Exception as exc:
                         errors.append(str(exc))
-                    if backend is not None:
-                        errors.extend(backend.readiness_errors())
                     semantic = validate_semantic_model(
                         source.semantic_model_path,
                         dialect=source.dialect,

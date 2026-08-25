@@ -26,7 +26,7 @@ def test_approve_resume_shape(approval: ApprovalRequest) -> None:
     }
 
 
-def test_edit_is_validated_and_preserves_action_order(
+def test_edit_preserves_action_order(
     approval: ApprovalRequest,
 ) -> None:
     edited = "SELECT Name FROM Artist ORDER BY Name LIMIT 10"
@@ -40,13 +40,13 @@ def test_edit_is_validated_and_preserves_action_order(
     }
 
 
-def test_invalid_edit_does_not_create_resume_command(
+def test_empty_edit_does_not_create_resume_command(
     approval: ApprovalRequest,
 ) -> None:
     with pytest.raises(ValueError):
         decisions_to_command(
             approval,
-            [Decision(action="edit", edited_sql="DROP TABLE Artist")],
+            [Decision(action="edit", edited_sql="")],
         )
 
 

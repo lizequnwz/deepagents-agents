@@ -80,24 +80,6 @@ class SQLiteBackend:
             check_same_thread=False,
         )
 
-    def readiness_errors(self) -> list[str]:
-        if not self.database_path.is_file():
-            return [f"SQLite database not found at {self.database_path}."]
-        try:
-            connection = self._connect()
-            try:
-                connection.execute("SELECT 1").fetchone()
-            finally:
-                connection.close()
-        except sqlite3.DatabaseError as exc:
-            return [
-                f"SQLite database at {self.database_path} is not readable: {exc}"
-            ]
-        return []
-
-    def validate_sql(self, query: str) -> None:
-        validate_readonly_sql(query, dialect=self.dialect)
-
     def execute(
         self,
         query: str,
@@ -105,7 +87,7 @@ class SQLiteBackend:
         timeout_seconds: float,
         max_rows: int,
     ) -> BackendExecutionResult:
-        self.validate_sql(query)
+        validate_readonly_sql(query, dialect=self.dialect)
         started = time.monotonic()
         deadline = started + timeout_seconds
         connection = self._connect()
@@ -142,34 +124,31 @@ class SQLiteBackend:
             elapsed_ms=(time.monotonic() - started) * 1_000,
         )
 
-    def list_tables(self) -> list[str]:
+    def get_table_schema(self, table_names: list[str]) -> list[TableInfo]:
         connection = self._connect()
         try:
+            if not table_names:
+                return []
+            placeholders = ", ".join("?" for _ in table_names)
             rows = connection.execute(
-                """
+                f"""
                 SELECT name
                 FROM sqlite_master
                 WHERE type IN ('table', 'view')
                   AND name NOT LIKE 'sqlite_%'
-                ORDER BY name
-                """
+                  AND name COLLATE NOCASE IN ({placeholders})
+                """,
+                table_names,
             ).fetchall()
-        finally:
-            connection.close()
-        return [str(row[0]) for row in rows]
+            available = {str(row[0]).casefold(): str(row[0]) for row in rows}
+            unknown = [
+                name for name in table_names if name.casefold() not in available
+            ]
+            if unknown:
+                raise ValueError(
+                    "Unknown table(s): " + ", ".join(sorted(unknown))
+                )
 
-    def get_table_schema(self, table_names: list[str]) -> list[TableInfo]:
-        available = {name.casefold(): name for name in self.list_tables()}
-        unknown = [
-            name for name in table_names if name.casefold() not in available
-        ]
-        if unknown:
-            raise ValueError(
-                "Unknown table(s): " + ", ".join(sorted(unknown))
-            )
-
-        connection = self._connect()
-        try:
             tables: list[TableInfo] = []
             for requested_name in table_names:
                 physical_name = available[requested_name.casefold()]

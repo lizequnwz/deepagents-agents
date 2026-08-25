@@ -143,19 +143,7 @@ def test_execute_wraps_expected_provider_query_errors() -> None:
     assert cursor.closed is True
 
 
-def test_readiness_tables_and_schema_use_configured_context() -> None:
-    readiness = FakeCursor(
-        ["ROLE_NAME", "DATABASE_NAME", "SCHEMA_NAME"],
-        [("ANALYST_READ_ONLY", "ANALYTICS", "PUBLIC")],
-    )
-    first_tables = FakeCursor(
-        ["TABLE_NAME"],
-        [("CUSTOMERS",), ("ORDERS",)],
-    )
-    second_tables = FakeCursor(
-        ["TABLE_NAME"],
-        [("CUSTOMERS",), ("ORDERS",)],
-    )
+def test_targeted_schema_uses_configured_context() -> None:
     columns = FakeCursor(
         ["TABLE_NAME", "COLUMN_NAME", "DATA_TYPE", "IS_NULLABLE"],
         [
@@ -163,13 +151,9 @@ def test_readiness_tables_and_schema_use_configured_context() -> None:
             ("ORDERS", "TOTAL", "NUMBER", "YES"),
         ],
     )
-    client = FakeSnowflakeClient(
-        [readiness, first_tables, second_tables, columns]
-    )
+    client = FakeSnowflakeClient([columns])
     backend = SnowflakeBackend(client)
 
-    assert backend.readiness_errors() == []
-    assert backend.list_tables() == ["CUSTOMERS", "ORDERS"]
     schema = backend.get_table_schema(["orders"])
 
     assert schema[0].name == "ORDERS"
@@ -181,14 +165,11 @@ def test_readiness_tables_and_schema_use_configured_context() -> None:
         ("ORDER_ID", "NUMBER", False),
         ("TOTAL", "NUMBER", True),
     ]
-    assert all(
-        cursor.closed
-        for cursor in (readiness, first_tables, second_tables, columns)
-    )
+    assert columns.closed is True
+    assert len(client.calls) == 1
     assert all(timeout == 10 for _, timeout in client.calls)
-    assert "INFORMATION_SCHEMA.TABLES" in client.calls[1][0]
-    assert "INFORMATION_SCHEMA.COLUMNS" in client.calls[3][0]
-    assert "'ORDERS'" in client.calls[3][0]
+    assert "INFORMATION_SCHEMA.COLUMNS" in client.calls[0][0]
+    assert "'ORDERS'" in client.calls[0][0]
 
 
 def test_factory_requires_empty_target_and_injected_client(

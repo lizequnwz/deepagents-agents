@@ -187,41 +187,18 @@ def validate_semantic_model(
 
     if backend is not None and not errors:
         try:
-            available = {
-                table.casefold(): table for table in backend.list_tables()
-            }
+            inspected_tables = backend.get_table_schema(list(physical_sources))
         except Exception as exc:
-            errors.append(f"Could not inspect live database tables: {exc}")
+            errors.append(f"Could not inspect live table schemas: {exc}")
         else:
-            matched_sources = {
-                physical_source: available[physical_source.casefold()]
-                for physical_source in physical_sources
-                if physical_source.casefold() in available
-            }
-            for physical_source, dataset in physical_sources.items():
-                if physical_source not in matched_sources:
-                    errors.append(
-                        f"OSI dataset {dataset['name']!r} references missing "
-                        f"table {physical_source!r}."
-                    )
-            try:
-                inspected_tables = backend.get_table_schema(
-                    list(matched_sources.values())
-                )
-            except Exception as exc:
-                errors.append(f"Could not inspect live table schemas: {exc}")
-                inspected_tables = []
             schema_by_name = {
                 table.name.casefold(): table for table in inspected_tables
             }
             for physical_source, dataset in physical_sources.items():
-                matched_name = matched_sources.get(physical_source)
-                if matched_name is None:
-                    continue
-                table = schema_by_name.get(matched_name.casefold())
+                table = schema_by_name.get(physical_source.casefold())
                 if table is None:
                     errors.append(
-                        f"Could not inspect table {matched_name!r}."
+                        f"Could not inspect table {physical_source!r}."
                     )
                     continue
                 columns = {

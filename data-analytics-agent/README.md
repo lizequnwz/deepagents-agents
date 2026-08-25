@@ -192,10 +192,7 @@ the source to the registry, restart FastAPI, and verify readiness. See
 
 [`SQLBackend`](data_analytics_agent/backends/base.py) defines:
 
-- `readiness_errors`
-- `validate_sql`
 - `execute`
-- `list_tables`
 - `get_table_schema`
 
 Provider-specific connections, metadata, timeouts, row caps, and native safety
@@ -215,8 +212,9 @@ See [Backend development](doc/backend-development.md) and the
   autonomous mode preserves every validation and execution limit.
 - `create_chart` executes automatically only after strict schema and
   result-scoped validation.
-- Edited SQL is validated again.
-- The backend executes the exact validated or human-edited SQL.
+- Submitted or human-edited SQL is validated once by the backend immediately
+  before execution.
+- The backend executes the exact submitted or human-edited SQL.
 - A bounded subprocess executes the exact submitted or human-edited Python with service secrets
   removed from its environment. It is not a production sandbox.
 - SQLite uses read-only mode, an authorizer, deadline, and capped fetch.

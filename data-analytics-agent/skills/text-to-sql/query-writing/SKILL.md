@@ -19,9 +19,8 @@ description: Ground a database question in the OSI semantic model already loaded
 4. Use only declared relationship paths and exact physical dataset `source`
    and field-expression names. Select only columns needed for the answer or
    requested chart.
-5. Use `list_tables` or `get_table_schema` only to fill a named OSI gap or
-   verify suspected drift. These tools inspect metadata; do not use SQL to
-   probe row values for schema discovery.
+5. Treat a missing physical source or field as a source-readiness problem. Do
+   not explore undeclared database objects or probe row values for discovery.
 6. Use `write_todos` only when the assignment has several dependent analysis
    steps.
 
@@ -60,11 +59,10 @@ logical OSI dataset and field names.
 
 ## Validate, review, and finish
 
-1. Call `validate_sql`, then `execute_sql`. Only `execute_sql` runs the query
-   and pauses for human review.
-2. If review rejects the query, apply the feedback and submit a revised,
-   validated query. If review edits it, treat the executed edit as
-   authoritative.
+1. Call `execute_sql`. It validates the query once immediately before execution
+   and pauses for human review when approval is enabled.
+2. If review rejects the query, apply the feedback and submit a revision. If
+   review edits it, treat the executed edit as authoritative.
 3. Finish only after a successful `QueryResult`.
 
 Return the business answer plus the exact executed SQL, result ID, columns,

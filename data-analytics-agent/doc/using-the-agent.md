@@ -4,7 +4,7 @@
 
 The application is a local conversational analytics workspace. A user selects
 one ready data source and asks a business question. SQL and statistical Python
-either execute after validation or pause for review according to independent
+either execute immediately or pause for review according to independent
 deployment settings. Ordinary data answers automatically attempt one useful
 chart over their final evidence.
 
@@ -189,9 +189,9 @@ charted evidence.
 
 ## SQL execution and optional review
 
-With `REQUIRE_SQL_APPROVAL=false` (the default), validated read-only SQL runs
-immediately. Set it to `true` to pause every `execute_sql` action. The review
-panel then shows:
+With `REQUIRE_SQL_APPROVAL=false` (the default), SQL is validated once by the
+backend and runs immediately. Set it to `true` to pause every `execute_sql`
+action. The review panel then shows:
 
 - exact proposed SQL;
 - selected source and dialect;
@@ -203,13 +203,14 @@ Review joins, filters, metric definitions, date logic, ordering, and row limit.
 
 ### Approve
 
-Use **Run this SQL** without changing the editor. The same SQL is validated
-again and executed.
+Use **Run this SQL** without changing the editor. The backend validates that
+SQL once immediately before executing it.
 
 ### Edit
 
 Change the SQL in the editor, then use **Run this SQL**. The edited text becomes
-the authoritative query. It is parsed and validated before the agent resumes.
+the authoritative query. The backend validates that exact text once immediately
+before execution.
 
 ### Reject
 

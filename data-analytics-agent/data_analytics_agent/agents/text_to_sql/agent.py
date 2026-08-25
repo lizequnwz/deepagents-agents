@@ -12,9 +12,6 @@ from langchain.agents.structured_output import ToolStrategy
 
 from data_analytics_agent.agents.text_to_sql.tools import (
     create_execute_sql_tool,
-    create_get_table_schema_tool,
-    create_list_tables_tool,
-    create_validate_sql_tool,
 )
 from data_analytics_agent.backends import SQLBackend
 from data_analytics_agent.data_sources import DataSource
@@ -24,8 +21,8 @@ from data_analytics_agent.stores import ResultStore
 
 def _sql_output_retry_message(require_approval: bool) -> str:
     review_recovery = (
-        "After rejection, apply the feedback, validate the revision, and "
-        "submit it for review. "
+        "After rejection, apply the feedback and submit the revision for "
+        "review. "
         if require_approval
         else "Repair validation or execution failures before retrying. "
     )
@@ -47,11 +44,12 @@ def _sql_subagent_prompt(
     require_approval: bool,
 ) -> str:
     execution_mode = (
-        "Execution pauses for human approve/edit/reject after validation. A "
-        "rejection requires revision and another review. A human-edited "
-        "execution replaces stale scope from the assignment."
+        "Execution pauses for human approve/edit/reject. After approval, the "
+        "backend validates once and executes. A rejection requires revision "
+        "and another review. A human-edited execution replaces stale scope "
+        "from the assignment."
         if require_approval
-        else "After validation, execution proceeds immediately without a "
+        else "The backend validates once and executes immediately without a "
         "human interrupt. Repair validation or execution failures before "
         "retrying."
     )
@@ -66,8 +64,7 @@ possible, and read each path at most once per assignment. Re-read only if the
 earlier content was truncated or compacted, or if needed content fell outside
 the returned range. Apply the skill to produce one validated result that
 answers the assignment and is chart-ready when requested. The OSI model is
-authoritative; use live schema tools only for a concrete gap or suspected
-drift.
+authoritative and contains the complete queryable schema.
 
 Hard boundaries:
 - Submit exactly one read-only SELECT, CTE, or set-operation statement.
@@ -78,9 +75,9 @@ Hard boundaries:
   requested business shape.
 - Do not add `LIMIT` unless the user explicitly requests a row count. Ranking
   words require deterministic ordering but do not imply a row count.
-- Call `validate_sql` before `execute_sql`. Validation does not query the
-  database. If either tool returns an error observation, revise the query while
-  attempts remain. {execution_mode}
+- Call `execute_sql`. It validates the statement once immediately before
+  execution. If it returns an error observation, revise the query while attempts
+  remain. {execution_mode}
 
 Finish only after `execute_sql` succeeds. Return `SQLAnalysisResponse` using the
 successful `QueryResult`: copy its exact `executed_sql` to `sql` and its result
@@ -117,11 +114,6 @@ def build_text_to_sql_subagent(
             )
         )
     agent_middleware.extend([TodoListMiddleware(), *(middleware or [])])
-    fallback_tools = [
-        create_list_tables_tool(backend),
-        create_get_table_schema_tool(backend),
-        create_validate_sql_tool(backend),
-    ]
     return {
         "name": "text-to-sql",
         "description": (
@@ -139,7 +131,7 @@ def build_text_to_sql_subagent(
             source,
             require_approval=require_approval,
         ),
-        "tools": [*fallback_tools, execute_sql],
+        "tools": [execute_sql],
         "model": model,
         "skills": ["/project/skills/text-to-sql/"],
         "permissions": permissions,

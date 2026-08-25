@@ -42,12 +42,6 @@ class SQLBackend(Protocol):
     dialect: str
     backend_type: str
 
-    def readiness_errors(self) -> list[str]:
-        """Return actionable errors without raising for expected setup issues."""
-
-    def validate_sql(self, query: str) -> None:
-        """Raise when the query is not one safe read-only statement."""
-
     def execute(
         self,
         query: str,
@@ -55,13 +49,10 @@ class SQLBackend(Protocol):
         timeout_seconds: float,
         max_rows: int,
     ) -> BackendExecutionResult:
-        """Execute exact SQL or raise ``SQLExecutionError``/``TimeoutError``."""
-
-    def list_tables(self) -> list[str]:
-        """List queryable tables and views."""
+        """Validate and execute exact SQL or raise an execution error."""
 
     def get_table_schema(self, table_names: list[str]) -> list[TableInfo]:
-        """Return normalized schema metadata for the requested tables."""
+        """Return live metadata for the requested OSI-declared tables."""
 
 
 def normalize_result_value(value: Any) -> Any:

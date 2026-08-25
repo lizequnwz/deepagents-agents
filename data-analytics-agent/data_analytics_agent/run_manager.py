@@ -30,9 +30,6 @@ from data_analytics_agent.agents.statistical_analysis.schemas import (
     StatisticalAnalysisOutcome,
     StatisticalAnalysisResult,
 )
-from data_analytics_agent.agents.text_to_sql.tools import (
-    validate_readonly_sql,
-)
 from data_analytics_agent.agents.visualization.schemas import (
     ChartSpec,
     VisualizationOutcome,
@@ -637,15 +634,11 @@ def decisions_to_command(
             }
         )
 
-    if decision.action == "approve" and approval.review_type == "sql":
-        validate_readonly_sql(approval.query, approval.dialect)
-        translated = {"type": "approve"}
-    elif decision.action == "approve":
+    if decision.action == "approve":
         translated = {"type": "approve"}
     elif approval.review_type == "sql":
         if not decision.edited_sql:
             raise ValueError("edited_sql is required for an edit decision.")
-        validate_readonly_sql(decision.edited_sql, approval.dialect)
         translated = {
             "type": "edit",
             "edited_action": {
@@ -824,18 +817,7 @@ def _activity_arguments(tool_name: str, tool_input: Any) -> dict[str, Any]:
             and not isinstance(todos, (str, bytes, bytearray))
             else 0
         }
-    if tool_name == "get_table_schema":
-        names = data.get("table_names") or []
-        if not isinstance(names, Sequence) or isinstance(names, str):
-            return {}
-        clean_names = [
-            _safe_activity_value(name, limit=80) for name in list(names)[:10]
-        ]
-        arguments = {"table_names": clean_names}
-        if len(names) > 10:
-            arguments["omitted_tables"] = len(names) - 10
-        return arguments
-    if tool_name in {"validate_sql", "execute_sql"}:
+    if tool_name == "execute_sql":
         query = data.get("query")
         return (
             {"query": _bounded_activity_text(query)}
@@ -916,14 +898,8 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
         return ("search", "Searching semantic context")
     if tool_name == "write_todos":
         return ("planning", "Planning the analysis")
-    if tool_name == "list_tables":
-        return ("schema", "Checking live table names as fallback")
-    if tool_name == "get_table_schema":
-        return ("schema", "Checking live table schema as fallback")
-    if tool_name == "validate_sql":
-        return ("sql_check", "Checking generated SQL")
     if tool_name == "execute_sql":
-        return ("execution", "Executing validated SQL")
+        return ("execution", "Validating and executing SQL")
     if tool_name == "list_conversation_results":
         return ("result", "Listing saved conversation results")
     if tool_name == "list_conversation_analyses":

@@ -2,9 +2,9 @@
 
 ## Purpose and mental model
 
-`SQLBackend` is the database-provider boundary. The agent supplies validated SQL
-and execution limits; the adapter validates, executes, caps, normalizes, and
-returns metadata through stable Python values.
+`SQLBackend` is the database-provider boundary. The agent supplies SQL and
+execution limits; the adapter validates once immediately before execution,
+executes, caps, normalizes, and returns metadata through stable Python values.
 
 The protocol is defined in
 [`backends/base.py`](../data_analytics_agent/backends/base.py). It is structural:
@@ -16,17 +16,15 @@ adapters do not need to subclass a base class if they satisfy the contract.
 | --- | --- |
 | `dialect` | SQLGlot dialect expected by the adapter |
 | `backend_type` | Registry/factory discriminator |
-| `readiness_errors()` | Return actionable expected setup errors without raising |
-| `validate_sql(query)` | Reject anything except one safe read-only query |
-| `execute(query, timeout_seconds, max_rows)` | Execute exact validated SQL and return a normalized capped result |
-| `list_tables()` | List queryable tables/views in the source context |
-| `get_table_schema(table_names)` | Return normalized table and column metadata |
+| `execute(query, timeout_seconds, max_rows)` | Validate and execute exact SQL, returning a normalized capped result |
+| `get_table_schema(table_names)` | Return live metadata for requested OSI-declared tables |
 
-`execute` raises `SQLExecutionError` for expected provider rejection of a safe
-query and `TimeoutError` for its deadline. The text-to-SQL tool converts those
-two outcomes into model-visible error observations so the specialist can revise
-within its existing budget. Unexpected adapter or application defects must not
-be relabeled as query errors.
+`execute` raises `SQLValidationError` for unsafe SQL, `SQLExecutionError` for
+expected provider rejection of a safe query, and `TimeoutError` for its
+deadline. The text-to-SQL tool converts those outcomes into model-visible error
+observations so the specialist can revise within its existing budget.
+Unexpected adapter or application defects must not be relabeled as query
+errors.
 
 Execution returns:
 
@@ -42,7 +40,7 @@ BackendExecutionResult
 
 Every adapter must:
 
-1. Validate inside `execute` even if the caller already validated.
+1. Validate exactly once inside `execute`.
 2. Execute the exact submitted or human-edited query without invisible rewriting.
 3. Enforce `timeout_seconds` using provider-native cancellation or deadline
    controls.
@@ -67,15 +65,14 @@ The rest of the application should never depend on that provider library.
 
 ## Metadata methods
 
-`list_tables` and `get_table_schema` support:
-
-- startup source/OSI readiness;
-- agent fallback when semantic context is ambiguous or stale.
+`get_table_schema` supports startup source/OSI readiness. It receives only the
+physical tables declared by the OSI model; do not enumerate the complete live
+schema or expose metadata discovery to the model.
 
 Return provider-independent `TableInfo` and `ColumnInfo`. Preserve the
 provider's physical name while making lookup behavior explicit.
 
-Metadata operations may use provider-specific catalog APIs or internal
+Metadata operations may use provider-specific catalog APIs or targeted
 `INFORMATION_SCHEMA` queries. They are not user-generated SQL actions, but
 should still use least-privilege credentials and bounded operations.
 

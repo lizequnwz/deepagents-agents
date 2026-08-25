@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from data_analytics_agent.agents.text_to_sql.agent import _sql_subagent_prompt
+from data_analytics_agent.agents.text_to_sql.agent import (
+    _sql_subagent_prompt,
+    build_text_to_sql_subagent,
+)
 from data_analytics_agent.agents.visualization.agent import (
     _visualization_prompt,
     build_visualization_subagent,
@@ -127,7 +130,7 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
         normalized_sql_prompt
     )
     assert "write fresh source sql" in normalized_sql_prompt
-    assert "if either tool returns an error observation" in (
+    assert "if it returns an error observation" in (
         normalized_sql_prompt
     )
 
@@ -159,6 +162,22 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
     )
     assert "compact automatic-report default" in normalized_enabled_prompt
     assert "any answer with no final evidence" in normalized_enabled_prompt
+
+
+def test_text_to_sql_exposes_only_execution_to_the_model(
+    test_settings: Settings,
+) -> None:
+    source = test_settings.load_catalog().get("test")
+    subagent = build_text_to_sql_subagent(
+        source=source,
+        backend=object(),
+        result_store=ResultStore(),
+        model=object(),
+        permissions=[],
+        require_approval=False,
+    )
+
+    assert [tool.name for tool in subagent["tools"]] == ["execute_sql"]
 
 
 def test_reporting_feature_flag_controls_automatic_reports(

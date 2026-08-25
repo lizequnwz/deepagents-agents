@@ -96,7 +96,7 @@
     {
       "from": 150,
       "to": 690,
-      "label": "SQL validation and optional review"
+      "label": "SQL review and backend validation"
     },
     {
       "from": 710,
@@ -143,7 +143,7 @@
       "from": "sql_agent",
       "to": "review",
       "y": 350,
-      "label": "propose validated SQL",
+      "label": "propose SQL",
       "variant": "security"
     },
     {
@@ -171,7 +171,7 @@
       "from": "sql_agent",
       "to": "backend",
       "y": 530,
-      "label": "execute exact approved or submitted SQL",
+      "label": "validate once + execute exact SQL",
       "variant": "emphasis"
     },
     {
