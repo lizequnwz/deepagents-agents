@@ -37,33 +37,33 @@ from data_analytics_agent.schemas import SavedResult
 
 _SCRIPT_PATTERN = re.compile(r"<script(?:\s[^>]*)?>(.*?)</script>", re.DOTALL)
 _INLINE_PATTERN = re.compile(r"\*\*(.+?)\*\*|`([^`]+)`")
-REPORT_RENDERER_VERSION = "1.2"
+REPORT_RENDERER_VERSION = "1.3"
 
 # Report-owned semantic chart tokens. Every categorical color maintains at
 # least 3:1 contrast against both the light and dark report surfaces.
 _REPORT_CHART_DISCRETE = (
-    "#2563EB",  # primary blue
-    "#D97706",  # highlight amber
-    "#0F766E",  # comparison teal
-    "#9333EA",  # secondary violet
-    "#DB2777",  # secondary rose
-    "#4D7C0F",  # secondary olive
-    "#0891B2",  # secondary cyan
+    "#368727",  # Fidelity green
+    "#3266E0",  # blue
+    "#9747F6",  # purple
+    "#C74B07",  # orange
+    "#058070",  # aqua
+    "#997E05",  # gold
+    "#047CB8",  # cobalt
+    "#DC1616",  # red
 )
 _REPORT_CHART_CONTINUOUS = (
-    "#E0F2FE",
-    "#7DD3FC",
-    "#0284C7",
-    "#075985",
-    "#082F49",
+    "#EDFAEB",
+    "#BBEBB2",
+    "#65C754",
+    "#368727",
+    "#044014",
 )
 _REPORT_CHART_STYLE = ChartRenderStyle(
     discrete_colors=_REPORT_CHART_DISCRETE,
     continuous_colors=_REPORT_CHART_CONTINUOUS,
     show_title=False,
     font_family=(
-        "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "
-        "Segoe UI, sans-serif"
+        "Fidelity Sans, Source Sans 3, Arial, ui-sans-serif, sans-serif"
     ),
 )
 
@@ -399,9 +399,17 @@ def _font_stack(style: str) -> str:
     return {
         "editorial": "Georgia, 'Times New Roman', serif",
         "technical": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-        "humanist": "Optima, Candara, 'Segoe UI', sans-serif",
-        "modern": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        "humanist": "'Fidelity Sans', 'Source Sans 3', Arial, sans-serif",
+        "modern": "'Source Sans 3', Arial, ui-sans-serif, sans-serif",
     }[style]
+
+
+def _heading_font_stack(style: str) -> str:
+    if style == "technical":
+        return _font_stack(style)
+    if style == "editorial":
+        return "Georgia, 'Times New Roman', serif"
+    return "'Fidelity Slab', 'Roboto Slab', Rockwell, Georgia, serif"
 
 
 def _style(spec: ReportSpec) -> str:
@@ -409,7 +417,7 @@ def _style(spec: ReportSpec) -> str:
     gap = {"spacious": "2rem", "balanced": "1.35rem", "dense": ".9rem"}[
         theme.density
     ]
-    radius = {"square": "0", "soft": ".85rem", "rounded": "1.4rem"}[
+    radius = {"square": "0", "soft": ".5rem", "rounded": "1rem"}[
         theme.corner_style
     ]
     return f"""
@@ -418,25 +426,28 @@ def _style(spec: ReportSpec) -> str:
   --primary: {theme.primary_color}; --accent: {theme.accent_color};
   --surface: {theme.surface_color}; --background: {theme.background_color};
   --text: {theme.text_color}; --muted: {theme.muted_color};
-  --border: color-mix(in srgb, var(--text) 14%, transparent);
-  --chart-grid: rgba(71, 85, 105, .24);
+  --border: #D9D8D5; --chart-grid: rgba(82, 81, 80, .24);
+  --warning-text: #7F330F; --warning-background: #FFF8ED;
+  --hero-start: var(--primary); --hero-end: #044014;
   --gap: {gap}; --radius: {radius}; --font: {_font_stack(theme.font_style)};
+  --heading-font: {_heading_font_stack(theme.font_style)};
 }}
 * {{ box-sizing: border-box; }}
 html {{ scroll-behavior: smooth; }}
 body {{ margin: 0; background: var(--background); color: var(--text); font-family: var(--font); font-size: 16px; line-height: 1.62; }}
 button, summary {{ font: inherit; }}
-a {{ color: var(--primary); }}
+a {{ color: #1D3986; text-decoration-thickness: .08em; text-underline-offset: .16em; }}
 .report-shell {{ width: calc(100% - clamp(1rem, 3vw, 3rem)); max-width: 1360px; margin: 0 auto; padding: clamp(.75rem, 2.5vw, 2.5rem) 0; }}
-.report-hero {{ position: relative; overflow: hidden; padding: clamp(1.75rem, 4vw, 3.5rem) clamp(1.25rem, 3vw, 2.5rem); border-radius: calc(var(--radius) * 1.25); color: white; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 62%, #020617)); box-shadow: 0 24px 70px color-mix(in srgb, var(--primary) 24%, transparent); }}
-.report-hero::after {{ content: ''; position: absolute; width: 24rem; height: 24rem; border-radius: 50%; right: -10rem; top: -12rem; background: color-mix(in srgb, var(--accent) 60%, transparent); filter: blur(2px); opacity: .55; }}
+.report-hero {{ position: relative; overflow: hidden; padding: clamp(1.75rem, 4vw, 3.5rem) clamp(1.25rem, 3vw, 2.5rem); border-radius: calc(var(--radius) * 1.25); color: white; background: linear-gradient(135deg, var(--hero-start), var(--hero-end)); box-shadow: 0 18px 48px color-mix(in srgb, #044014 22%, transparent); }}
+.report-hero::after {{ content: ''; position: absolute; width: 24rem; height: 24rem; border-radius: 50%; right: -10rem; top: -12rem; background: color-mix(in srgb, #DBCA72 52%, transparent); opacity: .32; }}
 .eyebrow {{ margin: 0 0 .75rem; letter-spacing: .13em; text-transform: uppercase; font-size: .78rem; font-weight: 700; }}
-h1, h2, h3 {{ line-height: 1.16; text-wrap: balance; }}
-h1 {{ position: relative; z-index: 1; margin: 0; max-width: 22ch; font-size: clamp(2.15rem, 6vw, 4.9rem); letter-spacing: -.045em; overflow-wrap: anywhere; }}
+h1, h2 {{ font-family: var(--heading-font); line-height: 1.16; text-wrap: balance; }}
+h3 {{ line-height: 1.2; text-wrap: balance; }}
+h1 {{ position: relative; z-index: 1; margin: 0; max-width: 22ch; font-size: clamp(2.15rem, 6vw, 4.6rem); letter-spacing: -.025em; font-weight: 600; overflow-wrap: anywhere; }}
 .subtitle {{ position: relative; z-index: 1; max-width: 68ch; margin: 1.2rem 0 0; font-size: clamp(1.05rem, 2vw, 1.35rem); opacity: .9; }}
 .report-meta {{ position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: .65rem 1.25rem; margin-top: 2rem; font-size: .88rem; opacity: .84; }}
 .report-content {{ display: grid; gap: var(--gap); margin-top: var(--gap); }}
-.report-block {{ min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: clamp(1.1rem, 2.25vw, 1.8rem); box-shadow: 0 12px 36px color-mix(in srgb, var(--text) 7%, transparent); }}
+.report-block {{ min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: clamp(1.1rem, 2.25vw, 1.8rem); box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 6%, transparent); }}
 .report-block > :first-child {{ margin-top: 0; }} .report-block > :last-child {{ margin-bottom: 0; }}
 .report-block h2 {{ margin: 0 0 1rem; font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -.025em; }}
 .report-block h3 {{ margin: 1.2rem 0 .45rem; font-size: 1.05rem; }}
@@ -456,8 +467,8 @@ table {{ width: 100%; border-collapse: collapse; font-variant-numeric: tabular-n
 caption {{ padding: .8rem 1rem; color: var(--muted); text-align: left; }} th, td {{ padding: .7rem .85rem; text-align: left; border-top: 1px solid var(--border); vertical-align: top; }} th {{ position: sticky; top: 0; background: color-mix(in srgb, var(--primary) 8%, var(--surface)); font-weight: 720; }} tbody tr:nth-child(even) {{ background: color-mix(in srgb, var(--text) 2.5%, transparent); }}
 .chart-summary, figcaption {{ color: var(--muted); }} figure {{ margin: 0; }} figcaption {{ margin-top: .6rem; font-size: .88rem; }}
 .chart-block .plotly-graph-div {{ max-width: 100%; }} .chart-data .report-block {{ margin-top: .75rem; padding: 0; border: 0; box-shadow: none; }}
-.chart-warning {{ padding: .75rem 1rem; color: #7C2D12; background: #FFF7ED; border-radius: .65rem; }}
-.analysis-warnings {{ padding: .25rem .9rem; color: #7C2D12; background: #FFF7ED; border-radius: .65rem; }} .analysis-warnings ul {{ margin-top: 0; }} .analysis-warning {{ margin: .45rem 0; }}
+.chart-warning {{ padding: .75rem 1rem; color: var(--warning-text); background: var(--warning-background); border: 1px solid color-mix(in srgb, var(--warning-text) 28%, transparent); border-radius: var(--radius); }}
+.analysis-warnings {{ padding: .25rem .9rem; color: var(--warning-text); background: var(--warning-background); border: 1px solid color-mix(in srgb, var(--warning-text) 28%, transparent); border-radius: var(--radius); }} .analysis-warnings ul {{ margin-top: 0; }} .analysis-warning {{ margin: .45rem 0; }}
 .stat-scalar {{ display: flex; justify-content: space-between; gap: 1rem; padding: .85rem 0; border-bottom: 1px solid var(--border); }} .stat-scalar strong {{ font-variant-numeric: tabular-nums; }}
 .stat-figure img {{ display: block; width: 100%; height: auto; border-radius: calc(var(--radius) * .65); }}
 details {{ margin-top: 1rem; }} summary {{ min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--primary); font-weight: 700; }} summary:focus-visible, .theme-toggle:focus-visible {{ outline: 3px solid var(--accent); outline-offset: 3px; }}
@@ -469,13 +480,15 @@ details {{ margin-top: 1rem; }} summary {{ min-height: 44px; display: flex; alig
 .sql-query pre {{ max-width: 100%; margin: 0; padding: 1rem; overflow: auto; border: 1px solid var(--border); border-radius: calc(var(--radius) * .65); background: color-mix(in srgb, var(--text) 6%, var(--surface)); font-size: .82rem; line-height: 1.55; tab-size: 2; white-space: pre; }}
 .sql-query pre code {{ padding: 0; background: transparent; }}
 code {{ padding: .1rem .3rem; border-radius: .25rem; background: color-mix(in srgb, var(--text) 8%, transparent); }}
-body[data-theme='dark'] {{ --surface: #111827; --background: #020617; --text: #F8FAFC; --muted: #CBD5E1; --border: #334155; --chart-grid: rgba(203, 213, 225, .24); }}
-@media (prefers-color-scheme: dark) {{ body:not([data-theme='light']) {{ --surface: #111827; --background: #020617; --text: #F8FAFC; --muted: #CBD5E1; --border: #334155; --chart-grid: rgba(203, 213, 225, .24); }} }}
+body[data-theme='light'] {{ color-scheme: light; }}
+body[data-theme='dark'] {{ color-scheme: dark; --primary: #65C754; --accent: #DBCA72; --surface: #292928; --background: #141414; --text: #F9F7F5; --muted: #D9D8D5; --border: #525150; --chart-grid: rgba(217, 216, 213, .24); --warning-text: #FFDDA8; --warning-background: #403F3E; }}
+body[data-theme='dark'] a {{ color: #8CC1FD; }}
+@media (prefers-color-scheme: dark) {{ body[data-theme='adaptive'] {{ color-scheme: dark; --primary: #65C754; --accent: #DBCA72; --surface: #292928; --background: #141414; --text: #F9F7F5; --muted: #D9D8D5; --border: #525150; --chart-grid: rgba(217, 216, 213, .24); --warning-text: #FFDDA8; --warning-background: #403F3E; }} body[data-theme='adaptive'] a {{ color: #8CC1FD; }} }}
 @media (max-width: 1100px) {{ .metrics-grid {{ grid-template-columns: repeat(var(--metric-tablet-columns), minmax(0, 1fr)); }} }}
 @media (max-width: 700px) {{ .report-shell {{ width: calc(100% - 1rem); }} .report-hero {{ padding: 1.75rem 1.1rem; }} .metrics-grid {{ grid-template-columns: repeat(var(--metric-mobile-columns), minmax(0, 1fr)); }} .infographic.steps .infographic-item::after {{ display: none; }} .report-block {{ padding: 1.05rem; }} }}
 @media (max-width: 430px) {{ .metrics-grid {{ grid-template-columns: 1fr; }} body {{ font-size: 16px; }} .sql-query pre {{ padding: .8rem; font-size: .78rem; }} }}
 @media (prefers-reduced-motion: reduce) {{ *, *::before, *::after {{ scroll-behavior: auto !important; transition: none !important; animation: none !important; }} }}
-@media print {{ .theme-toggle {{ display: none; }} body {{ background: white; color: #111827; }} .report-shell {{ width: 100%; max-width: none; padding: 0; }} .report-hero, .report-block {{ box-shadow: none; break-inside: avoid; }} .sql-query pre {{ white-space: pre-wrap; overflow-wrap: anywhere; }} details > * {{ display: block !important; }} }}
+@media print {{ .theme-toggle {{ display: none; }} body {{ background: white; color: #141414; }} .report-shell {{ width: 100%; max-width: none; padding: 0; }} .report-hero, .report-block {{ box-shadow: none; break-inside: avoid; }} .sql-query pre {{ white-space: pre-wrap; overflow-wrap: anywhere; }} details > * {{ display: block !important; }} }}
 """
 
 
@@ -582,7 +595,7 @@ def render_report(
         f"<span>Audience · {escape(spec.audience)}</span>" if spec.audience else ""
     )
     mode = spec.theme.color_mode
-    body_theme = "dark" if mode == "dark" else "light" if mode == "light" else ""
+    body_theme = mode
     footer = (
         f'<footer class="report-footer">{_rich_text(spec.footer)}</footer>'
         if spec.footer
@@ -594,7 +607,12 @@ def render_report(
   const body = document.body;
   const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 
-  const activeTheme = () => body.dataset.theme || (systemTheme.matches ? 'dark' : 'light');
+  const activeTheme = () => {
+    if (body.dataset.theme === 'light' || body.dataset.theme === 'dark') {
+      return body.dataset.theme;
+    }
+    return systemTheme.matches ? 'dark' : 'light';
+  };
 
   const syncPlotTheme = () => {
     if (!window.Plotly) return;
@@ -636,7 +654,7 @@ def render_report(
     syncThemeControl();
   });
   systemTheme.addEventListener('change', () => {
-    if (!body.dataset.theme) syncThemeControl();
+    if (body.dataset.theme === 'adaptive') syncThemeControl();
   });
   syncThemeControl();
 })();

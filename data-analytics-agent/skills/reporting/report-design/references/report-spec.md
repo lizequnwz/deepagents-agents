@@ -3,7 +3,9 @@
 Pass one valid JSON-encoded string as `create_report(report_json=...)`. The
 decoded value must be an object with `title` and `blocks`. Omit optional fields
 when they are not useful; application defaults will apply. Shorter payloads are
-more reliable, so do not restate default theme or block values.
+more reliable, so do not restate default theme or block values. The default is
+the Fidelity-aligned light theme; every report still includes a dark-mode
+toggle, and `adaptive` remains available when system preference should win.
 
 Expected validation and rendering problems return `ok=false` with compact
 `issues` containing JSON-style field paths. Correct those exact issues and
@@ -19,12 +21,12 @@ retry once; do not repeat an unchanged specification.
   "audience": "Optional intended reader",
   "design_direction": "Optional free-form visual direction",
   "theme": {
-    "primary_color": "#1E40AF",
-    "accent_color": "#D97706",
-    "font_style": "modern",
+    "primary_color": "#368727",
+    "accent_color": "#877300",
+    "font_style": "humanist",
     "density": "balanced",
     "corner_style": "soft",
-    "color_mode": "adaptive"
+    "color_mode": "light"
   },
   "blocks": [],
   "footer": "Optional closing note",

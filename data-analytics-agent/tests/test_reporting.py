@@ -213,6 +213,10 @@ def test_renderer_escapes_model_text_and_includes_all_requested_rows() -> None:
     assert saved.result_id not in html
     assert "max-width: 1360px" in html
     assert "padding: clamp(1.75rem, 4vw, 3.5rem)" in html
+    assert '<body data-theme="light">' in html
+    assert "--primary: #368727" in html
+    assert "'Fidelity Slab', 'Roboto Slab'" in html
+    assert "--background: #F9F7F5" in html
 
 
 def test_renderer_deduplicates_and_escapes_reproducible_sql() -> None:
@@ -318,10 +322,32 @@ def test_report_chart_uses_coherent_default_palette() -> None:
         generated_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
     )
 
-    assert "#2563EB" in html
+    assert "#368727" in html
     assert html.count("Amount by category") == 1
     assert "Plotly.relayout" in html
     assert "hoverlabel.bgcolor" in html
+
+
+def test_report_dark_theme_uses_fidelity_dark_tokens() -> None:
+    spec = ReportSpec.model_validate(
+        {
+            "title": "Dark report",
+            "theme": {"color_mode": "dark"},
+            "blocks": [{"type": "narrative", "body": "Finding"}],
+        }
+    )
+
+    html = render_report(
+        spec,
+        results={},
+        analyses={},
+        generated_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+
+    assert '<body data-theme="dark">' in html
+    assert "--surface: #292928" in html
+    assert "--background: #141414" in html
+    assert "--primary: #65C754" in html
 
 
 def test_report_tool_enforces_scope_and_versions_revisions() -> None:
@@ -374,7 +400,7 @@ def test_report_tool_enforces_scope_and_versions_revisions() -> None:
         revised.report.report_id,
         "thread-1",
         source_id="source-1",
-    ).renderer_version == "1.2"
+    ).renderer_version == "1.3"
 
     wrong_thread = SimpleNamespace(
         state={

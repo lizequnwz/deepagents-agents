@@ -5,62 +5,72 @@ headless = true
 gatherUsageStats = false
 
 [theme]
-font = "sans-serif"
-headingFont = "sans-serif"
-codeFont = "monospace"
+# Fidelity's production typefaces are proprietary. These open web fonts mirror
+# the humanist sans + friendly slab pairing while retaining system fallbacks.
+base = "light"
+font = "'Source Sans 3':https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap, Arial, sans-serif"
+headingFont = "'Roboto Slab':https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;600;700&display=swap, Rockwell, Georgia, serif"
+codeFont = "'Source Code Pro':https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600&display=swap, monospace"
 baseFontSize = 16
 codeFontSize = "0.875rem"
-baseRadius = "medium"
-buttonRadius = "medium"
+baseRadius = "8px"
+buttonRadius = "8px"
 showWidgetBorder = true
 showSidebarBorder = true
-headingFontSizes = ["2rem", "1.5rem", "1.25rem", "1rem", "0.875rem", "0.75rem"]
-headingFontWeights = [700, 650, 600, 600, 600, 600]
+headingFontSizes = ["2.5rem", "2rem", "1.5rem", "1.25rem", "1rem", "0.875rem"]
+headingFontWeights = [600, 600, 600, 600, 600, 600]
+linkUnderline = true
+chartCategoricalColors = ["#368727", "#3266E0", "#9747F6", "#C74B07", "#058070", "#997E05", "#047CB8", "#DC1616"]
+chartSequentialColors = ["#EDFAEB", "#D4F3CF", "#BBEBB2", "#8AD97C", "#65C754", "#48AC36", "#368727", "#1E6F1D", "#0F5319", "#044014"]
 
 [theme.light]
-primaryColor = "#3730A3"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F8FAFC"
-textColor = "#172033"
-linkColor = "#3730A3"
-codeTextColor = "#172033"
-codeBackgroundColor = "#F1F5F9"
-borderColor = "#CBD5E1"
-dataframeBorderColor = "#CBD5E1"
-dataframeHeaderBackgroundColor = "#F1F5F9"
-blueColor = "#1D4ED8"
-greenColor = "#15803D"
-orangeColor = "#B45309"
-redColor = "#B91C1C"
-grayColor = "#475569"
+primaryColor = "#368727"
+backgroundColor = "#F9F7F5"
+secondaryBackgroundColor = "#F5F3F0"
+textColor = "#141414"
+linkColor = "#1D3986"
+codeTextColor = "#292928"
+codeBackgroundColor = "#F5F3F0"
+borderColor = "#D9D8D5"
+dataframeBorderColor = "#D9D8D5"
+dataframeHeaderBackgroundColor = "#F5F3F0"
+redColor = "#C31212"
+orangeColor = "#C74B07"
+yellowColor = "#877300"
+greenColor = "#368727"
+blueColor = "#3266E0"
+violetColor = "#9747F6"
+grayColor = "#525150"
 
 [theme.light.sidebar]
-backgroundColor = "#F8FAFC"
-secondaryBackgroundColor = "#F1F5F9"
-textColor = "#172033"
-borderColor = "#CBD5E1"
-primaryColor = "#3730A3"
+backgroundColor = "#F5F3F0"
+secondaryBackgroundColor = "#E6E4E1"
+textColor = "#141414"
+borderColor = "#D9D8D5"
+primaryColor = "#368727"
 
 [theme.dark]
-primaryColor = "#4338CA"
-backgroundColor = "#0F172A"
-secondaryBackgroundColor = "#172033"
-textColor = "#F1F5F9"
-linkColor = "#C7D2FE"
-codeTextColor = "#E2E8F0"
-codeBackgroundColor = "#111827"
-borderColor = "#475569"
-dataframeBorderColor = "#475569"
-dataframeHeaderBackgroundColor = "#1E293B"
-blueColor = "#93C5FD"
-greenColor = "#86EFAC"
-orangeColor = "#FCD34D"
-redColor = "#FCA5A5"
-grayColor = "#CBD5E1"
+primaryColor = "#368727"
+backgroundColor = "#141414"
+secondaryBackgroundColor = "#292928"
+textColor = "#F9F7F5"
+linkColor = "#8CC1FD"
+codeTextColor = "#F5F3F0"
+codeBackgroundColor = "#292928"
+borderColor = "#525150"
+dataframeBorderColor = "#525150"
+dataframeHeaderBackgroundColor = "#403F3E"
+redColor = "#FF6868"
+orangeColor = "#FF9F37"
+yellowColor = "#DBCA72"
+greenColor = "#65C754"
+blueColor = "#60A5FA"
+violetColor = "#C293F9"
+grayColor = "#D9D8D5"
 
 [theme.dark.sidebar]
-backgroundColor = "#111827"
-secondaryBackgroundColor = "#1E293B"
-textColor = "#F1F5F9"
-borderColor = "#475569"
-primaryColor = "#4338CA"
+backgroundColor = "#292928"
+secondaryBackgroundColor = "#403F3E"
+textColor = "#F9F7F5"
+borderColor = "#525150"
+primaryColor = "#368727"

@@ -23,18 +23,18 @@ class ReportingModel(BaseModel):
 class ReportTheme(ReportingModel):
     """Semantic design controls interpreted by the trusted renderer."""
 
-    primary_color: str = "#1E40AF"
-    accent_color: str = "#D97706"
+    primary_color: str = "#368727"
+    accent_color: str = "#877300"
     surface_color: str = "#FFFFFF"
-    background_color: str = "#F8FAFC"
-    text_color: str = "#0F172A"
-    muted_color: str = "#475569"
+    background_color: str = "#F9F7F5"
+    text_color: str = "#141414"
+    muted_color: str = "#525150"
     font_style: Literal["modern", "editorial", "technical", "humanist"] = (
-        "modern"
+        "humanist"
     )
     density: Literal["spacious", "balanced", "dense"] = "balanced"
     corner_style: Literal["square", "soft", "rounded"] = "soft"
-    color_mode: Literal["light", "dark", "adaptive"] = "adaptive"
+    color_mode: Literal["light", "dark", "adaptive"] = "light"
 
     @field_validator(
         "primary_color",
