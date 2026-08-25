@@ -69,7 +69,7 @@ if submitted:
 
 
 def test_api_contract_mismatch_requires_service_restart() -> None:
-    assert api_contract_error({"api_contract_version": 6}) is None
+    assert api_contract_error({"api_contract_version": 7}) is None
     missing = api_contract_error({})
     stale = api_contract_error({"api_contract_version": 2})
 
@@ -135,8 +135,8 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
             "tool": {
                 "call_id": "call-1",
                 "name": "read_file",
-                "arguments": {"skill": "query-writing"},
-                "debug_input": {"file_path": "SKILL.md"},
+                "input": {"file_path": "SKILL.md"},
+                "output": None,
             },
         },
         {
@@ -148,8 +148,8 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
             "tool": {
                 "call_id": "call-1",
                 "name": "read_file",
-                "arguments": {"skill": "query-writing"},
-                "debug_output": {"content": "skill text"},
+                "input": None,
+                "output": {"content": "skill text"},
             },
         },
         {
@@ -161,7 +161,8 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
             "tool": {
                 "call_id": "call-2",
                 "name": "read_file",
-                "arguments": {"skill": "schema-exploration"},
+                "input": {"file_path": "SCHEMA.md"},
+                "output": None,
             },
         },
     ]
@@ -171,17 +172,17 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
     assert len(consolidated) == 2
     assert consolidated[0]["phase"] == "completed"
     assert consolidated[0]["label"] == "Loaded skill · query-writing"
-    assert consolidated[0]["tool"]["debug_input"] == {
+    assert consolidated[0]["tool"]["input"] == {
         "file_path": "SKILL.md"
     }
-    assert consolidated[0]["tool"]["debug_output"] == {
+    assert consolidated[0]["tool"]["output"] == {
         "content": "skill text"
     }
     assert consolidated[0]["duration_ms"] == 250
     assert consolidated[1]["tool"]["call_id"] == "call-2"
 
 
-def test_activity_renderer_shows_arguments_and_debug_state() -> None:
+def test_activity_renderer_shows_collapsed_tool_io_and_debug_state() -> None:
     app = AppTest.from_string(
         '''
 from data_analytics_agent.ui.components import render_activity_timeline
@@ -196,9 +197,32 @@ render_activity_timeline(
         "tool": {
             "call_id": "call-1",
             "name": "read_file",
-            "arguments": {"skill": "query-writing"},
-            "debug_input": {"file_path": "SKILL.md"},
-            "debug_output": {"content": "skill text"},
+            "input": {"file_path": "SKILL.md"},
+            "output": {"content": "skill text"},
+        },
+    }, {
+        "id": 2,
+        "kind": "skill",
+        "label": "Loading skill · schema-exploration",
+        "phase": "started",
+        "agent": "text-to-sql",
+        "tool": {
+            "call_id": "call-2",
+            "name": "read_file",
+            "input": None,
+            "output": None,
+        },
+    }, {
+        "id": 3,
+        "kind": "skill",
+        "label": "Loaded skill · chart-design",
+        "phase": "completed",
+        "agent": "text-to-sql",
+        "tool": {
+            "call_id": "call-3",
+            "name": "read_file",
+            "input": {"file_path": "CHART.md"},
+            "output": None,
         },
     }],
     debug_states=[{
@@ -220,10 +244,46 @@ render_activity_timeline(
         "Loaded skill · query-writing · Text-to-SQL" in caption.value
         for caption in app.caption
     )
-    assert [panel.label for panel in app.get("status")] == [
-        "read_file",
+    panels = app.get("status")
+    assert [panel.label for panel in panels] == [
+        "read_file · call 1",
+        "read_file · call 2",
+        "read_file · call 3",
         "Agent state (debug)",
     ]
+    assert all(panel.proto.expanded is False for panel in panels)
+    captions = [caption.value for caption in app.caption]
+    assert any("Waiting for tool output" in value for value in captions)
+    assert any("This tool call has no input" in value for value in captions)
+    assert any("The tool returned no value" in value for value in captions)
+
+
+def test_activity_renderer_omits_agent_state_when_not_supplied() -> None:
+    app = AppTest.from_string(
+        '''
+from data_analytics_agent.ui.components import render_activity_timeline
+
+render_activity_timeline(
+    [{
+        "id": 1,
+        "kind": "search",
+        "label": "Searched semantic context",
+        "phase": "completed",
+        "agent": "text-to-sql",
+        "tool": {
+            "call_id": "call-1",
+            "name": "grep",
+            "input": {"pattern": "Revenue"},
+            "output": ["semantic/revenue.yaml"],
+        },
+    }],
+    key_prefix="normal",
+)
+'''
+    ).run()
+
+    assert not app.exception
+    assert [panel.label for panel in app.get("status")] == ["grep"]
 
 
 def test_run_diagnostics_renderer_shows_operational_summary() -> None:

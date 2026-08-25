@@ -18,7 +18,6 @@ from data_analytics_agent.ui.components import (
     render_activity_timeline,
     render_approval,
     render_conversation_diagnostics_content,
-    render_debug_states,
     render_empty_state,
     render_page_header,
     render_pending_user_message,
@@ -48,6 +47,7 @@ def initialize_session_state() -> None:
     st.session_state.setdefault("active_run_id", None)
     st.session_state.setdefault("last_run_error", None)
     st.session_state.setdefault("last_run_diagnostics", None)
+    st.session_state.setdefault("last_run_activities", None)
     st.session_state.setdefault("last_run_debug_states", None)
     st.session_state.setdefault("last_run_metrics", None)
     st.session_state.setdefault("conversation_notice", None)
@@ -77,6 +77,7 @@ def clear_conversation_state() -> None:
     st.session_state["active_run_id"] = None
     st.session_state["last_run_error"] = None
     st.session_state["last_run_diagnostics"] = None
+    st.session_state["last_run_activities"] = None
     st.session_state["last_run_debug_states"] = None
     st.session_state["last_run_metrics"] = None
     st.session_state["review_notice"] = None
@@ -426,11 +427,21 @@ if st.session_state.get("last_run_error"):
         render_execution_diagnostics(
             st.session_state["last_run_diagnostics"]
         )
-    if st.session_state.get("last_run_debug_states"):
-        render_debug_states(
-            st.session_state["last_run_debug_states"],
-            key_prefix="last_failed_run",
-        )
+    failed_activities = st.session_state.get("last_run_activities") or []
+    failed_debug_states = (
+        st.session_state.get("last_run_debug_states") or []
+    )
+    if failed_activities or failed_debug_states:
+        with st.status(
+            "How this run progressed",
+            expanded=False,
+            state="error",
+        ):
+            render_activity_timeline(
+                failed_activities,
+                debug_states=failed_debug_states,
+                key_prefix="last_failed_run",
+            )
     if st.session_state.get("last_run_metrics"):
         render_run_diagnostics(
             st.session_state["last_run_metrics"],
@@ -512,6 +523,12 @@ if active_run_id:
         st.session_state["last_run_diagnostics"] = active_run.get(
             "diagnostics"
         )
+        st.session_state["last_run_activities"] = list(
+            st.session_state.get(
+                f"event_activities_{active_run_id}",
+                active_run.get("events") or [],
+            )
+        )
         st.session_state["last_run_debug_states"] = active_run.get(
             "debug_states"
         )
@@ -542,6 +559,7 @@ if not active_run_id:
         try:
             st.session_state["last_run_error"] = None
             st.session_state["last_run_diagnostics"] = None
+            st.session_state["last_run_activities"] = None
             st.session_state["last_run_debug_states"] = None
             st.session_state["last_run_metrics"] = None
             run = client.send_message(thread_id, typed_question)

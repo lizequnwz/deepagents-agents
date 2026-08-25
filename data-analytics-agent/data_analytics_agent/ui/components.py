@@ -81,20 +81,15 @@ def consolidate_activity_events(
         )
         existing["tool"] = {
             **new_tool,
-            "arguments": (
-                new_tool.get("arguments")
-                or existing_tool.get("arguments")
-                or {}
+            "input": (
+                existing_tool.get("input")
+                if existing_tool.get("input") is not None
+                else new_tool.get("input")
             ),
-            "debug_input": (
-                existing_tool.get("debug_input")
-                if existing_tool.get("debug_input") is not None
-                else new_tool.get("debug_input")
-            ),
-            "debug_output": (
-                new_tool.get("debug_output")
-                if new_tool.get("debug_output") is not None
-                else existing_tool.get("debug_output")
+            "output": (
+                new_tool.get("output")
+                if event.get("phase") in {"completed", "failed"}
+                else existing_tool.get("output")
             ),
         }
     return consolidated
@@ -338,11 +333,10 @@ def render_activity_timeline(
         st.caption(f"{icon} {label} · {agent}{duration}")
 
         tool = event.get("tool") or {}
-        arguments = tool.get("arguments") or {}
-        debug_input = tool.get("debug_input")
-        debug_output = tool.get("debug_output")
-        if not arguments and debug_input is None and debug_output is None:
+        if not tool:
             continue
+        tool_input = tool.get("input")
+        tool_output = tool.get("output")
         tool_name = str(tool.get("name") or "tool")
         tool_seen[tool_name] = tool_seen.get(tool_name, 0) + 1
         ordinal = (
@@ -358,19 +352,24 @@ def render_activity_timeline(
             type="compact",
             key=f"activity_{key_prefix}_{event_key}",
         ):
-            if arguments:
-                st.caption("Curated arguments")
-                st.json(arguments)
-            if debug_input is not None:
+            st.caption(
+                "Input · bounded and recognized-secret-key-redacted"
+            )
+            if tool_input is None:
+                st.caption("This tool call has no input.")
+            else:
+                st.json(tool_input)
+
+            if phase == "started":
+                st.caption(":material/pending: Waiting for tool output…")
+            else:
                 st.caption(
-                    "Redacted and bounded raw input · trusted local debug only"
+                    "Output · bounded and recognized-secret-key-redacted"
                 )
-                st.json(debug_input)
-            if debug_output is not None:
-                st.caption(
-                    "Redacted and bounded raw result · trusted local debug only"
-                )
-                st.json(debug_output)
+                if tool_output is None:
+                    st.caption("The tool returned no value.")
+                else:
+                    st.json(tool_output)
 
     render_debug_states(
         debug_states or [],

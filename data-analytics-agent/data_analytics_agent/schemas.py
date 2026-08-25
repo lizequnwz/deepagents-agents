@@ -14,7 +14,7 @@ from data_analytics_agent.agents.statistical_analysis.schemas import (
 from data_analytics_agent.agents.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 6
+API_CONTRACT_VERSION = 7
 
 
 class StrictModel(BaseModel):
@@ -281,9 +281,8 @@ class ActivityTool(StrictModel):
 
     call_id: str | None = None
     name: str
-    arguments: dict[str, Any] = Field(default_factory=dict)
-    debug_input: Any | None = None
-    debug_output: Any | None = None
+    input: Any | None = None
+    output: Any | None = None
 
 
 class ActivityEvent(StrictModel):

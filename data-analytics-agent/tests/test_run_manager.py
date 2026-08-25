@@ -11,10 +11,9 @@ from data_analytics_agent.run_manager import (
     DEBUG_STATE_CHAR_LIMIT,
     RunDiagnosticsCallback,
     RunManager,
-    _activity_arguments,
     _activity_for_tool,
     _apply_sql_analysis,
-    _bounded_debug_value,
+    _bounded_tool_value,
     _current_sql_analysis,
     _sanitize_state_snapshot,
     _statistical_execution_completion,
@@ -349,7 +348,7 @@ def test_previous_turn_sql_analysis_is_not_reused_for_a_followup() -> None:
     assert _current_sql_analysis(output) is None
 
 
-def test_activity_names_specific_skill_and_curates_known_arguments() -> None:
+def test_activity_names_specific_skill() -> None:
     skill_input = {
         "file_path": "/project/skills/text-to-sql/query-writing/SKILL.md",
         "offset": 0,
@@ -361,23 +360,6 @@ def test_activity_names_specific_skill_and_curates_known_arguments() -> None:
         "skill",
         "Loading skill · query-writing",
     )
-    assert _activity_arguments("read_file", skill_input) == {
-        "path": "skills/text-to-sql/query-writing/SKILL.md",
-        "offset": 0,
-        "limit": 1000,
-        "skill": "query-writing",
-    }
-    assert _activity_arguments(
-        "task",
-        {
-            "subagent_type": "text-to-sql",
-            "description": "private model-authored assignment",
-        },
-    ) == {"subagent_type": "text-to-sql"}
-    assert _activity_arguments(
-        "inspect_result_for_chart", {"result_id": "1234567890abcdef"}
-    ) == {"result": "12345678"}
-    assert _activity_arguments("unknown_tool", {"rows": [1, 2]}) == {}
 
 
 def test_statistical_activity_distinguishes_success_failure_and_no_execution(
@@ -418,8 +400,8 @@ def test_statistical_activity_distinguishes_success_failure_and_no_execution(
     )
 
 
-def test_debug_tool_input_is_secret_redacted_and_bounded() -> None:
-    bounded = _bounded_debug_value(
+def test_tool_input_is_secret_redacted_and_bounded() -> None:
+    bounded = _bounded_tool_value(
         {"query": "SELECT 1", "api_key": "never-show", "value": "x" * 5000}
     )
 

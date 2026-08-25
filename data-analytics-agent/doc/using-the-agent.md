@@ -255,23 +255,23 @@ A completed turn can contain:
 - structured statistical method, assumptions, warnings, interpretation,
   compact outputs, bounded diagnostic figures, and exact executed Python;
 - structured activity history with context, skill, agent, and tool lifecycle;
-- expandable curated tool arguments;
-- bounded debug tool inputs, tool results, and agent state when trusted-local
-  debug mode is enabled;
+- collapsed bounded tool inputs and outputs in every mode;
+- bounded agent state when trusted-local debug mode is enabled;
 - an automatic downloadable HTML report for every successful evidence-backed
   analysis when reporting is enabled.
 
 The activity API is append-only. Tool start, completion, and failure events
 share a call ID, and Streamlit consolidates those events into one progress
-step. Repeated calls remain visible instead of being deduplicated. Normal
-activity never includes tool outputs, result rows, model reasoning, or full
-delegation prompts.
+step. Repeated calls remain visible instead of being deduplicated. Inputs and
+outputs are recursively recognized-secret-key-redacted and bounded to 4,000
+serialized characters apiece. They can still include questions, SQL, sampled
+business data, delegation prompts, and unrecognized secrets.
 
 The rotating `logs/api.log` always records bounded,
 recognized-secret-key-redacted tool results plus tool completion/failure
-metadata. With `AGENT_DEBUG_DETAILS=true`, each tool step also exposes its
-bounded raw input and result in Streamlit, and the log additionally records
-tool starts and bounded inputs. Each active run and completed turn also
+metadata. Streamlit always shows the corresponding bounded input and result in
+a collapsed tool step. With `AGENT_DEBUG_DETAILS=true`, the log additionally
+records tool starts and bounded inputs, and each active run and completed turn
 contains the latest state snapshot for the coordinator and each observed
 specialist. Snapshots include
 bounded messages and ordinary state fields, but replace memory contents with
@@ -292,9 +292,9 @@ After the coordinator completes direct or multi-step analysis, the visualization
 specialist consumes one selected source/thread-scoped final result. It
 cannot execute SQL or generate arbitrary Python. It validates a constrained
 `ChartSpec`, then `create_chart` generates it automatically. While the run is
-active, the progress panel shows the chart type and a bounded subset of
-arguments such as x/y mappings, orientation, or category limit; internal result
-IDs and the full tool payload are not shown.
+active, the progress panel label shows the chart type and key mappings. Its
+collapsed tool step contains the bounded, recognized-secret-key-redacted chart
+input and output.
 
 Generated specs support bar (including a constrained bar/line dual axis), line, area,
 scatter, pie/donut, histogram, box, heatmap, and simple maps. Business

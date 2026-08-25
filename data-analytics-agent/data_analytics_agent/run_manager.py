@@ -67,8 +67,8 @@ from data_analytics_agent.stores import (
 logger = logging.getLogger(__name__)
 
 RESHAPE_ACTIVITY_LABEL = "Chart data needs SQL reshaping"
-DEBUG_VALUE_CHAR_LIMIT = 4_000
-DEBUG_TOTAL_CHAR_LIMIT = 25_000
+TOOL_VALUE_CHAR_LIMIT = 4_000
+TOOL_DIAGNOSTIC_TOTAL_CHAR_LIMIT = 25_000
 DEBUG_STATE_CHAR_LIMIT = 20_000
 DEBUG_STATE_STRING_LIMIT = 2_000
 DEBUG_STATE_MESSAGE_LIMIT = 10
@@ -93,8 +93,8 @@ def _is_secret_key(value: Any) -> bool:
     return normalized in _SECRET_KEYS or normalized.endswith("_api_key")
 
 
-def _sanitize_debug_value(value: Any, *, depth: int = 0) -> Any:
-    """Convert a tool payload to bounded, JSON-safe, secret-redacted data."""
+def _sanitize_tool_value(value: Any, *, depth: int = 0) -> Any:
+    """Convert a tool payload to JSON-safe, secret-redacted data."""
 
     if depth >= 8:
         return "[maximum depth reached]"
@@ -110,7 +110,7 @@ def _sanitize_debug_value(value: Any, *, depth: int = 0) -> Any:
             sanitized[key_text] = (
                 "[REDACTED]"
                 if _is_secret_key(key_text)
-                else _sanitize_debug_value(item, depth=depth + 1)
+                else _sanitize_tool_value(item, depth=depth + 1)
             )
         if len(items) > 50:
             sanitized["__truncated_items__"] = len(items) - 50
@@ -120,7 +120,7 @@ def _sanitize_debug_value(value: Any, *, depth: int = 0) -> Any:
     ):
         items = list(value)
         sanitized_items = [
-            _sanitize_debug_value(item, depth=depth + 1)
+            _sanitize_tool_value(item, depth=depth + 1)
             for item in items[:50]
         ]
         if len(items) > 50:
@@ -135,39 +135,39 @@ def _sanitize_debug_value(value: Any, *, depth: int = 0) -> Any:
     return str(value)
 
 
-def _bounded_debug_value(value: Any) -> Any:
-    """Return structured debug data when small, otherwise a bounded preview."""
+def _bounded_tool_value(value: Any) -> Any:
+    """Return structured tool data when small, otherwise a bounded preview."""
 
-    sanitized = _sanitize_debug_value(value)
+    sanitized = _sanitize_tool_value(value)
     serialized = json.dumps(
         sanitized,
         ensure_ascii=False,
         sort_keys=True,
         default=str,
     )
-    if len(serialized) <= DEBUG_VALUE_CHAR_LIMIT:
+    if len(serialized) <= TOOL_VALUE_CHAR_LIMIT:
         return sanitized
-    omitted = len(serialized) - DEBUG_VALUE_CHAR_LIMIT
+    omitted = len(serialized) - TOOL_VALUE_CHAR_LIMIT
     return {
-        "preview": serialized[:DEBUG_VALUE_CHAR_LIMIT],
+        "preview": serialized[:TOOL_VALUE_CHAR_LIMIT],
         "truncated_characters": omitted,
     }
 
 
-def _serialize_debug_value(value: Any) -> str | None:
+def _serialize_tool_value(value: Any) -> str | None:
     if value is None:
         return None
     serialized = json.dumps(
-        _sanitize_debug_value(value),
+        _sanitize_tool_value(value),
         ensure_ascii=False,
         sort_keys=True,
         default=str,
     )
-    if len(serialized) <= DEBUG_VALUE_CHAR_LIMIT:
+    if len(serialized) <= TOOL_VALUE_CHAR_LIMIT:
         return serialized
-    omitted = len(serialized) - DEBUG_VALUE_CHAR_LIMIT
+    omitted = len(serialized) - TOOL_VALUE_CHAR_LIMIT
     suffix = f"… [{omitted} characters truncated]"
-    return serialized[: DEBUG_VALUE_CHAR_LIMIT - len(suffix)] + suffix
+    return serialized[: TOOL_VALUE_CHAR_LIMIT - len(suffix)] + suffix
 
 
 def _agent_name(graph_name: str) -> str | None:
@@ -534,12 +534,12 @@ def _debug_tool_calls(
     for item in reversed(matching):
         diagnostic = ToolCallDiagnostic(
             tool_name=item["tool_name"],
-            input=_serialize_debug_value(item.get("input")),
-            output=_serialize_debug_value(item.get("output")),
-            error=_serialize_debug_value(item.get("error")),
+            input=_serialize_tool_value(item.get("input")),
+            output=_serialize_tool_value(item.get("output")),
+            error=_serialize_tool_value(item.get("error")),
         )
         size = len(diagnostic.model_dump_json(exclude_none=True))
-        if total_chars + size > DEBUG_TOTAL_CHAR_LIMIT:
+        if total_chars + size > TOOL_DIAGNOSTIC_TOTAL_CHAR_LIMIT:
             break
         selected.append(diagnostic)
         total_chars += size
@@ -682,15 +682,6 @@ def _safe_activity_value(value: Any, *, limit: int = 36) -> str:
     return text
 
 
-def _bounded_activity_text(value: Any, *, limit: int = 500) -> str:
-    """Keep a readable argument preview without altering its meaning."""
-
-    text = re.sub(r"\s+", " ", str(value)).strip()
-    if len(text) > limit:
-        return f"{text[: limit - 1]}…"
-    return text
-
-
 def _project_relative_path(value: Any) -> str:
     path = str(value or "").strip()
     if path.startswith("/project/"):
@@ -748,129 +739,6 @@ def _chart_activity(tool_input: Any) -> tuple[str, str]:
     if arguments:
         label = f"{label} · {' · '.join(arguments[:4])}"
     return ("chart", label)
-
-
-def _chart_arguments(tool_input: Any) -> dict[str, Any]:
-    data = tool_input if isinstance(tool_input, dict) else {}
-    raw_spec = data.get("spec")
-    if not isinstance(raw_spec, dict):
-        return {}
-    try:
-        spec = ChartSpec.model_validate(raw_spec)
-    except ValueError:
-        return {}
-    arguments: dict[str, Any] = {"chart_type": spec.chart_type.value}
-    for field in ("x", "secondary_y", "value", "location"):
-        value = getattr(spec, field)
-        if value:
-            arguments[field] = _safe_activity_value(value, limit=80)
-    if spec.y:
-        arguments["y"] = [
-            _safe_activity_value(column, limit=80) for column in spec.y[:3]
-        ]
-        if len(spec.y) > 3:
-            arguments["omitted_y_columns"] = len(spec.y) - 3
-    if spec.orientation == "horizontal":
-        arguments["orientation"] = "horizontal"
-    if spec.category_limit is not None:
-        arguments["category_limit"] = spec.category_limit
-    return arguments
-
-
-def _activity_arguments(tool_name: str, tool_input: Any) -> dict[str, Any]:
-    """Return the explicit safe argument allowlist for one known tool."""
-
-    data = tool_input if isinstance(tool_input, dict) else {}
-    if tool_name == "task":
-        return {
-            "subagent_type": _safe_activity_value(
-                data.get("subagent_type") or "text-to-sql", limit=80
-            )
-        }
-    if tool_name == "read_file":
-        path = _project_relative_path(
-            data.get("file_path") or data.get("path")
-        )
-        arguments: dict[str, Any] = {"path": path}
-        for field in ("offset", "limit"):
-            if data.get(field) is not None:
-                arguments[field] = data[field]
-        if "SKILL.md" in path or "/skills/" in f"/{path}":
-            arguments["skill"] = _skill_name(path)
-        return arguments
-    if tool_name in {"grep", "glob"}:
-        arguments = {}
-        for field in ("pattern", "query", "path", "glob"):
-            if data.get(field) is not None:
-                value = data[field]
-                arguments[field] = (
-                    _project_relative_path(value)
-                    if field == "path"
-                    else _bounded_activity_text(value, limit=160)
-                )
-        return arguments
-    if tool_name == "write_todos":
-        todos = data.get("todos")
-        return {
-            "step_count": len(todos)
-            if isinstance(todos, Sequence)
-            and not isinstance(todos, (str, bytes, bytearray))
-            else 0
-        }
-    if tool_name == "execute_sql":
-        query = data.get("query")
-        return (
-            {"query": _bounded_activity_text(query)}
-            if query is not None
-            else {}
-        )
-    if tool_name in {
-        "inspect_conversation_result",
-        "inspect_result_for_chart",
-        "inspect_result_for_statistics",
-    }:
-        result_id = str(data.get("result_id") or "")
-        return {"result": result_id[:8]} if result_id else {}
-    if tool_name == "inspect_conversation_analysis":
-        analysis_id = str(data.get("analysis_id") or "")
-        return {"analysis": analysis_id[:8]} if analysis_id else {}
-    if tool_name == "create_report":
-        raw_spec = data.get("report_json")
-        if isinstance(raw_spec, str):
-            try:
-                raw_spec = json.loads(raw_spec)
-            except (TypeError, ValueError):
-                return {}
-        if not isinstance(raw_spec, Mapping):
-            return {}
-        arguments = {
-            "title": _safe_activity_value(raw_spec.get("title"), limit=120),
-            "block_count": len(raw_spec.get("blocks") or []),
-        }
-        if raw_spec.get("previous_report_id"):
-            arguments["revision"] = True
-        return arguments
-    if tool_name in {"validate_chart", "create_chart"}:
-        return _chart_arguments(tool_input)
-    if tool_name == "finish_visualization":
-        arguments = {}
-        if data.get("outcome"):
-            arguments["outcome"] = _safe_activity_value(
-                data["outcome"], limit=80
-            )
-        if data.get("message"):
-            arguments["message"] = _bounded_activity_text(
-                data["message"], limit=240
-            )
-        return arguments
-    if tool_name == "execute_statistical_python":
-        result_id = str(data.get("result_id") or "")
-        code = str(data.get("code") or "")
-        arguments = {"code_lines": len(code.splitlines())}
-        if result_id:
-            arguments["result"] = result_id[:8]
-        return arguments
-    return {}
 
 
 def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
@@ -1622,7 +1490,7 @@ class RunManager:
             )
             tool_sequence = self.runs.get(run_id).next_event_id
             tool_activities: dict[
-                str, tuple[str, str, str, str, dict[str, Any]]
+                str, tuple[str, str, str, str]
             ] = {}
             open_tool_calls: dict[str, list[str]] = {}
             async for event in stream:
@@ -1650,16 +1518,11 @@ class RunManager:
                             tool_name,
                             data.get("input"),
                         )
-                        arguments = _activity_arguments(
-                            tool_name,
-                            data.get("input"),
-                        )
                         tool_activities[call_id] = (
                             activity[0],
                             activity[1],
                             event_agent,
                             tool_name,
-                            arguments,
                         )
                         open_tool_calls.setdefault(tool_name, []).append(call_id)
                         self.runs.start_tool_call(
@@ -1675,12 +1538,7 @@ class RunManager:
                             tool=ActivityTool(
                                 call_id=call_id,
                                 name=tool_name,
-                                arguments=arguments,
-                                debug_input=(
-                                    _bounded_debug_value(data.get("input"))
-                                    if self.debug_details
-                                    else None
-                                ),
+                                input=_bounded_tool_value(data.get("input")),
                             ),
                         )
                         if self.debug_details:
@@ -1691,7 +1549,7 @@ class RunManager:
                                 event_agent,
                                 tool_name,
                                 call_id,
-                                _serialize_debug_value(data.get("input"))
+                                _serialize_tool_value(data.get("input"))
                                 or "null",
                             )
                     elif lifecycle in {"tool-finished", "tool-error"}:
@@ -1704,14 +1562,12 @@ class RunManager:
                             kind = "tool"
                             label = f"Using tool · {tool_name}"
                             recorded_agent = event_agent
-                            arguments = {}
                         else:
                             (
                                 kind,
                                 label,
                                 recorded_agent,
                                 recorded_tool_name,
-                                arguments,
                             ) = recorded
                             tool_name = recorded_tool_name
                         failed = lifecycle == "tool-error"
@@ -1727,15 +1583,11 @@ class RunManager:
                             (
                                 completion_label,
                                 handled_failure,
-                                completion_arguments,
+                                _completion_details,
                             ) = _statistical_execution_completion(
                                 data.get("output")
                             )
                             failed = failed or handled_failure
-                            arguments = {
-                                **arguments,
-                                **completion_arguments,
-                            }
                         if not call_id:
                             tool_sequence += 1
                             call_id = f"tool-{tool_sequence}"
@@ -1745,16 +1597,14 @@ class RunManager:
                             agent=recorded_agent,
                             failed=failed,
                         )
-                        debug_output = None
-                        if self.debug_details:
-                            debug_output = _bounded_debug_value(
-                                data.get("output")
-                                if lifecycle == "tool-finished"
-                                else {
-                                    "error": data.get("message")
-                                    or "Tool call failed."
-                                }
-                            )
+                        output = (
+                            data.get("output")
+                            if lifecycle == "tool-finished"
+                            else {
+                                "error": data.get("message")
+                                or "Tool call failed."
+                            }
+                        )
                         self.runs.add_event(
                             run_id,
                             kind,
@@ -1765,8 +1615,7 @@ class RunManager:
                             tool=ActivityTool(
                                 call_id=call_id or None,
                                 name=tool_name,
-                                arguments=arguments,
-                                debug_output=debug_output,
+                                output=_bounded_tool_value(output),
                             ),
                         )
                         logger.info(
@@ -1785,14 +1634,7 @@ class RunManager:
                             recorded_agent,
                             tool_name,
                             call_id,
-                            _serialize_debug_value(
-                                data.get("output")
-                                if lifecycle == "tool-finished"
-                                else {
-                                    "error": data.get("message")
-                                    or "Tool call failed."
-                                }
-                            )
+                            _serialize_tool_value(output)
                             or "null",
                         )
                         if call_id:
@@ -1902,7 +1744,8 @@ class RunManager:
                     if event.phase == "started"
                     and event.tool is not None
                     and event.tool.name == "task"
-                    and event.tool.arguments.get("subagent_type")
+                    and isinstance(event.tool.input, Mapping)
+                    and event.tool.input.get("subagent_type")
                     == "statistical-analysis"
                 }
             )

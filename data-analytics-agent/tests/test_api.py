@@ -419,10 +419,10 @@ def test_api_approval_rejection_reapproval_and_rehydration(
     assert semantic_event["phase"] == "started"
     assert semantic_event["agent"] == "coordinator"
     assert semantic_event["tool"]["name"] == "read_file"
-    assert semantic_event["tool"]["arguments"] == {
-        "path": "semantic/chinook.osi.yaml"
+    assert semantic_event["tool"]["input"] == {
+        "file_path": "/project/semantic/chinook.osi.yaml"
     }
-    assert semantic_event["tool"]["debug_input"] is None
+    assert semantic_event["tool"]["output"] is None
 
     rejected = client.post(
         f"/api/runs/{run_id}/decisions",
@@ -556,7 +556,7 @@ def test_health_reports_visualization_feature_state(
     health = TestClient(create_app(services)).get("/health")
 
     assert health.status_code == 200
-    assert health.json()["api_contract_version"] == 6
+    assert health.json()["api_contract_version"] == 7
     assert health.json()["reporting_enabled"] is True
     assert health.json()["visualization_enabled"] is True
     assert health.json()["sql_approval_required"] is False
@@ -569,7 +569,7 @@ def test_budget_failure_returns_safe_diagnostics(
 ) -> None:
     services = Services(
         settings=test_settings,
-        agent=FakeAgent([BudgetFailureStream()]),
+        agent=FakeAgent([BudgetFailureStream(include_large_payload=True)]),
     )
     client = TestClient(create_app(services))
     thread_id = client.post("/api/conversations").json()["thread_id"]
@@ -594,6 +594,17 @@ def test_budget_failure_returns_safe_diagnostics(
         "tool_name": "execute_sql",
         "recent_tool_calls": [],
     }
+    tool_events = [
+        event
+        for event in run["events"]
+        if (event.get("tool") or {}).get("call_id") == "execution-1"
+    ]
+    assert tool_events[0]["tool"]["input"] == {
+        "query": "SELECT Name FROM Artist",
+        "api_key": "[REDACTED]",
+    }
+    assert "truncated_characters" in tool_events[1]["tool"]["output"]
+    assert "must-not-leak" not in str(tool_events)
     conversation = services.conversations.get(thread_id)
     assert conversation.active_run_id is None
     assert conversation.run_ids == [created.json()["run_id"]]
@@ -655,17 +666,15 @@ def test_debug_activity_and_latest_agent_states_persist_in_history(
     ]
     assert tool_events[0]["label"] == "Loading skill · query-writing"
     assert tool_events[1]["label"] == "Loaded skill · query-writing"
-    assert tool_events[0]["tool"]["arguments"] == {
-        "path": "skills/text-to-sql/query-writing/SKILL.md",
+    assert tool_events[0]["tool"]["input"] == {
+        "file_path": (
+            "/project/skills/text-to-sql/query-writing/SKILL.md"
+        ),
         "limit": 1000,
-        "skill": "query-writing",
+        "api_key": "[REDACTED]",
     }
-    debug_input = tool_events[0]["tool"]["debug_input"]
-    assert debug_input["api_key"] == "[REDACTED]"
-    assert "never-show" not in str(debug_input)
-    assert tool_events[1]["tool"]["debug_output"] == (
-        "private skill contents"
-    )
+    assert "never-show" not in str(tool_events[0]["tool"]["input"])
+    assert tool_events[1]["tool"]["output"] == "private skill contents"
     failed = next(
         event
         for event in run["events"]
@@ -673,7 +682,7 @@ def test_debug_activity_and_latest_agent_states_persist_in_history(
         and event["phase"] == "failed"
     )
     assert failed["label"] == "Tool failed · grep"
-    assert failed["tool"]["debug_output"] == {
+    assert failed["tool"]["output"] == {
         "error": "private backend failure"
     }
 
@@ -713,7 +722,7 @@ def test_debug_activity_and_latest_agent_states_persist_in_history(
     assert turn["debug_states"] == run["debug_states"]
 
 
-def test_debug_state_and_raw_inputs_are_absent_when_disabled(
+def test_tool_io_is_present_and_agent_state_is_absent_when_debug_disabled(
     test_settings: Settings,
 ) -> None:
     services = Services(
@@ -730,11 +739,31 @@ def test_debug_state_and_raw_inputs_are_absent_when_disabled(
     run = client.get(f"/api/runs/{created['run_id']}").json()
 
     assert run["debug_states"] == []
-    assert all(
-        (event.get("tool") or {}).get("debug_input") is None
-        and (event.get("tool") or {}).get("debug_output") is None
-        for event in run["events"]
+    tool_events = [event for event in run["events"] if event.get("tool")]
+    skill_started = next(
+        event
+        for event in tool_events
+        if event["tool"]["call_id"] == "skill-call"
+        and event["phase"] == "started"
     )
+    assert skill_started["tool"]["input"]["api_key"] == "[REDACTED]"
+    assert "never-show" not in str(skill_started["tool"]["input"])
+    skill_completed = next(
+        event
+        for event in tool_events
+        if event["tool"]["call_id"] == "skill-call"
+        and event["phase"] == "completed"
+    )
+    assert skill_completed["tool"]["output"] == "private skill contents"
+    search_failed = next(
+        event
+        for event in tool_events
+        if event["tool"]["call_id"] == "search-call"
+        and event["phase"] == "failed"
+    )
+    assert search_failed["tool"]["output"] == {
+        "error": "private backend failure"
+    }
 
     package_logger = logging.getLogger("data_analytics_agent")
     for handler in package_logger.handlers:
@@ -774,12 +803,15 @@ def test_handled_statistical_failure_is_not_presented_as_executed(
     assert events[1]["label"] == (
         "Statistical Python execution failed · attempt 1"
     )
-    assert events[1]["tool"]["arguments"] == {
-        "code_lines": 1,
-        "result": "result-1",
+    assert events[0]["tool"]["input"] == {
+        "result_id": "result-12345678",
+        "code": "analysis_outputs = {}",
+    }
+    assert events[1]["tool"]["output"] == {
+        "ok": False,
+        "code": "python_execution_failed",
         "attempt": 1,
         "remaining_attempts": 1,
-        "code": "python_execution_failed",
     }
     statistical = next(
         agent

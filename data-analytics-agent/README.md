@@ -76,12 +76,11 @@ model.
 - No generated SQL limit unless the user explicitly requests one
 - Streamlit result tables, CSV downloads, warnings, and source diagnostics
 - Structured live activity showing named context, skills, agents, tools, and
-  curated tool arguments
+  collapsed bounded tool inputs and outputs
 - In-memory run and conversation diagnostics for provider-reported tokens,
   elapsed/active/review time, per-agent aggregates, and tool durations
 - Rotating bounded API logs with redacted tool results in every mode
-- Optional trusted-local debug views for bounded tool inputs/results and
-  per-agent state snapshots
+- Optional trusted-local debug views for bounded per-agent state snapshots
 - Optional Snowflake adapter over an injected `snowlib` client
 - Automatic feature-flagged coordinator reporting with open-ended explicit
   design direction
@@ -143,8 +142,8 @@ API_AUTO_RELOAD=false ./scripts/start.sh
 6. Open the automatically generated report in a full-page reading view or
    download its identical HTML, and optionally request a different audience,
    structure, or visual treatment.
-7. Expand progress steps to inspect loaded skills, context files, tools, and
-   curated arguments such as chart mappings.
+7. Expand progress steps to inspect each tool's bounded, recognized-secret-key-
+   redacted input and output.
 8. Inspect every supporting table/CSV, exact SQL, statistical outputs, rendered
    Plotly chart, and exact executed Python.
 9. Expand run diagnostics, or the sidebar conversation diagnostics, to inspect

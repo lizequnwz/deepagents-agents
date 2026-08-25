@@ -91,26 +91,28 @@ Normal `logs/api.log` records include tool completion summaries and every
 bounded, recursively secret-key-redacted tool result, including handled and
 unhandled failures. This is independent of debug mode.
 
+The activity API and Streamlit progress timeline always expose each tool's
+bounded, recursively secret-key-redacted input and output. Streamlit keeps every
+tool call collapsed by default and retains the activity for completed and failed
+runs.
+
 Failed runs always expose safe diagnostics: agent, budget type, limit,
 attempted count, run ID, and the specific tool when applicable. Set
 `AGENT_DEBUG_DETAILS=true` only for trusted local debugging. It additionally
 enables:
 
-- bounded, recursively secret-key-redacted raw inputs on activity tool calls;
-- bounded, recursively secret-key-redacted tool results on completed and failed
-  activity calls in the API and Streamlit timeline;
 - detailed tool-start records and inputs in the rotating `logs/api.log` file;
 - a rolling window of the last five tool payloads on execution-budget errors;
 - the latest bounded `values` state snapshot for the coordinator and each
   observed specialist, retained with the completed turn.
 
-Logged and debug payloads are bounded to 4,000 serialized characters per input
-or result;
+Activity and logged tool payloads are bounded to 4,000 serialized characters per
+input or result;
 state snapshots retain at most 10 recent messages per agent, bound strings and
 collections, replace memory contents with path/size metadata, and are capped at
-20,000 serialized characters. Debug payloads can still contain SQL, questions,
-model text, sampled business data, and unrecognized secrets; never enable this
-mode in an untrusted or shared environment.
+20,000 serialized characters. Tool payloads and debug state can still contain
+SQL, questions, model text, sampled business data, and unrecognized secrets; do
+not expose the local UI to an untrusted or shared environment.
 
 `PGEOCODE_DATA_DIR` may optionally set the cache directory for the US postal
 dataset used by ZIP and city/state maps. `pgeocode` downloads that generic
@@ -253,7 +255,7 @@ The normal suite covers:
 - Streamlit helper behavior;
 - constrained chart schema and presentation limits;
 - automatic chart selection for ordinary data questions, explicit-type
-  authority, safe progress arguments, and final-evidence provenance;
+  authority, bounded progress I/O, and final-evidence provenance;
 - opaque result IDs plus recoverable validation, missing-relation, timeout, and
   provider query failures under the existing SQL execution budget;
 - Plotly rendering, partial map resolution, and saved-turn reconstruction.
