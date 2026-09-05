@@ -224,8 +224,16 @@ The dictionary is evidence, not executable runtime configuration.
 - selected dialect or `ANSI_SQL` expression;
 - primary-key references;
 - relationship endpoints and column mappings;
+- duplicate metric and relationship names;
+- selected-dialect metric expressions;
 - live table existence;
 - simple physical identifier existence.
+
+Successful readiness retains the parsed model as an immutable process-local
+catalog. Agents receive a compact overview and use deterministic semantic tools
+to search candidates, fetch exact entity definitions, and traverse declared
+relationships. They do not read the raw YAML file. Restart the application to
+load a changed OSI model.
 
 Complex expressions are not fully checked against the database. Add focused
 tests and representative queries.
@@ -237,7 +245,8 @@ tests and representative queries.
 - Logical names are stable internal vocabulary.
 - Physical source and expression values are executable vocabulary.
 - Metrics and code mappings never guess undocumented business facts.
-- Schema fallback tools do not replace a stale semantic model.
+- Semantic tools expose only OSI-declared objects; they never enumerate a
+  fallback database schema.
 
 ## Common mistakes
 

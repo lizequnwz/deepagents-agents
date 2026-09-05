@@ -1,27 +1,40 @@
 ---
 name: query-writing
-description: Ground a database question in the OSI semantic model already loaded for the assignment, then write one safe, dialect-aware, chart-ready SELECT query and submit it for human-reviewed execution. Use for database analysis, metrics, ranking, time series, distributions, relationships, heatmap grids, and other result shaping; fall back to the runtime OSI path only when its context is absent, truncated, or compacted.
+description: Ground a database question with the source-bound semantic discovery tools, then write one safe, dialect-aware, chart-ready SELECT query and submit it for human-reviewed execution. Use for database analysis, metrics, ranking, time series, distributions, relationships, heatmap grids, and other result shaping.
 ---
 
 # Query Writing
 
 ## Ground the query
 
-1. Use the OSI semantic model already loaded for this assignment. If it is
-   absent from context, truncated, or compacted, read the exact OSI path from
-   the runtime prompt with `limit=1000`.
-2. Identify the relevant logical datasets and fields, their exact physical
-   sources or expressions, declared relationships, metric definitions,
-   synonyms, and source-specific AI instructions.
-3. Resolve the requested business grain and note only material ambiguity that
+1. Use the semantic overview for orientation. When the relevant entities are
+   not obvious, call `search_semantic_model` with business terms from the
+   assignment. For initial selection, search only dataset and metric kinds;
+   include fields only when exact field discovery is still needed. Keep the
+   result limit between 1 and 10 and normally request no more than 5 matches.
+2. Fetch the exact relevant datasets, fields, and metrics in one batched
+   `get_semantic_entities` call, with at most 10 datasets and 10 metrics. Every
+   requested name, including names in `field_names`, is a logical snake_case
+   name from the overview or search results, never a physical SQL name such as
+   `InvoiceId`. Use the returned physical sources and selected dialect
+   expressions exactly as declared.
+   When requesting more than two datasets, provide `field_names` for every
+   dataset and list only fields required by the query; use an empty list when
+   only dataset metadata is needed.
+3. When more than one dataset is required, call `get_relationships` and use
+   only the returned declared path and join fields. Make this call after exact
+   entity selection and request only the datasets required by the query.
+4. Identify the relevant logical datasets and fields, metric definitions,
+   synonyms, source-specific instructions, and requested business grain.
+5. Resolve the requested business grain and note only material ambiguity that
    changes the query or answer. Stop schema exploration when the OSI model
    provides enough information to write the query.
-4. Use only declared relationship paths and exact physical dataset `source`
+6. Use only declared relationship paths and exact physical dataset `source`
    and field-expression names. Select only columns needed for the answer or
    requested chart.
-5. Treat a missing physical source or field as a source-readiness problem. Do
+7. Treat a missing physical source or field as a source-readiness problem. Do
    not explore undeclared database objects or probe row values for discovery.
-6. Use `write_todos` only when the assignment has several dependent analysis
+8. Use `write_todos` only when the assignment has several dependent analysis
    steps.
 
 When explaining schema, distinguish physical source or expression names from

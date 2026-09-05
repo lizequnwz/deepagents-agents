@@ -73,7 +73,6 @@ class DataSource:
     backend_type: str
     backend_options: dict[str, Any]
     semantic_model_path: Path
-    semantic_virtual_path: str
     dialect: str
     target: dict[str, Any]
     examples: tuple[ExampleQuestion, ...]
@@ -162,7 +161,6 @@ def load_data_source_catalog(
         semantic_path = _resolve_semantic_path(
             project_root, definition.semantic_model
         )
-        relative_semantic = semantic_path.relative_to(project_root.resolve())
         limits = ExecutionLimits(
             timeout_seconds=(
                 definition.limits.timeout_seconds
@@ -196,7 +194,6 @@ def load_data_source_catalog(
             backend_type=backend.type,
             backend_options=dict(backend.options),
             semantic_model_path=semantic_path,
-            semantic_virtual_path=f"/project/{relative_semantic.as_posix()}",
             dialect=definition.dialect,
             target=dict(definition.target),
             examples=tuple(

@@ -4,9 +4,16 @@ A source-aware, approval-configurable conversational analytics POC built with De
 Agents, FastAPI, and Streamlit.
 
 The Data Analytics Agent delegates database questions to an isolated
-text-to-SQL specialist. The specialist reads the selected OSI semantic model,
-prepares one read-only query, validates it, and either executes immediately or
-pauses for approve/edit/reject according to `REQUIRE_SQL_APPROVAL`.
+text-to-SQL specialist. Each source's OSI model is parsed once into an immutable
+semantic catalog. The specialist searches that catalog, fetches only the
+relevant datasets, fields, metrics, and declared relationships, prepares one
+read-only query, validates it, and either executes immediately or pauses for
+approve/edit/reject according to `REQUIRE_SQL_APPROVAL`.
+
+The coordinator uses the same catalog's business-facing projection for
+metadata-only research. It can explain available data, propose supported
+analyses and hypotheses, identify limitations, and produce executable analysis
+briefs without running SQL or creating empty charts and reports.
 
 For broader questions, the coordinator plans a sequential investigation and
 combines several source/thread-scoped SQL results. Every ordinary data-bearing
@@ -55,6 +62,10 @@ model.
 - Trusted registry for multiple semantic data sources
 - Conversation-per-source isolation and URL rehydration
 - Source-specific agent graph, OSI model, dialect, limits, and backend
+- Cached immutable OSI catalog with bounded overview and deterministic lexical
+  discovery
+- Role-specific semantic tools for entity details and declared join paths
+- Metadata-only research that transitions into the existing analysis workflow
 - Generic `SQLBackend` protocol with a hardened SQLite adapter
 - Dialect-aware structural validation with SQLGlot
 - Independently configurable SQL and statistical-Python approval

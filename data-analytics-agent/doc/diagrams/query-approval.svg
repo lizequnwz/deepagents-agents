@@ -4626,7 +4626,7 @@ rect.c-bg-rect { fill: var(--bg); }
           <rect x="356" y="280" width="168" height="16" rx="3" class="c-mask"/>
           <text x="440" y="290" class="t-backend" font-size="9" text-anchor="middle">request analysis-ready dataset</text>
         </g>
-        <text data-detail="fine" x="405" y="318" class="t-dim" font-size="7">The specialist reads the selected OSI model before writing SQL.</text>
+        <text data-detail="fine" x="405" y="318" class="t-dim" font-size="7">The specialist fetches targeted definitions from the cached OSI catalog before writing SQL.</text>
         </g>
 
         <g data-edge-from="sql_agent" data-edge-to="review" data-edge-label="propose SQL" data-edge-key="4">

@@ -178,4 +178,12 @@ def create_execute_statistical_python_tool(
         run_store.record_statistical_execution(context.run_id, execution)
         return execution.model_facing()
 
+    execute_statistical_python.description = (
+        "Execute exact validated Python against df from result_id. Set "
+        "analysis_outputs to a compact named dictionary with at most "
+        f"{limits.max_output_items} items; each table or series may have at "
+        f"most {limits.max_output_rows} rows and {limits.max_output_columns} "
+        f"columns, with at most {limits.max_figures} figures and "
+        f"{limits.max_output_chars} serialized output characters."
+    )
     return execute_statistical_python

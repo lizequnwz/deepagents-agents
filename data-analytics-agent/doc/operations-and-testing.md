@@ -91,6 +91,10 @@ Normal `logs/api.log` records include tool completion summaries and every
 bounded, recursively secret-key-redacted tool result, including handled and
 unhandled failures. This is independent of debug mode.
 
+Handled `ToolMessage(status="error")` observations are recorded as failed tool
+activities and included in per-agent `tool_call_errors`; recovery by the agent
+does not hide the failed attempt from diagnostics.
+
 The activity API and Streamlit progress timeline always expose each tool's
 bounded, recursively secret-key-redacted input and output. Streamlit keeps every
 tool call collapsed by default and retains the activity for completed and failed

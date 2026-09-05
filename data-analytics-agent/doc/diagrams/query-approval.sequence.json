@@ -137,7 +137,7 @@
       "y": 300,
       "label": "request analysis-ready dataset",
       "variant": "emphasis",
-      "note": "The specialist reads the selected OSI model before writing SQL."
+      "note": "The specialist fetches targeted definitions from the cached OSI catalog before writing SQL."
     },
     {
       "from": "sql_agent",

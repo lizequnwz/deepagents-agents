@@ -42,6 +42,11 @@ from data_analytics_agent.reporting.tools import (
     create_list_conversation_analyses_tool,
 )
 from data_analytics_agent.schemas import CoordinatorResponse
+from data_analytics_agent.semantic import (
+    SemanticCatalog,
+    render_semantic_overview,
+)
+from data_analytics_agent.semantic_tools import create_semantic_tools
 from data_analytics_agent.stores import (
     ReportStore,
     ResultStore,
@@ -52,6 +57,7 @@ from data_analytics_agent.stores import (
 
 def _coordinator_prompt(
     source: DataSource,
+    semantic_overview: str,
     *,
     visualization_enabled: bool,
     statistical_analysis_enabled: bool = True,
@@ -103,7 +109,10 @@ uncertainty or modeling materially improves the answer: tests, experiments,
 regression, predictive modeling, trend inference, seasonality, forecasting, or
 similar analysis. A descriptive trend, ranking, comparison, or distribution
 that SQL and the normal visualization can answer does not need statistical
-Python.
+Python. Treat questions about drivers, factors, relationships, or impact as
+inferential unless the answer is a declared or directly demonstrated accounting
+identity. If only descriptive evidence is available, describe associations or
+concentration rather than impact.
 
 Delegate to `statistical-analysis` at most once in a user turn. The only
 exception is when that delegation returns `needs_sql_reshape`: obtain exactly
@@ -200,21 +209,38 @@ in AGENTS.md. Do not execute SQL, invent database facts, or switch sources.
 Source context available without database execution:
 - Description: {source.description}
 - SQL dialect: {source.dialect}
-- Semantic model: `{source.semantic_virtual_path}`
+
+Semantic overview:
+{semantic_overview}
 
 Curated example questions:
 {curated_examples}
 
-Handle greetings, help, capability or architecture questions, requests for
-example questions, and analysis brainstorming yourself. These requests do not
-ask for database values. Use the source context and curated examples above,
+Handle greetings, help, capability or architecture questions, and requests for
+example questions yourself. Use the source context and curated examples above,
 do not call `task`, and leave `primary_result_id` empty with no supporting
 result IDs.
+
+Own metadata-only Research directly. When the user asks what data or analyses
+are available, requests hypotheses or analytical ideas, or asks for an analysis
+plan without observed values, use the semantic tools yourself. Search when the
+relevant entities are not obvious, normally request at most five search
+matches, fetch exact definitions in batches, and inspect declared relationships
+as needed. When fetching more than two datasets, provide `field_names` for
+every dataset and request only needed fields. Distinguish supported
+opportunities, untested hypotheses, limitations, and prioritized next analyses.
+Express each next analysis as a compact brief with objective, population and
+grain, metrics, dimensions, time window, datasets and relationships, expected
+result shape, and unresolved assumptions. Do not call `task`, execute SQL,
+create saved results, visualize, run statistics, or create a report for
+metadata-only Research. Return empty result IDs.
 
 Delegate to `text-to-sql` only when the user asks to retrieve, calculate,
 compare, rank, aggregate, filter, or otherwise verify actual database values,
 or requests a new result shape. A request about what could be analyzed is not
-itself a request to perform that analysis.
+itself a request to perform that analysis. For data-bearing requests, do not
+inspect semantic entities or relationships before delegation; the text-to-SQL
+specialist owns detailed semantic grounding for its complete assignment.
 
 Choose the smallest complete path:
 - Direct analysis: use one text-to-SQL assignment when one result completely
@@ -223,6 +249,9 @@ Choose the smallest complete path:
   different-grain questions, use `write_todos`. Define the business objective,
   subquestions, required result shapes, and material assumptions. Gather
   evidence one step at a time and revise the plan after each result.
+- Do not request a detailed analysis-ready result unless it will be assigned to
+  statistical analysis or is itself final evidence. Otherwise request the final
+  answer- and report-ready result shape directly.
 
 Run text-to-SQL delegations sequentially. Never issue more than one `task` call
 to `text-to-sql` in the same model response. Each assignment must be complete
@@ -333,6 +362,7 @@ def build_agent(
     analysis_store: StatisticalAnalysisStore | None = None,
     report_store: ReportStore | None = None,
     source: DataSource,
+    semantic_catalog: SemanticCatalog,
     backend: SQLBackend,
     model: Any | None = None,
     checkpointer: InMemorySaver | None = None,
@@ -354,7 +384,14 @@ def build_agent(
     shared_run_store = run_store or RunStore()
     shared_analysis_store = analysis_store or StatisticalAnalysisStore()
     shared_report_store = report_store or ReportStore()
-    coordinator_tools = [list_results, inspect_result]
+    coordinator_tools = [
+        *create_semantic_tools(
+            semantic_catalog,
+            include_physical=False,
+        ),
+        list_results,
+        inspect_result,
+    ]
     if settings.enable_reporting:
         coordinator_tools.extend(
             [
@@ -381,7 +418,6 @@ def build_agent(
             operations=["read"],
             paths=[
                 "/project/AGENTS.md",
-                "/project/semantic/**",
                 "/project/skills/**",
             ],
             mode="allow",
@@ -401,6 +437,7 @@ def build_agent(
     subagents = [
         build_text_to_sql_subagent(
             source=source,
+            semantic_catalog=semantic_catalog,
             backend=backend,
             result_store=result_store,
             model=chat_model,
@@ -464,6 +501,7 @@ def build_agent(
         tools=coordinator_tools,
         system_prompt=_coordinator_prompt(
             source,
+            render_semantic_overview(semantic_catalog),
             visualization_enabled=settings.enable_data_visualization,
             statistical_analysis_enabled=(
                 settings.enable_statistical_analysis

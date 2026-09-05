@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from langchain.agents.middleware.tool_call_limit import (
     ToolCallLimitExceededError,
 )
+from langchain_core.messages import ToolMessage
 from langgraph.types import Interrupt
 
 from data_analytics_agent.agents.visualization.schemas import (
@@ -40,10 +41,8 @@ class FakeStream:
                 "namespace": [],
                 "data": {
                     "event": "tool-started",
-                    "tool_name": "read_file",
-                    "input": {
-                        "file_path": "/project/semantic/chinook.osi.yaml"
-                    },
+                    "tool_name": "search_semantic_model",
+                    "input": {"query": "artist", "limit": 5},
                 },
             },
         }
@@ -273,8 +272,8 @@ class DebugStateStream(FakeStream):
                 "data": {
                     "event": "tool-started",
                     "tool_call_id": "search-call",
-                    "tool_name": "grep",
-                    "input": {"pattern": "Revenue", "path": "/project/semantic"},
+                    "tool_name": "search_semantic_model",
+                    "input": {"query": "Revenue"},
                 },
             },
         }
@@ -285,7 +284,7 @@ class DebugStateStream(FakeStream):
                 "data": {
                     "event": "tool-error",
                     "tool_call_id": "search-call",
-                    "tool_name": "grep",
+                    "tool_name": "search_semantic_model",
                     "message": "private backend failure",
                 },
             },
@@ -339,6 +338,75 @@ class FailedStatisticalExecutionStream(FakeStream):
                         "attempt": 1,
                         "remaining_attempts": 1,
                     },
+                },
+            },
+        }
+
+
+class HandledToolErrorStream(FakeStream):
+    def __init__(self) -> None:
+        super().__init__(answer=FinalAnswer(answer="Handled error recorded."))
+
+    async def __aiter__(self):
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["text-to-sql:abc"],
+                "data": {
+                    "event": "tool-started",
+                    "tool_call_id": "semantic-call",
+                    "tool_name": "get_semantic_entities",
+                    "input": {"dataset_names": ["unknown"]},
+                },
+            },
+        }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": ["text-to-sql:abc"],
+                "data": {
+                    "event": "tool-finished",
+                    "tool_call_id": "semantic-call",
+                    "tool_name": "get_semantic_entities",
+                    "output": ToolMessage(
+                        content="Unknown exact semantic names.",
+                        tool_call_id="semantic-call",
+                        status="error",
+                    ),
+                },
+            },
+        }
+
+
+class ApprovalTaskInterruptStream(FakeStream):
+    def __init__(self) -> None:
+        super().__init__(approval_sql="SELECT 1")
+
+    async def __aiter__(self):
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": [],
+                "data": {
+                    "event": "tool-started",
+                    "tool_call_id": "task-call",
+                    "tool_name": "task",
+                    "input": {"subagent_type": "text-to-sql"},
+                },
+            },
+        }
+        yield {
+            "method": "tools",
+            "params": {
+                "namespace": [],
+                "data": {
+                    "event": "tool-error",
+                    "tool_call_id": "task-call",
+                    "tool_name": "task",
+                    "message": (
+                        "(Interrupt(value={'action_requests': "
+                        "[{'name': 'execute_sql'}]}),)"
+                    ),
                 },
             },
         }
@@ -413,14 +481,13 @@ def test_api_approval_rejection_reapproval_and_rehydration(
         for event in first["events"]
         if event["kind"] == "semantic"
     )
-    assert semantic_event["label"] == (
-        "Inspecting semantic model · chinook.osi.yaml"
-    )
+    assert semantic_event["label"] == "Searching the semantic model"
     assert semantic_event["phase"] == "started"
     assert semantic_event["agent"] == "coordinator"
-    assert semantic_event["tool"]["name"] == "read_file"
+    assert semantic_event["tool"]["name"] == "search_semantic_model"
     assert semantic_event["tool"]["input"] == {
-        "file_path": "/project/semantic/chinook.osi.yaml"
+        "query": "artist",
+        "limit": 5,
     }
     assert semantic_event["tool"]["output"] is None
 
@@ -608,6 +675,14 @@ def test_budget_failure_returns_safe_diagnostics(
     conversation = services.conversations.get(thread_id)
     assert conversation.active_run_id is None
     assert conversation.run_ids == [created.json()["run_id"]]
+    package_logger = logging.getLogger("data_analytics_agent")
+    for handler in package_logger.handlers:
+        handler.flush()
+    log_text = (
+        test_settings.project_root / "logs" / "api.log"
+    ).read_text(encoding="utf-8")
+    assert f"run.error run_id={created.json()['run_id']}" in log_text
+    assert "exceeded its tool calls execution budget" in log_text
 
 
 def test_debug_budget_failure_redacts_and_truncates_tool_payloads(
@@ -681,7 +756,7 @@ def test_debug_activity_and_latest_agent_states_persist_in_history(
         if (event.get("tool") or {}).get("call_id") == "search-call"
         and event["phase"] == "failed"
     )
-    assert failed["label"] == "Tool failed · grep"
+    assert failed["label"] == "Tool failed · search_semantic_model"
     assert failed["tool"]["output"] == {
         "error": "private backend failure"
     }
@@ -819,6 +894,69 @@ def test_handled_statistical_failure_is_not_presented_as_executed(
         if agent["agent"] == "statistical-analysis"
     )
     assert statistical["tool_call_errors"] == 1
+
+
+def test_handled_tool_error_is_reported_as_failed_activity(
+    test_settings: Settings,
+) -> None:
+    services = Services(
+        settings=test_settings,
+        agent=FakeAgent([HandledToolErrorStream()]),
+    )
+    client = TestClient(create_app(services))
+    thread_id = client.post("/api/conversations").json()["thread_id"]
+
+    created = client.post(
+        f"/api/conversations/{thread_id}/messages",
+        json={"message": "Inspect semantic metadata"},
+    ).json()
+    run = client.get(f"/api/runs/{created['run_id']}").json()
+
+    completed = next(
+        event
+        for event in run["events"]
+        if (event.get("tool") or {}).get("call_id") == "semantic-call"
+        and event["phase"] == "failed"
+    )
+    assert completed["label"] == "Tool failed · get_semantic_entities"
+    text_to_sql = next(
+        agent
+        for agent in run["run_diagnostics"]["agents"]
+        if agent["agent"] == "text-to-sql"
+    )
+    assert text_to_sql["tool_call_errors"] == 1
+
+
+def test_approval_task_interrupt_is_not_reported_as_failure(
+    test_settings: Settings,
+) -> None:
+    services = Services(
+        settings=test_settings,
+        agent=FakeAgent([ApprovalTaskInterruptStream()]),
+    )
+    client = TestClient(create_app(services))
+    thread_id = client.post("/api/conversations").json()["thread_id"]
+
+    created = client.post(
+        f"/api/conversations/{thread_id}/messages",
+        json={"message": "Run a reviewed query"},
+    ).json()
+    run = client.get(f"/api/runs/{created['run_id']}").json()
+
+    assert run["status"] == "approval_required"
+    event = next(
+        event
+        for event in run["events"]
+        if (event.get("tool") or {}).get("call_id") == "task-call"
+        and event["phase"] == "completed"
+    )
+    assert event["label"] == "Delegation paused for approval"
+    coordinator = next(
+        agent
+        for agent in run["run_diagnostics"]["agents"]
+        if agent["agent"] == "coordinator"
+    )
+    assert coordinator["tool_call_errors"] == 0
 
 
 def test_api_chart_generation_is_automatic_and_completes_conversation(

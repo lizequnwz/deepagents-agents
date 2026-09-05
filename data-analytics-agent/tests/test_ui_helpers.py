@@ -266,15 +266,15 @@ from data_analytics_agent.ui.components import render_activity_timeline
 render_activity_timeline(
     [{
         "id": 1,
-        "kind": "search",
-        "label": "Searched semantic context",
+        "kind": "semantic",
+        "label": "Searched the semantic model",
         "phase": "completed",
         "agent": "text-to-sql",
         "tool": {
             "call_id": "call-1",
-            "name": "grep",
-            "input": {"pattern": "Revenue"},
-            "output": ["semantic/revenue.yaml"],
+            "name": "search_semantic_model",
+            "input": {"query": "Revenue"},
+            "output": {"matches": []},
         },
     }],
     key_prefix="normal",
@@ -283,7 +283,9 @@ render_activity_timeline(
     ).run()
 
     assert not app.exception
-    assert [panel.label for panel in app.get("status")] == ["grep"]
+    assert [panel.label for panel in app.get("status")] == [
+        "search_semantic_model"
+    ]
 
 
 def test_run_diagnostics_renderer_shows_operational_summary() -> None:

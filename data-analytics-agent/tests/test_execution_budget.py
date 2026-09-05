@@ -38,6 +38,7 @@ from data_analytics_agent.data_sources import load_data_source_catalog
 from data_analytics_agent.execution_budget import (
     execution_budget_middleware,
 )
+from data_analytics_agent.semantic import load_semantic_catalog
 from data_analytics_agent.stores import ResultStore, RunStore
 
 
@@ -45,6 +46,15 @@ from data_analytics_agent.stores import ResultStore, RunStore
 def disable_langsmith_tracing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
+
+
+def _semantic_catalog(source):
+    loaded = load_semantic_catalog(
+        source.semantic_model_path,
+        dialect=source.dialect,
+    )
+    assert loaded.catalog is not None
+    return loaded.catalog
 
 
 class LoopingToolModel(BaseChatModel):
@@ -195,6 +205,7 @@ def test_execution_approval_modes_construct_independently(
     result_store = ResultStore()
     sql_spec = build_text_to_sql_subagent(
         source=source,
+        semantic_catalog=_semantic_catalog(source),
         backend=create_backend(source, test_settings.project_root),
         result_store=result_store,
         model=ReviewingModel(),
@@ -271,6 +282,7 @@ def test_sql_agent_checks_budgets_before_requesting_review(
 
     spec = build_text_to_sql_subagent(
         source=source,
+        semantic_catalog=_semantic_catalog(source),
         backend=create_backend(source, test_settings.project_root),
         result_store=ResultStore(),
         model=ReviewingModel(),

@@ -16,6 +16,11 @@ from data_analytics_agent.agents.text_to_sql.tools import (
 from data_analytics_agent.backends import SQLBackend
 from data_analytics_agent.data_sources import DataSource
 from data_analytics_agent.schemas import SQLAnalysisResponse
+from data_analytics_agent.semantic import (
+    SemanticCatalog,
+    render_semantic_overview,
+)
+from data_analytics_agent.semantic_tools import create_semantic_tools
 from data_analytics_agent.stores import ResultStore
 
 
@@ -40,6 +45,7 @@ SQL_OUTPUT_RETRY_MESSAGE = _sql_output_retry_message(True)
 
 def _sql_subagent_prompt(
     source: DataSource,
+    semantic_overview: str,
     *,
     require_approval: bool,
 ) -> str:
@@ -55,16 +61,24 @@ def _sql_subagent_prompt(
     )
     return f"""\
 You are the isolated text-to-SQL specialist for {source.name!r}, permanently
-bound to source ID {source.source_id!r}, SQL dialect {source.dialect!r}, and OSI
-model `{source.semantic_virtual_path}`.
+bound to source ID {source.source_id!r} and SQL dialect {source.dialect!r}.
 
-Before analysis, read the OSI file and the `query-writing` skill with
-`limit=1000`. Issue these two independent reads in one tool-call batch when
-possible, and read each path at most once per assignment. Re-read only if the
-earlier content was truncated or compacted, or if needed content fell outside
-the returned range. Apply the skill to produce one validated result that
-answers the assignment and is chart-ready when requested. The OSI model is
-authoritative and contains the complete queryable schema.
+Semantic overview:
+{semantic_overview}
+
+Before analysis, read the `query-writing` skill with `limit=1000`. Apply it to
+produce one validated result that answers the assignment and is chart-ready
+when requested. The application-owned OSI catalog is authoritative. Use
+`search_semantic_model` only when the relevant logical entities are not obvious;
+for initial selection, search dataset and metric kinds before searching fields.
+Then fetch exact definitions for up to 10 datasets and 10 metrics with one
+batched `get_semantic_entities` call. `dataset_names`, `metric_names`, and
+`field_names` always use exact logical snake_case names from the overview or
+search results, never physical SQL names. When more than one dataset is needed,
+call `get_relationships` after entity selection. When more than two datasets
+are needed, provide `field_names` for every requested dataset and fetch only
+the fields required by the query. Stop discovery as soon as the query is safely
+grounded; do not reconstruct the entire catalog.
 
 Hard boundaries:
 - Submit exactly one read-only SELECT, CTE, or set-operation statement.
@@ -92,6 +106,7 @@ sample rows.
 def build_text_to_sql_subagent(
     *,
     source: DataSource,
+    semantic_catalog: SemanticCatalog,
     backend: SQLBackend,
     result_store: ResultStore,
     model: Any,
@@ -102,6 +117,10 @@ def build_text_to_sql_subagent(
     """Build the source-bound SQL specialist."""
 
     execute_sql = create_execute_sql_tool(source, backend, result_store)
+    semantic_tools = create_semantic_tools(
+        semantic_catalog,
+        include_physical=True,
+    )
     agent_middleware: list[Any] = []
     if require_approval:
         agent_middleware.append(
@@ -118,8 +137,8 @@ def build_text_to_sql_subagent(
         "name": "text-to-sql",
         "description": (
             f"Use for every {source.name} database question and whenever a "
-            "visualization needs a new chart-ready result. It reads the "
-            "selected OSI model, writes and validates SQL, "
+            "visualization needs a new chart-ready result. It discovers "
+            "selected OSI entities, writes and validates SQL, "
             + (
                 "requests human review, "
                 if require_approval
@@ -129,9 +148,10 @@ def build_text_to_sql_subagent(
         ),
         "system_prompt": _sql_subagent_prompt(
             source,
+            render_semantic_overview(semantic_catalog),
             require_approval=require_approval,
         ),
-        "tools": [execute_sql],
+        "tools": [*semantic_tools, execute_sql],
         "model": model,
         "skills": ["/project/skills/text-to-sql/"],
         "permissions": permissions,

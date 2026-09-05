@@ -7,6 +7,9 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
+from data_analytics_agent.agents.statistical_analysis.schemas import (
+    StatisticalAnalysisResult,
+)
 from data_analytics_agent.run_manager import (
     DEBUG_STATE_CHAR_LIMIT,
     RunDiagnosticsCallback,
@@ -17,6 +20,8 @@ from data_analytics_agent.run_manager import (
     _current_sql_analysis,
     _sanitize_state_snapshot,
     _statistical_execution_completion,
+    _tool_output_is_approval_interrupt,
+    _tool_output_is_error,
 )
 from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.schemas import (
@@ -244,6 +249,50 @@ def test_no_query_answer_may_omit_evidence() -> None:
     assert validated == answer
 
 
+def test_statistical_parent_is_added_to_final_evidence() -> None:
+    results = ResultStore()
+    summary = results.save(
+        thread_id="thread-a",
+        source_id="source-a",
+        executed_sql="SELECT category, revenue FROM summary",
+        columns=["category", "revenue"],
+        rows=[{"category": "A", "revenue": 10}],
+        truncated=False,
+        elapsed_ms=1.0,
+    )
+    statistical_parent = results.save(
+        thread_id="thread-a",
+        source_id="source-a",
+        executed_sql="SELECT value FROM observations",
+        columns=["value"],
+        rows=[{"value": 1}],
+        truncated=False,
+        elapsed_ms=1.0,
+    )
+    answer = FinalAnswer(
+        answer="The statistical execution could not be completed.",
+        primary_result_id=summary.result_id,
+        results=[_reference(summary)],
+        statistical_analysis=StatisticalAnalysisResult(
+            outcome="cannot_analyze",
+            parent_result_id=statistical_parent.result_id,
+            answer="No inferential findings are authoritative.",
+        ),
+    )
+
+    validated = _manager(results)._validate_answer_provenance(
+        answer,
+        "thread-a",
+        "source-a",
+    )
+
+    assert validated.primary_result_id == summary.result_id
+    assert [item.result_id for item in validated.results] == [
+        summary.result_id,
+        statistical_parent.result_id,
+    ]
+
+
 def test_current_sql_subagent_result_overrides_stale_coordinator_narrative() -> None:
     rows = [{"Name": "AC/DC"}]
     analysis = SQLAnalysisResult(
@@ -362,6 +411,18 @@ def test_activity_names_specific_skill() -> None:
     )
 
 
+def test_activity_names_semantic_discovery_tools() -> None:
+    assert _activity_for_tool(
+        "search_semantic_model", {"query": "revenue"}
+    ) == ("semantic", "Searching the semantic model")
+    assert _activity_for_tool(
+        "get_semantic_entities", {"dataset_names": ["invoices"]}
+    ) == ("semantic", "Inspecting semantic entities")
+    assert _activity_for_tool(
+        "get_relationships", {"dataset_names": ["invoices"]}
+    ) == ("semantic", "Inspecting declared relationships")
+
+
 def test_statistical_activity_distinguishes_success_failure_and_no_execution(
 ) -> None:
     assert _statistical_execution_completion(
@@ -409,6 +470,38 @@ def test_tool_input_is_secret_redacted_and_bounded() -> None:
     assert "never-show" not in serialized
     assert "[REDACTED]" in serialized
     assert "truncated_characters" in bounded
+
+
+def test_handled_tool_error_observation_is_counted_as_failure() -> None:
+    assert _tool_output_is_error(
+        ToolMessage(
+            content="Request at most 10 datasets per call.",
+            tool_call_id="semantic-call",
+            status="error",
+        )
+    )
+    assert _tool_output_is_error({"status": "error"})
+    assert not _tool_output_is_error(
+        ToolMessage(
+            content="Semantic entities returned.",
+            tool_call_id="semantic-call",
+            status="success",
+        )
+    )
+
+
+def test_task_approval_interrupt_is_not_a_tool_failure() -> None:
+    assert _tool_output_is_approval_interrupt(
+        {
+            "error": (
+                "(Interrupt(value={'action_requests': "
+                "[{'name': 'execute_statistical_python'}]}),)"
+            )
+        }
+    )
+    assert not _tool_output_is_approval_interrupt(
+        {"error": "The statistical task failed."}
+    )
 
 
 def test_debug_state_snapshot_is_safe_latest_state_shape() -> None:

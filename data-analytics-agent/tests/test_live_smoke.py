@@ -10,7 +10,17 @@ import pytest
 from data_analytics_agent.coordinator import build_agent
 from data_analytics_agent.backends import SQLiteBackend
 from data_analytics_agent.config import Settings
+from data_analytics_agent.semantic import load_semantic_catalog
 from data_analytics_agent.stores import ResultStore
+
+
+def _semantic_catalog(source):
+    loaded = load_semantic_catalog(
+        source.semantic_model_path,
+        dialect=source.dialect,
+    )
+    assert loaded.catalog is not None
+    return loaded.catalog
 
 
 def test_agent_graph_builds_without_network(
@@ -32,6 +42,7 @@ def test_agent_graph_builds_without_network(
         settings,
         ResultStore(),
         source=source,
+        semantic_catalog=_semantic_catalog(source),
         backend=SQLiteBackend(database),
     )
     assert graph.name == "data-analytics-agent"
@@ -58,6 +69,7 @@ def test_live_agent_builds() -> None:
             settings,
             ResultStore(),
             source=source,
+            semantic_catalog=_semantic_catalog(source),
             backend=SQLiteBackend(
                 settings.project_root / str(source.target["path"])
             ),

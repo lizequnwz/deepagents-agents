@@ -11,7 +11,7 @@ import re
 from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain.agents.middleware.model_call_limit import (
     ModelCallLimitExceededError,
@@ -170,6 +170,27 @@ def _serialize_tool_value(value: Any) -> str | None:
     return serialized[: TOOL_VALUE_CHAR_LIMIT - len(suffix)] + suffix
 
 
+def _tool_output_is_error(value: Any) -> bool:
+    """Recognize handled tool failures returned as completed observations."""
+
+    if isinstance(value, ToolMessage):
+        return value.status == "error"
+    if isinstance(value, Mapping):
+        return value.get("status") == "error"
+    return False
+
+
+def _tool_output_is_approval_interrupt(value: Any) -> bool:
+    """Recognize the expected task interruption used for human review."""
+
+    if not isinstance(value, Mapping):
+        return False
+    error = value.get("error")
+    if not isinstance(error, str):
+        return False
+    return "Interrupt(value=" in error and "action_requests" in error
+
+
 def _agent_name(graph_name: str) -> str | None:
     normalized = graph_name.casefold()
     if "text-to-sql" in normalized:
@@ -286,6 +307,12 @@ def _log_run_summary(event: str, snapshot: Any) -> None:
         diagnostics.active_ms,
         diagnostics.approval_wait_ms,
     )
+    if snapshot.error:
+        logger.error(
+            "run.error run_id=%s error=%s",
+            snapshot.run_id,
+            _safe_activity_value(snapshot.error, limit=1_000),
+        )
 
 
 def _log_agent_summaries(snapshot: Any) -> None:
@@ -750,13 +777,17 @@ def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
         if subagent_type == "statistical-analysis":
             return ("subagent", "Delegating to the statistical analyst")
         return ("subagent", "Delegating to the text-to-SQL analyst")
+    if tool_name == "search_semantic_model":
+        return ("semantic", "Searching the semantic model")
+    if tool_name == "get_semantic_entities":
+        return ("semantic", "Inspecting semantic entities")
+    if tool_name == "get_relationships":
+        return ("semantic", "Inspecting declared relationships")
     if tool_name == "read_file":
         path = _project_relative_path(
             data.get("file_path") or data.get("path")
         )
         filename = path.rsplit("/", 1)[-1] or "context"
-        if "semantic/" in path:
-            return ("semantic", f"Inspecting semantic model · {filename}")
         if "SKILL.md" in path or "/skills/" in path:
             return ("skill", f"Loading skill · {_skill_name(path)}")
         if "AGENTS.md" in path:
@@ -1328,7 +1359,16 @@ class RunManager:
                     "stored artifact."
                 )
 
-        if answer.primary_result_id is None:
+        result_ids = [item.result_id for item in answer.results]
+        primary_result_id = answer.primary_result_id
+        if answer.statistical_analysis is not None:
+            statistical_parent = answer.statistical_analysis.parent_result_id
+            if statistical_parent not in result_ids:
+                result_ids.append(statistical_parent)
+            if primary_result_id is None:
+                primary_result_id = statistical_parent
+
+        if primary_result_id is None:
             if answer.results:
                 raise RuntimeError(
                     "Agent returned supporting results without a primary result."
@@ -1337,15 +1377,11 @@ class RunManager:
                 raise RuntimeError(
                     "Agent returned a chart without an executed result."
                 )
-            if answer.statistical_analysis is not None:
-                raise RuntimeError(
-                    "Agent returned statistical analysis without a parent result."
-                )
             return answer
 
         references = self._resolve_result_references(
-            primary_result_id=answer.primary_result_id,
-            result_ids=[item.result_id for item in answer.results],
+            primary_result_id=primary_result_id,
+            result_ids=result_ids,
             thread_id=thread_id,
             source_id=source_id,
         )
@@ -1374,7 +1410,7 @@ class RunManager:
             if (
                 analysis.outcome
                 is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED
-                and analysis.parent_result_id != answer.primary_result_id
+                and analysis.parent_result_id != primary_result_id
             ):
                 raise RuntimeError(
                     "Completed statistical analysis parent must be primary."
@@ -1387,7 +1423,12 @@ class RunManager:
                 raise RuntimeError(
                     "Agent returned statistical analysis for a truncated result."
                 )
-        return answer.model_copy(update={"results": references})
+        return answer.model_copy(
+            update={
+                "primary_result_id": primary_result_id,
+                "results": references,
+            }
+        )
 
     async def start(self, run_id: str) -> None:
         snapshot = self.runs.get(run_id)
@@ -1570,12 +1611,33 @@ class RunManager:
                                 recorded_tool_name,
                             ) = recorded
                             tool_name = recorded_tool_name
-                        failed = lifecycle == "tool-error"
-                        completion_label = (
-                            f"Tool failed · {tool_name}"
-                            if failed
-                            else _completed_activity_label(label)
+                        output = (
+                            data.get("output")
+                            if lifecycle == "tool-finished"
+                            else {
+                                "error": data.get("message")
+                                or "Tool call failed."
+                            }
                         )
+                        approval_interrupt = (
+                            tool_name == "task"
+                            and _tool_output_is_approval_interrupt(output)
+                        )
+                        failed = (
+                            lifecycle == "tool-error"
+                            and not approval_interrupt
+                        ) or (
+                            lifecycle == "tool-finished"
+                            and _tool_output_is_error(output)
+                        )
+                        if approval_interrupt:
+                            completion_label = "Delegation paused for approval"
+                        else:
+                            completion_label = (
+                                f"Tool failed · {tool_name}"
+                                if failed
+                                else _completed_activity_label(label)
+                            )
                         if (
                             lifecycle == "tool-finished"
                             and tool_name == "execute_statistical_python"
@@ -1596,14 +1658,6 @@ class RunManager:
                             call_id,
                             agent=recorded_agent,
                             failed=failed,
-                        )
-                        output = (
-                            data.get("output")
-                            if lifecycle == "tool-finished"
-                            else {
-                                "error": data.get("message")
-                                or "Tool call failed."
-                            }
                         )
                         self.runs.add_event(
                             run_id,

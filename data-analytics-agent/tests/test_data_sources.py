@@ -20,10 +20,24 @@ from data_analytics_agent.coordinator import (
     _final_answer_response_format,
 )
 from data_analytics_agent.data_sources import ExampleQuestion
+from data_analytics_agent.semantic import (
+    SemanticCatalog,
+    load_semantic_catalog,
+    render_semantic_overview,
+)
 from data_analytics_agent.stores import ResultStore
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _semantic_context(source) -> tuple[SemanticCatalog, str]:
+    loaded = load_semantic_catalog(
+        source.semantic_model_path,
+        dialect=source.dialect,
+    )
+    assert loaded.catalog is not None
+    return loaded.catalog, render_semantic_overview(loaded.catalog)
 
 
 def test_registry_resolves_source_semantic_target_and_limits(
@@ -35,7 +49,7 @@ def test_registry_resolves_source_semantic_target_and_limits(
     assert set(catalog.sources) == {"test", "test_alt"}
     source = catalog.get("test")
     assert source.semantic_model_path.is_file()
-    assert source.semantic_virtual_path == "/project/semantic/test.osi.yaml"
+    assert source.semantic_model_path.name == "test.osi.yaml"
     assert source.backend_type == "sqlite"
     assert source.dialect == "sqlite"
     assert source.target["path"] == "db/test.sqlite"
@@ -104,14 +118,18 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
         data_sources_config_path=test_settings.data_sources_config_path,
     )
     source = disabled.load_catalog().get("test")
+    _, overview = _semantic_context(source)
 
     assert disabled.enable_data_visualization is False
-    prompt = _coordinator_prompt(source, visualization_enabled=False)
+    prompt = _coordinator_prompt(
+        source, overview, visualization_enabled=False
+    )
     assert "visualization is disabled" in prompt.lower()
     assert "do not simulate one" in prompt.lower()
 
     enabled_prompt = _coordinator_prompt(
         source,
+        overview,
         visualization_enabled=True,
     )
     normalized_enabled_prompt = " ".join(enabled_prompt.lower().split())
@@ -120,7 +138,9 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
         " ".join(enabled_prompt.lower().split())
     )
 
-    sql_prompt = _sql_subagent_prompt(source, require_approval=True)
+    sql_prompt = _sql_subagent_prompt(
+        source, overview, require_approval=True
+    )
     normalized_sql_prompt = " ".join(sql_prompt.lower().split())
     assert "do not add `limit` unless the user explicitly requests" in (
         normalized_sql_prompt
@@ -164,12 +184,14 @@ def test_visualization_feature_flag_is_global_and_defaults_enabled(
     assert "any answer with no final evidence" in normalized_enabled_prompt
 
 
-def test_text_to_sql_exposes_only_execution_to_the_model(
+def test_text_to_sql_exposes_semantic_discovery_and_execution(
     test_settings: Settings,
 ) -> None:
     source = test_settings.load_catalog().get("test")
+    semantic_catalog, _ = _semantic_context(source)
     subagent = build_text_to_sql_subagent(
         source=source,
+        semantic_catalog=semantic_catalog,
         backend=object(),
         result_store=ResultStore(),
         model=object(),
@@ -177,7 +199,12 @@ def test_text_to_sql_exposes_only_execution_to_the_model(
         require_approval=False,
     )
 
-    assert [tool.name for tool in subagent["tools"]] == ["execute_sql"]
+    assert [tool.name for tool in subagent["tools"]] == [
+        "search_semantic_model",
+        "get_semantic_entities",
+        "get_relationships",
+        "execute_sql",
+    ]
 
 
 def test_reporting_feature_flag_controls_automatic_reports(
@@ -185,8 +212,10 @@ def test_reporting_feature_flag_controls_automatic_reports(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = test_settings.load_catalog().get("test")
+    _, overview = _semantic_context(source)
     enabled = _coordinator_prompt(
         source,
+        overview,
         visualization_enabled=True,
         reporting_enabled=True,
     )
@@ -203,6 +232,7 @@ def test_reporting_feature_flag_controls_automatic_reports(
     )
     prompt = _coordinator_prompt(
         source,
+        overview,
         visualization_enabled=True,
         reporting_enabled=disabled.enable_reporting,
     )
@@ -219,9 +249,11 @@ def test_statistical_feature_flag_defaults_enabled_and_can_be_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = test_settings.load_catalog().get("test")
+    _, overview = _semantic_context(source)
     assert test_settings.enable_statistical_analysis is True
     enabled = _coordinator_prompt(
         source,
+        overview,
         visualization_enabled=True,
         statistical_analysis_enabled=True,
     )
@@ -255,6 +287,7 @@ def test_statistical_feature_flag_defaults_enabled_and_can_be_disabled(
     )
     prompt = _coordinator_prompt(
         source,
+        overview,
         visualization_enabled=True,
         statistical_analysis_enabled=disabled.enable_statistical_analysis,
     )
@@ -263,27 +296,26 @@ def test_statistical_feature_flag_defaults_enabled_and_can_be_disabled(
     assert "do not simulate execution" in " ".join(prompt.lower().split())
 
 
-def test_sql_context_reads_are_batched_and_unique(
+def test_sql_prompt_uses_semantic_tools_without_raw_file_reads(
     test_settings: Settings,
 ) -> None:
     source = test_settings.load_catalog().get("test")
+    _, overview = _semantic_context(source)
     normalized = " ".join(
-        _sql_subagent_prompt(source, require_approval=True).split()
+        _sql_subagent_prompt(
+            source, overview, require_approval=True
+        ).split()
     )
 
-    assert (
-        "Issue these two independent reads in one tool-call batch when "
-        "possible"
-    ) in normalized
-    assert "read the OSI file and the `query-writing` skill" in normalized
-    assert "schema-exploration" not in normalized
-    assert "read each path at most once per assignment" in normalized
-    assert "Re-read only if the earlier content was truncated or compacted" in (
-        normalized
-    )
+    assert "read the `query-writing` skill" in normalized
+    assert "`search_semantic_model`" in normalized
+    assert "`get_semantic_entities`" in normalized
+    assert "`get_relationships`" in normalized
+    assert "read the OSI file" not in normalized
+    assert "/project/semantic/" not in normalized
 
 
-def test_sql_skill_reuses_the_loaded_osi_and_covers_schema_grounding() -> None:
+def test_sql_skill_uses_semantic_discovery_for_schema_grounding() -> None:
     skill_root = PROJECT_ROOT / "skills/text-to-sql"
     content = (skill_root / "query-writing/SKILL.md").read_text(
         encoding="utf-8"
@@ -293,13 +325,14 @@ def test_sql_skill_reuses_the_loaded_osi_and_covers_schema_grounding() -> None:
     assert sorted(
         path.name for path in skill_root.iterdir() if path.is_dir()
     ) == ["query-writing"]
-    assert "OSI semantic model already loaded for the assignment" in normalized
-    assert "If it is absent from context, truncated, or compacted" in normalized
-    assert "runtime prompt with `limit=1000`" in normalized
-    assert "Read the exact OSI" not in content
+    assert "`search_semantic_model`" in normalized
+    assert "`get_semantic_entities`" in normalized
+    assert "`get_relationships`" in normalized
+    assert "runtime OSI path" not in normalized
+    assert "raw semantic" not in normalized
     assert "relevant logical datasets and fields" in normalized
-    assert "exact physical sources or expressions" in normalized
-    assert "declared relationships" in normalized
+    assert "physical sources and selected dialect expressions" in normalized
+    assert "declared path and join fields" in normalized
     assert "requested business grain" in normalized
     assert "distinguish physical source or expression names" in normalized
 
@@ -316,12 +349,15 @@ def test_coordinator_owns_help_and_question_brainstorming(
             ),
         ),
     )
+    _, overview = _semantic_context(source)
 
-    prompt = _coordinator_prompt(source, visualization_enabled=True)
+    prompt = _coordinator_prompt(
+        source, overview, visualization_enabled=True
+    )
     normalized = " ".join(prompt.split())
 
     assert source.description in prompt
-    assert source.semantic_virtual_path in prompt
+    assert "Model: test_model" in prompt
     assert f"SQL dialect: {source.dialect}" in prompt
     assert "Challenging comparison" in prompt
     assert "Which segments changed the most over time?" in prompt
@@ -331,6 +367,9 @@ def test_coordinator_owns_help_and_question_brainstorming(
     )
     assert "requests for example questions" in normalized
     assert "do not call `task`" in normalized
+    assert "Own metadata-only Research directly" in normalized
+    assert "supported opportunities" in normalized
+    assert "Do not call `task`, execute SQL" in normalized
     assert (
         "A request about what could be analyzed is not itself a request"
         in normalized
@@ -345,8 +384,11 @@ def test_coordinator_handles_sources_without_curated_examples(
     test_settings: Settings,
 ) -> None:
     source = test_settings.load_catalog().get("test")
+    _, overview = _semantic_context(source)
 
-    prompt = _coordinator_prompt(source, visualization_enabled=False)
+    prompt = _coordinator_prompt(
+        source, overview, visualization_enabled=False
+    )
 
     assert "No curated example questions are configured." in prompt
 

@@ -40,7 +40,7 @@ def _statistical_output_retry_message(require_approval: bool) -> str:
 def _statistical_subagent_prompt(
     source: DataSource,
     *,
-    maximum_attempts: int,
+    execution_limits: PythonExecutionLimits,
     require_approval: bool,
 ) -> str:
     execution_mode = (
@@ -91,10 +91,19 @@ Dataset and execution contract:
 - Set `analysis_outputs` to a dictionary mapping human-readable names to
   compact strings, scalars, pandas DataFrames/Series, JSON record lists, or
   matplotlib Figures/Axes.
+- `analysis_outputs` may contain at most {execution_limits.max_output_items}
+  items. Every table or series may contain at most
+  {execution_limits.max_output_rows} rows and
+  {execution_limits.max_output_columns} columns. Return at most
+  {execution_limits.max_figures} figures and keep all serialized outputs within
+  {execution_limits.max_output_chars} characters. Apply these limits in the
+  proposed code before its first execution; prefer a small safety margin rather
+  than using every available row or item.
 - Call `execute_statistical_python` with only the assigned result ID and the
   complete proposed code. {execution_mode}
 - A repairable failure may receive one targeted repair and be {retry_mode}
-  again, up to {maximum_attempts} actual executions total. Never repeat
+  again, up to {execution_limits.max_execution_attempts} actual executions
+  total. Never repeat
   unchanged failing code or start a different analysis after attempts are
   exhausted.
 
@@ -107,6 +116,11 @@ Completeness and terminal outcomes:
   observations within categories. One aggregate row per category cannot
   estimate within-category variability and must not be replaced by a
   correlation between two derived numeric totals.
+- Keep the modeled outcome aligned with the user's business question. Do not
+  replace total revenue with a price tier, product class, or other proxy merely
+  to make a model possible. If the requested outcome is constant, nearly
+  constant, or algebraically determined by supplied inputs, return
+  `needs_sql_reshape` or `cannot_analyze` instead of forcing a model.
 - Return `needs_clarification` when a user choice would materially change the
   dataset or method.
 - Return `cannot_analyze` when the data cannot support the inference or all
@@ -177,7 +191,7 @@ def build_statistical_analysis_subagent(
         ),
         "system_prompt": _statistical_subagent_prompt(
             source,
-            maximum_attempts=execution_limits.max_execution_attempts,
+            execution_limits=execution_limits,
             require_approval=require_approval,
         ),
         "tools": [inspect_result, execute_python],

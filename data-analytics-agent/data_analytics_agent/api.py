@@ -37,7 +37,7 @@ from data_analytics_agent.schemas import (
     RunResponse,
     RunStatus,
 )
-from data_analytics_agent.semantic import validate_semantic_model
+from data_analytics_agent.semantic import SemanticCatalog, load_semantic_catalog
 from data_analytics_agent.stores import (
     ConversationStore,
     ReportStore,
@@ -78,6 +78,9 @@ class Services:
     _manager: RunManager | None = None
     _backends: dict[str, SQLBackend] = field(default_factory=dict)
     _agents: dict[str, Any] = field(default_factory=dict)
+    _semantic_catalogs: dict[str, SemanticCatalog] = field(
+        default_factory=dict
+    )
     _source_summaries: dict[str, DataSourceSummary] | None = None
     _lock: RLock = field(default_factory=RLock)
 
@@ -123,13 +126,15 @@ class Services:
                         backend = self.backend_for_source(source_id)
                     except Exception as exc:
                         errors.append(str(exc))
-                    semantic = validate_semantic_model(
+                    semantic = load_semantic_catalog(
                         source.semantic_model_path,
                         dialect=source.dialect,
                         backend=backend if not errors else None,
                     )
-                    errors.extend(semantic.errors)
-                    warnings.extend(semantic.warnings)
+                    errors.extend(semantic.diagnostics.errors)
+                    warnings.extend(semantic.diagnostics.warnings)
+                    if semantic.catalog is not None:
+                        self._semantic_catalogs[source_id] = semantic.catalog
                     summaries[source_id] = DataSourceSummary(
                         source_id=source_id,
                         name=source.name,
@@ -170,6 +175,15 @@ class Services:
             )
         return self.source(source_id)
 
+    def semantic_catalog_for_source(self, source_id: str) -> SemanticCatalog:
+        self.require_ready_source(source_id)
+        try:
+            return self._semantic_catalogs[source_id]
+        except KeyError as exc:
+            raise ValueError(
+                f"Semantic catalog for source {source_id!r} is unavailable."
+            ) from exc
+
     def agent_for_source(self, source_id: str) -> Any:
         if self.agent is not None:
             return self.agent
@@ -184,6 +198,7 @@ class Services:
                     analysis_store=self.analyses,
                     report_store=self.reports,
                     source=source,
+                    semantic_catalog=self.semantic_catalog_for_source(source_id),
                     backend=self.backend_for_source(source_id),
                 )
                 self._agents[source_id] = graph

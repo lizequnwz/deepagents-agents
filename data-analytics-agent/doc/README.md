@@ -40,7 +40,7 @@ entry point; these guides explain the contracts and procedures behind it.
 4. Review `data_analytics_agent/reporting/` and the saved-artifact contracts.
 
 The executable [`agent_internals_tutorial.ipynb`](../agent_internals_tutorial.ipynb)
-is the companion lab. It demonstrates the registry, OSI grounding, backend
+is the companion lab. It demonstrates the registry, semantic-catalog grounding, backend
 contract, result provenance, HITL interruption, API lifecycle, and UI behavior.
 The production graph additionally includes the feature-flagged visualization
 specialist and constrained chart contract.
@@ -54,6 +54,7 @@ specialist and constrained chart contract.
 | [Reporting capability](reporting-capability.md) | Using or extending the coordinator reporting skill, structured report contract, self-contained HTML renderer, or Streamlit preview/download flow |
 | [Adding data sources](adding-data-sources.md) | Registering another SQLite database or changing source metadata and limits |
 | [Semantic-model best practices](semantic-model-best-practices.md) | Authoring or reviewing an OSI `0.1.1` model |
+| [Semantic discovery design](semantic-discovery-and-research-plan.md) | Understanding progressive semantic retrieval, metadata Research, and deferred scale options |
 | [Backend development](backend-development.md) | Implementing or testing another `SQLBackend` |
 | [Safety and HITL](safety-and-hitl.md) | Changing SQL validation, approval, execution, result access, or trust boundaries |
 | [Operations and testing](operations-and-testing.md) | Configuration, startup, readiness, tests, notebook execution, and troubleshooting |

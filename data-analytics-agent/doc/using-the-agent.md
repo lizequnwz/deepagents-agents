@@ -83,6 +83,23 @@ count. Ranking words such as “top” establish ordering but do not establish a
 hidden count. It should state material assumptions rather than silently
 guessing.
 
+### Research available data without executing SQL
+
+Ask what the selected source supports when you want to shape an analysis before
+retrieving values:
+
+```text
+What customer engagement analyses does this source support? Separate grounded
+opportunities from hypotheses, note missing data, and recommend three next
+analyses.
+```
+
+The coordinator searches the source's cached OSI catalog and inspects only the
+relevant datasets, fields, metrics, and declared relationships. It does not run
+SQL, create result IDs, generate a chart, invoke statistics, or create a report
+for this metadata-only request. A later request to run one recommendation uses
+the existing reviewed analysis workflow in the same source-bound conversation.
+
 To require a particular chart, name it explicitly:
 
 ```text

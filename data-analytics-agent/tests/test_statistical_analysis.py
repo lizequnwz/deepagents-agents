@@ -45,9 +45,10 @@ def test_statistical_prompt_prevents_retry_loops_and_redundant_payloads(
     test_settings: Settings,
 ) -> None:
     source = test_settings.load_catalog().get("test")
+    limits = PythonExecutionLimits()
     prompt = _statistical_subagent_prompt(
         source,
-        maximum_attempts=2,
+        execution_limits=limits,
         require_approval=True,
     )
     normalized = " ".join(prompt.split())
@@ -62,6 +63,10 @@ def test_statistical_prompt_prevents_retry_loops_and_redundant_payloads(
     assert "execution_attempts_exhausted" in normalized
     assert "references/regression.md" in normalized
     assert "references/time-series.md" in normalized
+    assert f"at most {limits.max_output_items} items" in normalized
+    assert f"{limits.max_output_rows} rows" in normalized
+    assert f"{limits.max_output_columns} columns" in normalized
+    assert "Do not replace total revenue with a price tier" in normalized
 
     skill = (
         PROJECT_ROOT / "skills/statistics/statistical-analysis/SKILL.md"
@@ -244,6 +249,8 @@ def test_statistical_tools_enforce_scope_and_refuse_truncated_data() -> None:
         source_id="source-1",
         limits=PythonExecutionLimits(),
     )
+    assert "at most 10 items" in execute.description
+    assert "at most 50 rows and 20 columns" in execute.description
     refused = execute.func(
         saved.result_id,
         'analysis_outputs = {"Mean": df.value.mean()}',

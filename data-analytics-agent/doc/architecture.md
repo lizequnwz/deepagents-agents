@@ -18,13 +18,13 @@ inside an adapter.
 | --- | --- | --- |
 | Streamlit | Source selection, conversation URL, polling, conditional SQL/Python review, progress, multi-result/statistical/Plotly presentation | Agent graph, credentials, SQL or Python execution |
 | FastAPI | Source catalog, conversations, runs, SQL decisions, result endpoint, service construction | Open-ended business interpretation |
-| Coordinator | Conversational context, direct-versus-investigation planning, sequential delegation, evidence selection, structured answers | Direct SQL execution |
-| Text-to-SQL specialist | OSI reading, query design, structural validation, execution request, interpretation | Source switching |
+| Coordinator | Conversational context, semantic research, direct-versus-investigation planning, sequential delegation, evidence selection, structured answers | Direct SQL execution |
+| Text-to-SQL specialist | Targeted semantic discovery, query design, structural validation, execution request, interpretation | Source switching |
 | Visualization specialist | One constrained chart spec over one scoped saved result | SQL, arbitrary Python, source switching |
 | Statistical specialist | General validated Python over one scoped saved SQL result | SQL, source switching |
 | HITL middleware | Deployment-configurable pause and approve/edit/reject resume shape for SQL and Python | Database authorization or a production code sandbox |
 | `SQLBackend` | Provider dialect, validation, execution, metadata, native safety controls | Business semantics |
-| OSI model | Curated entities, physical expressions, relationships, metrics, AI context | Credentials or connection lifecycle |
+| Semantic catalog | Immutable parsed OSI entities, physical expressions, relationships, metrics, indexes, and AI context | Credentials or connection lifecycle |
 | Process-local stores | Conversation, run, event, and result artifacts | Durable or multi-user persistence |
 
 ## Source resolution
@@ -42,8 +42,8 @@ registry with Pydantic, resolves semantic paths under `semantic/`, merges global
 and source-specific limits, and produces immutable runtime `DataSource`
 objects.
 
-[`api.py`](../data_analytics_agent/api.py) builds and caches one backend and agent
-graph per source. A future backend-provider layer may share connection
+[`api.py`](../data_analytics_agent/api.py) builds and caches one semantic
+catalog, backend, and agent graph per source. A future backend-provider layer may share connection
 configuration or pools, but a source-specific execution context must remain
 explicit.
 
@@ -81,7 +81,7 @@ thread/source provenance.
 - agent-scoped `skills/text-to-sql/` and `skills/data-visualization/`
   and `skills/statistics/` namespaces, each exposed only to its matching
   specialist;
-- filesystem read access only to `AGENTS.md`, `semantic/**`, and `skills/**`;
+- filesystem read access only to `AGENTS.md` and `skills/**`;
 - provider/tool structured-output contracts;
 - a source-specific in-memory LangGraph checkpointer.
 
@@ -95,6 +95,14 @@ database analysis; `agents/visualization/` owns the chart schema, result-scoped
 tools, validation, geocoding, and deterministic renderer. The root `agent.py`
 remains a thin compatibility import for Deep Agents tooling.
 
+The coordinator and text-to-SQL specialist share three source-bound read-only
+semantic tools. `search_semantic_model` returns compact lexical candidates,
+`get_semantic_entities` returns exact selected definitions, and
+`get_relationships` returns declared adjacency or a deterministic shortest
+path. The coordinator receives business semantics; text-to-SQL additionally
+receives physical sources and selected-dialect expressions. Agents never read
+raw OSI YAML.
+
 `agents/statistical_analysis/` owns result inspection, the Python HITL tool,
 bounded subprocess execution, typed statistical outputs, and the terminal
 statistical outcome contract. It receives a result ID, not row data in the task
@@ -106,8 +114,10 @@ message.
 2. FastAPI creates a run and rejects concurrent runs for the same thread.
 3. `RunManager` invokes the source-specific coordinator with typed run-scope
    state containing the conversation, run, and source IDs.
-4. The coordinator delegates database work.
-5. The specialist reads OSI context and calls `execute_sql`. The backend
+4. The coordinator answers metadata-only research with its business-facing
+   semantic tools, or delegates when observed values are requested.
+5. The specialist uses the compact overview and targeted semantic tools, then
+   calls `execute_sql`. The backend
    validates once immediately before execution. Expected validation or provider
    query errors return as tool observations so the specialist can revise within
    the existing execution budget.

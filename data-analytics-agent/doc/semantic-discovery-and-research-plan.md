@@ -1,5 +1,11 @@
 # Semantic Discovery and Research Capability Plan
 
+## Status
+
+Implemented as the source-bound semantic catalog, deterministic discovery
+tools, and coordinator-owned metadata Research path. This document remains the
+design record for the capability and its deferred scale options.
+
 ## Objective
 
 Evolve the Data Analytics Agent so it can work efficiently with both small and
@@ -38,7 +44,7 @@ artifact type for the initial implementation.
 - Remove the obsolete raw-file agent path once the replacement works. Do not
   retain a compatibility fallback.
 
-## Current limitation
+## Original limitation
 
 The text-to-SQL specialist currently reads the complete OSI file at the start
 of every stateless assignment. This is acceptable for the bundled models but
@@ -54,7 +60,7 @@ The existing semantic loader validates the OSI file but does not retain a
 typed, reusable representation for agents. The implementation should turn that
 existing loading boundary into the foundation for semantic discovery.
 
-## Proposed architecture
+## Implemented architecture
 
 ### 1. Application-owned semantic catalog
 
@@ -131,7 +137,7 @@ not decide join paths or invent semantic definitions.
 
 Input:
 
-- a bounded list of dataset and metric names;
+- up to ten exact logical dataset and metric names;
 - optional selected field names.
 
 Coordinator output:
@@ -144,8 +150,9 @@ Text-to-SQL output additionally includes:
 - exact physical dataset sources;
 - dialect-selected field and metric expressions.
 
-Batch several entities in one call. Do not require one call per dataset or
-field.
+Batch the datasets needed by a normal multi-table analysis in one call. Field
+selection uses logical snake_case names, never physical SQL names. Expose these
+limits and naming rules in the tool schema so invalid calls are avoidable.
 
 #### `get_relationships`
 
@@ -156,9 +163,12 @@ Input:
 
 Output:
 
-- declared direct relationships among or adjacent to the selected datasets;
+- for one selected dataset, its adjacent declared relationships;
+- for multiple selected datasets, only declared relationships whose endpoints
+  are both selected;
 - declared join fields;
 - a shortest declared path when a target is supplied;
+- the dataset names participating in that path;
 - explicit failure when no declared path exists;
 - model hash.
 
@@ -216,6 +226,10 @@ it should still use the catalog interface rather than raw YAML.
 
 The normal path should require a small number of bounded calls, not exhaustive
 pagination through the catalog.
+
+Handled validation errors remain recoverable tool observations, but run
+diagnostics must count and display them as failed calls rather than successful
+semantic work.
 
 ## Research behavior
 
@@ -313,7 +327,7 @@ Requirements for a later profiling capability:
 Profile-backed exploration should not silently masquerade as metadata-only
 Research.
 
-## Implementation plan
+## Implementation sequence
 
 ### Phase 1: Semantic catalog
 

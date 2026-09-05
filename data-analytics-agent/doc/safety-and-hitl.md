@@ -16,8 +16,8 @@ sufficient by itself.
 | --- | --- |
 | Trusted source catalog | Users cannot submit arbitrary targets or semantic files |
 | Semantic model | Curated tables, fields, joins, metrics, and caveats |
-| Agent permissions | Read access limited to required project context |
-| Prompt contract | One read-only query grounded only in the complete OSI model |
+| Agent permissions | Read access limited to coordinator policy and specialist skills; raw semantic files are unavailable |
+| Prompt contract | One read-only query grounded through the source-bound OSI catalog and declared relationships |
 | Structural parser | SQLGlot parses one dialect-specific statement |
 | Allowed query class | One `SELECT`, CTE, or set operation |
 | Forbidden operations | DDL, DML, transactions, commands, procedures, administrative/session and metadata operations |
