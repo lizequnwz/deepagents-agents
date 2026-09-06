@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import sqlite3
 import time
+import pyarrow as pa
+from threading import Event
 from pathlib import Path
 
 from data_analytics_agent.backends.base import (
-    BackendExecutionResult,
     ColumnInfo,
     SQLExecutionError,
     TableInfo,
-    normalize_result_value,
 )
 from data_analytics_agent.backends.validation import validate_readonly_sql
 
@@ -55,9 +55,7 @@ def _readonly_authorizer(
         "SQLITE_UPDATE",
     }
     denied_codes = {
-        getattr(sqlite3, name)
-        for name in denied_names
-        if hasattr(sqlite3, name)
+        getattr(sqlite3, name) for name in denied_names if hasattr(sqlite3, name)
     }
     return sqlite3.SQLITE_DENY if action in denied_codes else sqlite3.SQLITE_OK
 
@@ -80,35 +78,44 @@ class SQLiteBackend:
             check_same_thread=False,
         )
 
-    def execute(
-        self,
-        query: str,
-        *,
-        timeout_seconds: float,
-        max_rows: int,
-    ) -> BackendExecutionResult:
+    def execute_batches(
+        self, query: str, *, timeout_seconds: float, cancel: Event | None = None
+    ):
         validate_readonly_sql(query, dialect=self.dialect)
-        started = time.monotonic()
-        deadline = started + timeout_seconds
+        deadline = time.monotonic() + timeout_seconds
         connection = self._connect()
         try:
             connection.set_authorizer(_readonly_authorizer)
             connection.set_progress_handler(
-                lambda: 1 if time.monotonic() >= deadline else 0,
-                1_000,
+                lambda: int(
+                    time.monotonic() >= deadline or bool(cancel and cancel.is_set())
+                ),
+                1000,
             )
             cursor = connection.execute(query)
             columns = [column[0] for column in cursor.description or []]
-            raw_rows = cursor.fetchmany(max_rows + 1)
-            truncated = len(raw_rows) > max_rows
-            rows = [
-                {
-                    column: normalize_result_value(value)
-                    for column, value in zip(columns, raw_row, strict=True)
-                }
-                for raw_row in raw_rows[:max_rows]
-            ]
+            emitted = False
+            while True:
+                if cancel and cancel.is_set():
+                    raise InterruptedError("SQL stopped.")
+                rows = cursor.fetchmany(8192)
+                if not rows:
+                    if cursor.rowcount == 0:
+                        pass
+                    break
+                emitted = True
+                yield pa.RecordBatch.from_arrays(
+                    [
+                        pa.array([row[index] for row in rows])
+                        for index in range(len(columns))
+                    ],
+                    names=columns,
+                )
+            if not emitted:
+                yield self._empty_batch(columns)
         except sqlite3.DatabaseError as exc:
+            if cancel and cancel.is_set():
+                raise InterruptedError("SQL stopped.") from exc
             if "interrupted" in str(exc).lower():
                 raise TimeoutError(
                     f"SQL execution exceeded {timeout_seconds:g} seconds."
@@ -117,11 +124,10 @@ class SQLiteBackend:
         finally:
             connection.close()
 
-        return BackendExecutionResult(
-            columns=columns,
-            rows=rows,
-            truncated=truncated,
-            elapsed_ms=(time.monotonic() - started) * 1_000,
+    @staticmethod
+    def _empty_batch(columns):
+        return pa.RecordBatch.from_arrays(
+            [pa.array([], type=pa.string()) for _ in columns], names=columns
         )
 
     def get_table_schema(self, table_names: list[str]) -> list[TableInfo]:
@@ -141,13 +147,9 @@ class SQLiteBackend:
                 table_names,
             ).fetchall()
             available = {str(row[0]).casefold(): str(row[0]) for row in rows}
-            unknown = [
-                name for name in table_names if name.casefold() not in available
-            ]
+            unknown = [name for name in table_names if name.casefold() not in available]
             if unknown:
-                raise ValueError(
-                    "Unknown table(s): " + ", ".join(sorted(unknown))
-                )
+                raise ValueError("Unknown table(s): " + ", ".join(sorted(unknown)))
 
             tables: list[TableInfo] = []
             for requested_name in table_names:
@@ -165,9 +167,7 @@ class SQLiteBackend:
                     )
                     for row in rows
                 )
-                tables.append(
-                    TableInfo(name=physical_name, columns=columns)
-                )
+                tables.append(TableInfo(name=physical_name, columns=columns))
         finally:
             connection.close()
         return tables

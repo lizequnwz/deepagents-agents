@@ -7,7 +7,6 @@ from io import BytesIO
 import json
 import math
 from pathlib import Path
-import pickle
 import struct
 import sys
 import traceback
@@ -113,7 +112,7 @@ def _figure_output(
 def _normalize_outputs(
     raw_outputs: Any,
     limits: dict[str, Any],
-    input_frame: pd.DataFrame,
+    input_frame: pd.DataFrame | None,
 ) -> list[dict[str, Any]]:
     if not isinstance(raw_outputs, dict):
         raise TypeError(
@@ -145,13 +144,9 @@ def _normalize_outputs(
             figure_count += 1
             figure_bytes += image_size
             if figure_count > limits["max_figures"]:
-                raise ValueError(
-                    f"Return at most {limits['max_figures']} figures."
-                )
+                raise ValueError(f"Return at most {limits['max_figures']} figures.")
             if figure_bytes > limits["max_total_figure_bytes"]:
-                raise ValueError(
-                    "Combined figure bytes exceed the configured limit."
-                )
+                raise ValueError("Combined figure bytes exceed the configured limit.")
             outputs.append(output)
             continue
         if isinstance(value, pd.Series):
@@ -160,7 +155,9 @@ def _normalize_outputs(
                 _table_output(name, value.rename(column_name).reset_index(), limits)
             )
         elif isinstance(value, pd.DataFrame):
-            if value is input_frame or value.equals(input_frame):
+            if input_frame is not None and (
+                value is input_frame or value.equals(input_frame)
+            ):
                 raise ValueError(
                     "analysis_outputs cannot return the complete input DataFrame; "
                     "return a compact statistical summary instead."
@@ -177,21 +174,21 @@ def _normalize_outputs(
                     f"Array output {name!r} must have one or two dimensions."
                 )
             outputs.append(_table_output(name, frame, limits))
-        elif isinstance(value, list) and value and all(
-            isinstance(item, dict) for item in value
+        elif (
+            isinstance(value, list)
+            and value
+            and all(isinstance(item, dict) for item in value)
         ):
             outputs.append(_table_output(name, pd.DataFrame(value), limits))
         elif isinstance(value, list) and not value:
             outputs.append({"name": name, "kind": "text", "text": "[]"})
         elif isinstance(value, str):
             outputs.append({"name": name, "kind": "text", "text": value})
-        elif value is None or isinstance(
-            value, str | int | float | bool | np.generic
-        ):
+        elif value is None or isinstance(value, str | int | float | bool | np.generic):
             outputs.append(
                 {"name": name, "kind": "scalar", "value": _json_value(value)}
             )
-        elif isinstance(value, dict):
+        elif isinstance(value, (dict, list, tuple)):
             outputs.append(
                 {
                     "name": name,
@@ -222,23 +219,56 @@ def main() -> int:
         return 2
     frame_path, code_path, limits_path, output_path = map(Path, sys.argv[1:])
     try:
-        with frame_path.open("rb") as file:
-            df = pickle.load(file)
+        bindings = json.loads(frame_path.read_text())
+        datasets = {name: pd.read_parquet(path) for name, path in bindings.items()}
         code = code_path.read_text(encoding="utf-8")
         limits = json.loads(limits_path.read_text(encoding="utf-8"))
         namespace: dict[str, Any] = {
-            "__name__": "__statistical_analysis__",
-            "df": df,
+            "__name__": "__data_analysis__",
+            "datasets": datasets,
+            "output_datasets": {},
             "pd": pd,
             "np": np,
         }
-        exec(compile(code, "<reviewed-statistical-analysis>", "exec"), namespace)
+        exec(compile(code, "<reviewed-data-analysis>", "exec"), namespace)
         outputs = _normalize_outputs(
-            namespace.get("analysis_outputs"),
+            namespace.get("analysis_outputs") or {"status": "Derived datasets saved"},
             limits,
-            df,
+            None,
         )
-        payload = {"ok": True, "outputs": outputs, "warnings": []}
+        derived = {}
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        requested = namespace.get("output_datasets", {})
+        if not isinstance(requested, dict):
+            raise ValueError("output_datasets must be a name-to-DataFrame dictionary.")
+        for index, (name, frame) in enumerate(requested.items()):
+            if (
+                not isinstance(name, str)
+                or not name.strip()
+                or not isinstance(frame, pd.DataFrame)
+            ):
+                raise ValueError(
+                    "Each output dataset requires a name and a pandas DataFrame."
+                )
+            table = pa.Table.from_pandas(frame, preserve_index=False)
+            if (
+                table.num_rows > limits["max_dataset_rows"]
+                or table.nbytes > limits["max_dataset_bytes"]
+            ):
+                raise ValueError(
+                    f"Derived dataset {name!r} exceeds the configured dataset budget."
+                )
+            target = output_path.parent / f"derived-{index}.parquet"
+            pq.write_table(table, target)
+            derived[name] = str(target)
+        payload = {
+            "ok": True,
+            "outputs": outputs,
+            "output_datasets": derived,
+            "warnings": [],
+        }
         status = 0
     except BaseException as exc:
         payload = {

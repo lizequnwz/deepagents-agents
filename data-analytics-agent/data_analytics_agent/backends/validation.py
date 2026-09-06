@@ -49,9 +49,7 @@ def validate_readonly_sql(query: str, *, dialect: str) -> exp.Query:
     try:
         statements = parse(query, read=dialect)
     except (ParseError, ValueError) as exc:
-        raise SQLValidationError(
-            f"Invalid {dialect} SQL: {exc}"
-        ) from exc
+        raise SQLValidationError(f"Invalid {dialect} SQL: {exc}") from exc
     statements = [statement for statement in statements if statement is not None]
     if len(statements) != 1:
         raise SQLValidationError("Exactly one SQL statement is required.")

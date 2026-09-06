@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from numbers import Real
+from decimal import Decimal
 import re
 from typing import Any
 
@@ -22,7 +23,7 @@ _YEAR_RE = re.compile(r"^(?:19|20)\d{2}$")
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, Real) and not isinstance(value, bool)
+    return isinstance(value, (Real, Decimal)) and not isinstance(value, bool)
 
 
 def _stable_distinct(values: list[Any]) -> list[Any]:
@@ -51,6 +52,10 @@ def _physical_kind(values: list[Any]) -> PhysicalKind:
 
 
 def _temporal_kind(value: Any) -> TemporalKind | None:
+    if isinstance(value, datetime):
+        return TemporalKind.DATETIME
+    if isinstance(value, date):
+        return TemporalKind.DATE
     if not isinstance(value, str):
         return None
     text = value.strip()
@@ -93,9 +98,7 @@ def _role_candidates(
 
     total = len(values)
     numeric_count = sum(_is_number(value) for value in values)
-    text_or_bool_count = sum(
-        isinstance(value, (str, bool)) for value in values
-    )
+    text_or_bool_count = sum(isinstance(value, (str, bool)) for value in values)
     candidates: list[RoleCandidate] = []
 
     if temporal_kind is not None:
@@ -113,10 +116,7 @@ def _role_candidates(
                 confidence=numeric_confidence,
             )
         )
-        low_cardinality = (
-            distinct_count <= 30
-            or distinct_count / max(total, 1) <= 0.2
-        )
+        low_cardinality = distinct_count <= 30 or distinct_count / max(total, 1) <= 0.2
         if low_cardinality:
             candidates.append(
                 RoleCandidate(
@@ -132,9 +132,7 @@ def _role_candidates(
             )
         )
     if not candidates:
-        candidates.append(
-            RoleCandidate(role=AnalyticalRole.UNKNOWN, confidence=1)
-        )
+        candidates.append(RoleCandidate(role=AnalyticalRole.UNKNOWN, confidence=1))
     return tuple(candidates)
 
 
@@ -156,9 +154,7 @@ def profile_result(
         inferred_temporal: TemporalKind | None = None
         temporal_confidence = 0.0
         if matched:
-            counts = {
-                candidate: matched.count(candidate) for candidate in set(matched)
-            }
+            counts = {candidate: matched.count(candidate) for candidate in set(matched)}
             inferred_temporal, matched_count = max(
                 counts.items(), key=lambda item: item[1]
             )

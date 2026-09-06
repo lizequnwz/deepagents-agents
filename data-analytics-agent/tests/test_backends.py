@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
 
 from data_analytics_agent.backends import (
-    BackendExecutionResult,
     ColumnInfo,
     TableInfo,
     validate_readonly_sql,
@@ -22,25 +20,12 @@ class FakeClientBackend:
     def __init__(self) -> None:
         self.executed: list[str] = []
 
-    def execute(
-        self,
-        query: str,
-        *,
-        timeout_seconds: float,
-        max_rows: int,
-    ) -> BackendExecutionResult:
+    def execute_batches(self, query, *, timeout_seconds, cancel=None):
+        import pyarrow as pa
+
         validate_readonly_sql(query, dialect=self.dialect)
-        assert timeout_seconds > 0
         self.executed.append(query)
-        rows: list[dict[str, Any]] = [
-            {"value": number} for number in range(max_rows + 1)
-        ]
-        return BackendExecutionResult(
-            columns=["value"],
-            rows=rows[:max_rows],
-            truncated=len(rows) > max_rows,
-            elapsed_ms=2.5,
-        )
+        yield pa.record_batch({"value": range(10001)})
 
     def get_table_schema(self, table_names: list[str]) -> list[TableInfo]:
         assert table_names == ["facts"]

@@ -28,7 +28,7 @@ entry point; these guides explain the contracts and procedures behind it.
 ### Add another specialist agent
 
 1. [`architecture.md`](architecture.md#adding-specialist-capabilities)
-2. Review the existing `agents/visualization/` result-contract pattern.
+2. Review the existing `data_analytics_agent/agents/data_analysis/` result-contract pattern.
 3. [`safety-and-hitl.md`](safety-and-hitl.md#trust-boundary)
 4. [`backend-development.md`](backend-development.md#keep-backend-and-agent-contracts-separate)
 
@@ -40,17 +40,15 @@ entry point; these guides explain the contracts and procedures behind it.
 4. Review `data_analytics_agent/reporting/` and the saved-artifact contracts.
 
 The executable [`agent_internals_tutorial.ipynb`](../agent_internals_tutorial.ipynb)
-is the companion lab. It demonstrates the registry, semantic-catalog grounding, backend
-contract, result provenance, HITL interruption, API lifecycle, and UI behavior.
-The production graph additionally includes the feature-flagged visualization
-specialist and constrained chart contract.
+is the companion lab. It demonstrates typed datasets, iterative Python execution,
+derived artifacts, reopening local storage, and evidence-backed HTML reporting.
 
 ## Guide index
 
 | Guide | Use it when |
 | --- | --- |
 | [Using the agent](using-the-agent.md) | Running the UI, selecting sources, reviewing SQL, restoring conversations, or diagnosing user-facing problems |
-| [Architecture](architecture.md) | Understanding ownership, source binding, agent topology, extension seams, or process-local limitations |
+| [Architecture](architecture.md) | Understanding ownership, source binding, agent topology, extension seams, or durable storage |
 | [Reporting capability](reporting-capability.md) | Using or extending the coordinator reporting skill, structured report contract, self-contained HTML renderer, or Streamlit preview/download flow |
 | [Adding data sources](adding-data-sources.md) | Registering another SQLite database or changing source metadata and limits |
 | [Semantic-model best practices](semantic-model-best-practices.md) | Authoring or reviewing an OSI `0.1.1` model |
@@ -60,7 +58,10 @@ specialist and constrained chart contract.
 | [Operations and testing](operations-and-testing.md) | Configuration, startup, readiness, tests, notebook execution, and troubleshooting |
 | [Snowflake backend](snowflake-blueprint.md) | Configuring and understanding the optional `snowlib` adapter |
 
-## Canonical diagrams
+## Historical diagrams
+
+These diagrams describe the previous release. Use [architecture.md](architecture.md)
+for the current coordinator, two-specialist, and durable-artifact design.
 
 Each diagram has an embedded dual-theme SVG, an interactive Archify HTML file,
 and editable JSON source.

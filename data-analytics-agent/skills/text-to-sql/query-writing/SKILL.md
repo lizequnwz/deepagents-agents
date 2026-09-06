@@ -1,6 +1,6 @@
 ---
 name: query-writing
-description: Ground a database question with the source-bound semantic discovery tools, then write one safe, dialect-aware, chart-ready SELECT query and submit it for human-reviewed execution. Use for database analysis, metrics, ranking, time series, distributions, relationships, heatmap grids, and other result shaping.
+description: Ground a database question with the source-bound semantic discovery tools, then write one safe, dialect-aware, chart-ready SELECT query and execute it with optional review. Use for database analysis, metrics, ranking, time series, distributions, relationships, heatmap grids, and other result shaping.
 ---
 
 # Query Writing
@@ -82,3 +82,11 @@ Return the business answer plus the exact executed SQL, result ID, columns,
 full-result profile, at most the provided first 10 rows, stored row count, and
 truncation flag. Never claim the stored row count is the uncapped database
 total when `truncated` is true.
+
+## Reuse saved data
+
+Use query_saved_results with explicit alias-to-artifact bindings and DuckDB SQL
+for descriptive reshaping of saved snapshots. Inspect the resulting profile.
+Use browse_semantic_model for paginated dataset/field discovery and lookup_values
+for bounded source category discovery. Reuse is a snapshot; fresh/current
+requests require new source execution. Source queries remain sequential.

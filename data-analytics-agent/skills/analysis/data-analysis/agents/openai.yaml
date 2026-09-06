@@ -1,0 +1,4 @@
+interface:
+  display_name: "Statistical analysis"
+  short_description: "Inference, regression, and time-series modeling"
+  default_prompt: "Use $data-analysis to answer the modeling or uncertainty question with the simplest defensible analysis."

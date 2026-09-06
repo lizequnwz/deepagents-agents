@@ -176,14 +176,11 @@ def test_agent_result_discovery_exposes_profiles_and_only_head_ten() -> None:
         }
     )
 
-    list_tool = create_list_conversation_results_tool(
-        store, source_id="source-a"
-    )
+    list_tool = create_list_conversation_results_tool(store, source_id="source-a")
     listed = list_tool.func(runtime)
     assert listed["results"][0]["result_id"] == saved.result_id
-    assert listed["results"][0]["originating_question"] == "Show every number"
+    assert listed["results"][0]["purpose"] == "Show every number"
     assert "rows" not in listed["results"][0]
-    assert listed["results"][0]["profile"]["scope"] == "stored_rows"
 
     inspect_tool = create_inspect_conversation_result_tool(
         store,

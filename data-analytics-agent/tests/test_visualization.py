@@ -1,48 +1,26 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from types import SimpleNamespace
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from data_analytics_agent.agents.visualization.geocoding import GeoPoint
-from data_analytics_agent.agents.visualization.renderer import (
+from data_analytics_agent.visualization.geocoding import GeoPoint
+from data_analytics_agent.visualization.renderer import (
     ChartRenderStyle,
     build_chart,
 )
-from data_analytics_agent.agents.visualization.schemas import (
+from data_analytics_agent.visualization.schemas import (
     ChartSpec,
-    VisualizationOutcome,
-    VisualizationResult,
 )
-from data_analytics_agent.agents.visualization.tools import (
-    create_chart_result,
-    create_create_chart_tool,
-    create_finish_visualization_tool,
-)
-from data_analytics_agent.agents.visualization.validation import (
+from data_analytics_agent.visualization.validation import (
     presentation_rows,
     validate_chart_spec,
 )
-from data_analytics_agent.run_manager import (
-    RunManager,
-    _apply_sql_analysis,
-    _apply_visualization,
-    _chart_activity,
-)
-from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.schemas import (
-    CoordinatorResponse,
-    FinalAnswer,
     ResultReference,
-    SQLAnalysisResult,
     SavedResult,
 )
 from data_analytics_agent.stores import (
-    ConversationStore,
     ResultStore,
-    RunStore,
 )
 
 
@@ -55,20 +33,16 @@ def _saved_result(
         {"category": "B", "amount": 12.0},
         {"category": "A", "amount": 8.0},
     ]
-    return SavedResult(
-        result_id=result_id,
-        thread_id="thread-1",
-        source_id="source-1",
-        executed_sql="SELECT category, amount FROM metrics",
-        originating_question="Show metrics",
-        short_label="Show metrics",
-        columns=list(data[0]),
-        rows=data,
-        profile=profile_result(list(data[0]), data),
-        row_count=len(data),
-        truncated=False,
-        elapsed_ms=1.0,
-        created_at=datetime.now(timezone.utc),
+    return (
+        ResultStore()
+        .save(
+            thread_id="thread-1",
+            source_id="source-1",
+            executed_sql="SELECT category, amount FROM metrics",
+            columns=list(data[0]),
+            rows=data,
+        )
+        .model_copy(update={"result_id": result_id})
     )
 
 
@@ -196,10 +170,7 @@ def test_chart_validation_enforces_columns_numeric_data_and_limits() -> None:
         validate_chart_spec(_bar_spec(y=["missing"]), result)
 
     many = _saved_result(
-        rows=[
-            {"category": f"C{index}", "amount": index}
-            for index in range(31)
-        ]
+        rows=[{"category": f"C{index}", "amount": index} for index in range(31)]
     )
     with pytest.raises(ValueError, match="at most 30"):
         validate_chart_spec(_bar_spec(), many)
@@ -212,9 +183,7 @@ def test_chart_validation_enforces_columns_numeric_data_and_limits() -> None:
         many,
     )
 
-    size_result = _saved_result(
-        rows=[{"x": 2, "amount": 1, "size": -1}]
-    )
+    size_result = _saved_result(rows=[{"x": 2, "amount": 1, "size": -1}])
     with pytest.raises(ValueError, match="nonnegative"):
         validate_chart_spec(
             ChartSpec(
@@ -252,8 +221,7 @@ def test_presentation_operations_are_reviewed_sort_and_category_limit() -> None:
     ]
     rendered = build_chart(spec, result.rows)
     assert any(
-        "Displaying 2 of 3 categories" in warning
-        for warning in rendered.warnings
+        "Displaying 2 of 3 categories" in warning for warning in rendered.warnings
     )
 
 
@@ -462,312 +430,3 @@ def test_state_choropleth_normalizes_names_and_warns_on_invalid_state() -> None:
 
     assert list(rendered.figure.data[0].locations) == ["NY"]
     assert any("unrecognized map" in warning for warning in rendered.warnings)
-
-
-def test_exact_visualization_subagent_result_overrides_coordinator_chart() -> None:
-    approved = _bar_spec(title="Generated title")
-    result = VisualizationResult(
-        answer="Chart generated successfully.",
-        chart=approved,
-    )
-    output = {
-        "messages": [
-            HumanMessage(content="Chart it"),
-            ToolMessage(
-                content=result.model_dump_json(),
-                tool_call_id="viz-task",
-            ),
-            AIMessage(content="Made a chart."),
-        ]
-    }
-    answer = FinalAnswer(
-        answer="Made a chart.",
-        primary_result_id=approved.result_id,
-        results=[_reference(approved.result_id)],
-        chart=_bar_spec(title="Stale title"),
-    )
-
-    authoritative = _apply_visualization(answer, output)
-    assert authoritative.chart == approved
-    assert authoritative.answer == "Made a chart."
-
-
-def test_terminal_visualization_failure_clears_stale_chart() -> None:
-    outcome = VisualizationResult(
-        outcome="cannot_create",
-        result_id="result-1",
-        answer="The requested map requires location columns.",
-    )
-    output = {
-        "messages": [
-            HumanMessage(content="Map it"),
-            ToolMessage(
-                content=outcome.model_dump_json(),
-                tool_call_id="viz-task",
-            ),
-        ]
-    }
-
-    authoritative = _apply_visualization(
-        FinalAnswer(
-            answer="Working.",
-            primary_result_id="result-1",
-            results=[_reference()],
-            chart=_bar_spec(),
-        ),
-        output,
-    )
-
-    assert authoritative.answer == "Working."
-    assert authoritative.chart is None
-
-
-def test_create_chart_returns_success_message_and_exact_spec() -> None:
-    spec = _bar_spec()
-
-    result = create_chart_result(spec, _saved_result())
-
-    assert result.chart == spec
-    assert result.answer == (
-        "Chart generated successfully: bar chart 'Amount by category'."
-    )
-
-
-def test_create_chart_completes_visualization_directly() -> None:
-    results = ResultStore()
-    saved = results.save(
-        thread_id="thread-1",
-        source_id="source-1",
-        executed_sql="SELECT category, amount FROM metrics",
-        columns=["category", "amount"],
-        rows=[{"category": "A", "amount": 1}],
-        truncated=False,
-        elapsed_ms=1,
-    )
-    tool = create_create_chart_tool(results, source_id="source-1")
-    runtime = SimpleNamespace(
-        state={
-            "thread_id": "thread-1",
-            "run_id": "run-1",
-            "source_id": "source-1",
-        },
-        tool_call_id="chart-call",
-    )
-
-    command = tool.func(
-        _bar_spec(result_id=saved.result_id),
-        runtime,
-    )
-
-    assert tool.return_direct is True
-    assert command.update["structured_response"].chart.result_id == saved.result_id
-    assert command.update["messages"][0].tool_call_id == "chart-call"
-
-
-def test_visualization_can_finish_with_a_structured_reshape_outcome() -> None:
-    results = ResultStore()
-    saved = results.save(
-        thread_id="thread-1",
-        source_id="source-1",
-        executed_sql="SELECT category, amount FROM metrics",
-        columns=["category", "amount"],
-        rows=[{"category": "A", "amount": 1}],
-        truncated=False,
-        elapsed_ms=1,
-    )
-    tool = create_finish_visualization_tool(
-        results, source_id="source-1"
-    )
-    runtime = SimpleNamespace(
-        state={
-            "thread_id": "thread-1",
-            "run_id": "run-1",
-            "source_id": "source-1",
-        },
-        tool_call_id="finish-call",
-    )
-
-    command = tool.func(
-        saved.result_id,
-        "needs_sql_reshape",
-        "Aggregate duplicate heatmap cells in SQL.",
-        runtime,
-    )
-    outcome = command.update["structured_response"]
-
-    assert outcome.outcome is VisualizationOutcome.NEEDS_SQL_RESHAPE
-    assert outcome.chart is None
-    assert command.update["messages"][0].tool_call_id == "finish-call"
-
-
-def test_chart_progress_shows_safe_partial_arguments() -> None:
-    spec = _bar_spec(
-        orientation="horizontal",
-        category_limit=10,
-        sort_by="amount",
-    )
-
-    kind, label = _chart_activity(
-        {"spec": spec.model_dump(mode="json")}
-    )
-
-    assert kind == "chart"
-    assert label == (
-        "Generating bar chart · x=category · y=amount · horizontal · top 10"
-    )
-    assert spec.result_id not in label
-
-    combo = _bar_spec(secondary_y="forecast")
-    _, combo_label = _chart_activity(
-        {"spec": combo.model_dump(mode="json")}
-    )
-    assert combo_label == (
-        "Generating bar chart · x=category · y=amount · "
-        "secondary y=forecast"
-    )
-
-
-def test_chart_request_preserves_coordinator_answer_with_exact_sql_result() -> None:
-    approved = _bar_spec()
-    saved = _saved_result()
-    sql_result = SQLAnalysisResult(
-        answer="The query returned grouped rows.",
-        sql="SELECT category, SUM(amount) AS amount FROM metrics GROUP BY 1",
-        result_id=approved.result_id,
-        columns=saved.columns,
-        sample_rows=saved.rows,
-        profile=saved.profile,
-        row_count=2,
-        truncated=False,
-    )
-    visualization = VisualizationResult(answer="Approved.", chart=approved)
-    output = {
-        "messages": [
-            HumanMessage(content="Chart it"),
-            ToolMessage(
-                content=sql_result.model_dump_json(),
-                tool_call_id="sql-task",
-            ),
-            ToolMessage(
-                content=visualization.model_dump_json(),
-                tool_call_id="viz-task",
-            ),
-            AIMessage(content="Here is the generated chart."),
-        ]
-    }
-    answer = CoordinatorResponse(
-        answer="Here is the generated chart.",
-        primary_result_id=approved.result_id,
-        supporting_result_ids=[approved.result_id],
-    )
-
-    authoritative = _apply_sql_analysis(answer, output)
-    assert authoritative.answer == "Here is the generated chart."
-    assert authoritative.primary_result_id == sql_result.result_id
-    assert authoritative.supporting_result_ids == [sql_result.result_id]
-
-
-def test_answer_chart_must_match_saved_result_provenance() -> None:
-    results = ResultStore()
-    saved = results.save(
-        thread_id="thread-1",
-        source_id="source-1",
-        executed_sql="SELECT category, amount FROM metrics",
-        columns=["category", "amount"],
-        rows=[{"category": "A", "amount": 1}],
-        truncated=False,
-        elapsed_ms=1,
-    )
-    manager = RunManager(
-        agent=object(),
-        conversations=ConversationStore(),
-        runs=RunStore(),
-        results=results,
-    )
-    spec = _bar_spec(result_id=saved.result_id)
-
-    answer = manager._validate_answer_provenance(
-        FinalAnswer(
-            answer="Chart.",
-            primary_result_id=saved.result_id,
-            results=[
-                ResultReference(
-                    result_id=saved.result_id,
-                    executed_sql="SELECT stale",
-                    originating_question="Stale",
-                    short_label="Stale",
-                )
-            ],
-            chart=spec,
-        ),
-        "thread-1",
-        "source-1",
-    )
-
-    assert answer.results[0].executed_sql == saved.executed_sql
-    assert answer.chart == spec
-
-
-def test_chart_may_reference_scoped_supporting_evidence() -> None:
-    results = ResultStore()
-    primary = results.save(
-        thread_id="thread-1",
-        source_id="source-1",
-        executed_sql="SELECT category, total FROM summary",
-        columns=["category", "total"],
-        rows=[{"category": "A", "total": 10}],
-        truncated=False,
-        elapsed_ms=1,
-    )
-    chart_result = results.save(
-        thread_id="thread-1",
-        source_id="source-1",
-        executed_sql="SELECT category, amount FROM metrics",
-        columns=["category", "amount"],
-        rows=[{"category": "A", "amount": 1}],
-        truncated=False,
-        elapsed_ms=1,
-    )
-    outside = results.save(
-        thread_id="thread-1",
-        source_id="source-1",
-        executed_sql="SELECT category, amount FROM unused_metrics",
-        columns=["category", "amount"],
-        rows=[{"category": "A", "amount": 2}],
-        truncated=False,
-        elapsed_ms=1,
-    )
-    manager = RunManager(
-        agent=object(),
-        conversations=ConversationStore(),
-        runs=RunStore(),
-        results=results,
-    )
-    answer = FinalAnswer(
-        answer="Supporting evidence explains the primary result.",
-        primary_result_id=primary.result_id,
-        results=[
-            _reference(primary.result_id),
-            _reference(chart_result.result_id),
-        ],
-        chart=_bar_spec(result_id=chart_result.result_id),
-    )
-
-    validated = manager._validate_answer_provenance(
-        answer,
-        "thread-1",
-        "source-1",
-    )
-
-    assert validated.primary_result_id == primary.result_id
-    assert validated.chart is not None
-    assert validated.chart.result_id == chart_result.result_id
-
-    with pytest.raises(RuntimeError, match="outside the final evidence"):
-        manager._validate_answer_provenance(
-            answer.model_copy(
-                update={"chart": _bar_spec(result_id=outside.result_id)}
-            ),
-            "thread-1",
-            "source-1",
-        )

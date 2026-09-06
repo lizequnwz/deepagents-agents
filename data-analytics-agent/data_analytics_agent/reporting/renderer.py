@@ -1,6 +1,7 @@
 """Trusted deterministic renderer for standalone analytical HTML reports."""
 
 from __future__ import annotations
+from data_analytics_agent.visualization.schemas import ChartSpec
 
 import base64
 from collections.abc import Mapping, Sequence
@@ -13,25 +14,24 @@ from typing import Any
 
 from plotly.io import to_html as plotly_to_html
 
-from data_analytics_agent.agents.visualization.renderer import (
+from data_analytics_agent.visualization.renderer import (
     ChartRenderStyle,
     build_chart,
 )
-from data_analytics_agent.agents.visualization.schemas import ChartType
-from data_analytics_agent.agents.visualization.validation import (
+from data_analytics_agent.visualization.schemas import ChartType
+from data_analytics_agent.visualization.validation import (
     validate_chart_spec,
 )
 from data_analytics_agent.reporting.schemas import (
-    ReportBlock,
     ReportCalloutBlock,
     ReportChartBlock,
     ReportInfographicBlock,
     ReportMetricsBlock,
     ReportNarrativeBlock,
     ReportSpec,
-    ReportStatisticalBlock,
+    ReportAnalysisBlock,
     ReportTableBlock,
-    ResolvedStatisticalAnalysis,
+    ResolvedDataAnalysis,
 )
 from data_analytics_agent.schemas import SavedResult
 
@@ -62,9 +62,7 @@ _REPORT_CHART_STYLE = ChartRenderStyle(
     discrete_colors=_REPORT_CHART_DISCRETE,
     continuous_colors=_REPORT_CHART_CONTINUOUS,
     show_title=False,
-    font_family=(
-        "Fidelity Sans, Source Sans 3, Arial, ui-sans-serif, sans-serif"
-    ),
+    font_family=("Fidelity Sans, Source Sans 3, Arial, ui-sans-serif, sans-serif"),
 )
 
 
@@ -184,12 +182,12 @@ def _narrative(block: ReportNarrativeBlock) -> str:
     )
 
 
-def _metrics(block: ReportMetricsBlock) -> str:
+def _metrics(block: ReportMetricsBlock, results) -> str:
     title = f"<h2>{escape(block.title)}</h2>" if block.title else ""
     items = "".join(
         '<article class="metric-card">'
         f'<p class="metric-label">{escape(metric.label)}</p>'
-        f'<p class="metric-value">{escape(metric.value)}</p>'
+        f'<p class="metric-value">{escape(metric.prefix + format(results[metric.result_id].read_rows(1, metric.row_index)[0][metric.column], metric.number_format) + metric.suffix)}</p>'
         + (
             f'<p class="metric-change">{escape(metric.change)}</p>'
             if metric.change
@@ -207,9 +205,9 @@ def _metrics(block: ReportMetricsBlock) -> str:
     mobile_columns = min(block.columns, 2)
     return (
         '<section class="report-block">'
-        f"{title}<div class=\"metrics-grid\" style=\"--metric-columns:{block.columns};"
+        f'{title}<div class="metrics-grid" style="--metric-columns:{block.columns};'
         f"--metric-tablet-columns:{tablet_columns};"
-        f"--metric-mobile-columns:{mobile_columns}\">"
+        f'--metric-mobile-columns:{mobile_columns}">'
         f"{items}</div></section>"
     )
 
@@ -231,11 +229,7 @@ def _infographic(block: ReportInfographicBlock) -> str:
         '<article class="infographic-item">'
         f'<span class="item-index" aria-hidden="true">{index:02d}</span>'
         f"<h3>{escape(item.label)}</h3>"
-        + (
-            f'<p class="item-value">{escape(item.value)}</p>'
-            if item.value
-            else ""
-        )
+        + (f'<p class="item-value">{escape(item.value)}</p>' if item.value else "")
         + f"{_rich_text(item.description)}</article>"
         for index, item in enumerate(block.items, start=1)
     )
@@ -247,8 +241,8 @@ def _infographic(block: ReportInfographicBlock) -> str:
 
 
 def _statistical(
-    block: ReportStatisticalBlock,
-    analysis: ResolvedStatisticalAnalysis,
+    block: ReportAnalysisBlock,
+    analysis: ResolvedDataAnalysis,
 ) -> str:
     outputs: list[str] = []
     if block.include_outputs:
@@ -279,7 +273,7 @@ def _statistical(
                     for row in rows
                 )
                 outputs.append(
-                    f"<h3>{name}</h3><div class=\"table-scroll\"><table>"
+                    f'<h3>{name}</h3><div class="table-scroll"><table>'
                     f"<thead><tr>{header}</tr></thead><tbody>{body}</tbody>"
                     "</table></div>"
                 )
@@ -293,9 +287,9 @@ def _statistical(
                 outputs.append(
                     f"<h3>{name}</h3>{_rich_text(str(output.get('text') or ''))}"
                 )
-    assumptions = block.assumptions or analysis.assumptions
-    interpretation = block.interpretation or analysis.interpretation
-    method = block.method or analysis.method
+    assumptions = analysis.assumptions
+    interpretation = analysis.interpretation
+    method = analysis.method
     details: list[str] = []
     if method:
         details.append(f"<h3>Method</h3>{_rich_text(method)}")
@@ -339,16 +333,17 @@ def _chart(
     result: SavedResult,
     *,
     chart_index: int,
+    chart: ChartSpec,
     include_plotly: bool,
 ) -> str:
-    if block.chart.chart_type is ChartType.MAP:
+    if chart.chart_type is ChartType.MAP:
         raise ValueError(
             "Offline report maps are not yet supported because geographic "
             "topology must also be embedded. Use a table or non-map chart."
         )
-    validate_chart_spec(block.chart, result)
+    validate_chart_spec(chart, result)
     rendered = build_chart(
-        block.chart,
+        chart,
         result.rows,
         style=_REPORT_CHART_STYLE,
     )
@@ -365,8 +360,7 @@ def _chart(
         },
     )
     warnings = "".join(
-        f'<p class="chart-warning">{escape(item)}</p>'
-        for item in rendered.warnings
+        f'<p class="chart-warning">{escape(item)}</p>' for item in rendered.warnings
     )
     data_table = ""
     if block.show_data_table:
@@ -374,7 +368,7 @@ def _chart(
             '<details class="chart-data"><summary>Accessible chart data</summary>'
             + _table_html(
                 result,
-                title=f"Data for {block.chart.title}",
+                title=f"Data for {chart.title}",
                 caption="Data used by this chart",
                 columns=result.columns,
                 rows=result.rows,
@@ -382,13 +376,11 @@ def _chart(
             + "</details>"
         )
     caption = (
-        f"<figcaption>{escape(block.caption)}</figcaption>"
-        if block.caption
-        else ""
+        f"<figcaption>{escape(block.caption)}</figcaption>" if block.caption else ""
     )
     return (
         '<section class="report-block chart-block">'
-        f"<h2>{escape(block.chart.title)}</h2>"
+        f"<h2>{escape(chart.title)}</h2>"
         f'<p class="chart-summary">{escape(block.summary)}</p>'
         f'<figure aria-label="{escape(block.summary)}">{chart_html}{caption}</figure>'
         f"{warnings}{data_table}</section>"
@@ -414,12 +406,8 @@ def _heading_font_stack(style: str) -> str:
 
 def _style(spec: ReportSpec) -> str:
     theme = spec.theme
-    gap = {"spacious": "2rem", "balanced": "1.35rem", "dense": ".9rem"}[
-        theme.density
-    ]
-    radius = {"square": "0", "soft": ".5rem", "rounded": "1rem"}[
-        theme.corner_style
-    ]
+    gap = {"spacious": "2rem", "balanced": "1.35rem", "dense": ".9rem"}[theme.density]
+    radius = {"square": "0", "soft": ".5rem", "rounded": "1rem"}[theme.corner_style]
     return f"""
 :root {{
   color-scheme: light dark;
@@ -495,17 +483,18 @@ body[data-theme='dark'] a {{ color: #8CC1FD; }}
 def _sql_queries(results: Mapping[str, SavedResult]) -> str:
     """Render exact executed SQL without exposing opaque artifact IDs."""
 
+    results = {
+        key: value
+        for key, value in results.items()
+        if value.kind == "source_sql" and value.executed_sql
+    }
     if not results:
         return ""
     query_items = "".join(
         '<article class="sql-query">'
         f"<h3>Query {index}: {escape(result.short_label)}</h3>"
         f'<p class="sql-query-meta">Returned {result.row_count:,} rows'
-        + (
-            " (truncated at the configured limit)"
-            if result.truncated
-            else ""
-        )
+        + (" (truncated at the configured limit)" if result.truncated else "")
         + "</p>"
         f'<pre aria-label="SQL for query {index}"><code class="language-sql">'
         f"{escape(result.executed_sql)}</code></pre></article>"
@@ -539,18 +528,20 @@ def render_report(
     spec: ReportSpec,
     *,
     results: Mapping[str, SavedResult],
-    analyses: Mapping[str, ResolvedStatisticalAnalysis],
+    analyses: Mapping[str, ResolvedDataAnalysis],
     generated_at: datetime,
+    charts: Mapping[str, ChartSpec] | None = None,
 ) -> str:
     """Render a validated specification to one offline-capable HTML file."""
 
+    charts = charts or {}
     block_html: list[str] = []
     chart_index = 0
     for block in spec.blocks:
         if isinstance(block, ReportNarrativeBlock):
             block_html.append(_narrative(block))
         elif isinstance(block, ReportMetricsBlock):
-            block_html.append(_metrics(block))
+            block_html.append(_metrics(block, results))
         elif isinstance(block, ReportCalloutBlock):
             block_html.append(_callout(block))
         elif isinstance(block, ReportInfographicBlock):
@@ -561,10 +552,14 @@ def render_report(
             missing = [column for column in columns if column not in result.columns]
             if missing:
                 raise ValueError(
-                    "Report table references unknown columns: "
-                    + ", ".join(missing)
+                    "Report table references unknown columns: " + ", ".join(missing)
                 )
-            rows = result.rows if block.include_all_rows else result.rows[: block.row_limit]
+            rows = result.read_rows(
+                min(result.row_count, 10_000)
+                if block.include_all_rows
+                else block.row_limit,
+                columns=block.columns or None,
+            )
             block_html.append(
                 _table_html(
                     result,
@@ -576,17 +571,19 @@ def render_report(
             )
         elif isinstance(block, ReportChartBlock):
             chart_index += 1
-            result = results[block.chart.result_id]
+            chart = charts[block.chart_id]
+            result = results[chart.result_id]
             block_html.append(
                 _chart(
                     block,
                     result,
                     chart_index=chart_index,
+                    chart=chart,
                     include_plotly=chart_index == 1,
                 )
             )
-        elif isinstance(block, ReportStatisticalBlock):
-            key = block.analysis_id or f"current:{block.parent_result_id}"
+        elif isinstance(block, ReportAnalysisBlock):
+            key = block.analysis_id
             block_html.append(_statistical(block, analyses[key]))
         else:  # pragma: no cover - discriminated union is exhaustive
             raise TypeError(f"Unsupported report block {type(block).__name__}.")
@@ -678,7 +675,7 @@ def render_report(
     )
     csp = _script_csp(content)
     return (
-        "<!doctype html><html lang=\"en\"><head>"
+        '<!doctype html><html lang="en"><head>'
         '<meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f'<meta http-equiv="Content-Security-Policy" content="{escape(csp, quote=True)}">'

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from data_analytics_agent.agents.statistical_analysis.runner import (
+from data_analytics_agent.agents.data_analysis.runner import (
     PythonExecutionLimits,
 )
 from data_analytics_agent.data_sources import (
@@ -75,21 +75,15 @@ class Settings:
             os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
         )
     )
-    data_sources_config_path: Path = field(
-        default_factory=_data_sources_config_path
-    )
+    data_sources_config_path: Path = field(default_factory=_data_sources_config_path)
     api_base_url: str = field(
-        default_factory=lambda: os.getenv(
-            "API_BASE_URL", "http://127.0.0.1:8000"
-        )
+        default_factory=lambda: os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
     )
     sql_timeout_seconds: float = field(
-        default_factory=lambda: float(
-            os.getenv("SQL_TIMEOUT_SECONDS", "10")
-        )
+        default_factory=lambda: float(os.getenv("SQL_TIMEOUT_SECONDS", "10"))
     )
     max_result_rows: int = field(
-        default_factory=lambda: int(os.getenv("SQL_MAX_RESULT_ROWS", "10000"))
+        default_factory=lambda: int(os.getenv("SQL_MAX_RESULT_ROWS", "1000000"))
     )
     model_sample_rows: int = field(
         default_factory=lambda: int(os.getenv("MODEL_SAMPLE_ROWS", "10"))
@@ -98,7 +92,7 @@ class Settings:
         default_factory=lambda: _env_bool("REQUIRE_SQL_APPROVAL", False)
     )
     require_python_approval: bool = field(
-        default_factory=lambda: _env_bool("REQUIRE_PYTHON_APPROVAL", True)
+        default_factory=lambda: _env_bool("REQUIRE_PYTHON_APPROVAL", False)
     )
     enable_data_visualization: bool = field(
         default_factory=lambda: _env_bool(
@@ -106,122 +100,87 @@ class Settings:
             True,
         )
     )
-    enable_statistical_analysis: bool = field(
+    enable_data_analysis: bool = field(
         default_factory=lambda: _env_bool(
-            "ENABLE_STATISTICAL_ANALYSIS",
+            "ENABLE_DATA_ANALYSIS",
             True,
         )
     )
-    enable_reporting: bool = field(
-        default_factory=lambda: _env_bool("ENABLE_REPORTING", True)
-    )
-    statistical_python_timeout_seconds: float = field(
+    analysis_python_timeout_seconds: float = field(
         default_factory=lambda: _env_positive_float(
-            "STATISTICAL_PYTHON_TIMEOUT_SECONDS", 30
+            "ANALYSIS_PYTHON_TIMEOUT_SECONDS", 120
         )
     )
-    statistical_max_stdout_chars: int = field(
+    analysis_max_stdout_chars: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_MAX_STDOUT_CHARS", 10_000)
+    )
+    analysis_max_output_items: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_MAX_OUTPUT_ITEMS", 10)
+    )
+    analysis_max_output_rows: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_MAX_OUTPUT_ROWS", 50)
+    )
+    analysis_max_output_columns: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_MAX_OUTPUT_COLUMNS", 20)
+    )
+    analysis_max_output_chars: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_MAX_OUTPUT_CHARS", 50_000)
+    )
+    analysis_max_figures: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_MAX_FIGURES", 4)
+    )
+    analysis_max_figure_bytes: int = field(
         default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_STDOUT_CHARS", 10_000
+            "ANALYSIS_MAX_FIGURE_BYTES", 1_048_576
         )
     )
-    statistical_max_output_items: int = field(
+    analysis_max_total_figure_bytes: int = field(
         default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_OUTPUT_ITEMS", 10
+            "ANALYSIS_MAX_TOTAL_FIGURE_BYTES", 3_145_728
         )
     )
-    statistical_max_output_rows: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_OUTPUT_ROWS", 50
-        )
+    analysis_max_figure_width: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_MAX_FIGURE_WIDTH", 1_600)
     )
-    statistical_max_output_columns: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_OUTPUT_COLUMNS", 20
-        )
-    )
-    statistical_max_output_chars: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_OUTPUT_CHARS", 50_000
-        )
-    )
-    statistical_max_figures: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_FIGURES", 4
-        )
-    )
-    statistical_max_figure_bytes: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_FIGURE_BYTES", 1_048_576
-        )
-    )
-    statistical_max_total_figure_bytes: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_TOTAL_FIGURE_BYTES", 3_145_728
-        )
-    )
-    statistical_max_figure_width: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_FIGURE_WIDTH", 1_600
-        )
-    )
-    statistical_max_figure_height: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_MAX_FIGURE_HEIGHT", 1_200
-        )
+    analysis_max_figure_height: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_MAX_FIGURE_HEIGHT", 1_200)
     )
     coordinator_model_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "COORDINATOR_MODEL_CALL_LIMIT", 32
-        )
+        default_factory=lambda: _env_positive_int("COORDINATOR_MODEL_CALL_LIMIT", 96)
     )
     coordinator_tool_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "COORDINATOR_TOOL_CALL_LIMIT", 24
-        )
-    )
-    coordinator_task_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "COORDINATOR_TASK_CALL_LIMIT", 12
-        )
+        default_factory=lambda: _env_positive_int("COORDINATOR_TOOL_CALL_LIMIT", 120)
     )
     sql_agent_model_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "SQL_AGENT_MODEL_CALL_LIMIT", 24
-        )
+        default_factory=lambda: _env_positive_int("SQL_AGENT_MODEL_CALL_LIMIT", 48)
     )
     sql_agent_tool_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "SQL_AGENT_TOOL_CALL_LIMIT", 30
-        )
+        default_factory=lambda: _env_positive_int("SQL_AGENT_TOOL_CALL_LIMIT", 64)
     )
-    sql_execute_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "SQL_EXECUTE_CALL_LIMIT", 3
-        )
+    analysis_agent_model_call_limit: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_AGENT_MODEL_CALL_LIMIT", 64)
     )
-    visualization_agent_model_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "VISUALIZATION_AGENT_MODEL_CALL_LIMIT", 12
-        )
-    )
-    visualization_agent_tool_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "VISUALIZATION_AGENT_TOOL_CALL_LIMIT", 16
-        )
-    )
-    statistical_agent_model_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_AGENT_MODEL_CALL_LIMIT", 24
-        )
-    )
-    statistical_agent_tool_call_limit: int = field(
-        default_factory=lambda: _env_positive_int(
-            "STATISTICAL_AGENT_TOOL_CALL_LIMIT", 24
-        )
+    analysis_agent_tool_call_limit: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_AGENT_TOOL_CALL_LIMIT", 80)
     )
     agent_debug_details: bool = field(
         default_factory=lambda: _env_bool("AGENT_DEBUG_DETAILS", False)
+    )
+
+    @property
+    def storage_dir(self) -> Path:
+        return Path(
+            os.getenv("ANALYTICS_STORAGE_DIR", str(self.project_root / ".analytics"))
+        ).resolve()
+
+    max_dataset_bytes: int = field(
+        default_factory=lambda: _env_positive_int("MAX_DATASET_BYTES", 268_435_456)
+    )
+    analysis_budget_seconds: float = field(
+        default_factory=lambda: _env_positive_float("ANALYSIS_BUDGET_SECONDS", 900)
+    )
+    presentation_budget_seconds: float = field(
+        default_factory=lambda: _env_positive_float("PRESENTATION_BUDGET_SECONDS", 120)
     )
 
     def load_catalog(self) -> DataSourceCatalog:
@@ -233,51 +192,44 @@ class Settings:
             default_model_sample_rows=self.model_sample_rows,
         )
 
-    def statistical_execution_limits(self) -> PythonExecutionLimits:
+    def python_execution_limits(self) -> PythonExecutionLimits:
         return PythonExecutionLimits(
-            timeout_seconds=self.statistical_python_timeout_seconds,
-            max_stdout_chars=self.statistical_max_stdout_chars,
-            max_output_items=self.statistical_max_output_items,
-            max_output_rows=self.statistical_max_output_rows,
-            max_output_columns=self.statistical_max_output_columns,
-            max_output_chars=self.statistical_max_output_chars,
-            max_figures=self.statistical_max_figures,
-            max_figure_bytes=self.statistical_max_figure_bytes,
-            max_total_figure_bytes=(
-                self.statistical_max_total_figure_bytes
-            ),
-            max_figure_width=self.statistical_max_figure_width,
-            max_figure_height=self.statistical_max_figure_height,
+            timeout_seconds=self.analysis_python_timeout_seconds,
+            max_dataset_rows=self.max_result_rows,
+            max_dataset_bytes=self.max_dataset_bytes,
+            max_stdout_chars=self.analysis_max_stdout_chars,
+            max_output_items=self.analysis_max_output_items,
+            max_output_rows=self.analysis_max_output_rows,
+            max_output_columns=self.analysis_max_output_columns,
+            max_output_chars=self.analysis_max_output_chars,
+            max_figures=self.analysis_max_figures,
+            max_figure_bytes=self.analysis_max_figure_bytes,
+            max_total_figure_bytes=(self.analysis_max_total_figure_bytes),
+            max_figure_width=self.analysis_max_figure_width,
+            max_figure_height=self.analysis_max_figure_height,
         )
 
     def readiness_errors(self) -> list[str]:
         errors: list[str] = []
         if self.model_provider not in {"openai", "bedrock_converse"}:
-            errors.append(
-                "MODEL_PROVIDER must be openai or bedrock_converse."
-            )
+            errors.append("MODEL_PROVIDER must be openai or bedrock_converse.")
         if self.model_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
             errors.append(
                 "OPENAI_API_KEY is missing. Copy .env.example to .env and add a key."
             )
         if self.sql_timeout_seconds <= 0:
             errors.append("SQL_TIMEOUT_SECONDS must be greater than zero.")
-        if not 1 <= self.max_result_rows <= 10_000:
-            errors.append(
-                "SQL_MAX_RESULT_ROWS must be between 1 and 10000."
-            )
+        if self.max_result_rows < 1:
+            errors.append("SQL_MAX_RESULT_ROWS must be greater than zero.")
         if not 1 <= self.model_sample_rows <= min(self.max_result_rows, 10):
             errors.append(
                 "MODEL_SAMPLE_ROWS must be between 1 and the smaller of 10 "
                 "and SQL_MAX_RESULT_ROWS."
             )
-        if (
-            self.statistical_max_total_figure_bytes
-            < self.statistical_max_figure_bytes
-        ):
+        if self.analysis_max_total_figure_bytes < self.analysis_max_figure_bytes:
             errors.append(
-                "STATISTICAL_MAX_TOTAL_FIGURE_BYTES must be greater than or "
-                "equal to STATISTICAL_MAX_FIGURE_BYTES."
+                "ANALYSIS_MAX_TOTAL_FIGURE_BYTES must be greater than or "
+                "equal to ANALYSIS_MAX_FIGURE_BYTES."
             )
         try:
             self.load_catalog()

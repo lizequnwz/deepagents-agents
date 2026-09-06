@@ -29,9 +29,7 @@ def create_backend(
             )
         configured = Path(raw_path).expanduser()
         database_path = (
-            configured
-            if configured.is_absolute()
-            else project_root / configured
+            configured if configured.is_absolute() else project_root / configured
         )
         backend = SQLiteBackend(database_path)
     elif source.backend_type == "snowflake":
@@ -42,8 +40,7 @@ def create_backend(
             )
         if snowflake_client is None:
             raise ValueError(
-                f"Snowflake source {source.source_id!r} requires a snowlib "
-                "client."
+                f"Snowflake source {source.source_id!r} requires a snowlib client."
             )
         backend = SnowflakeBackend(snowflake_client)
     else:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import csv
 import hashlib
 import io
@@ -11,19 +10,18 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import streamlit as st
 
-from data_analytics_agent.agents.visualization.geocoding import (
+from data_analytics_agent.visualization.geocoding import (
     USLocationResolver,
 )
-from data_analytics_agent.agents.visualization.renderer import build_chart
-from data_analytics_agent.agents.visualization.schemas import ChartSpec
+from data_analytics_agent.visualization.renderer import build_chart
+from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.ui.api_client import APIError, AgentAPIClient
 
 FALLBACK_EXAMPLES = [
     {
         "label": "Summarize the available data",
         "question": (
-            "What business entities and measures are available in this "
-            "data source?"
+            "What business entities and measures are available in this data source?"
         ),
     },
     {
@@ -71,12 +69,8 @@ def consolidate_activity_events(
                 "label": event.get("label", existing.get("label")),
                 "phase": event.get("phase", existing.get("phase")),
                 "agent": event.get("agent") or existing.get("agent"),
-                "created_at": event.get(
-                    "created_at", existing.get("created_at")
-                ),
-                "duration_ms": event.get(
-                    "duration_ms", existing.get("duration_ms")
-                ),
+                "created_at": event.get("created_at", existing.get("created_at")),
+                "duration_ms": event.get("duration_ms", existing.get("duration_ms")),
             }
         )
         existing["tool"] = {
@@ -191,13 +185,11 @@ def render_run_diagnostics_content(
     ]
     if tokens.get("cached_input_tokens") is not None:
         details.append(
-            "cached input "
-            + _format_tokens(tokens.get("cached_input_tokens"))
+            "cached input " + _format_tokens(tokens.get("cached_input_tokens"))
         )
     if tokens.get("reasoning_output_tokens") is not None:
         details.append(
-            "reasoning output "
-            + _format_tokens(tokens.get("reasoning_output_tokens"))
+            "reasoning output " + _format_tokens(tokens.get("reasoning_output_tokens"))
         )
     if partial:
         details.append("token total is partial")
@@ -212,9 +204,7 @@ def render_run_diagnostics_content(
                 "Tokens": int(agent_tokens.get("total_tokens") or 0),
                 "Model calls": int(agent.get("model_calls") or 0),
                 "Model time": _format_duration(agent.get("model_ms")),
-                "Max model call": _format_duration(
-                    agent.get("max_model_call_ms")
-                ),
+                "Max model call": _format_duration(agent.get("max_model_call_ms")),
                 "Tool calls": int(agent.get("tool_calls") or 0),
                 "Tool time": _format_duration(agent.get("tool_ms")),
             }
@@ -303,6 +293,33 @@ def render_debug_states(
                 st.json(snapshot.get("state") or {})
 
 
+def render_activity_summary(events: list[dict[str, Any]]) -> None:
+    """Keep current tools and recent completions visible without opening raw I/O."""
+    calls = [e for e in consolidate_activity_events(events) if e.get("tool")]
+    if not calls:
+        st.caption("Waiting for the agent’s next action…")
+        return
+    pending = [e for e in calls if e.get("phase") == "started"]
+    finished = [e for e in calls if e.get("phase") != "started"]
+    st.caption(f"{len(calls)} tool calls · {len(pending)} running")
+    for event in pending + finished[-5:]:
+        tool = event["tool"]
+        name = tool.get("name") or "tool"
+        arguments = tool.get("input") or {}
+        detail = ""
+        if isinstance(arguments, dict):
+            if name == "task" and arguments.get("subagent_type"):
+                detail = f" → {arguments['subagent_type']}"
+            elif name == "read_file" and arguments.get("file_path"):
+                detail = f" · {arguments['file_path']}"
+        phase = event.get("phase") or "completed"
+        duration = event.get("duration_ms")
+        timing = f" · {_format_duration(duration)}" if duration is not None else ""
+        st.caption(
+            f"{_agent_label(event.get('agent'))} · {name}{detail} · {phase}{timing}"
+        )
+
+
 def render_activity_timeline(
     events: list[dict[str, Any]],
     *,
@@ -352,9 +369,7 @@ def render_activity_timeline(
             type="compact",
             key=f"activity_{key_prefix}_{event_key}",
         ):
-            st.caption(
-                "Input · bounded and recognized-secret-key-redacted"
-            )
+            st.caption("Input · bounded and recognized-secret-key-redacted")
             if tool_input is None:
                 st.caption("This tool call has no input.")
             else:
@@ -363,9 +378,7 @@ def render_activity_timeline(
             if phase == "started":
                 st.caption(":material/pending: Waiting for tool output…")
             else:
-                st.caption(
-                    "Output · bounded and recognized-secret-key-redacted"
-                )
+                st.caption("Output · bounded and recognized-secret-key-redacted")
                 if tool_output is None:
                     st.caption("The tool returned no value.")
                 else:
@@ -432,16 +445,14 @@ def _us_location_resolver() -> USLocationResolver:
 def render_page_header(source: dict[str, Any] | None = None) -> None:
     st.caption(":material/query_stats: CONVERSATIONAL ANALYTICS")
     source_name = source["name"] if source else "your data"
-    source_anchor = (
-        f"ask-questions-about-{source['source_id']}" if source else False
-    )
+    source_anchor = f"ask-questions-about-{source['source_id']}" if source else False
     st.title(
         f"Ask questions about {source_name}",
         anchor=source_anchor,
     )
     st.caption(
-        "Semantic-grounded analytics. SQL and statistical Python are reviewed "
-        "before execution; charts remain result-scoped."
+        "Semantic-grounded analytics. SQL and analytical Python are reviewed "
+        "when enabled; saved evidence supports iterative analysis."
     )
 
 
@@ -460,16 +471,14 @@ def render_sidebar(
     with st.sidebar:
         st.title("Data Analytics Agent")
         st.caption(
-            "Approval-configurable SQL and statistical Python, automatic "
-            "constrained charts, semantic grounding, and local in-memory "
+            "Approval-configurable SQL and analytical Python, automatic "
+            "constrained charts, semantic grounding, and durable local "
             "conversation state."
         )
         ready_sources = [
             source for source in data_sources["sources"] if source["ready"]
         ]
-        ready_by_id = {
-            source["source_id"]: source for source in ready_sources
-        }
+        ready_by_id = {source["source_id"]: source for source in ready_sources}
         st.selectbox(
             "Data source",
             options=list(ready_by_id),
@@ -484,15 +493,13 @@ def render_sidebar(
         selected_source = ready_by_id[st.session_state["source_selector"]]
         st.caption(selected_source["description"])
         st.badge(
-            f"{selected_source['backend_type']} · "
-            f"{selected_source['dialect']}",
+            f"{selected_source['backend_type']} · {selected_source['dialect']}",
             icon=":material/storage:",
             color="blue",
         )
         if source_switch_disabled:
             st.caption(
-                "The data source cannot change while a run or SQL review "
-                "is active."
+                "The data source cannot change while a run or SQL review is active."
             )
 
         new_conversation = st.button(
@@ -519,7 +526,7 @@ def render_sidebar(
                 )
             )
             st.caption(
-                "Statistical Python · "
+                "Python analysis · "
                 + (
                     "review required"
                     if health.get("python_approval_required")
@@ -583,8 +590,8 @@ def render_sidebar(
                 language=None,
             )
             st.caption(
-                "Conversation data is process-local and is cleared when the "
-                "FastAPI server restarts."
+                "Conversations and saved artifacts remain available after restart. "
+                "Unfinished work waits for Resume."
             )
         return new_conversation, diagnostics_slot
 
@@ -609,8 +616,7 @@ def render_empty_state(
 ) -> None:
     examples = source.get("examples") or FALLBACK_EXAMPLES
     question_by_label = {
-        f":material/lightbulb: {item['label']}": item["question"]
-        for item in examples
+        f":material/lightbulb: {item['label']}": item["question"] for item in examples
     }
     with st.container(border=True):
         st.subheader(
@@ -633,6 +639,21 @@ def render_empty_state(
         )
 
 
+@st.cache_data(max_entries=128, show_spinner=False)
+def _saved_result(base_url: str, result_id: str, limit: int = 100):
+    return AgentAPIClient(base_url).get_result(result_id, limit=limit)
+
+
+@st.cache_data(max_entries=32, show_spinner=False)
+def _saved_report(base_url: str, report_id: str):
+    return AgentAPIClient(base_url).get_report(report_id)
+
+
+def clear_artifact_cache() -> None:
+    _saved_result.clear()
+    _saved_report.clear()
+
+
 def _render_result(
     client: AgentAPIClient,
     result_id: str,
@@ -644,7 +665,7 @@ def _render_result(
     expanded: bool = False,
 ) -> None:
     try:
-        result = client.get_result(result_id)
+        result = _saved_result(client.base_url, result_id, 5000 if chart else 100)
     except APIError as exc:
         st.warning(
             f"Saved result is unavailable: {exc}",
@@ -692,15 +713,12 @@ def _render_result(
             width="stretch",
             hide_index=True,
         )
-        st.download_button(
-            "Download CSV",
-            data=rows_to_csv(result["columns"], result["rows"]),
-            file_name=f"{source_id}-result-{result_id[:8]}.csv",
-            mime="text/csv",
-            icon=":material/download:",
-            on_click="ignore",
-            width="content",
-            key=f"download_{result_id}_{widget_key}",
+        st.caption(
+            f"Preview: {len(result['rows'])} of {result['row_count']:,} saved rows."
+        )
+        st.link_button("Download full CSV", client.dataset_download_url(result_id))
+        st.link_button(
+            "Download full Parquet", client.dataset_download_url(result_id, "parquet")
         )
 
     def render_provenance() -> None:
@@ -721,9 +739,7 @@ def _render_result(
         try:
             spec = ChartSpec.model_validate(chart)
             if spec.result_id != result_id:
-                raise ValueError(
-                    "The chart does not reference this saved result."
-                )
+                raise ValueError("The chart does not reference this saved result.")
             rendered = build_chart(
                 spec,
                 result["rows"],
@@ -778,7 +794,7 @@ def _render_report(
 
     report_id = str(reference.get("report_id") or "")
     try:
-        report = client.get_report(report_id)
+        report = _saved_report(client.base_url, report_id)
     except APIError as exc:
         st.warning(
             f"Saved report is unavailable: {exc}",
@@ -818,9 +834,7 @@ def _render_report(
             st.download_button(
                 "Download HTML report",
                 data=html.encode("utf-8"),
-                file_name=(
-                    f"report-{report_id[:8]}-v{report['version']}.html"
-                ),
+                file_name=(f"report-{report_id[:8]}-v{report['version']}.html"),
                 mime="text/html",
                 icon=":material/download:",
                 on_click="ignore",
@@ -867,11 +881,21 @@ def render_turn(
                     st.markdown("**Interpretation**")
                     st.markdown(interpretation)
 
-        statistical = answer.get("statistical_analysis")
-        if statistical:
-            _render_statistical_analysis(
-                statistical,
-                widget_key=turn_key,
+        if answer.get("partial"):
+            st.warning("Partial findings — the investigation is unfinished.")
+        for question in answer.get("unresolved_questions") or []:
+            st.caption(f"Still to investigate: {question}")
+        for index, analysis in enumerate(answer.get("analyses") or []):
+            _render_data_analysis(
+                analysis, client=client, widget_key=f"{turn_key}_{index}"
+            )
+        for index, chart in enumerate(answer.get("charts") or []):
+            _render_result(
+                client,
+                chart["result_id"],
+                widget_key=f"{turn_key}_chart_{index}",
+                source_id=source_id,
+                chart=chart,
             )
 
         report = answer.get("report")
@@ -883,7 +907,7 @@ def render_turn(
             )
 
         results = answer.get("results") or []
-        chart = answer.get("chart")
+        chart = None
         for index, reference in enumerate(results):
             result_id = str(reference.get("result_id") or "")
             label = str(reference.get("short_label") or "SQL evidence")
@@ -900,9 +924,7 @@ def render_turn(
                 widget_key=f"{turn_key}_{index}",
                 source_id=source_id,
                 chart=(
-                    chart
-                    if chart and chart.get("result_id") == result_id
-                    else None
+                    chart if chart and chart.get("result_id") == result_id else None
                 ),
                 reference=reference,
                 expanded=index == 0 and chart is None,
@@ -929,95 +951,48 @@ def render_turn(
             )
 
 
-def _render_statistical_analysis(
-    analysis: dict[str, Any],
-    *,
-    widget_key: str,
+def _render_data_analysis(
+    analysis: dict[str, Any], *, client: AgentAPIClient, widget_key: str
 ) -> None:
-    """Render bounded statistical outputs and inspectable methodology."""
-
-    outcome = str(analysis.get("outcome") or "cannot_analyze")
-    color = "green" if outcome == "analysis_completed" else "orange"
     st.badge(
-        outcome.replace("_", " "),
+        str(analysis.get("outcome", "analysis")).replace("_", " "),
         icon=":material/functions:",
-        color=color,
     )
-
-    for index, output in enumerate(analysis.get("outputs") or []):
-        name = str(output.get("name") or f"Output {index + 1}")
-        kind = output.get("kind")
-        if kind == "table":
-            st.markdown(f"**{name}**")
-            st.dataframe(
-                output.get("rows") or [],
-                column_order=output.get("columns") or None,
-                hide_index=True,
-                width="stretch",
-                key=f"stat_table_{widget_key}_{index}",
-            )
-        elif kind == "figure" and output.get("image_base64"):
-            try:
-                image = base64.b64decode(output["image_base64"], validate=True)
-                st.image(image, caption=name, width="stretch")
-            except (ValueError, TypeError):
-                st.warning(
-                    f"Statistical figure {name!r} could not be decoded.",
-                    icon=":material/warning:",
-                )
-        elif kind == "scalar":
-            st.markdown(f"**{name}:** {output.get('value')}")
-        else:
-            st.markdown(f"**{name}**")
-            st.markdown(str(output.get("text") or ""))
-
-    warnings = list(
-        dict.fromkeys(
-            str(warning).strip()
-            for warning in analysis.get("warnings") or []
-            if str(warning).strip()
-        )
-    )
-    if warnings:
-        with st.expander(
-            f"Statistical notes and limitations ({len(warnings)})",
-            icon=":material/warning:",
-            expanded=False,
-            type="compact",
-            key=f"statistical_warnings_{widget_key}",
+    with st.expander("Analysis methods, outputs, and executed Python", expanded=False):
+        st.markdown(analysis.get("method") or "")
+        for note in (analysis.get("assumptions") or []) + (
+            analysis.get("warnings") or []
         ):
-            for warning in warnings:
-                st.markdown(f"- {warning}")
+            st.caption(note)
+        for index, execution in enumerate(analysis.get("executions") or []):
+            st.markdown(f"**Execution {index + 1}**")
+            st.code(execution.get("executed_python") or "", language="python")
+            st.json(
+                {
+                    "inputs": execution.get("inputs"),
+                    "derived datasets": execution.get("output_datasets"),
+                }
+            )
+            if execution.get("error"):
+                st.warning(execution["error"])
+            for j, output in enumerate(execution.get("outputs") or []):
+                st.caption(output.get("name") or "Output")
+                if output.get("kind") == "table":
+                    st.dataframe(
+                        output.get("rows") or [],
+                        hide_index=True,
+                        key=f"analysis_{widget_key}_{index}_{j}",
+                    )
+                elif output.get("kind") == "figure" and output.get("image_path"):
+                    from pathlib import Path
 
-    with st.expander(
-        "Statistical method and assumptions",
-        icon=":material/science:",
-        expanded=False,
-    ):
-        method = analysis.get("method")
-        if method:
-            st.markdown("**Method**")
-            st.markdown(str(method))
-        assumptions = analysis.get("assumptions") or []
-        if assumptions:
-            st.markdown("**Assumptions**")
-            for assumption in assumptions:
-                st.markdown(f"- {assumption}")
-        interpretation = analysis.get("interpretation")
-        if interpretation:
-            st.markdown("**Interpretation**")
-            st.markdown(str(interpretation))
-
-    with st.expander(
-        "Executed statistical Python and provenance",
-        icon=":material/code:",
-        expanded=False,
-    ):
-        st.caption(
-            f"Parent result · `{str(analysis.get('parent_result_id') or '')}`"
-        )
-        if analysis.get("executed_python"):
-            st.code(analysis["executed_python"], language="python")
+                    st.image(
+                        f"{client.base_url}/api/figures/{Path(output['image_path']).name}"
+                    )
+                else:
+                    st.write(output.get("text") or output.get("value"))
+            for warning in execution.get("warnings") or []:
+                st.caption(warning)
 
 
 def render_pending_user_message(question: str) -> None:
@@ -1133,9 +1108,7 @@ def _render_sql_approval(
                         "filter, grouping, or sort order."
                     ),
                     height=100,
-                    key=(
-                        f"rejection_feedback_{run['run_id']}_{cycle_key}"
-                    ),
+                    key=(f"rejection_feedback_{run['run_id']}_{cycle_key}"),
                 )
                 reject = st.form_submit_button(
                     "Send feedback and revise",
@@ -1302,9 +1275,7 @@ def _render_python_approval(
                         "handling, outputs, or figures."
                     ),
                     height=100,
-                    key=(
-                        f"rejection_feedback_{run['run_id']}_{cycle_key}"
-                    ),
+                    key=(f"rejection_feedback_{run['run_id']}_{cycle_key}"),
                 )
                 reject = st.form_submit_button(
                     "Send feedback and revise",

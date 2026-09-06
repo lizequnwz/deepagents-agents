@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import time
+import pyarrow as pa
+from threading import Event
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 from data_analytics_agent.backends.base import (
-    BackendExecutionResult,
     ColumnInfo,
     SQLExecutionError,
     TableInfo,
-    normalize_result_value,
 )
 from data_analytics_agent.backends.validation import validate_readonly_sql
 
@@ -70,13 +69,6 @@ def _row_value(row: Any, index: int, name: str) -> Any:
     return row[index]
 
 
-def _normalized_row(columns: list[str], row: Any) -> dict[str, Any]:
-    return {
-        column: normalize_result_value(_row_value(row, index, column))
-        for index, column in enumerate(columns)
-    }
-
-
 def _is_query_timeout(exc: Exception) -> bool:
     return isinstance(exc, TimeoutError) or (
         getattr(exc, "errno", None) == _SNOWFLAKE_QUERY_CANCELED_ERRNO
@@ -127,28 +119,35 @@ class SnowflakeBackend:
             if cursor is not None:
                 cursor.close()
 
-    def execute(
-        self,
-        query: str,
-        *,
-        timeout_seconds: float,
-        max_rows: int,
-    ) -> BackendExecutionResult:
+    def execute_batches(
+        self, query: str, *, timeout_seconds: float, cancel: Event | None = None
+    ):
         validate_readonly_sql(query, dialect=self.dialect)
-        started = time.monotonic()
-        cursor: SnowflakeCursor | None = None
+        cursor = None
         try:
-            cursor = self.client.run_query(
-                query,
-                timeout_seconds=timeout_seconds,
-            )
+            cursor = self.client.run_query(query, timeout_seconds=timeout_seconds)
             columns = _column_names(cursor.description)
-            raw_rows = list(cursor.fetchmany(max_rows + 1))
-            truncated = len(raw_rows) > max_rows
-            rows = [
-                _normalized_row(columns, row)
-                for row in raw_rows[:max_rows]
-            ]
+            emitted = False
+            while True:
+                if cancel and cancel.is_set():
+                    raise InterruptedError("SQL stopped.")
+                rows = list(cursor.fetchmany(8192))
+                if not rows:
+                    break
+                emitted = True
+                yield pa.RecordBatch.from_arrays(
+                    [
+                        pa.array([_row_value(row, index, name) for row in rows])
+                        for index, name in enumerate(columns)
+                    ],
+                    names=columns,
+                )
+            if not emitted:
+                yield pa.RecordBatch.from_arrays(
+                    [pa.array([], type=pa.string()) for _ in columns], names=columns
+                )
+        except InterruptedError:
+            raise
         except Exception as exc:
             if _is_query_timeout(exc):
                 raise TimeoutError(
@@ -159,20 +158,11 @@ class SnowflakeBackend:
             if cursor is not None:
                 cursor.close()
 
-        return BackendExecutionResult(
-            columns=columns,
-            rows=rows,
-            truncated=truncated,
-            elapsed_ms=(time.monotonic() - started) * 1_000,
-        )
-
     def get_table_schema(self, table_names: list[str]) -> list[TableInfo]:
         if not table_names:
             return []
 
-        literals = ", ".join(
-            _sql_string_literal(name.upper()) for name in table_names
-        )
+        literals = ", ".join(_sql_string_literal(name.upper()) for name in table_names)
         query = f"""
             SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
             FROM INFORMATION_SCHEMA.COLUMNS
@@ -185,9 +175,7 @@ class SnowflakeBackend:
         actual_names: dict[str, str] = {}
         by_table: dict[str, list[ColumnInfo]] = {}
         for row in rows:
-            raw_table = str(
-                _row_value(row, positions["TABLE_NAME"], "TABLE_NAME")
-            )
+            raw_table = str(_row_value(row, positions["TABLE_NAME"], "TABLE_NAME"))
             folded_name = raw_table.casefold()
             actual_names[folded_name] = raw_table
             by_table.setdefault(folded_name, [])
@@ -218,13 +206,9 @@ class SnowflakeBackend:
                 )
             )
 
-        unknown = [
-            name for name in table_names if name.casefold() not in actual_names
-        ]
+        unknown = [name for name in table_names if name.casefold() not in actual_names]
         if unknown:
-            raise ValueError(
-                "Unknown table(s): " + ", ".join(sorted(unknown))
-            )
+            raise ValueError("Unknown table(s): " + ", ".join(sorted(unknown)))
         return [
             TableInfo(
                 name=actual_names[name.casefold()],

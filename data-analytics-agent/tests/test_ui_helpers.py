@@ -5,13 +5,11 @@ from streamlit.testing.v1 import AppTest
 from data_analytics_agent.ui.components import (
     consolidate_activity_events,
     conversation_url,
-    render_empty_state,
     rows_to_csv,
     python_review_decision,
     sql_review_decision,
 )
 from data_analytics_agent.ui.api_client import (
-    AgentAPIClient,
     api_contract_error,
 )
 
@@ -21,14 +19,12 @@ def test_conversation_url_replaces_existing_thread_and_preserves_query() -> None
         "http://127.0.0.1:8501/?mode=review&thread_id=old",
         "new-thread",
     )
-    assert url == (
-        "http://127.0.0.1:8501/?mode=review&thread_id=new-thread"
-    )
+    assert url == ("http://127.0.0.1:8501/?mode=review&thread_id=new-thread")
 
 
 def test_example_question_prefills_chat_input_without_submitting() -> None:
     app = AppTest.from_string(
-        '''
+        """
 import streamlit as st
 from data_analytics_agent.ui.components import render_empty_state
 
@@ -48,19 +44,15 @@ submitted = st.chat_input(
 )
 if submitted:
     st.write(f"submitted: {submitted}")
-'''
+"""
     ).run()
 
-    app.pills[0].set_value(
-        ":material/lightbulb: Compare regions"
-    ).run()
+    app.pills[0].set_value(":material/lightbulb: Compare regions").run()
 
     assert app.chat_input[0].value == "Which regions grew fastest?"
     assert not any("submitted:" in item.value for item in app.markdown)
 
-    app.chat_input[0].set_value(
-        "Which regions grew fastest last year?"
-    ).run()
+    app.chat_input[0].set_value("Which regions grew fastest last year?").run()
 
     assert any(
         "submitted: Which regions grew fastest last year?" in item.value
@@ -69,7 +61,7 @@ if submitted:
 
 
 def test_api_contract_mismatch_requires_service_restart() -> None:
-    assert api_contract_error({"api_contract_version": 7}) is None
+    assert api_contract_error({"api_contract_version": 9}) is None
     missing = api_contract_error({})
     stale = api_contract_error({"api_contract_version": 2})
 
@@ -78,6 +70,7 @@ def test_api_contract_mismatch_requires_service_restart() -> None:
     assert stale is not None
     assert "contract 2" in stale
     assert "restart `./scripts/start.sh`" in stale
+
 
 def test_rows_to_csv_uses_declared_column_order_and_escaping() -> None:
     content = rows_to_csv(
@@ -98,9 +91,7 @@ def test_rows_to_csv_uses_declared_column_order_and_escaping() -> None:
 def test_unchanged_editor_contents_approve_generated_sql() -> None:
     generated = "SELECT Name FROM Artist LIMIT 5"
 
-    assert sql_review_decision(generated, generated) == {
-        "action": "approve"
-    }
+    assert sql_review_decision(generated, generated) == {"action": "approve"}
 
 
 def test_any_exact_editor_change_submits_edited_sql() -> None:
@@ -172,19 +163,15 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
     assert len(consolidated) == 2
     assert consolidated[0]["phase"] == "completed"
     assert consolidated[0]["label"] == "Loaded skill · query-writing"
-    assert consolidated[0]["tool"]["input"] == {
-        "file_path": "SKILL.md"
-    }
-    assert consolidated[0]["tool"]["output"] == {
-        "content": "skill text"
-    }
+    assert consolidated[0]["tool"]["input"] == {"file_path": "SKILL.md"}
+    assert consolidated[0]["tool"]["output"] == {"content": "skill text"}
     assert consolidated[0]["duration_ms"] == 250
     assert consolidated[1]["tool"]["call_id"] == "call-2"
 
 
 def test_activity_renderer_shows_collapsed_tool_io_and_debug_state() -> None:
     app = AppTest.from_string(
-        '''
+        """
 from data_analytics_agent.ui.components import render_activity_timeline
 
 render_activity_timeline(
@@ -236,7 +223,7 @@ render_activity_timeline(
     }],
     key_prefix="test",
 )
-'''
+"""
     ).run()
 
     assert not app.exception
@@ -260,7 +247,7 @@ render_activity_timeline(
 
 def test_activity_renderer_omits_agent_state_when_not_supplied() -> None:
     app = AppTest.from_string(
-        '''
+        """
 from data_analytics_agent.ui.components import render_activity_timeline
 
 render_activity_timeline(
@@ -279,18 +266,16 @@ render_activity_timeline(
     }],
     key_prefix="normal",
 )
-'''
+"""
     ).run()
 
     assert not app.exception
-    assert [panel.label for panel in app.get("status")] == [
-        "search_semantic_model"
-    ]
+    assert [panel.label for panel in app.get("status")] == ["search_semantic_model"]
 
 
 def test_run_diagnostics_renderer_shows_operational_summary() -> None:
     app = AppTest.from_string(
-        '''
+        """
 from data_analytics_agent.ui.components import render_run_diagnostics
 
 render_run_diagnostics({
@@ -315,7 +300,7 @@ render_run_diagnostics({
         "tool_ms": 300,
     }],
 }, key="test")
-'''
+"""
     ).run()
 
     assert not app.exception
@@ -325,15 +310,12 @@ render_run_diagnostics({
         "Active",
         "Approval wait",
     ]
-    assert any(
-        "token total is partial" in caption.value
-        for caption in app.caption
-    )
+    assert any("token total is partial" in caption.value for caption in app.caption)
 
 
 def test_live_diagnostics_update_inside_one_persistent_expander() -> None:
     app = AppTest.from_string(
-        '''
+        """
 import streamlit as st
 from data_analytics_agent.ui.components import render_run_diagnostics_content
 
@@ -346,44 +328,14 @@ for total_tokens in (100, 125):
         render_run_diagnostics_content({
             "tokens": {"total_tokens": total_tokens},
         })
-'''
+"""
     ).run()
 
     assert not app.exception
-    assert [panel.label for panel in app.get("expander")] == [
-        "Run diagnostics"
-    ]
+    assert [panel.label for panel in app.get("expander")] == ["Run diagnostics"]
     assert app.metric[0].value == "125"
 
 
-def test_api_client_fetches_every_result_page() -> None:
-    class Client(AgentAPIClient):
-        paths: list[str] = []
-
-        def request(self, method, path, **kwargs):
-            del method, kwargs
-            self.paths.append(path)
-            offset = int(path.split("offset=", 1)[1].split("&", 1)[0])
-            all_rows = [{"value": value} for value in range(5)]
-            return {
-                "result_id": "result-1",
-                "source_id": "test",
-                "executed_sql": "SELECT value FROM numbers",
-                "columns": ["value"],
-                "rows": all_rows[offset : offset + 2],
-                "profile": {"scope": "stored_rows"},
-                "row_count": 5,
-                "truncated": False,
-                "elapsed_ms": 1,
-                "offset": offset,
-                "limit": 2,
-            }
-
-    client = Client("http://example.test")
-    result = client.get_result("result-1", page_size=2)
-
-    assert result["rows"] == [{"value": value} for value in range(5)]
-    assert len(client.paths) == 3
 def test_revised_sql_review_has_persistent_context() -> None:
     app = AppTest.from_string(
         """
@@ -406,9 +358,7 @@ render_approval(
     ).run()
 
     assert not app.exception
-    assert app.success[0].value == (
-        "Revised SQL is ready for another review."
-    )
+    assert app.success[0].value == ("Revised SQL is ready for another review.")
     assert any(
         caption.value == "Your feedback: Let's make it top 10."
         for caption in app.caption
@@ -417,7 +367,7 @@ render_approval(
 
 def test_python_review_shows_complete_code_and_dataset_provenance() -> None:
     app = AppTest.from_string(
-        '''
+        """
 from data_analytics_agent.ui.components import render_approval
 
 render_approval({
@@ -438,7 +388,7 @@ render_approval({
         "timeout_seconds": 30,
     },
 })
-'''
+"""
     ).run()
 
     assert not app.exception
@@ -447,173 +397,20 @@ render_approval({
         "analysis_outputs = {'Mean': float(df.value.mean())}"
     )
     assert any(
-        "exact code that will execute" in caption.value
-        for caption in app.caption
+        "exact code that will execute" in caption.value for caption in app.caption
     )
 
 
-def test_completed_statistical_turn_renders_compact_outputs_and_code() -> None:
-    app = AppTest.from_string(
-        '''
-from data_analytics_agent.ui.components import render_turn
-
-class Client:
-    def get_result(self, _result_id):
-        return {
-            "result_id": "result-1",
-            "executed_sql": "SELECT value FROM measurements",
-            "columns": ["value"],
-            "rows": [{"value": 1}, {"value": 2}],
-            "row_count": 2,
-            "truncated": False,
-            "elapsed_ms": 1.0,
-        }
-
-render_turn(
-    Client(),
-        {
-            "user_message": "Estimate the mean",
-            "answer": {
-                "answer": "The estimated mean is 1.5.",
-                "primary_result_id": "result-1",
-                "results": [{
-                    "result_id": "result-1",
-                    "executed_sql": "SELECT value FROM measurements",
-                    "originating_question": "Estimate the mean",
-                    "short_label": "Mean measurements",
-                }],
-            "assumptions": [],
-            "interpretation": "",
-            "statistical_analysis": {
-                "outcome": "analysis_completed",
-                "parent_result_id": "result-1",
-                "executed_python": (
-                    "analysis_outputs = {'Mean': float(df.value.mean())}"
-                ),
-                "answer": "The mean is 1.5.",
-                "method": "Arithmetic mean with a 95% confidence target.",
-                "assumptions": ["Two-sided alpha = 0.05."],
-                "interpretation": "The sample center is 1.5.",
-                "warnings": [
-                    "The largest market has a small sample.",
-                    "The largest market has a small sample.",
-                    "Treat the comparison as exploratory.",
-                ],
-                "outputs": [{"name": "Mean", "kind": "scalar", "value": 1.5}],
-            },
-        },
-        "activities": [],
-    },
-    turn_key="turn-statistics",
-    source_id="test",
-)
-'''
-    ).run()
-
+def test_visible_activity_summary_names_specialists_and_tools():
+    app = AppTest.from_string("""
+from data_analytics_agent.ui.components import render_activity_summary
+render_activity_summary([
+ {"agent":"coordinator","phase":"started","tool":{"call_id":"1","name":"task","input":{"subagent_type":"text-to-sql"}}},
+ {"agent":"text-to-sql","phase":"completed","duration_ms":123,"tool":{"call_id":"2","name":"execute_sql"}},
+])
+""").run()
     assert not app.exception
-    assert any("Mean:** 1.5" in markdown.value for markdown in app.markdown)
-    assert len(app.get("code")) == 2
-    assert any(
-        panel.label == "Statistical notes and limitations (2)"
-        for panel in app.get("status")
-    )
-    assert not app.warning
-    assert sum(
-        "The largest market has a small sample." in markdown.value
-        for markdown in app.markdown
-    ) == 1
-
-
-def test_reused_result_has_unique_widgets_in_each_turn() -> None:
-    app = AppTest.from_string(
-        """
-from data_analytics_agent.ui.components import render_turn
-
-class Client:
-    def get_result(self, _result_id):
-        return {
-            "result_id": "result-1",
-            "executed_sql": "SELECT 1",
-            "columns": ["value"],
-            "rows": [{"value": 1}],
-            "row_count": 1,
-            "truncated": False,
-            "elapsed_ms": 1.0,
-        }
-
-turn = {
-    "user_message": "Show the saved result",
-    "answer": {
-        "answer": "One row.",
-        "primary_result_id": "result-1",
-        "results": [{
-            "result_id": "result-1",
-            "executed_sql": "SELECT 1",
-            "originating_question": "Show the saved result",
-            "short_label": "Saved result",
-        }],
-        "assumptions": [],
-        "interpretation": "",
-    },
-    "activities": [],
-}
-render_turn(Client(), turn, turn_key="turn-1", source_id="test")
-render_turn(Client(), turn, turn_key="turn-2", source_id="test")
-"""
-    ).run()
-
-    assert not app.exception
-    assert len(app.get("download_button")) == 2
-
-
-def test_completed_chart_turn_renders_plotly_and_underlying_data() -> None:
-    app = AppTest.from_string(
-        """
-from data_analytics_agent.ui.components import render_turn
-
-class Client:
-    def get_result(self, _result_id):
-        return {
-            "result_id": "result-1",
-            "executed_sql": "SELECT category, amount FROM metrics",
-            "columns": ["category", "amount"],
-            "rows": [{"category": "A", "amount": 10}],
-            "row_count": 1,
-            "truncated": False,
-            "elapsed_ms": 1.0,
-        }
-
-render_turn(
-    Client(),
-        {
-            "user_message": "Chart it",
-            "answer": {
-                "answer": "One chart.",
-                "primary_result_id": "result-1",
-                "results": [{
-                    "result_id": "result-1",
-                    "executed_sql": "SELECT category, amount FROM metrics",
-                    "originating_question": "Chart it",
-                    "short_label": "Metrics",
-                }],
-            "assumptions": [],
-            "interpretation": "",
-            "chart": {
-                "result_id": "result-1",
-                "chart_type": "bar",
-                "title": "Amount",
-                "x": "category",
-                "y": ["amount"],
-            },
-        },
-        "activities": [],
-    },
-    turn_key="turn-chart",
-    source_id="test",
-)
-"""
-    ).run()
-
-    assert not app.exception
-    assert len(app.get("plotly_chart")) == 1
-    assert len(app.get("download_button")) == 1
+    captions = " ".join(c.value for c in app.caption)
+    assert "task → text-to-sql" in captions
+    assert "execute_sql" in captions and "completed" in captions
+    assert "2 tool calls · 1 running" in captions

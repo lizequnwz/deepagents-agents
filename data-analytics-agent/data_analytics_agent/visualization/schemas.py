@@ -40,16 +40,18 @@ class Palette(StrEnum):
     RED_BLUE = "red_blue"
 
 
-class VisualizationOutcome(StrEnum):
-    CHART_CREATED = "chart_created"
-    NEEDS_SQL_RESHAPE = "needs_sql_reshape"
-    CANNOT_CREATE = "cannot_create"
-
-
 class ChartSpec(VisualizationModel):
     """One reviewed, declarative chart over one saved result."""
 
     result_id: str
+    chart_id: str = ""
+    previous_chart_id: str | None = None
+    source_result_id: str | None = None
+    version: int = 1
+    notes: list[str] = Field(default_factory=list)
+    lower_bound: str | None = None
+    upper_bound: str | None = None
+    error_y: str | None = None
     chart_type: ChartType
     title: str
     x: str | None = None
@@ -63,13 +65,16 @@ class ChartSpec(VisualizationModel):
     latitude: str | None = None
     longitude: str | None = None
     map_mode: Literal["markers", "choropleth"] | None = None
-    location_mode: Literal[
-        "coordinates",
-        "us_zip",
-        "us_city_state",
-        "us_state",
-        "iso_country",
-    ] | None = None
+    location_mode: (
+        Literal[
+            "coordinates",
+            "us_zip",
+            "us_city_state",
+            "us_state",
+            "iso_country",
+        ]
+        | None
+    ) = None
     orientation: Literal["vertical", "horizontal"] = "vertical"
     sort_by: str | None = None
     sort_direction: Literal["ascending", "descending"] = "ascending"
@@ -151,47 +156,25 @@ class ChartSpec(VisualizationModel):
             ChartType.HEATMAP,
         }:
             raise ValueError(f"color is not supported for {chart_type}.")
-        if (
-            self.box_points != "outliers"
-            and chart_type is not ChartType.BOX
-        ):
+        if self.box_points != "outliers" and chart_type is not ChartType.BOX:
             raise ValueError("box_points is supported only for box charts.")
-        if (
-            self.category_limit is not None
-            and chart_type is ChartType.HISTOGRAM
-        ):
-            raise ValueError(
-                "category_limit is not supported for histograms."
-            )
+        if self.category_limit is not None and chart_type is ChartType.HISTOGRAM:
+            raise ValueError("category_limit is not supported for histograms.")
         if self.category_limit is not None and self.sort_by is None:
-            raise ValueError(
-                "category_limit requires an explicit meaningful sort_by."
-            )
+            raise ValueError("category_limit requires an explicit meaningful sort_by.")
         if self.secondary_y is not None:
             if chart_type is not ChartType.BAR:
-                raise ValueError(
-                    "secondary_y is supported only for bar charts."
-                )
+                raise ValueError("secondary_y is supported only for bar charts.")
             if len(self.y) != 1:
-                raise ValueError(
-                    "dual-axis bar charts require exactly one primary y."
-                )
+                raise ValueError("dual-axis bar charts require exactly one primary y.")
             if self.secondary_y == self.y[0]:
-                raise ValueError(
-                    "secondary_y must differ from the primary y."
-                )
+                raise ValueError("secondary_y must differ from the primary y.")
             if self.orientation != "vertical":
-                raise ValueError(
-                    "dual-axis bar charts require vertical orientation."
-                )
+                raise ValueError("dual-axis bar charts require vertical orientation.")
             if self.color is not None:
-                raise ValueError(
-                    "dual-axis bar charts do not support color grouping."
-                )
+                raise ValueError("dual-axis bar charts do not support color grouping.")
         elif self.secondary_y_label is not None:
-            raise ValueError(
-                "secondary_y_label requires a secondary_y column."
-            )
+            raise ValueError("secondary_y_label requires a secondary_y column.")
 
         if chart_type in {
             ChartType.BAR,
@@ -224,55 +207,28 @@ class ChartSpec(VisualizationModel):
                 raise ValueError("map requires map_mode and location_mode.")
             if self.location_mode == "coordinates":
                 if not self.latitude or not self.longitude:
-                    raise ValueError(
-                        "coordinate maps require latitude and longitude."
-                    )
+                    raise ValueError("coordinate maps require latitude and longitude.")
                 if self.location is not None or self.region is not None:
-                    raise ValueError(
-                        "coordinate maps do not use location or region."
-                    )
+                    raise ValueError("coordinate maps do not use location or region.")
             elif not self.location:
-                raise ValueError(
-                    "location-based maps require a location column."
-                )
-            if (
-                self.location_mode != "coordinates"
-                and (
-                    self.latitude is not None
-                    or self.longitude is not None
-                )
+                raise ValueError("location-based maps require a location column.")
+            if self.location_mode != "coordinates" and (
+                self.latitude is not None or self.longitude is not None
             ):
                 raise ValueError(
                     "latitude and longitude are used only by coordinate maps."
                 )
-            if (
-                self.location_mode == "us_city_state"
-                and not self.region
-            ):
-                raise ValueError(
-                    "US city/state maps require a region column."
-                )
-            if (
-                self.location_mode != "us_city_state"
-                and self.region is not None
-            ):
-                raise ValueError(
-                    "region is used only by US city/state maps."
-                )
-            if (
-                self.location_mode == "coordinates"
-                and self.category_limit is not None
-            ):
-                raise ValueError(
-                    "category_limit is not supported for coordinate maps."
-                )
-            if (
-                self.map_mode == "choropleth"
-                and self.location_mode not in {"us_state", "iso_country"}
-            ):
-                raise ValueError(
-                    "choropleth maps support US states or ISO countries."
-                )
+            if self.location_mode == "us_city_state" and not self.region:
+                raise ValueError("US city/state maps require a region column.")
+            if self.location_mode != "us_city_state" and self.region is not None:
+                raise ValueError("region is used only by US city/state maps.")
+            if self.location_mode == "coordinates" and self.category_limit is not None:
+                raise ValueError("category_limit is not supported for coordinate maps.")
+            if self.map_mode == "choropleth" and self.location_mode not in {
+                "us_state",
+                "iso_country",
+            }:
+                raise ValueError("choropleth maps support US states or ISO countries.")
             if self.map_mode == "choropleth" and not self.value:
                 raise ValueError("choropleth maps require a value column.")
             if self.map_mode == "choropleth" and self.color is not None:
@@ -280,14 +236,11 @@ class ChartSpec(VisualizationModel):
                     "choropleth maps use value for color and do not accept "
                     "a color grouping column."
                 )
-            if (
-                self.map_mode == "markers"
-                and self.location_mode not in {
-                    "coordinates",
-                    "us_zip",
-                    "us_city_state",
-                }
-            ):
+            if self.map_mode == "markers" and self.location_mode not in {
+                "coordinates",
+                "us_zip",
+                "us_city_state",
+            }:
                 raise ValueError(
                     "marker maps support coordinates, US ZIP codes, or "
                     "US city/state locations."
@@ -303,34 +256,18 @@ class ChartSpec(VisualizationModel):
             raise ValueError("donut mode is supported only for pie.")
         if self.bin_count is not None and chart_type is not ChartType.HISTOGRAM:
             raise ValueError("bin_count is supported only for histogram.")
-        return self
-
-
-class VisualizationResult(VisualizationModel):
-    """Terminal outcome from one visualization assignment."""
-
-    outcome: VisualizationOutcome = VisualizationOutcome.CHART_CREATED
-    result_id: str | None = None
-    answer: str
-    chart: ChartSpec | None = None
-
-    @model_validator(mode="after")
-    def validate_outcome(self) -> VisualizationResult:
-        if self.outcome is VisualizationOutcome.CHART_CREATED:
-            if self.chart is None:
-                raise ValueError("chart_created requires a chart.")
-            if self.result_id is None:
-                self.result_id = self.chart.result_id
-            elif self.result_id != self.chart.result_id:
-                raise ValueError(
-                    "Visualization result ID must match the chart result ID."
-                )
-        elif self.chart is not None:
+        if bool(self.lower_bound) != bool(self.upper_bound):
             raise ValueError(
-                f"{self.outcome.value} must not include a chart."
+                "Uncertainty bands require both lower_bound and upper_bound."
             )
-        elif self.result_id is None:
-            raise ValueError(
-                f"{self.outcome.value} requires a result_id."
-            )
+        if self.lower_bound and (
+            chart_type is not ChartType.LINE or self.color or len(self.y) != 1
+        ):
+            raise ValueError("Uncertainty bands require a single-series line chart.")
+        if self.error_y and (
+            chart_type not in {ChartType.BAR, ChartType.SCATTER}
+            or self.color
+            or len(self.y) != 1
+        ):
+            raise ValueError("Error bars require a single-series bar or scatter chart.")
         return self

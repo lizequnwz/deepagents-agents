@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import time
 from typing import Any
 
 import streamlit as st
@@ -15,9 +14,10 @@ from data_analytics_agent.ui.api_client import (
     api_contract_error,
 )
 from data_analytics_agent.ui.components import (
+    clear_artifact_cache,
     render_activity_timeline,
+    render_activity_summary,
     render_approval,
-    render_conversation_diagnostics_content,
     render_empty_state,
     render_page_header,
     render_pending_user_message,
@@ -28,12 +28,8 @@ from data_analytics_agent.ui.components import (
 )
 
 load_dotenv()
-API_BASE_URL = os.getenv(
-    "API_BASE_URL", "http://127.0.0.1:8000"
-).rstrip("/")
-APP_BASE_URL = os.getenv(
-    "APP_BASE_URL", "http://127.0.0.1:8501"
-).rstrip("/")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://127.0.0.1:8501").rstrip("/")
 
 st.set_page_config(
     page_title="Data Analytics Agent",
@@ -114,8 +110,7 @@ def get_or_create_conversation(
                 st.session_state["source_selector"] = conversation["source_id"]
             elif (
                 st.session_state.get("source_selector")
-                and st.session_state["source_selector"]
-                != conversation["source_id"]
+                and st.session_state["source_selector"] != conversation["source_id"]
             ):
                 switched_source = st.session_state["source_selector"]
                 new_thread_id = create_conversation(
@@ -123,8 +118,7 @@ def get_or_create_conversation(
                     switched_source,
                 )
                 st.session_state["conversation_notice"] = (
-                    "The data source changed, so a new conversation was "
-                    "started."
+                    "The data source changed, so a new conversation was started."
                 )
                 return (
                     new_thread_id,
@@ -145,6 +139,35 @@ def get_or_create_conversation(
         selected_source = default_source_id
     thread_id = create_conversation(client, selected_source)
     return thread_id, client.get_conversation(thread_id)
+
+
+def request_history_deletion(target: str) -> None:
+    st.session_state.pop("history_deletion_error", None)
+    st.session_state["history_deletion"] = target
+    st.session_state["history_deletion_scope"] = "This conversation"
+
+
+def cancel_history_deletion() -> None:
+    st.session_state.pop("history_deletion", None)
+
+
+def confirm_history_deletion(client: AgentAPIClient, target: str) -> None:
+    try:
+        if target == "all":
+            client.clear_history()
+        else:
+            client.delete_conversation(target)
+        st.session_state.pop("history_deletion", None)
+        st.session_state.pop("history_deletion_error", None)
+        clear_artifact_cache()
+        clear_conversation_state()
+        st.query_params.pop("thread_id", None)
+        st.session_state["current_thread_id"] = None
+        st.session_state["conversation_notice"] = (
+            "History deleted. A new empty conversation is ready."
+        )
+    except APIError as exc:
+        st.session_state["history_deletion_error"] = str(exc)
 
 
 def clear_completed_run(run_id: str) -> None:
@@ -175,133 +198,82 @@ def render_execution_diagnostics(diagnostics: dict[str, Any]) -> None:
             st.json(recent)
 
 
-def poll_run(
-    client: AgentAPIClient,
-    run_id: str,
-    initial_run: dict[str, Any],
-    *,
-    thread_id: str,
-    conversation_diagnostics_slot: Any,
-) -> dict[str, Any]:
-    cursor_key = f"event_cursor_{run_id}"
-    activities_key = f"event_activities_{run_id}"
-    debug_states_key = f"debug_states_{run_id}"
-    cursor = int(st.session_state.get(cursor_key, 0))
-    activities: list[dict[str, Any]] = st.session_state.setdefault(
-        activities_key, []
-    )
-    debug_states: list[dict[str, Any]] = st.session_state.setdefault(
-        debug_states_key, []
-    )
-    run = initial_run if cursor == 0 else client.get_run(
-        run_id, after_event_id=cursor
-    )
-    review_phase = st.session_state.get(f"review_phase_{run_id}")
-    status_by_phase = {
-        "revising_sql": "Feedback sent—revising SQL…",
-        "executing_sql": "Executing reviewed SQL…",
-        "revising_python": "Feedback sent—revising Python…",
-        "executing_python": "Executing reviewed Python…",
-    }
-    initial_status = status_by_phase.get(
-        review_phase,
-        "Agent is working…",
-    )
-
-    with st.status(
-        initial_status,
-        expanded=True,
-        state="running",
-    ) as status_panel:
-        timeline_slot = st.empty()
-        # Replacing this expander during polling resets its frontend open
-        # state. Mount it once and update only the content placeholder.
+@st.fragment(run_every="1s")
+def render_active_run(
+    client: AgentAPIClient, run_id: str, thread_id: str, source_id: str
+):
+    try:
+        run = client.get_run(run_id)
+        state = run["status"]
+        if state == "completed":
+            clear_completed_run(run_id)
+            st.rerun()
+        phases = {
+            "understanding": "Understanding",
+            "retrieving_data": "Retrieving data",
+            "analyzing": "Analyzing",
+            "findings_ready": "Findings ready",
+            "preparing_report": "Preparing report",
+        }
+        label = (
+            "Stopping"
+            if state == "stopping"
+            else phases.get(run.get("phase"), "Understanding")
+        )
+        if state in {"paused", "failed"}:
+            label = f"{state.capitalize()} · {label}"
+        st.markdown(f"**{label}**")
+        render_activity_summary(run.get("events") or [])
+        if run.get("findings"):
+            render_turn(
+                client,
+                {"user_message": run["question"], "answer": run["findings"]},
+                turn_key=f"pending_{run_id}",
+                source_id=source_id,
+            )
+        else:
+            render_pending_user_message(run["question"])
+        if state in {"running", "queued", "approval_required"}:
+            if st.button("Stop", key=f"stop_{run_id}"):
+                client.stop_run(run_id)
+                st.rerun()
+        if state == "approval_required":
+            decision = render_approval(run)
+            if decision:
+                client.submit_decision(run_id, decision)
+                st.rerun()
+        elif state in {"paused", "failed"}:
+            # Re-run once to release the chat input after a stop.
+            if st.session_state.get("active_run_id"):
+                st.session_state["active_run_id"] = None
+                st.rerun()
+            if run.get("error"):
+                st.error(run["error"])
+            st.info(
+                "Work is saved. Resume this investigation or send a correction below."
+            )
+            if st.button("Resume", key=f"resume_{run_id}"):
+                client.resume_run(run_id)
+                st.session_state["active_run_id"] = run_id
+                st.rerun()
+            if run.get("findings") and st.button(
+                "Retry report", key=f"retry_report_{run_id}"
+            ):
+                client.retry_report(run_id)
+                st.session_state["active_run_id"] = run_id
+                st.rerun()
         with st.expander(
-            "Run diagnostics",
-            icon=":material/monitoring:",
-            expanded=False,
-            key=f"live_run_diagnostics_{run_id}",
+            "Execution details", expanded=False, key=f"execution_details_{run_id}"
         ):
-            diagnostics_slot = st.empty()
-        render_version = 0
-
-        while True:
-            timeline_changed = render_version == 0
-            for event in run["events"]:
-                activities.append(event)
-                timeline_changed = True
-                status_panel.update(
-                    label=event["label"], state="running", expanded=True
-                )
-            latest_debug_states = run.get("debug_states") or []
-            if latest_debug_states != debug_states:
-                debug_states[:] = latest_debug_states
-                timeline_changed = True
-            if timeline_changed:
-                render_version += 1
-                timeline_slot.empty()
-                with timeline_slot.container():
-                    render_activity_timeline(
-                        activities,
-                        debug_states=debug_states,
-                        key_prefix=f"live_{run_id}_{render_version}",
-                    )
-            diagnostics_slot.empty()
-            with diagnostics_slot.container():
+            render_activity_timeline(
+                run.get("events") or [], key_prefix=f"live_{run_id}"
+            )
+            with st.expander("Run diagnostics", expanded=False):
                 render_run_diagnostics_content(
-                    run.get("run_diagnostics") or {},
-                    activities=activities,
+                    run.get("run_diagnostics") or {}, activities=run.get("events") or []
                 )
-            live_conversation = client.get_conversation(thread_id)
-            conversation_diagnostics_slot.empty()
-            with conversation_diagnostics_slot.container():
-                render_conversation_diagnostics_content(
-                    live_conversation.get("diagnostics") or {}
-                )
-
-            cursor = int(run["next_event_id"])
-            st.session_state[cursor_key] = cursor
-            state = run["status"]
-
-            if state == "approval_required":
-                review_type = (run.get("approval") or {}).get(
-                    "review_type", "sql"
-                )
-                revised = str(review_phase or "").startswith("revising_")
-                artifact_label = (
-                    "Python" if review_type == "python" else "SQL"
-                )
-                status_panel.update(
-                    label=(
-                        f"Revised {artifact_label} is ready for review"
-                        if revised
-                        else f"{artifact_label} is ready for review"
-                    ),
-                    state="complete",
-                    expanded=False,
-                )
-                if revised:
-                    st.session_state[
-                        f"review_phase_{run_id}"
-                    ] = "revision_ready"
-                return run
-            if state == "completed":
-                status_panel.update(
-                    label="Analysis complete",
-                    state="complete",
-                    expanded=False,
-                )
-                return run
-            if state == "failed":
-                status_panel.update(
-                    label="Analysis failed",
-                    state="error",
-                    expanded=True,
-                )
-                return run
-
-            time.sleep(0.6)
-            run = client.get_run(run_id, after_event_id=cursor)
+    except APIError as exc:
+        st.error(str(exc))
 
 
 initialize_session_state()
@@ -317,10 +289,7 @@ except APIError as exc:
 if health is not None and (contract_error := api_contract_error(health)):
     render_page_header()
     st.error(contract_error, icon=":material/restart_alt:")
-    st.caption(
-        "Restarting the API clears its in-memory conversations and saved "
-        "results. Export anything you need before stopping the services."
-    )
+    st.caption("Saved conversations and artifacts will remain available after restart.")
     st.stop()
 
 try:
@@ -329,18 +298,13 @@ except APIError as exc:
     render_page_header()
     st.error(str(exc), icon=":material/cloud_off:")
     st.caption(
-        "Run `./scripts/start.sh` from the project directory, then refresh "
-        "this page."
+        "Run `./scripts/start.sh` from the project directory, then refresh this page."
     )
     st.stop()
 
-sources_by_id = {
-    source["source_id"]: source for source in data_sources["sources"]
-}
+sources_by_id = {source["source_id"]: source for source in data_sources["sources"]}
 ready_source_ids = {
-    source_id
-    for source_id, source in sources_by_id.items()
-    if source["ready"]
+    source_id for source_id, source in sources_by_id.items() if source["ready"]
 }
 if not ready_source_ids:
     render_page_header()
@@ -369,9 +333,8 @@ except APIError as exc:
     st.stop()
 
 source = sources_by_id[conversation["source_id"]]
-active_run_id = (
-    conversation.get("active_run_id")
-    or st.session_state.get("active_run_id")
+active_run_id = conversation.get("active_run_id") or st.session_state.get(
+    "active_run_id"
 )
 
 new_conversation, conversation_diagnostics_slot = render_sidebar(
@@ -395,6 +358,61 @@ if new_conversation:
         st.rerun()
     except APIError as exc:
         st.sidebar.error(str(exc), icon=":material/error:")
+
+with st.sidebar:
+    with st.expander("Saved conversations", expanded=True):
+        for saved in reversed(client.list_conversations()):
+            if st.button(
+                saved["title"],
+                key=f"saved_{saved['thread_id']}",
+                disabled=saved["thread_id"] == thread_id,
+            ):
+                clear_conversation_state()
+                st.query_params["thread_id"] = saved["thread_id"]
+                st.session_state["current_thread_id"] = None
+                st.rerun()
+
+    with st.expander("Manage history", expanded=False):
+        st.button(
+            "Delete history",
+            key=f"delete_{thread_id}",
+            disabled=bool(active_run_id),
+            on_click=request_history_deletion,
+            args=(thread_id,),
+        )
+        if active_run_id:
+            st.caption("Stop active work before deleting its conversation.")
+        pending = st.session_state.get("history_deletion")
+        if pending and pending != thread_id:
+            st.session_state.pop("history_deletion", None)
+            pending = None
+        if pending:
+            selected_scope = st.radio(
+                "Delete which history?",
+                ["This conversation", "All conversations"],
+                key="history_deletion_scope",
+            )
+            target = "all" if selected_scope == "All conversations" else pending
+            scope = (
+                "all saved conversations" if target == "all" else "this conversation"
+            )
+            st.warning(
+                f"Permanently delete {scope}, including datasets, Python code and outputs, charts, reports, and pending approvals? This cannot be undone."
+            )
+            st.button(
+                "Confirm deletion",
+                key=f"confirm_delete_{target}",
+                type="primary",
+                on_click=confirm_history_deletion,
+                args=(client, target),
+            )
+            if st.session_state.get("history_deletion_error"):
+                st.error(st.session_state["history_deletion_error"])
+            st.button(
+                "Cancel",
+                key="cancel_history_deletion",
+                on_click=cancel_history_deletion,
+            )
 
 render_page_header(source)
 
@@ -424,13 +442,9 @@ if st.session_state.get("last_run_error"):
         icon=":material/error:",
     )
     if st.session_state.get("last_run_diagnostics"):
-        render_execution_diagnostics(
-            st.session_state["last_run_diagnostics"]
-        )
+        render_execution_diagnostics(st.session_state["last_run_diagnostics"])
     failed_activities = st.session_state.get("last_run_activities") or []
-    failed_debug_states = (
-        st.session_state.get("last_run_debug_states") or []
-    )
+    failed_debug_states = st.session_state.get("last_run_debug_states") or []
     if failed_activities or failed_debug_states:
         with st.status(
             "How this run progressed",
@@ -448,102 +462,18 @@ if st.session_state.get("last_run_error"):
             key="last_failed_run_metrics",
         )
 
+latest_run_id = (conversation.get("run_ids") or [None])[-1]
 if active_run_id:
     st.session_state["active_run_id"] = active_run_id
-    try:
-        initial_run = client.get_run(active_run_id)
-        render_pending_user_message(initial_run["question"])
-        active_run = poll_run(
-            client,
-            active_run_id,
-            initial_run,
-            thread_id=thread_id,
-            conversation_diagnostics_slot=conversation_diagnostics_slot,
-        )
-    except APIError as exc:
-        st.error(str(exc), icon=":material/error:")
-        active_run = None
-
-    if active_run and active_run["status"] == "approval_required":
-        revision_feedback = (
-            st.session_state.get(f"review_feedback_{active_run_id}")
-            if st.session_state.get(f"review_phase_{active_run_id}")
-            == "revision_ready"
-            else None
-        )
-        decision = render_approval(
-            active_run,
-            revision_feedback=revision_feedback,
-        )
-        if decision:
-            is_rejection = decision["action"] == "reject"
-            review_type = active_run["approval"].get(
-                "review_type", "sql"
-            )
-            artifact_label = (
-                "Python" if review_type == "python" else "SQL"
-            )
-            spinner_text = (
-                "Sending feedback to the analyst…"
-                if is_rejection
-                else f"Submitting the reviewed {artifact_label}…"
-            )
-            status_text = (
-                f"Feedback sent—revising {artifact_label}."
-                if is_rejection
-                else f"Executing reviewed {artifact_label}."
-            )
-            try:
-                with st.spinner(spinner_text):
-                    client.submit_decision(active_run_id, decision)
-                st.session_state["active_run_id"] = active_run_id
-                st.session_state["review_notice"] = status_text
-                if is_rejection:
-                    st.session_state[
-                        f"review_feedback_{active_run_id}"
-                    ] = decision["feedback"]
-                    st.session_state[
-                        f"review_phase_{active_run_id}"
-                    ] = f"revising_{review_type}"
-                else:
-                    st.session_state.pop(
-                        f"review_feedback_{active_run_id}",
-                        None,
-                    )
-                    st.session_state[
-                        f"review_phase_{active_run_id}"
-                    ] = f"executing_{review_type}"
-                st.rerun()
-            except APIError as exc:
-                st.error(str(exc), icon=":material/error:")
-    elif active_run and active_run["status"] == "failed":
-        st.session_state["last_run_error"] = (
-            active_run.get("error") or "The agent run failed."
-        )
-        st.session_state["last_run_diagnostics"] = active_run.get(
-            "diagnostics"
-        )
-        st.session_state["last_run_activities"] = list(
-            st.session_state.get(
-                f"event_activities_{active_run_id}",
-                active_run.get("events") or [],
-            )
-        )
-        st.session_state["last_run_debug_states"] = active_run.get(
-            "debug_states"
-        )
-        st.session_state["last_run_metrics"] = active_run.get(
-            "run_diagnostics"
-        )
-        clear_completed_run(active_run_id)
-        st.rerun()
-    elif active_run and active_run["status"] == "completed":
-        clear_completed_run(active_run_id)
-        st.rerun()
+    render_active_run(client, active_run_id, thread_id, conversation["source_id"])
+elif latest_run_id:
+    latest_run = client.get_run(latest_run_id)
+    if latest_run["status"] in {"paused", "failed"}:
+        render_active_run(client, latest_run_id, thread_id, conversation["source_id"])
 
 if not active_run_id:
     chat_input_key = f"chat_input_{thread_id}"
-    if not conversation["turns"]:
+    if not conversation["turns"] and not conversation.get("run_ids"):
         render_empty_state(
             thread_id,
             source,

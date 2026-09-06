@@ -4,9 +4,7 @@ from pathlib import Path
 
 import yaml
 
-SEMANTIC_PATH = (
-    Path(__file__).resolve().parents[1] / "semantic" / "chinook.osi.yaml"
-)
+SEMANTIC_PATH = Path(__file__).resolve().parents[1] / "semantic" / "chinook.osi.yaml"
 FINANCIAL_SEMANTIC_PATH = (
     Path(__file__).resolve().parents[1] / "semantic" / "financial.osi.yaml"
 )
@@ -143,9 +141,7 @@ def test_osi_model_covers_complete_chinook_schema() -> None:
     assert len(models) == 1
     model = models[0]
     datasets = {dataset["name"]: dataset for dataset in model["datasets"]}
-    assert {dataset["source"] for dataset in datasets.values()} == set(
-        EXPECTED_SOURCES
-    )
+    assert {dataset["source"] for dataset in datasets.values()} == set(EXPECTED_SOURCES)
 
     for dataset in datasets.values():
         physical_fields = {
@@ -164,17 +160,11 @@ def test_osi_model_covers_complete_chinook_schema() -> None:
     for relationship in model["relationships"]:
         assert relationship["from"] in datasets
         assert relationship["to"] in datasets
-        assert len(relationship["from_columns"]) == len(
-            relationship["to_columns"]
-        )
+        assert len(relationship["from_columns"]) == len(relationship["to_columns"])
         from_fields = {
-            field["name"]
-            for field in datasets[relationship["from"]]["fields"]
+            field["name"] for field in datasets[relationship["from"]]["fields"]
         }
-        to_fields = {
-            field["name"]
-            for field in datasets[relationship["to"]]["fields"]
-        }
+        to_fields = {field["name"] for field in datasets[relationship["to"]]["fields"]}
         assert set(relationship["from_columns"]) <= from_fields
         assert set(relationship["to_columns"]) <= to_fields
 
@@ -202,9 +192,7 @@ def test_financial_osi_model_covers_complete_schema_and_business_context() -> No
             field["expression"]["dialects"][0]["expression"]
             for field in dataset["fields"]
         }
-        assert physical_fields == EXPECTED_FINANCIAL_SOURCES[
-            dataset["source"]
-        ]
+        assert physical_fields == EXPECTED_FINANCIAL_SOURCES[dataset["source"]]
         assert all(field["description"] for field in dataset["fields"])
         assert all(
             field["expression"]["dialects"][0]["dialect"] == "ANSI_SQL"

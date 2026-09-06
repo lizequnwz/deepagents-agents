@@ -22,7 +22,7 @@ class ExampleQuestionConfig(RegistryModel):
 
 class ExecutionLimitOverrides(RegistryModel):
     timeout_seconds: float | None = Field(default=None, gt=0)
-    max_result_rows: int | None = Field(default=None, ge=1, le=10_000)
+    max_result_rows: int | None = Field(default=None, ge=1)
     model_sample_rows: int | None = Field(default=None, ge=1, le=10)
 
 
@@ -39,9 +39,7 @@ class SourceDefinition(RegistryModel):
     dialect: str
     target: dict[str, Any] = Field(default_factory=dict)
     examples: list[ExampleQuestionConfig] = Field(default_factory=list)
-    limits: ExecutionLimitOverrides = Field(
-        default_factory=ExecutionLimitOverrides
-    )
+    limits: ExecutionLimitOverrides = Field(default_factory=ExecutionLimitOverrides)
 
 
 class RegistryDocument(RegistryModel):
@@ -117,7 +115,7 @@ def load_data_source_catalog(
     *,
     config_path: Path | None = None,
     default_timeout_seconds: float = 10,
-    default_max_result_rows: int = 10_000,
+    default_max_result_rows: int = 1_000_000,
     default_model_sample_rows: int = 10,
 ) -> DataSourceCatalog:
     """Load and resolve the trusted source registry."""
@@ -129,9 +127,7 @@ def load_data_source_catalog(
         registry_path = project_root / registry_path
     registry_path = registry_path.resolve()
     if not registry_path.is_file():
-        raise FileNotFoundError(
-            f"Data-source registry not found at {registry_path}."
-        )
+        raise FileNotFoundError(f"Data-source registry not found at {registry_path}.")
 
     raw_document = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
     document = RegistryDocument.model_validate(raw_document)
@@ -158,21 +154,16 @@ def load_data_source_catalog(
                 f"{definition.backend!r}."
             ) from exc
 
-        semantic_path = _resolve_semantic_path(
-            project_root, definition.semantic_model
-        )
+        semantic_path = _resolve_semantic_path(project_root, definition.semantic_model)
         limits = ExecutionLimits(
             timeout_seconds=(
-                definition.limits.timeout_seconds
-                or default_timeout_seconds
+                definition.limits.timeout_seconds or default_timeout_seconds
             ),
             max_result_rows=(
-                definition.limits.max_result_rows
-                or default_max_result_rows
+                definition.limits.max_result_rows or default_max_result_rows
             ),
             model_sample_rows=(
-                definition.limits.model_sample_rows
-                or default_model_sample_rows
+                definition.limits.model_sample_rows or default_model_sample_rows
             ),
         )
         if limits.model_sample_rows > limits.max_result_rows:

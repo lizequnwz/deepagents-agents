@@ -1,1963 +1,304 @@
-"""Non-token-streaming Deep Agent run lifecycle and HITL resume handling."""
+"""Durable execution lifecycle; tools register evidence directly."""
 
 from __future__ import annotations
-
-from collections import deque
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, is_dataclass
+import asyncio
 import json
-import logging
-import re
-from typing import Any
-
-from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import AIMessage, ToolMessage
-from langchain_core.outputs import ChatGeneration, LLMResult
-from langchain.agents.middleware.model_call_limit import (
-    ModelCallLimitExceededError,
-)
-from langchain.agents.middleware.tool_call_limit import (
-    ToolCallLimitExceededError,
-)
-from langgraph.types import Command
-from pydantic import BaseModel
-
-from data_analytics_agent.agents.statistical_analysis.runner import (
-    PythonExecutionLimits,
-)
-from data_analytics_agent.agents.statistical_analysis.schemas import (
-    PythonExecutionResult,
-    StatisticalAnalysisOutcome,
-    StatisticalAnalysisResult,
-)
-from data_analytics_agent.agents.visualization.schemas import (
-    ChartSpec,
-    VisualizationOutcome,
-    VisualizationResult,
-)
-from data_analytics_agent.agents.visualization.validation import (
-    validate_chart_spec,
-)
-from data_analytics_agent.data_sources import DataSource
-from data_analytics_agent.reporting.schemas import ReportToolResult
+import time
+from data_analytics_agent.approvals import _extract_approval
+from data_analytics_agent.diagnostics import RunDiagnosticsCallback
+from data_analytics_agent.presentation import resolve_answer
+from data_analytics_agent.reporting.schemas import ReportReference, ReportSpec
+from data_analytics_agent.reporting.tools import generate_report
 from data_analytics_agent.schemas import (
-    ActivityTool,
-    AgentStateSnapshot,
-    ApprovalRequest,
-    ChatTurn,
     CoordinatorResponse,
-    Decision,
-    ExecutionBudgetDiagnostics,
-    FinalAnswer,
-    ResultReference,
+    ChatTurn,
     RunStatus,
-    SQLAnalysisResult,
-    SQLAnalysisResponse,
-    ToolCallDiagnostic,
-)
-from data_analytics_agent.stores import (
-    ConversationStore,
-    ReportStore,
-    ResultStore,
-    RunStore,
-    StatisticalAnalysisStore,
-    StoreNotFound,
 )
 
-logger = logging.getLogger(__name__)
 
-RESHAPE_ACTIVITY_LABEL = "Chart data needs SQL reshaping"
-TOOL_VALUE_CHAR_LIMIT = 4_000
-TOOL_DIAGNOSTIC_TOTAL_CHAR_LIMIT = 25_000
-DEBUG_STATE_CHAR_LIMIT = 20_000
-DEBUG_STATE_STRING_LIMIT = 2_000
-DEBUG_STATE_MESSAGE_LIMIT = 10
-_SECRET_KEYS = {
-    "api_key",
-    "apikey",
-    "authorization",
-    "connection_string",
-    "cookie",
-    "credentials",
-    "password",
-    "private_key",
-    "refresh_token",
-    "secret",
-    "token",
-    "access_token",
-}
-
-
-def _is_secret_key(value: Any) -> bool:
-    normalized = re.sub(r"[^a-z0-9]+", "_", str(value).lower()).strip("_")
-    return normalized in _SECRET_KEYS or normalized.endswith("_api_key")
-
-
-def _sanitize_tool_value(value: Any, *, depth: int = 0) -> Any:
-    """Convert a tool payload to JSON-safe, secret-redacted data."""
-
-    if depth >= 8:
-        return "[maximum depth reached]"
-    if isinstance(value, BaseModel):
-        value = value.model_dump(mode="json")
-    elif is_dataclass(value) and not isinstance(value, type):
-        value = asdict(value)
-    if isinstance(value, Mapping):
-        sanitized: dict[str, Any] = {}
-        items = list(value.items())
-        for key, item in items[:50]:
-            key_text = str(key)
-            sanitized[key_text] = (
-                "[REDACTED]"
-                if _is_secret_key(key_text)
-                else _sanitize_tool_value(item, depth=depth + 1)
-            )
-        if len(items) > 50:
-            sanitized["__truncated_items__"] = len(items) - 50
-        return sanitized
-    if isinstance(value, Sequence) and not isinstance(
-        value, (str, bytes, bytearray)
-    ):
-        items = list(value)
-        sanitized_items = [
-            _sanitize_tool_value(item, depth=depth + 1)
-            for item in items[:50]
-        ]
-        if len(items) > 50:
-            sanitized_items.append(
-                f"[{len(items) - 50} additional items truncated]"
-            )
-        return sanitized_items
-    if isinstance(value, bytes | bytearray):
-        return f"[{type(value).__name__} containing {len(value)} bytes]"
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    return str(value)
-
-
-def _bounded_tool_value(value: Any) -> Any:
-    """Return structured tool data when small, otherwise a bounded preview."""
-
-    sanitized = _sanitize_tool_value(value)
-    serialized = json.dumps(
-        sanitized,
-        ensure_ascii=False,
-        sort_keys=True,
-        default=str,
-    )
-    if len(serialized) <= TOOL_VALUE_CHAR_LIMIT:
-        return sanitized
-    omitted = len(serialized) - TOOL_VALUE_CHAR_LIMIT
-    return {
-        "preview": serialized[:TOOL_VALUE_CHAR_LIMIT],
-        "truncated_characters": omitted,
-    }
-
-
-def _serialize_tool_value(value: Any) -> str | None:
-    if value is None:
-        return None
-    serialized = json.dumps(
-        _sanitize_tool_value(value),
-        ensure_ascii=False,
-        sort_keys=True,
-        default=str,
-    )
-    if len(serialized) <= TOOL_VALUE_CHAR_LIMIT:
-        return serialized
-    omitted = len(serialized) - TOOL_VALUE_CHAR_LIMIT
-    suffix = f"… [{omitted} characters truncated]"
-    return serialized[: TOOL_VALUE_CHAR_LIMIT - len(suffix)] + suffix
-
-
-def _tool_output_is_error(value: Any) -> bool:
-    """Recognize handled tool failures returned as completed observations."""
-
-    if isinstance(value, ToolMessage):
-        return value.status == "error"
-    if isinstance(value, Mapping):
-        return value.get("status") == "error"
-    return False
-
-
-def _tool_output_is_approval_interrupt(value: Any) -> bool:
-    """Recognize the expected task interruption used for human review."""
-
-    if not isinstance(value, Mapping):
-        return False
-    error = value.get("error")
-    if not isinstance(error, str):
-        return False
-    return "Interrupt(value=" in error and "action_requests" in error
-
-
-def _agent_name(graph_name: str) -> str | None:
-    normalized = graph_name.casefold()
-    if "text-to-sql" in normalized:
-        return "text-to-sql"
-    if "data-visualization" in normalized:
-        return "data-visualization"
-    if "statistical-analysis" in normalized:
-        return "statistical-analysis"
-    if "data-analytics-agent" in normalized:
-        return "coordinator"
-    return None
-
-
-def _agent_for_namespace(
-    namespace: Sequence[Any],
-    *,
-    fallback: str = "coordinator",
-) -> str:
-    """Resolve a stable product agent name from a v3 event namespace."""
-
-    if not namespace:
-        return "coordinator"
-    joined = "/".join(str(item) for item in namespace)
-    return _agent_name(joined) or fallback
-
-
-def _agent_for_model_metadata(metadata: Mapping[str, Any] | None) -> str:
-    if not metadata:
-        return "unknown"
-    candidate = metadata.get("lc_agent_name")
-    if isinstance(candidate, str):
-        return _agent_name(candidate) or "unknown"
-    return "unknown"
-
-
-class RunDiagnosticsCallback(BaseCallbackHandler):
-    """Aggregate completed model-call diagnostics into the current run."""
-
-    def __init__(self, runs: RunStore, run_id: str) -> None:
-        super().__init__()
-        self.runs = runs
-        self.run_id = run_id
-
-    def on_chat_model_start(
-        self,
-        serialized: dict[str, Any],
-        messages: list[list[Any]],
-        *,
-        run_id: Any,
-        metadata: dict[str, Any] | None = None,
-        **kwargs: Any,
-    ) -> None:
-        del serialized, messages, kwargs
-        self.runs.start_model_call(
-            self.run_id,
-            str(run_id),
-            agent=_agent_for_model_metadata(metadata),
-        )
-
-    def on_llm_end(
-        self,
-        response: LLMResult,
-        *,
-        run_id: Any,
-        **kwargs: Any,
-    ) -> None:
-        del kwargs
-        usage = None
-        try:
-            generation = response.generations[0][0]
-        except IndexError:
-            generation = None
-        if isinstance(generation, ChatGeneration):
-            message = generation.message
-            if isinstance(message, AIMessage):
-                usage = message.usage_metadata
-        self.runs.finish_model_call(
-            self.run_id,
-            str(run_id),
-            usage=usage,
-        )
-
-    def on_llm_error(
-        self,
-        error: BaseException,
-        *,
-        run_id: Any,
-        **kwargs: Any,
-    ) -> None:
-        del error, kwargs
-        self.runs.finish_model_call(
-            self.run_id,
-            str(run_id),
-            usage=None,
-            failed=True,
-        )
-
-
-def _log_run_summary(event: str, snapshot: Any) -> None:
-    diagnostics = snapshot.run_diagnostics
-    logger.info(
-        "%s run_id=%s thread_id=%s status=%s total_tokens=%d "
-        "token_usage_partial=%s model_calls=%d tool_calls=%d elapsed_ms=%d "
-        "active_ms=%d approval_wait_ms=%d",
-        event,
-        snapshot.run_id,
-        snapshot.thread_id,
-        snapshot.status.value,
-        diagnostics.tokens.total_tokens,
-        diagnostics.token_usage_partial,
-        diagnostics.model_calls,
-        diagnostics.tool_calls,
-        diagnostics.elapsed_ms,
-        diagnostics.active_ms,
-        diagnostics.approval_wait_ms,
-    )
-    if snapshot.error:
-        logger.error(
-            "run.error run_id=%s error=%s",
-            snapshot.run_id,
-            _safe_activity_value(snapshot.error, limit=1_000),
-        )
-
-
-def _log_agent_summaries(snapshot: Any) -> None:
-    for agent in snapshot.run_diagnostics.agents:
-        logger.info(
-            "agent.summary run_id=%s agent=%s total_tokens=%d "
-            "token_usage_partial=%s model_calls=%d model_call_errors=%d "
-            "model_ms=%d max_model_call_ms=%d tool_calls=%d "
-            "tool_call_errors=%d tool_ms=%d",
-            snapshot.run_id,
-            agent.agent,
-            agent.tokens.total_tokens,
-            bool(agent.model_calls_missing_usage),
-            agent.model_calls,
-            agent.model_call_errors,
-            agent.model_ms,
-            agent.max_model_call_ms,
-            agent.tool_calls,
-            agent.tool_call_errors,
-            agent.tool_ms,
-        )
-
-
-def _sanitize_state_snapshot(
-    value: Mapping[str, Any],
-    *,
-    agent: str,
-    namespace: Sequence[Any],
-) -> AgentStateSnapshot:
-    """Create a bounded state view suitable only for trusted debug mode."""
-
-    stats = {"omitted_items": 0, "omitted_messages": 0, "truncated": False}
-
-    def sanitize(item: Any, *, depth: int = 0) -> Any:
-        if depth >= 8:
-            stats["omitted_items"] += 1
-            stats["truncated"] = True
-            return "[maximum depth reached]"
-        if isinstance(item, BaseModel):
-            item = item.model_dump(mode="json")
-        elif is_dataclass(item) and not isinstance(item, type):
-            item = asdict(item)
-        if isinstance(item, Mapping):
-            clean: dict[str, Any] = {}
-            pairs = list(item.items())
-            for key, nested in pairs[:50]:
-                key_text = str(key)
-                clean[key_text] = (
-                    "[REDACTED]"
-                    if _is_secret_key(key_text)
-                    else sanitize(nested, depth=depth + 1)
-                )
-            if len(pairs) > 50:
-                omitted = len(pairs) - 50
-                stats["omitted_items"] += omitted
-                stats["truncated"] = True
-                clean["__truncated_items__"] = omitted
-            return clean
-        if isinstance(item, Sequence) and not isinstance(
-            item, (str, bytes, bytearray)
-        ):
-            items = list(item)
-            clean_items = [
-                sanitize(nested, depth=depth + 1) for nested in items[:25]
-            ]
-            if len(items) > 25:
-                omitted = len(items) - 25
-                stats["omitted_items"] += omitted
-                stats["truncated"] = True
-                clean_items.append(f"[{omitted} additional items truncated]")
-            return clean_items
-        if isinstance(item, bytes | bytearray):
-            return f"[{type(item).__name__} containing {len(item)} bytes]"
-        if isinstance(item, str):
-            if len(item) <= DEBUG_STATE_STRING_LIMIT:
-                return item
-            stats["omitted_items"] += 1
-            stats["truncated"] = True
-            omitted = len(item) - DEBUG_STATE_STRING_LIMIT
-            return (
-                item[:DEBUG_STATE_STRING_LIMIT]
-                + f"… [{omitted} characters truncated]"
-            )
-        if item is None or isinstance(item, int | float | bool):
-            return item
-        return str(item)
-
-    clean_state: dict[str, Any] = {}
-    state_items = list(value.items())
-    for key, item in state_items[:50]:
-        key_text = str(key)
-        if _is_secret_key(key_text):
-            clean_state[key_text] = "[REDACTED]"
-            continue
-        if (
-            key_text == "messages"
-            and isinstance(item, Sequence)
-            and not isinstance(item, (str, bytes, bytearray))
-        ):
-            messages = list(item)
-            omitted = max(0, len(messages) - DEBUG_STATE_MESSAGE_LIMIT)
-            stats["omitted_messages"] += omitted
-            if omitted:
-                stats["truncated"] = True
-            clean_state[key_text] = [
-                sanitize(message, depth=1)
-                for message in messages[-DEBUG_STATE_MESSAGE_LIMIT:]
-            ]
-            continue
-        if key_text == "memory_contents" and isinstance(item, Mapping):
-            clean_state[key_text] = {
-                str(path): {"characters": len(str(contents))}
-                for path, contents in list(item.items())[:25]
-            }
-            if len(item) > 25:
-                omitted = len(item) - 25
-                stats["omitted_items"] += omitted
-                stats["truncated"] = True
-            continue
-        if (
-            key_text == "skills_metadata"
-            and isinstance(item, Sequence)
-            and not isinstance(item, (str, bytes, bytearray))
-        ):
-            skills: list[dict[str, Any]] = []
-            for metadata in list(item)[:25]:
-                raw = (
-                    metadata.model_dump(mode="json")
-                    if isinstance(metadata, BaseModel)
-                    else metadata
-                )
-                if not isinstance(raw, Mapping):
-                    skills.append({"value": sanitize(raw, depth=1)})
-                    continue
-                skills.append(
-                    {
-                        field: sanitize(raw[field], depth=1)
-                        for field in ("name", "path", "source")
-                        if field in raw
-                    }
-                )
-            clean_state[key_text] = skills
-            if len(item) > 25:
-                omitted = len(item) - 25
-                stats["omitted_items"] += omitted
-                stats["truncated"] = True
-            continue
-        clean_state[key_text] = sanitize(item, depth=1)
-    if len(state_items) > 50:
-        omitted = len(state_items) - 50
-        stats["omitted_items"] += omitted
-        stats["truncated"] = True
-        clean_state["__truncated_fields__"] = omitted
-
-    def serialized_length() -> int:
-        return len(
-            json.dumps(clean_state, ensure_ascii=False, default=str)
-        )
-
-    protected = {"thread_id", "run_id", "source_id", "question"}
-    while serialized_length() > DEBUG_STATE_CHAR_LIMIT:
-        candidates = [
-            key
-            for key in clean_state
-            if key not in protected
-            and clean_state[key] != "[omitted: snapshot size limit]"
-        ]
-        if not candidates:
-            break
-        largest = max(
-            candidates,
-            key=lambda key: len(
-                json.dumps(clean_state[key], ensure_ascii=False, default=str)
-            ),
-        )
-        clean_state[largest] = "[omitted: snapshot size limit]"
-        stats["omitted_items"] += 1
-        stats["truncated"] = True
-
-    return AgentStateSnapshot(
-        agent=agent,
-        namespace=[str(item) for item in namespace],
-        state=clean_state,
-        truncated=bool(stats["truncated"]),
-        omitted_items=int(stats["omitted_items"]),
-        omitted_messages=int(stats["omitted_messages"]),
-    )
-
-
-def _record_tool_event(
-    events: deque[dict[str, Any]],
-    data: dict[str, Any],
-    *,
-    agent: str,
-) -> None:
-    event_type = data.get("event")
-    tool_call_id = str(data.get("tool_call_id") or "")
-    if event_type == "tool-started":
-        events.append(
-            {
-                "tool_call_id": tool_call_id,
-                "agent": agent,
-                "tool_name": str(data.get("tool_name") or "unknown"),
-                "input": data.get("input"),
-                "output": None,
-                "error": None,
-            }
-        )
-        return
-    if event_type not in {"tool-finished", "tool-error"}:
-        return
-    matching = next(
-        (
-            item
-            for item in reversed(events)
-            if tool_call_id and item["tool_call_id"] == tool_call_id
-        ),
-        None,
-    )
-    if matching is None:
-        matching = {
-            "tool_call_id": tool_call_id,
-            "agent": agent,
-            "tool_name": str(data.get("tool_name") or "unknown"),
-            "input": None,
-            "output": None,
-            "error": None,
-        }
-        events.append(matching)
-    if event_type == "tool-finished":
-        matching["output"] = data.get("output")
-    else:
-        matching["error"] = str(data.get("message") or "Tool call failed.")
-
-
-def _debug_tool_calls(
-    events: deque[dict[str, Any]],
-    *,
-    agent: str,
-) -> list[ToolCallDiagnostic]:
-    matching = [item for item in events if item["agent"] == agent]
-    if not matching:
-        matching = list(events)
-    selected: list[ToolCallDiagnostic] = []
-    total_chars = 0
-    for item in reversed(matching):
-        diagnostic = ToolCallDiagnostic(
-            tool_name=item["tool_name"],
-            input=_serialize_tool_value(item.get("input")),
-            output=_serialize_tool_value(item.get("output")),
-            error=_serialize_tool_value(item.get("error")),
-        )
-        size = len(diagnostic.model_dump_json(exclude_none=True))
-        if total_chars + size > TOOL_DIAGNOSTIC_TOTAL_CHAR_LIMIT:
-            break
-        selected.append(diagnostic)
-        total_chars += size
-    return list(reversed(selected))
-
-
-def _budget_diagnostics(
-    exc: ModelCallLimitExceededError | ToolCallLimitExceededError,
-    *,
-    run_id: str,
-    agent: str,
-    events: deque[dict[str, Any]],
-    include_debug_details: bool,
-) -> ExecutionBudgetDiagnostics:
-    if isinstance(exc, ModelCallLimitExceededError):
-        budget_type = "model_calls"
-        tool_name = None
-        attempted_count = exc.thread_count + 1
-        limit = exc.thread_limit or exc.run_limit
-    else:
-        budget_type = "tool_calls"
-        tool_name = exc.tool_name
-        attempted_count = exc.thread_count
-        limit = exc.thread_limit or exc.run_limit
-    assert limit is not None
-    return ExecutionBudgetDiagnostics(
-        agent=agent,
-        budget_type=budget_type,
-        limit=limit,
-        attempted_count=attempted_count,
-        run_id=run_id,
-        tool_name=tool_name,
-        recent_tool_calls=(
-            _debug_tool_calls(events, agent=agent)
-            if include_debug_details
-            else []
-        ),
-    )
-
-
-def _budget_error_message(
-    diagnostics: ExecutionBudgetDiagnostics,
-) -> str:
-    """Explain which bounded agent loop stopped instead of blaming the user."""
-
-    budget = diagnostics.budget_type.replace("_", " ")
-    target = diagnostics.agent
-    if diagnostics.tool_name:
-        target = f"{target} tool {diagnostics.tool_name!r}"
-    return (
-        f"The {target} exceeded its {budget} execution budget "
-        f"({diagnostics.attempted_count} attempted; limit "
-        f"{diagnostics.limit}) and was stopped before completion. "
-        "This usually indicates an internal retry loop; review the execution "
-        "diagnostics before retrying."
-    )
-
-
-def _single_decision(
-    approval: ApprovalRequest,
-    decisions: list[Decision],
-) -> Decision:
-    if len(decisions) != 1:
-        raise ValueError("Exactly one decision is required for this review.")
-    decision = decisions[0]
-    if decision.action not in approval.allowed_decisions:
-        raise ValueError(f"Decision {decision.action!r} is not allowed.")
-    return decision
-
-
-def decisions_to_command(
-    approval: ApprovalRequest,
-    decisions: list[Decision],
-) -> Command:
-    """Validate and translate API decisions to LangGraph's resume shape."""
-
-    decision = _single_decision(approval, decisions)
-
-    if decision.action == "reject":
-        default_feedback = (
-            "Revise the Python and submit it for review again."
-            if approval.review_type == "python"
-            else "Revise the query and submit it for review again."
-        )
-        translated = {
-            "type": "reject",
-            "message": decision.feedback or default_feedback,
-        }
-        return Command(
-            resume={
-                approval.interrupt_id: {"decisions": [translated]},
-            }
-        )
-
-    if decision.action == "approve":
-        translated = {"type": "approve"}
-    elif approval.review_type == "sql":
-        if not decision.edited_sql:
-            raise ValueError("edited_sql is required for an edit decision.")
-        translated = {
-            "type": "edit",
-            "edited_action": {
-                "name": approval.action_name,
-                "args": {"query": decision.edited_sql},
-            },
-        }
-    else:
-        if decision.edited_python is None:
-            raise ValueError(
-                "edited_python is required for a Python edit decision."
-            )
-        if not decision.edited_python.strip():
-            raise ValueError("Reviewed Python cannot be empty.")
-        if not approval.parent_result_id:
-            raise ValueError("The Python review has no parent result ID.")
-        translated = {
-            "type": "edit",
-            "edited_action": {
-                "name": approval.action_name,
-                "args": {
-                    "result_id": approval.parent_result_id,
-                    "code": decision.edited_python,
-                },
-            },
-        }
-    return Command(
-        resume={
-            approval.interrupt_id: {"decisions": [translated]},
-        }
-    )
-
-
-def _safe_activity_value(value: Any, *, limit: int = 36) -> str:
-    """Bound model-authored chart arguments before showing them in progress."""
-
-    text = re.sub(r"\s+", " ", str(value)).strip()
-    text = re.sub(r"[^A-Za-z0-9 _./:-]", "", text)
-    if len(text) > limit:
-        return f"{text[: limit - 1]}…"
-    return text
-
-
-def _project_relative_path(value: Any) -> str:
-    path = str(value or "").strip()
-    if path.startswith("/project/"):
-        return path.removeprefix("/project/")
-    return path
-
-
-def _skill_name(path: str) -> str:
-    parts = [part for part in path.replace("\\", "/").split("/") if part]
-    if parts and parts[-1] == "SKILL.md" and len(parts) > 1:
-        return parts[-2]
-    if "skills" in parts:
-        index = parts.index("skills")
-        if index + 1 < len(parts):
-            return parts[index + 1]
-    return "analysis skill"
-
-
-def _chart_activity(tool_input: Any) -> tuple[str, str]:
-    """Describe a safe, useful subset of a create_chart call."""
-
-    data = tool_input if isinstance(tool_input, dict) else {}
-    raw_spec = data.get("spec")
-    if not isinstance(raw_spec, dict):
-        return ("chart", "Generating chart")
-    try:
-        spec = ChartSpec.model_validate(raw_spec)
-    except ValueError:
-        return ("chart", "Generating chart")
-
-    arguments: list[str] = []
-    if spec.x:
-        arguments.append(f"x={_safe_activity_value(spec.x)}")
-    if spec.y:
-        y_columns = ", ".join(
-            _safe_activity_value(column) for column in spec.y[:3]
-        )
-        if len(spec.y) > 3:
-            y_columns = f"{y_columns}, …"
-        arguments.append(f"y={y_columns}")
-    if spec.secondary_y:
-        arguments.append(
-            f"secondary y={_safe_activity_value(spec.secondary_y)}"
-        )
-    if spec.value:
-        arguments.append(f"value={_safe_activity_value(spec.value)}")
-    if spec.location:
-        arguments.append(f"location={_safe_activity_value(spec.location)}")
-    if spec.orientation == "horizontal":
-        arguments.append("horizontal")
-    if spec.category_limit is not None:
-        arguments.append(f"top {spec.category_limit}")
-
-    label = f"Generating {spec.chart_type.value} chart"
-    if arguments:
-        label = f"{label} · {' · '.join(arguments[:4])}"
-    return ("chart", label)
-
-
-def _activity_for_tool(tool_name: str, tool_input: Any) -> tuple[str, str]:
-    data = tool_input if isinstance(tool_input, dict) else {}
-    if tool_name == "task":
-        subagent_type = data.get("subagent_type")
-        if subagent_type == "data-visualization":
-            return ("subagent", "Delegating to the visualization analyst")
-        if subagent_type == "statistical-analysis":
-            return ("subagent", "Delegating to the statistical analyst")
-        return ("subagent", "Delegating to the text-to-SQL analyst")
-    if tool_name == "search_semantic_model":
-        return ("semantic", "Searching the semantic model")
-    if tool_name == "get_semantic_entities":
-        return ("semantic", "Inspecting semantic entities")
-    if tool_name == "get_relationships":
-        return ("semantic", "Inspecting declared relationships")
-    if tool_name == "read_file":
-        path = _project_relative_path(
-            data.get("file_path") or data.get("path")
-        )
-        filename = path.rsplit("/", 1)[-1] or "context"
-        if "SKILL.md" in path or "/skills/" in path:
-            return ("skill", f"Loading skill · {_skill_name(path)}")
-        if "AGENTS.md" in path:
-            return ("context", "Loading coordinator context · AGENTS.md")
-        return ("context", f"Reading context · {filename}")
-    if tool_name in {"grep", "glob"}:
-        return ("search", "Searching semantic context")
-    if tool_name == "write_todos":
-        return ("planning", "Planning the analysis")
-    if tool_name == "execute_sql":
-        return ("execution", "Validating and executing SQL")
-    if tool_name == "list_conversation_results":
-        return ("result", "Listing saved conversation results")
-    if tool_name == "list_conversation_analyses":
-        return ("statistics_data", "Listing saved statistical analyses")
-    if tool_name == "inspect_conversation_analysis":
-        return ("statistics_data", "Inspecting a saved statistical analysis")
-    if tool_name == "inspect_conversation_result":
-        return ("result", "Inspecting a saved conversation result")
-    if tool_name == "inspect_result_for_chart":
-        return ("chart_data", "Inspecting chart-ready result data")
-    if tool_name == "inspect_result_for_statistics":
-        return ("statistics_data", "Inspecting statistical-analysis data")
-    if tool_name == "execute_statistical_python":
-        return ("statistics", "Executing statistical Python")
-    if tool_name == "validate_chart":
-        return ("chart_check", "Checking the chart specification")
-    if tool_name == "create_chart":
-        return _chart_activity(tool_input)
-    if tool_name == "finish_visualization":
-        outcome = str(data.get("outcome") or "")
-        if outcome == "needs_sql_reshape":
-            return ("chart", RESHAPE_ACTIVITY_LABEL)
-        return ("chart", "Requested chart cannot be created")
-    if tool_name == "create_report":
-        return ("report", "Rendering self-contained HTML report")
-    return ("tool", f"Using tool · {tool_name or 'unknown'}")
-
-
-def _completed_activity_label(label: str) -> str:
-    replacements = {
-        "Loading ": "Loaded ",
-        "Inspecting ": "Inspected ",
-        "Reading ": "Read ",
-        "Searching ": "Searched ",
-        "Planning ": "Planned ",
-        "Checking ": "Checked ",
-        "Executing ": "Executed ",
-        "Listing ": "Listed ",
-        "Generating ": "Generated ",
-        "Delegating ": "Delegated ",
-        "Using ": "Used ",
-    }
-    for prefix, replacement in replacements.items():
-        if label.startswith(prefix):
-            return replacement + label[len(prefix) :]
-    return label
-
-
-def _tool_output_mapping(value: Any) -> Mapping[str, Any] | None:
-    """Extract a structured tool result from the event payload."""
-
-    if isinstance(value, BaseModel):
-        value = value.model_dump(mode="python")
-    if isinstance(value, Mapping):
-        if "ok" in value:
-            return value
-        for key in ("output", "content"):
-            nested = _tool_output_mapping(value.get(key))
-            if nested is not None:
-                return nested
-        return None
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except ValueError:
-            return None
-        return _tool_output_mapping(parsed)
-    return None
-
-
-def _statistical_execution_completion(
-    output: Any,
-) -> tuple[str, bool, dict[str, Any]]:
-    """Describe an execution result without calling handled errors success."""
-
-    payload = _tool_output_mapping(output)
-    if payload is None:
-        return ("Statistical Python attempt finished", False, {})
-
-    details: dict[str, Any] = {}
-    for field in ("attempt", "remaining_attempts"):
-        value = payload.get(field)
-        if isinstance(value, int) and not isinstance(value, bool):
-            details[field] = value
-    code = payload.get("code")
-    if code is not None:
-        details["code"] = _safe_activity_value(code, limit=80)
-
-    if payload.get("ok") is True:
-        attempt = payload.get("attempt")
-        label = "Statistical Python succeeded"
-        if isinstance(attempt, int):
-            label += f" · attempt {attempt}"
-        return (label, False, details)
-
-    no_execution_labels = {
-        "execution_attempts_exhausted": "execution budget exhausted",
-        "truncated_dataset": "dataset is truncated",
-    }
-    code_text = str(payload.get("code") or "")
-    if code_text in no_execution_labels:
-        return (
-            "Statistical Python was not run · "
-            f"{no_execution_labels[code_text]}",
-            True,
-            details,
-        )
-    attempt = payload.get("attempt")
-    label = "Statistical Python execution failed"
-    if isinstance(attempt, int):
-        label += f" · attempt {attempt}"
-    return (label, True, details)
-
-
-def _extract_approval(
-    interrupts: list[Any],
-    *,
-    source: DataSource | None = None,
-    result_store: ResultStore | None = None,
-    thread_id: str = "",
-    statistical_limits: PythonExecutionLimits | None = None,
-) -> ApprovalRequest:
-    for interrupt in interrupts:
-        interrupt_id = getattr(interrupt, "id", None)
-        if not isinstance(interrupt_id, str) or not interrupt_id:
-            raise RuntimeError(
-                "The run interrupted without a resumable interrupt ID."
-            )
-        value = getattr(interrupt, "value", interrupt)
-        if not isinstance(value, dict):
-            continue
-        requests = value.get("action_requests") or []
-        configs = value.get("review_configs") or []
-        for index, action in enumerate(requests):
-            if not isinstance(action, dict):
-                continue
-            name = action.get("name")
-            arguments = action.get("args") or action.get("arguments") or {}
-            allowed = ["approve", "edit", "reject"]
-            if index < len(configs) and isinstance(configs[index], dict):
-                configured = configs[index].get("allowed_decisions")
-                if isinstance(configured, list):
-                    allowed = [
-                        item
-                        for item in configured
-                        if item in {"approve", "edit", "reject"}
-                    ]
-            if not isinstance(arguments, dict):
-                continue
-            query = arguments.get("query")
-            if name == "execute_sql" and isinstance(query, str):
-                return ApprovalRequest(
-                    interrupt_id=interrupt_id,
-                    action_name=name,
-                    query=query,
-                    allowed_decisions=allowed,
-                    source_id=source.source_id if source else "",
-                    dialect=source.dialect if source else "sqlite",
-                    timeout_seconds=(
-                        source.limits.timeout_seconds if source else 10
-                    ),
-                    max_result_rows=(
-                        source.limits.max_result_rows if source else 10_000
-                    ),
-                    description=(
-                        "Review the generated SQL before it is executed. "
-                        "The database has not been queried yet."
-                    ),
-                )
-            code = arguments.get("code")
-            result_id = arguments.get("result_id")
-            if (
-                name == "execute_statistical_python"
-                and isinstance(code, str)
-                and isinstance(result_id, str)
-                and result_store is not None
-            ):
-                try:
-                    result = result_store.get(
-                        result_id,
-                        thread_id,
-                        source_id=source.source_id if source else None,
-                    )
-                except StoreNotFound as exc:
-                    raise RuntimeError(
-                        "The Python review references an out-of-scope result."
-                    ) from exc
-                limits = statistical_limits or PythonExecutionLimits()
-                return ApprovalRequest(
-                    interrupt_id=interrupt_id,
-                    action_name=name,
-                    query=code,
-                    allowed_decisions=allowed,
-                    review_type="python",
-                    source_id=result.source_id,
-                    timeout_seconds=limits.timeout_seconds,
-                    parent_result_id=result.result_id,
-                    originating_question=result.originating_question,
-                    executed_sql=result.executed_sql,
-                    columns=result.columns,
-                    sample_rows=result.rows[:10],
-                    profile=result.profile,
-                    row_count=result.row_count,
-                    truncated=result.truncated,
-                    description=(
-                        "Review the complete generated Python before it is "
-                        "executed against the scoped saved result."
-                    ),
-                )
-    raise RuntimeError("The run interrupted without a reviewable action.")
-
-
-def _current_sql_analysis(
-    output: dict[str, Any],
-) -> SQLAnalysisResult | SQLAnalysisResponse | None:
-    """Find the executed SQL subagent result from the current user turn."""
-
-    messages = output.get("messages")
-    if not isinstance(messages, list):
-        return None
-
-    for message in reversed(messages):
-        message_type = getattr(message, "type", None)
-        if message_type is None and isinstance(message, dict):
-            message_type = message.get("type") or message.get("role")
-        if message_type in {"human", "user"}:
-            return None
-
-        content = getattr(message, "content", None)
-        if content is None and isinstance(message, dict):
-            content = message.get("content")
-        if not isinstance(content, str):
-            continue
-        for schema in (SQLAnalysisResult, SQLAnalysisResponse):
-            try:
-                return schema.model_validate_json(content)
-            except ValueError:
-                pass
-    return None
-
-
-def _current_visualization(
-    output: dict[str, Any],
-) -> VisualizationResult | None:
-    """Find the reviewed visualization result from the current user turn."""
-
-    messages = output.get("messages")
-    if not isinstance(messages, list):
-        return None
-    for message in reversed(messages):
-        message_type = getattr(message, "type", None)
-        if message_type is None and isinstance(message, dict):
-            message_type = message.get("type") or message.get("role")
-        if message_type in {"human", "user"}:
-            return None
-        content = getattr(message, "content", None)
-        if content is None and isinstance(message, dict):
-            content = message.get("content")
-        if not isinstance(content, str):
-            continue
-        try:
-            return VisualizationResult.model_validate_json(content)
-        except ValueError:
-            continue
-    return None
-
-
-def _current_statistical_analysis(
-    output: dict[str, Any],
-) -> StatisticalAnalysisResult | None:
-    """Find the statistical specialist result from the current user turn."""
-
-    messages = output.get("messages")
-    if not isinstance(messages, list):
-        return None
-    for message in reversed(messages):
-        message_type = getattr(message, "type", None)
-        if message_type is None and isinstance(message, dict):
-            message_type = message.get("type") or message.get("role")
-        if message_type in {"human", "user"}:
-            return None
-        content = getattr(message, "content", None)
-        if content is None and isinstance(message, dict):
-            content = message.get("content")
-        if not isinstance(content, str):
-            continue
-        try:
-            return StatisticalAnalysisResult.model_validate_json(content)
-        except ValueError:
-            continue
-    return None
-
-
-def _current_report(output: dict[str, Any]) -> ReportToolResult | None:
-    """Find the authoritative report tool result from the current turn."""
-
-    messages = output.get("messages")
-    if not isinstance(messages, list):
-        return None
-    for message in reversed(messages):
-        message_type = getattr(message, "type", None)
-        if message_type is None and isinstance(message, dict):
-            message_type = message.get("type") or message.get("role")
-        if message_type in {"human", "user"}:
-            return None
-        content = getattr(message, "content", None)
-        if content is None and isinstance(message, dict):
-            content = message.get("content")
-        if not isinstance(content, str):
-            continue
-        try:
-            return ReportToolResult.model_validate_json(content)
-        except ValueError:
-            continue
-    return None
-
-
-def _apply_sql_analysis(
-    answer: CoordinatorResponse,
-    output: dict[str, Any],
-) -> CoordinatorResponse:
-    """Prefer current direct-result metadata over coordinator paraphrasing."""
-
-    analysis = _current_sql_analysis(output)
-    if analysis is None:
-        return answer
-    supporting_ids = list(answer.supporting_result_ids)
-    primary_id = answer.primary_result_id
-    if primary_id is None and not supporting_ids:
-        primary_id = analysis.result_id
-        supporting_ids = [analysis.result_id]
-    elif analysis.result_id not in supporting_ids:
-        return answer
-    single_result = len(dict.fromkeys(supporting_ids)) == 1
-    updates = {
-        "primary_result_id": primary_id,
-        "supporting_result_ids": supporting_ids,
-    }
-    if single_result:
-        updates["assumptions"] = analysis.assumptions
-        updates["interpretation"] = analysis.interpretation
-    if (
-        single_result
-        and _current_visualization(output) is None
-        and _current_statistical_analysis(output) is None
-        and _current_report(output) is None
-    ):
-        updates["answer"] = analysis.answer
-    return answer.model_copy(update=updates)
-
-
-def _apply_statistical_analysis(
-    answer: FinalAnswer,
-    output: dict[str, Any],
-    execution: PythonExecutionResult | None,
-) -> FinalAnswer:
-    """Attach executed outputs and make their parent result canonical."""
-
-    analysis = _current_statistical_analysis(output)
-    if analysis is None:
-        analysis = answer.statistical_analysis
-    if analysis is None:
-        if execution is not None:
-            raise RuntimeError(
-                "Statistical Python executed without a terminal "
-                "statistical result."
-            )
-        return answer
-    if analysis.outcome is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED:
-        if execution is None:
-            raise RuntimeError(
-                "Statistical analysis claimed completion without an executed "
-                "execution."
-            )
-        if analysis.parent_result_id != execution.parent_result_id:
-            raise RuntimeError(
-                "Statistical analysis referenced a different parent result."
-            )
-        analysis = analysis.model_copy(
-            update={
-                "executed_python": execution.executed_python,
-                "outputs": execution.outputs,
-                "warnings": list(
-                    dict.fromkeys([*analysis.warnings, *execution.warnings])
-                ),
-            }
-        )
-    elif execution is not None:
-        raise RuntimeError(
-            "Statistical Python succeeded but the specialist returned "
-            "a non-completed outcome."
-        )
-    if not analysis.answer.strip():
-        analysis = analysis.model_copy(update={"answer": answer.answer})
-    updates: dict[str, Any] = {"statistical_analysis": analysis}
-    if analysis.outcome is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED:
-        updates["primary_result_id"] = analysis.parent_result_id
-    return answer.model_copy(update=updates)
-
-
-def _apply_visualization(
-    answer: FinalAnswer,
-    output: dict[str, Any],
-) -> FinalAnswer:
-    """Attach the exact generated chart without replacing the business answer."""
-
-    visualization = _current_visualization(output)
-    if visualization is None:
-        return answer
-    if visualization.outcome is not VisualizationOutcome.CHART_CREATED:
-        return answer.model_copy(update={"chart": None})
-    assert visualization.chart is not None
-    return answer.model_copy(update={"chart": visualization.chart})
-
-
-def _apply_report(answer: FinalAnswer, output: dict[str, Any]) -> FinalAnswer:
-    """Attach the trusted report without discarding an ordinary answer chart."""
-
-    report = _current_report(output)
-    if report is None:
-        return answer
-    return answer.model_copy(update={"report": report.report})
-
-
-def _conversation_history_answer(answer: FinalAnswer) -> str:
-    """Serialize a completed answer without binary statistical figure data."""
-
-    payload = answer.model_dump(mode="json", exclude_none=True)
-    statistical = payload.get("statistical_analysis")
-    if isinstance(statistical, dict):
-        for output in statistical.get("outputs") or []:
-            if isinstance(output, dict) and output.get("kind") == "figure":
-                output.pop("image_base64", None)
-    return json.dumps(payload, ensure_ascii=False)
+class AnalysisBudgetEnded(TimeoutError):
+    pass
 
 
 class RunManager:
     def __init__(
         self,
         *,
-        agent: Any | None = None,
-        agent_resolver: Callable[[str], Any] | None = None,
-        source_resolver: Callable[[str], DataSource] | None = None,
-        conversations: ConversationStore,
-        runs: RunStore,
-        results: ResultStore,
-        analyses: StatisticalAnalysisStore | None = None,
-        reports: ReportStore | None = None,
-        statistical_execution_limits: PythonExecutionLimits | None = None,
-        debug_details: bool = False,
-    ) -> None:
-        if agent is None and agent_resolver is None:
-            raise ValueError("An agent or agent_resolver is required.")
-        self.agent = agent
-        self.agent_resolver = agent_resolver
-        self.source_resolver = source_resolver
-        self.conversations = conversations
-        self.runs = runs
-        self.results = results
-        self.analyses = analyses or StatisticalAnalysisStore()
-        self.reports = reports or ReportStore()
-        self.statistical_execution_limits = (
-            statistical_execution_limits or PythonExecutionLimits()
+        conversations,
+        runs,
+        results,
+        analyses=None,
+        reports=None,
+        agent=None,
+        agent_resolver=None,
+        source_resolver=None,
+        python_execution_limits=None,
+        debug_details=False,
+        presentation_budget_seconds=120,
+    ):
+        self.conversations, self.runs, self.results = conversations, runs, results
+        self.analyses, self.reports = analyses, reports
+        self.agent, self.agent_resolver, self.source_resolver = (
+            agent,
+            agent_resolver,
+            source_resolver,
         )
-        self.debug_details = debug_details
-        self._diagnostic_events: dict[str, deque[dict[str, Any]]] = {}
+        self.python_execution_limits = python_execution_limits
+        self.presentation_budget_seconds = presentation_budget_seconds
+        self.tasks = {}
 
-    def _resolve_result_references(
-        self,
-        *,
-        primary_result_id: str | None,
-        result_ids: Sequence[str],
-        thread_id: str,
-        source_id: str,
-    ) -> list[ResultReference]:
-        """Resolve ordered, scoped evidence from application-owned storage."""
+    def _graph(self, source_id):
+        return self.agent_resolver(source_id) if self.agent_resolver else self.agent
 
-        unique_ids = list(dict.fromkeys(result_ids))
-        if primary_result_id is None:
-            if unique_ids:
-                raise RuntimeError(
-                    "Agent returned supporting results without a primary result."
-                )
-            return []
-        if primary_result_id not in unique_ids:
-            raise RuntimeError(
-                "Agent primary result is missing from supporting results."
-            )
-        ordered_ids = [
-            primary_result_id,
-            *(item for item in unique_ids if item != primary_result_id),
-        ]
-        references: list[ResultReference] = []
-        for result_id in ordered_ids:
-            try:
-                result = self.results.get(
-                    result_id,
-                    thread_id,
-                    source_id=source_id,
-                )
-            except StoreNotFound as exc:
-                raise RuntimeError(
-                    "Agent returned an unknown or out-of-conversation result."
-                ) from exc
-            references.append(
-                ResultReference(
-                    result_id=result.result_id,
-                    executed_sql=result.executed_sql,
-                    originating_question=result.originating_question,
-                    short_label=result.short_label,
-                )
-            )
-        return references
-
-    def _answer_from_coordinator(
-        self,
-        response: CoordinatorResponse,
-        *,
-        thread_id: str,
-        source_id: str,
-    ) -> FinalAnswer:
-        references = self._resolve_result_references(
-            primary_result_id=response.primary_result_id,
-            result_ids=response.supporting_result_ids,
-            thread_id=thread_id,
-            source_id=source_id,
-        )
-        return FinalAnswer(
-            answer=response.answer,
-            primary_result_id=response.primary_result_id,
-            results=references,
-            assumptions=response.assumptions,
-            interpretation=response.interpretation,
-        )
-
-    def _validate_answer_provenance(
-        self,
-        answer: FinalAnswer,
-        thread_id: str,
-        source_id: str,
-    ) -> FinalAnswer:
-        """Require executable answers to reference this conversation's result."""
-
-        if answer.report is not None:
-            try:
-                report = self.reports.get(
-                    answer.report.report_id,
-                    thread_id,
-                    source_id=source_id,
-                )
-            except StoreNotFound as exc:
-                raise RuntimeError(
-                    "Agent returned an unknown or out-of-conversation report."
-                ) from exc
-            if report.reference() != answer.report:
-                raise RuntimeError(
-                    "Agent returned report metadata that differs from the "
-                    "stored artifact."
-                )
-
-        result_ids = [item.result_id for item in answer.results]
-        primary_result_id = answer.primary_result_id
-        if answer.statistical_analysis is not None:
-            statistical_parent = answer.statistical_analysis.parent_result_id
-            if statistical_parent not in result_ids:
-                result_ids.append(statistical_parent)
-            if primary_result_id is None:
-                primary_result_id = statistical_parent
-
-        if primary_result_id is None:
-            if answer.results:
-                raise RuntimeError(
-                    "Agent returned supporting results without a primary result."
-                )
-            if answer.chart is not None:
-                raise RuntimeError(
-                    "Agent returned a chart without an executed result."
-                )
-            return answer
-
-        references = self._resolve_result_references(
-            primary_result_id=primary_result_id,
-            result_ids=result_ids,
-            thread_id=thread_id,
-            source_id=source_id,
-        )
-        results_by_id = {
-            reference.result_id: self.results.get(
-                reference.result_id,
-                thread_id,
-                source_id=source_id,
-            )
-            for reference in references
-        }
-        if answer.chart is not None:
-            result = results_by_id.get(answer.chart.result_id)
-            if result is None:
-                raise RuntimeError(
-                    "Agent returned a chart outside the final evidence."
-                )
-            validate_chart_spec(answer.chart, result)
-        if answer.statistical_analysis is not None:
-            analysis = answer.statistical_analysis
-            result = results_by_id.get(analysis.parent_result_id)
-            if result is None:
-                raise RuntimeError(
-                    "Agent returned statistical analysis outside the final evidence."
-                )
-            if (
-                analysis.outcome
-                is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED
-                and analysis.parent_result_id != primary_result_id
-            ):
-                raise RuntimeError(
-                    "Completed statistical analysis parent must be primary."
-                )
-            if (
-                result.truncated
-                and analysis.outcome
-                is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED
-            ):
-                raise RuntimeError(
-                    "Agent returned statistical analysis for a truncated result."
-                )
-        return answer.model_copy(
-            update={
-                "primary_result_id": primary_result_id,
-                "results": references,
-            }
-        )
-
-    async def start(self, run_id: str) -> None:
-        snapshot = self.runs.get(run_id)
-        conversation = self.conversations.get(snapshot.thread_id)
-        messages: list[dict[str, str]] = []
+    async def start(self, run_id):
+        run = self.runs.get(run_id)
+        conversation = self.conversations.get(run.thread_id)
+        messages = []
         for turn in conversation.turns:
-            messages.append(
-                {"role": "user", "content": turn.user_message}
-            )
-            messages.append(
+            messages += [
+                {"role": "user", "content": turn.user_message},
                 {
                     "role": "assistant",
-                    "content": _conversation_history_answer(turn.answer),
+                    "content": json.dumps(
+                        {
+                            "answer": turn.answer.answer,
+                            "results": [
+                                r.model_dump(mode="json") for r in turn.answer.results
+                            ],
+                            "analysis_ids": [
+                                a.analysis_id for a in turn.answer.analyses
+                            ],
+                            "chart_ids": [c.chart_id for c in turn.answer.charts],
+                            "report_id": turn.answer.report.report_id
+                            if turn.answer.report
+                            else None,
+                        }
+                    ),
+                },
+            ]
+        record = self.conversations.investigation(run.thread_id)
+        if record:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "Saved investigation context: " + json.dumps(record),
                 }
             )
-        messages.append(
-            {"role": "user", "content": snapshot.question}
-        )
+        messages.append({"role": "user", "content": run.question})
         await self._drive(
             run_id,
             {
                 "messages": messages,
-                "thread_id": snapshot.thread_id,
+                "thread_id": run.thread_id,
                 "run_id": run_id,
-                "source_id": snapshot.source_id,
-                "question": snapshot.question,
+                "source_id": run.source_id,
+                "question": run.question,
             },
         )
 
-    async def resume(
-        self,
-        run_id: str,
-        command: Command,
-    ) -> None:
-        resume_value = command.resume
-        if isinstance(resume_value, dict) and "decisions" not in resume_value:
-            resume_value = next(iter(resume_value.values()), None)
-        decisions = (
-            resume_value.get("decisions", [])
-            if isinstance(resume_value, dict)
-            else []
-        )
-        decision_type = (
-            decisions[0].get("type")
-            if decisions and isinstance(decisions[0], dict)
-            else None
-        )
-        review_type = self.runs.get_last_review_type(run_id)
-        artifact = "Python" if review_type == "python" else "SQL"
-        if decision_type == "reject":
-            label = f"Applying feedback and revising {artifact}"
-        else:
-            label = f"Executing reviewed {artifact}"
-        self.runs.add_event(run_id, "resume", label, agent="coordinator")
+    async def resume(self, run_id, command=None):
+        self.runs.cancel_event(run_id).clear()
         await self._drive(run_id, command)
 
-    async def _drive(self, run_id: str, agent_input: Any) -> None:
-        snapshot = self.runs.get(run_id)
-        thread_id = snapshot.thread_id
-        source_id = snapshot.source_id
-        source = (
-            self.source_resolver(source_id) if self.source_resolver else None
-        )
-        graph = (
-            self.agent_resolver(source_id)
-            if self.agent_resolver is not None
-            else self.agent
-        )
-        self.runs.start_active(run_id)
-        diagnostic_events = self._diagnostic_events.setdefault(
-            run_id, deque(maxlen=5)
-        )
-        active_agents = ["coordinator"]
-        if not snapshot.events:
-            self.runs.add_event(
-                run_id,
-                "interpretation",
-                "Interpreting the request",
-                agent="coordinator",
-            )
-            self.runs.add_event(
-                run_id,
-                "context",
-                "Loading coordinator context · AGENTS.md",
-                agent="coordinator",
-            )
+    async def stop(self, run_id):
+        self.runs.set_status(run_id, RunStatus.STOPPING)
+        self.runs.cancel_event(run_id).set()
+        task = self.tasks.get(run_id)
+        if task:
+            task.cancel()
+        else:
+            self.runs.pause(run_id)
+            run = self.runs.get(run_id)
+            self.conversations.fail_run(run.thread_id, run_id)
 
-        # A run owns its checkpoint lifecycle. Conversation history is supplied
-        # explicitly in start(), so a directly completed chart cannot leave a
-        # stale nested interrupt for the next user turn.
-        config = {
-            "configurable": {"thread_id": run_id},
-            "callbacks": [RunDiagnosticsCallback(self.runs, run_id)],
-        }
-        try:
-            stream = await graph.astream_events(
-                agent_input,
-                config=config,
-                version="v3",
+    def _finish(self, run_id, answer):
+        run = self.runs.get(run_id)
+        reference = self.runs.report_reference(run_id)
+        if answer.results and reference is None:
+            raise ValueError(
+                "Findings are saved, but their required HTML report is missing. Retry report generation."
             )
-            tool_sequence = self.runs.get(run_id).next_event_id
-            tool_activities: dict[
-                str, tuple[str, str, str, str]
-            ] = {}
-            open_tool_calls: dict[str, list[str]] = {}
-            async for event in stream:
-                method = event.get("method")
-                params = event.get("params") or {}
-                data = params.get("data") or {}
-                if method == "tools":
-                    namespace = params.get("namespace") or []
-                    event_agent = _agent_for_namespace(
-                        namespace,
-                        fallback=active_agents[-1],
-                    )
-                    _record_tool_event(
-                        diagnostic_events,
-                        data,
-                        agent=event_agent,
-                    )
-                    lifecycle = data.get("event")
-                    tool_name = str(data.get("tool_name") or "unknown")
-                    raw_call_id = str(data.get("tool_call_id") or "")
-                    if lifecycle == "tool-started":
-                        tool_sequence += 1
-                        call_id = raw_call_id or f"tool-{tool_sequence}"
-                        activity = _activity_for_tool(
-                            tool_name,
-                            data.get("input"),
-                        )
-                        tool_activities[call_id] = (
-                            activity[0],
-                            activity[1],
-                            event_agent,
-                            tool_name,
-                        )
-                        open_tool_calls.setdefault(tool_name, []).append(call_id)
-                        self.runs.start_tool_call(
-                            run_id,
-                            call_id,
-                            agent=event_agent,
-                        )
-                        self.runs.add_event(
-                            run_id,
-                            *activity,
-                            phase="started",
-                            agent=event_agent,
-                            tool=ActivityTool(
-                                call_id=call_id,
-                                name=tool_name,
-                                input=_bounded_tool_value(data.get("input")),
-                            ),
-                        )
-                        if self.debug_details:
-                            logger.info(
-                                "tool.debug.started run_id=%s agent=%s "
-                                "tool=%s call_id=%s input=%s",
-                                run_id,
-                                event_agent,
-                                tool_name,
-                                call_id,
-                                _serialize_tool_value(data.get("input"))
-                                or "null",
-                            )
-                    elif lifecycle in {"tool-finished", "tool-error"}:
-                        call_id = raw_call_id
-                        if not call_id:
-                            candidates = open_tool_calls.get(tool_name) or []
-                            call_id = candidates[-1] if candidates else ""
-                        recorded = tool_activities.get(call_id)
-                        if recorded is None:
-                            kind = "tool"
-                            label = f"Using tool · {tool_name}"
-                            recorded_agent = event_agent
-                        else:
-                            (
-                                kind,
-                                label,
-                                recorded_agent,
-                                recorded_tool_name,
-                            ) = recorded
-                            tool_name = recorded_tool_name
-                        output = (
-                            data.get("output")
-                            if lifecycle == "tool-finished"
-                            else {
-                                "error": data.get("message")
-                                or "Tool call failed."
-                            }
-                        )
-                        approval_interrupt = (
-                            tool_name == "task"
-                            and _tool_output_is_approval_interrupt(output)
-                        )
-                        failed = (
-                            lifecycle == "tool-error"
-                            and not approval_interrupt
-                        ) or (
-                            lifecycle == "tool-finished"
-                            and _tool_output_is_error(output)
-                        )
-                        if approval_interrupt:
-                            completion_label = "Delegation paused for approval"
-                        else:
-                            completion_label = (
-                                f"Tool failed · {tool_name}"
-                                if failed
-                                else _completed_activity_label(label)
-                            )
-                        if (
-                            lifecycle == "tool-finished"
-                            and tool_name == "execute_statistical_python"
-                        ):
-                            (
-                                completion_label,
-                                handled_failure,
-                                _completion_details,
-                            ) = _statistical_execution_completion(
-                                data.get("output")
-                            )
-                            failed = failed or handled_failure
-                        if not call_id:
-                            tool_sequence += 1
-                            call_id = f"tool-{tool_sequence}"
-                        duration_ms = self.runs.finish_tool_call(
-                            run_id,
-                            call_id,
-                            agent=recorded_agent,
-                            failed=failed,
-                        )
-                        self.runs.add_event(
-                            run_id,
-                            kind,
-                            completion_label,
-                            phase="failed" if failed else "completed",
-                            agent=recorded_agent,
-                            duration_ms=duration_ms,
-                            tool=ActivityTool(
-                                call_id=call_id or None,
-                                name=tool_name,
-                                output=_bounded_tool_value(output),
-                            ),
-                        )
-                        logger.info(
-                            "%s run_id=%s agent=%s tool=%s duration_ms=%d",
-                            "tool.failed" if failed else "tool.completed",
-                            run_id,
-                            recorded_agent,
-                            tool_name,
-                            duration_ms,
-                        )
-                        logger.info(
-                            "tool.result.%s run_id=%s agent=%s tool=%s "
-                            "call_id=%s result=%s",
-                            "failed" if failed else "completed",
-                            run_id,
-                            recorded_agent,
-                            tool_name,
-                            call_id,
-                            _serialize_tool_value(output)
-                            or "null",
-                        )
-                        if call_id:
-                            candidates = open_tool_calls.get(tool_name) or []
-                            if call_id in candidates:
-                                candidates.remove(call_id)
-                elif method == "lifecycle":
-                    graph_name = str(data.get("graph_name") or "")
-                    lifecycle = data.get("event")
-                    lifecycle_agent = _agent_name(graph_name)
-                    if lifecycle == "started" and lifecycle_agent:
-                        if active_agents[-1] != lifecycle_agent:
-                            active_agents.append(lifecycle_agent)
-                    elif lifecycle == "completed" and lifecycle_agent:
-                        for index in range(len(active_agents) - 1, 0, -1):
-                            if active_agents[index] == lifecycle_agent:
-                                del active_agents[index]
-                                break
-                    if "text-to-sql" in graph_name and lifecycle == "started":
-                        label = "Text-to-SQL analyst started"
-                        self.runs.add_event(
-                            run_id,
-                            "subagent",
-                            label,
-                            phase="started",
-                            agent="text-to-sql",
-                        )
-                    elif (
-                        "text-to-sql" in graph_name
-                        and lifecycle == "completed"
-                    ):
-                        self.runs.add_event(
-                            run_id,
-                            "subagent",
-                            "Text-to-SQL analyst completed",
-                            phase="completed",
-                            agent="text-to-sql",
-                        )
-                    elif (
-                        "data-visualization" in graph_name
-                        and lifecycle == "started"
-                    ):
-                        label = "Visualization analyst started"
-                        self.runs.add_event(
-                            run_id,
-                            "subagent",
-                            label,
-                            phase="started",
-                            agent="data-visualization",
-                        )
-                    elif (
-                        "statistical-analysis" in graph_name
-                        and lifecycle == "started"
-                    ):
-                        self.runs.add_event(
-                            run_id,
-                            "subagent",
-                            "Statistical analyst started",
-                            phase="started",
-                            agent="statistical-analysis",
-                        )
-                    elif (
-                        "statistical-analysis" in graph_name
-                        and lifecycle == "completed"
-                    ):
-                        self.runs.add_event(
-                            run_id,
-                            "subagent",
-                            "Statistical analyst completed",
-                            phase="completed",
-                            agent="statistical-analysis",
-                        )
-                    elif (
-                        "data-visualization" in graph_name
-                        and lifecycle == "completed"
-                    ):
-                        self.runs.add_event(
-                            run_id,
-                            "subagent",
-                            "Visualization analyst completed",
-                            phase="completed",
-                            agent="data-visualization",
-                        )
-                elif (
-                    method == "values"
-                    and self.debug_details
-                    and isinstance(data, Mapping)
-                ):
-                    namespace = params.get("namespace") or []
-                    state_agent = _agent_for_namespace(
-                        namespace,
-                        fallback=active_agents[-1],
-                    )
-                    self.runs.set_debug_state(
-                        run_id,
-                        _sanitize_state_snapshot(
-                            data,
-                            agent=state_agent,
-                            namespace=namespace,
-                        ),
-                    )
+        if reference:
+            answer = answer.model_copy(
+                update={"report": ReportReference.model_validate(reference)}
+            )
+        self.runs.complete(run_id, answer)
+        self.conversations.complete_run(
+            run.thread_id,
+            run_id,
+            ChatTurn(
+                user_message=run.question,
+                answer=answer,
+                activities=run.events,
+                diagnostics=run.run_diagnostics,
+            ),
+        )
 
-            statistical_delegations = len(
+    async def retry_report(self, run_id):
+        run = self.runs.get(run_id)
+        spec = self.runs.report_spec(run_id)
+        if not run.findings:
+            raise ValueError("No saved findings to report.")
+        if not spec:
+            self.runs.set_phase(run_id, "preparing_report")
+            await self._drive(
+                run_id,
                 {
-                    event.tool.call_id or f"event-{event.id}"
-                    for event in self.runs.get(run_id).events
-                    if event.phase == "started"
-                    and event.tool is not None
-                    and event.tool.name == "task"
-                    and isinstance(event.tool.input, Mapping)
-                    and event.tool.input.get("subagent_type")
-                    == "statistical-analysis"
-                }
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "The findings are already published. Load report-design and create their required report now. Do not rerun analysis.",
+                        }
+                    ]
+                },
             )
-            if statistical_delegations > 2:
-                raise RuntimeError(
-                    "Statistical analysis exceeded the single allowed "
-                    "SQL-reshape recovery cycle."
-                )
+            return
+        self.tasks[run_id] = asyncio.current_task()
+        self.runs.cancel_event(run_id).clear()
+        self.runs.start_active(run_id)
+        self.runs.set_phase(run_id, "preparing_report")
 
-            interrupted = await stream.interrupted()
-            if interrupted:
-                reshape_requests = sum(
-                    event.label == RESHAPE_ACTIVITY_LABEL
-                    and event.phase == "started"
-                    for event in self.runs.get(run_id).events
-                )
-                if reshape_requests > 1:
-                    raise RuntimeError(
-                        "The requested chart remained incompatible after the "
-                        "single allowed SQL-reshape recovery cycle."
-                    )
-                approval = _extract_approval(
-                    await stream.interrupts(),
-                    source=source,
+        def render():
+            with self.runs.worker(run_id):
+                return generate_report(
+                    ReportSpec.model_validate(spec),
+                    thread_id=run.thread_id,
+                    source_id=run.source_id,
                     result_store=self.results,
-                    thread_id=thread_id,
-                    statistical_limits=self.statistical_execution_limits,
+                    analysis_store=self.analyses,
+                    run_store=self.runs,
+                    report_store=self.reports,
+                    findings=run.findings,
                 )
-                is_python = approval.review_type == "python"
-                self.runs.add_event(
-                    run_id,
-                    "approval",
-                    (
-                        "Python approval required"
-                        if is_python
-                        else "SQL approval required"
-                    ),
-                    agent=(
-                        "statistical-analysis" if is_python else "text-to-sql"
-                    ),
-                )
-                self.runs.require_approval(run_id, approval)
-                _log_run_summary("run.paused", self.runs.get(run_id))
-                return
 
-            output = await stream.output()
-            if not output or "structured_response" not in output:
-                raise RuntimeError("Agent completed without a structured response.")
-            answer_value = output["structured_response"]
-            if isinstance(answer_value, FinalAnswer):
-                answer = answer_value
-            else:
-                if isinstance(answer_value, CoordinatorResponse):
-                    coordinator_response = answer_value
-                elif isinstance(answer_value, BaseModel):
-                    coordinator_response = CoordinatorResponse.model_validate(
-                        answer_value.model_dump(mode="python")
-                    )
-                else:
-                    coordinator_response = CoordinatorResponse.model_validate(
-                        answer_value
-                    )
-                coordinator_response = _apply_sql_analysis(
-                    coordinator_response,
-                    output,
-                )
-                answer = self._answer_from_coordinator(
-                    coordinator_response,
-                    thread_id=thread_id,
-                    source_id=source_id,
-                )
-            answer = _apply_statistical_analysis(
-                answer,
-                output,
-                self.runs.get_statistical_execution(run_id),
-            )
-            answer = _apply_visualization(answer, output)
-            if (
-                answer.statistical_analysis is not None
-                and answer.statistical_analysis.outcome
-                is StatisticalAnalysisOutcome.ANALYSIS_COMPLETED
-            ):
-                saved_analysis = self.analyses.save(
-                    thread_id=thread_id,
-                    source_id=source_id,
-                    analysis=answer.statistical_analysis,
-                )
-                answer = answer.model_copy(
-                    update={"statistical_analysis": saved_analysis.analysis}
-                )
-            answer = _apply_report(answer, output)
-            answer = self._validate_answer_provenance(
-                answer,
-                thread_id,
-                source_id,
-            )
-            self.runs.add_event(
-                run_id,
-                "answer",
-                "Preparing the final answer",
-                agent="coordinator",
-            )
-            self.runs.complete(run_id, answer)
-            self._diagnostic_events.pop(run_id, None)
-            completed = self.runs.get(run_id)
-            _log_run_summary("run.completed", completed)
-            _log_agent_summaries(completed)
-            self.conversations.complete_run(
-                thread_id,
-                run_id,
-                ChatTurn(
-                    user_message=completed.question,
-                    answer=answer,
-                    activities=completed.events,
-                    debug_states=completed.debug_states,
-                    diagnostics=completed.run_diagnostics,
-                ),
-            )
-        except (
-            ModelCallLimitExceededError,
-            ToolCallLimitExceededError,
-        ) as exc:
-            diagnostics = _budget_diagnostics(
-                exc,
-                run_id=run_id,
-                agent=active_agents[-1],
-                events=diagnostic_events,
-                include_debug_details=self.debug_details,
-            )
-            self._diagnostic_events.pop(run_id, None)
-            self.runs.add_event(
-                run_id,
-                "error",
-                "Execution budget exceeded",
-                phase="failed",
-                agent=active_agents[-1],
-            )
+        try:
+            async with asyncio.timeout(self.presentation_budget_seconds):
+                artifact = await asyncio.to_thread(render)
+            self.runs.attach_report(run_id, artifact.reference())
+            self._finish(run_id, run.findings)
+        except (asyncio.CancelledError, InterruptedError):
+            self.runs.cancel_event(run_id).set()
+            while self.runs.workers_active(run_id):
+                await asyncio.sleep(0.05)
+            self.runs.pause(run_id)
+            self.conversations.fail_run(run.thread_id, run_id)
+        except Exception as exc:
             self.runs.fail(
                 run_id,
-                _budget_error_message(diagnostics),
-                diagnostics=diagnostics,
+                str(exc) or "Presentation budget exhausted. Retry the saved report.",
             )
-            failed = self.runs.get(run_id)
-            _log_run_summary("run.failed", failed)
-            _log_agent_summaries(failed)
-            self.conversations.fail_run(thread_id, run_id)
+            self.conversations.fail_run(run.thread_id, run_id)
+        finally:
+            self.tasks.pop(run_id, None)
+
+    async def _consume(self, run_id, agent_input):
+        run = self.runs.get(run_id)
+        graph = self._graph(run.source_id)
+        stream = await graph.astream_events(
+            agent_input,
+            config={
+                "configurable": {"thread_id": run_id},
+                "callbacks": [RunDiagnosticsCallback(self.runs, run_id)],
+            },
+            version="v3",
+        )
+        async for _event in stream:
+            # The callback records tool identities from framework metadata; stream
+            # namespaces contain execution IDs, not reliable specialist names.
+            pass
+        if await stream.interrupted():
+            source = (
+                self.source_resolver(run.source_id) if self.source_resolver else None
+            )
+            approval = _extract_approval(
+                await stream.interrupts(),
+                source=source,
+                result_store=self.results,
+                thread_id=run.thread_id,
+                analysis_limits=self.python_execution_limits,
+            )
+            self.runs.require_approval(run_id, approval)
+            return
+        output = await stream.output()
+        response = output.get("structured_response") if output else None
+        if response is None:
+            raise ValueError("Agent finished without a structured response.")
+        response = CoordinatorResponse.model_validate(response)
+        answer = self.runs.get(run_id).findings or resolve_answer(
+            response,
+            thread_id=run.thread_id,
+            source_id=run.source_id,
+            results=self.results,
+            analyses=self.analyses,
+            runs=self.runs,
+        )
+        self._finish(run_id, answer)
+
+    async def _consume_with_budget(
+        self, run_id, agent_input, *, presentation_only=False
+    ):
+        task = asyncio.create_task(self._consume(run_id, agent_input))
+        presentation_started = time.monotonic() if presentation_only else None
+        try:
+            while True:
+                done, _ = await asyncio.wait([task], timeout=0.1)
+                if done:
+                    return task.result()
+                snapshot = self.runs.get(run_id)
+                if snapshot.findings is not None and presentation_started is None:
+                    presentation_started = time.monotonic()
+                if presentation_started is not None:
+                    if (
+                        time.monotonic() - presentation_started
+                        >= self.presentation_budget_seconds
+                    ):
+                        raise TimeoutError(
+                            "Presentation budget exhausted. Saved findings are available for report retry."
+                        )
+                elif (
+                    snapshot.run_diagnostics.active_ms
+                    >= getattr(self.runs, "analysis_budget_seconds", 900) * 1000
+                ):
+                    raise AnalysisBudgetEnded()
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+    async def _drive(self, run_id, agent_input):
+        run = self.runs.get(run_id)
+        self.tasks[run_id] = asyncio.current_task()
+        self.runs.start_active(run_id)
+        try:
+            try:
+                await self._consume_with_budget(
+                    run_id, agent_input, presentation_only=bool(run.findings)
+                )
+            except AnalysisBudgetEnded:
+                self.runs.cancel_event(run_id).set()
+                while self.runs.workers_active(run_id):
+                    await asyncio.sleep(0.05)
+                self.runs.cancel_event(run_id).clear()
+                await self._consume_with_budget(
+                    run_id,
+                    {
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": "The active analysis budget has ended. Stop computation. Inspect committed saved artifacts and execution outputs, publish only supported partial findings with unresolved questions, and create their HTML report now.",
+                            }
+                        ]
+                    },
+                    presentation_only=True,
+                )
+        except (asyncio.CancelledError, InterruptedError):
+            self.runs.cancel_event(run_id).set()
+            while self.runs.workers_active(run_id):
+                await asyncio.sleep(0.05)
+            self.runs.pause(run_id)
+            self.conversations.fail_run(run.thread_id, run_id)
         except Exception as exc:
-            self._diagnostic_events.pop(run_id, None)
-            message = str(exc) or exc.__class__.__name__
-            self.runs.add_event(
-                run_id,
-                "error",
-                "The run failed",
-                phase="failed",
-                agent=active_agents[-1],
-            )
-            self.runs.fail(run_id, message)
-            failed = self.runs.get(run_id)
-            _log_run_summary("run.failed", failed)
-            _log_agent_summaries(failed)
-            self.conversations.fail_run(thread_id, run_id)
+            self.runs.fail(run_id, str(exc) or type(exc).__name__)
+            self.conversations.fail_run(run.thread_id, run_id)
+        finally:
+            self.tasks.pop(run_id, None)

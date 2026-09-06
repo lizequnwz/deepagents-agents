@@ -79,18 +79,19 @@ def test_execute_forwards_exact_sql_caps_normalizes_and_closes() -> None:
     backend = SnowflakeBackend(client)
     query = "SELECT amount, day, payload FROM facts ORDER BY day"
 
-    result = backend.execute(query, timeout_seconds=7.5, max_rows=2)
+    import pyarrow as pa
 
+    result = pa.Table.from_batches(
+        list(backend.execute_batches(query, timeout_seconds=7.5))
+    )
     assert client.calls == [(query, 7.5)]
-    assert cursor.fetch_sizes == [3]
-    assert cursor.closed is True
-    assert result.columns == ["AMOUNT", "DAY", "PAYLOAD"]
-    assert result.rows == [
-        {"AMOUNT": "1.20", "DAY": "2026-07-20", "PAYLOAD": "61"},
-        {"AMOUNT": "2.30", "DAY": "2026-07-21", "PAYLOAD": "62"},
-    ]
-    assert result.truncated is True
-    assert result.elapsed_ms >= 0
+    assert cursor.closed
+    assert result.to_pylist()[0] == {
+        "AMOUNT": Decimal("1.20"),
+        "DAY": date(2026, 7, 20),
+        "PAYLOAD": b"a",
+    }
+    assert result.num_rows == 3
 
 
 def test_execute_rejects_unsafe_sql_before_calling_client() -> None:
@@ -98,10 +99,11 @@ def test_execute_rejects_unsafe_sql_before_calling_client() -> None:
     backend = SnowflakeBackend(client)
 
     with pytest.raises(SQLValidationError):
-        backend.execute(
-            "DELETE FROM facts",
-            timeout_seconds=5,
-            max_rows=10,
+        list(
+            backend.execute_batches(
+                "DELETE FROM facts",
+                timeout_seconds=5,
+            )
         )
 
     assert client.calls == []
@@ -116,10 +118,11 @@ def test_execute_translates_cancel_and_closes_cursor() -> None:
     backend = SnowflakeBackend(FakeSnowflakeClient([cursor]))
 
     with pytest.raises(TimeoutError, match="exceeded 3 seconds"):
-        backend.execute(
-            "SELECT value FROM facts",
-            timeout_seconds=3,
-            max_rows=10,
+        list(
+            backend.execute_batches(
+                "SELECT value FROM facts",
+                timeout_seconds=3,
+            )
         )
 
     assert cursor.closed is True
@@ -134,10 +137,11 @@ def test_execute_wraps_expected_provider_query_errors() -> None:
     backend = SnowflakeBackend(FakeSnowflakeClient([cursor]))
 
     with pytest.raises(SQLExecutionError, match=r"\[2003\] unknown table"):
-        backend.execute(
-            "SELECT value FROM missing_facts",
-            timeout_seconds=3,
-            max_rows=10,
+        list(
+            backend.execute_batches(
+                "SELECT value FROM missing_facts",
+                timeout_seconds=3,
+            )
         )
 
     assert cursor.closed is True
@@ -158,8 +162,7 @@ def test_targeted_schema_uses_configured_context() -> None:
 
     assert schema[0].name == "ORDERS"
     actual_columns = [
-        (column.name, column.data_type, column.nullable)
-        for column in schema[0].columns
+        (column.name, column.data_type, column.nullable) for column in schema[0].columns
     ]
     assert actual_columns == [
         ("ORDER_ID", "NUMBER", False),

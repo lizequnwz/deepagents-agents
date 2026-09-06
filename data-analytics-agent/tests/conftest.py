@@ -21,9 +21,7 @@ def test_settings(
 
     database_path = database_dir / "test.sqlite"
     connection = sqlite3.connect(database_path)
-    connection.execute(
-        "CREATE TABLE Artist (ArtistId INTEGER PRIMARY KEY, Name TEXT)"
-    )
+    connection.execute("CREATE TABLE Artist (ArtistId INTEGER PRIMARY KEY, Name TEXT)")
     connection.commit()
     connection.close()
 
@@ -93,3 +91,6 @@ sources:
         project_root=project_root,
         data_sources_config_path=registry_path,
     )
+
+
+from tests.test_persistent_analyst import workspace as workspace

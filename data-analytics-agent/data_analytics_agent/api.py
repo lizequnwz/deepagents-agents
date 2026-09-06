@@ -8,17 +8,22 @@ from threading import RLock
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, FileResponse, StreamingResponse
+from contextlib import asynccontextmanager
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from data_analytics_agent.persistence import LocalStorage
+import csv
+import io
+from pathlib import Path
+import pyarrow.parquet as pq
 
 from data_analytics_agent.coordinator import build_agent
 from data_analytics_agent.backends import SQLBackend, create_backend
 from data_analytics_agent.config import Settings
 from data_analytics_agent.data_sources import DataSource, DataSourceCatalog
 from data_analytics_agent.logging_config import configure_api_logging
-from data_analytics_agent.run_manager import (
-    RunManager,
-    decisions_to_command,
-)
+from data_analytics_agent.run_manager import RunManager
+from data_analytics_agent.approvals import decisions_to_command
 from data_analytics_agent.reporting.schemas import ReportResponse
 from data_analytics_agent.schemas import (
     API_CONTRACT_VERSION,
@@ -43,7 +48,7 @@ from data_analytics_agent.stores import (
     ReportStore,
     ResultStore,
     RunStore,
-    StatisticalAnalysisStore,
+    DataAnalysisStore,
     StoreNotFound,
 )
 
@@ -65,24 +70,46 @@ def _create_snowflake_client() -> Any:
 @dataclass
 class Services:
     settings: Settings = field(default_factory=Settings)
-    conversations: ConversationStore = field(default_factory=ConversationStore)
-    runs: RunStore = field(default_factory=RunStore)
-    results: ResultStore = field(default_factory=ResultStore)
-    analyses: StatisticalAnalysisStore = field(
-        default_factory=StatisticalAnalysisStore
-    )
-    reports: ReportStore = field(default_factory=ReportStore)
+    conversations: ConversationStore | None = None
+    runs: RunStore | None = None
+    results: ResultStore | None = None
+    analyses: DataAnalysisStore | None = None
+    reports: ReportStore | None = None
     agent: Any | None = None
     catalog: DataSourceCatalog | None = None
     snowflake_client: Any | None = None
     _manager: RunManager | None = None
     _backends: dict[str, SQLBackend] = field(default_factory=dict)
     _agents: dict[str, Any] = field(default_factory=dict)
-    _semantic_catalogs: dict[str, SemanticCatalog] = field(
-        default_factory=dict
-    )
+    _semantic_catalogs: dict[str, SemanticCatalog] = field(default_factory=dict)
     _source_summaries: dict[str, DataSourceSummary] | None = None
     _lock: RLock = field(default_factory=RLock)
+
+    storage: LocalStorage | None = None
+    checkpointer: Any | None = None
+    deleting_conversations: set[str] = field(default_factory=set)
+
+    def __post_init__(self):
+        self.storage = self.storage or LocalStorage(self.settings.storage_dir)
+        self.conversations = self.conversations or ConversationStore(self.storage)
+        self.runs = self.runs or RunStore(self.storage)
+        self.results = self.results or ResultStore(
+            self.storage,
+            max_rows=self.settings.max_result_rows,
+            max_bytes=self.settings.max_dataset_bytes,
+        )
+        self.analyses = self.analyses or DataAnalysisStore(self.storage)
+        self.reports = self.reports or ReportStore(self.storage)
+        self.runs.analysis_budget_seconds = self.settings.analysis_budget_seconds
+        self.runs.recover()
+        for conversation in self.conversations.list():
+            if (
+                conversation.active_run_id
+                and self.runs.get(conversation.active_run_id).status == RunStatus.PAUSED
+            ):
+                self.conversations.fail_run(
+                    conversation.thread_id, conversation.active_run_id
+                )
 
     def source_catalog(self) -> DataSourceCatalog:
         with self._lock:
@@ -101,10 +128,7 @@ class Services:
             backend = self._backends.get(source_id)
             if backend is None:
                 source = self.source(source_id)
-                if (
-                    source.backend_type == "snowflake"
-                    and self.snowflake_client is None
-                ):
+                if source.backend_type == "snowflake" and self.snowflake_client is None:
                     self.snowflake_client = _create_snowflake_client()
                 backend = create_backend(
                     source,
@@ -197,6 +221,8 @@ class Services:
                     self.runs,
                     analysis_store=self.analyses,
                     report_store=self.reports,
+                    conversation_store=self.conversations,
+                    checkpointer=self.checkpointer,
                     source=source,
                     semantic_catalog=self.semantic_catalog_for_source(source_id),
                     backend=self.backend_for_source(source_id),
@@ -215,10 +241,9 @@ class Services:
                     results=self.results,
                     analyses=self.analyses,
                     reports=self.reports,
-                    statistical_execution_limits=(
-                        self.settings.statistical_execution_limits()
-                    ),
+                    python_execution_limits=(self.settings.python_execution_limits()),
                     debug_details=self.settings.agent_debug_details,
+                    presentation_budget_seconds=self.settings.presentation_budget_seconds,
                 )
             return self._manager
 
@@ -226,9 +251,32 @@ class Services:
 def create_app(services: Services | None = None) -> FastAPI:
     container = services or Services()
     log_path = configure_api_logging(container.settings.project_root)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        async with AsyncSqliteSaver.from_conn_string(
+            str(container.storage.root / "checkpoints.sqlite")
+        ) as checkpointer:
+            await checkpointer.setup()
+            container.checkpointer = checkpointer
+            yield
+            if container._manager:
+                import asyncio
+
+                tasks = list(container._manager.tasks.items())
+                for run_id, task in tasks:
+                    await container._manager.stop(run_id)
+                if tasks:
+                    await asyncio.gather(
+                        *(task for _, task in tasks), return_exceptions=True
+                    )
+            container._agents.clear()
+            container.checkpointer = None
+
     app = FastAPI(
+        lifespan=lifespan,
         title="Data Analytics Agent API",
-        version="0.6.0",
+        version="0.7.0",
     )
     app.state.services = container
     logger.info("api.configured log_file=%s", log_path)
@@ -248,9 +296,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         try:
             catalog = container.source_catalog()
             default_source_id = catalog.default_source_id
-            ready_count = sum(
-                summary.ready for summary in container.source_summaries()
-            )
+            ready_count = sum(summary.ready for summary in container.source_summaries())
             if ready_count == 0:
                 errors.append("No configured data source is ready.")
         except Exception as exc:
@@ -269,19 +315,11 @@ def create_app(services: Services | None = None) -> FastAPI:
             api_contract_version=API_CONTRACT_VERSION,
             default_source_id=default_source_id,
             ready_source_count=ready_count,
-            sql_approval_required=(
-                container.settings.require_sql_approval
-            ),
-            python_approval_required=(
-                container.settings.require_python_approval
-            ),
-            visualization_enabled=(
-                container.settings.enable_data_visualization
-            ),
-            statistical_analysis_enabled=(
-                container.settings.enable_statistical_analysis
-            ),
-            reporting_enabled=container.settings.enable_reporting,
+            sql_approval_required=(container.settings.require_sql_approval),
+            python_approval_required=(container.settings.require_python_approval),
+            visualization_enabled=(container.settings.enable_data_visualization),
+            data_analysis_enabled=(container.settings.enable_data_analysis),
+            reporting_enabled=True,
             errors=errors,
         )
 
@@ -318,8 +356,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
-                    f"Unknown data source "
-                    f"{request.source_id if request else None!r}."
+                    f"Unknown data source {request.source_id if request else None!r}."
                 ),
             ) from exc
         except ValueError as exc:
@@ -362,6 +399,7 @@ def create_app(services: Services | None = None) -> FastAPI:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=" ".join(readiness_errors),
             )
+        ensure_not_deleting(thread_id)
         conversation = container.conversations.get(thread_id)
         try:
             container.require_ready_source(conversation.source_id)
@@ -396,9 +434,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         run_id: str,
         after_event_id: int = Query(default=0, ge=0),
     ) -> RunResponse:
-        return container.runs.get(
-            run_id, after_event_id=after_event_id
-        )
+        return container.runs.get(run_id, after_event_id=after_event_id)
 
     @app.post(
         "/api/runs/{run_id}/decisions",
@@ -411,6 +447,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         background_tasks: BackgroundTasks,
     ) -> CreateRunResponse:
         run = container.runs.get(run_id)
+        ensure_not_deleting(run.thread_id)
         if run.status != RunStatus.APPROVAL_REQUIRED or run.approval is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -427,9 +464,7 @@ def create_app(services: Services | None = None) -> FastAPI:
                 detail=str(exc),
             ) from exc
         try:
-            approval_wait_ms = container.runs.claim_approval(
-                run_id, run.approval
-            )
+            approval_wait_ms = container.runs.claim_approval(run_id, run.approval)
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -454,9 +489,131 @@ def create_app(services: Services | None = None) -> FastAPI:
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=100, ge=1, le=10_000),
     ) -> ResultPage:
-        return container.results.page_unscoped(
-            result_id, offset=offset, limit=limit
+        return container.results.page_unscoped(result_id, offset=offset, limit=limit)
+
+    def ensure_not_deleting(thread_id):
+        if thread_id in container.deleting_conversations:
+            raise HTTPException(409, "This conversation is being deleted.")
+
+    @app.delete("/api/conversations/{thread_id}")
+    async def delete_conversation(thread_id: str):
+        from data_analytics_agent.history import delete_history
+
+        return await delete_history(container, {thread_id})
+
+    @app.delete("/api/conversations")
+    async def clear_history():
+        from data_analytics_agent.history import delete_history
+
+        return await delete_history(
+            container, {item.thread_id for item in container.conversations.list()}
         )
+
+    @app.get("/api/conversations")
+    async def list_conversations():
+        return [
+            {
+                "thread_id": item.thread_id,
+                "source_id": item.source_id,
+                "title": (
+                    item.turns[0].user_message
+                    if item.turns
+                    else container.runs.get(item.run_ids[0]).question
+                    if item.run_ids
+                    else "New conversation"
+                )[:100],
+                "active_run_id": item.active_run_id,
+                "run_ids": item.run_ids,
+            }
+            for item in container.conversations.list()
+        ]
+
+    @app.post("/api/runs/{run_id}/stop")
+    async def stop_run(run_id: str):
+        run = container.runs.get(run_id)
+        if run.status not in {
+            RunStatus.RUNNING,
+            RunStatus.QUEUED,
+            RunStatus.APPROVAL_REQUIRED,
+        }:
+            raise HTTPException(409, "Run is not active.")
+        await container.manager().stop(run_id)
+        return container.runs.get(run_id)
+
+    def claim_saved_run(run_id):
+        run = container.runs.get(run_id)
+        ensure_not_deleting(run.thread_id)
+        conversation = container.conversations.get(run.thread_id)
+        if run.status not in {RunStatus.PAUSED, RunStatus.FAILED}:
+            raise HTTPException(409, "Run is not resumable.")
+        if conversation.run_ids[-1:] != [run_id]:
+            raise HTTPException(
+                409,
+                "Continue the latest conversation turn instead of resuming older work.",
+            )
+        try:
+            container.conversations.begin_run(run.thread_id, run_id)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        container.runs.set_status(run_id, RunStatus.QUEUED)
+        return run
+
+    @app.post("/api/runs/{run_id}/resume", status_code=202)
+    async def resume_run(run_id: str, background_tasks: BackgroundTasks):
+        claim_saved_run(run_id)
+        background_tasks.add_task(container.manager().resume, run_id)
+        return {"run_id": run_id, "status": "queued"}
+
+    @app.post("/api/runs/{run_id}/retry-report", status_code=202)
+    async def retry_report(run_id: str, background_tasks: BackgroundTasks):
+        if not container.runs.get(run_id).findings:
+            raise HTTPException(409, "There are no saved findings.")
+        claim_saved_run(run_id)
+        background_tasks.add_task(container.manager().retry_report, run_id)
+        return {"run_id": run_id, "status": "queued"}
+
+    @app.get("/api/results/{result_id}/download")
+    async def download_dataset(result_id: str, format: str = "csv"):
+        result = container.results.get_unscoped(result_id)
+        if format == "parquet":
+            return FileResponse(
+                result.parquet_path,
+                filename=f"{result_id}.parquet",
+                media_type="application/octet-stream",
+            )
+        if format != "csv":
+            raise HTTPException(422, "Use csv or parquet.")
+
+        def chunks():
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            writer.writerow(result.columns)
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+            for batch in pq.ParquetFile(result.parquet_path).iter_batches(
+                batch_size=2048
+            ):
+                for row in batch.to_pylist():
+                    writer.writerow([row.get(column) for column in result.columns])
+                yield buffer.getvalue()
+                buffer.seek(0)
+                buffer.truncate(0)
+
+        return StreamingResponse(
+            chunks(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{result_id}.csv"'},
+        )
+
+    @app.get("/api/figures/{filename}")
+    async def get_figure(filename: str):
+        if Path(filename).name != filename or not filename.endswith(".png"):
+            raise HTTPException(404)
+        path = container.storage.artifacts / filename
+        if not path.is_file():
+            raise HTTPException(404)
+        return FileResponse(path, media_type="image/png")
 
     @app.get("/api/reports/{report_id}", response_model=ReportResponse)
     async def get_report(report_id: str) -> ReportResponse:

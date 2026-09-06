@@ -1,7 +1,6 @@
 """SQL backend contracts and built-in adapters."""
 
 from data_analytics_agent.backends.base import (
-    BackendExecutionResult,
     ColumnInfo,
     SQLBackend,
     SQLExecutionError,
@@ -20,7 +19,6 @@ from data_analytics_agent.backends.validation import (
 )
 
 __all__ = [
-    "BackendExecutionResult",
     "ColumnInfo",
     "SQLBackend",
     "SQLExecutionError",

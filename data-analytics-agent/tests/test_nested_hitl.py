@@ -12,14 +12,11 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 import pytest
 
-from data_analytics_agent.agents.text_to_sql.agent import (
-    SQL_OUTPUT_RETRY_MESSAGE,
-)
-from data_analytics_agent.run_manager import (
+from data_analytics_agent.approvals import (
     _extract_approval,
     decisions_to_command,
 )
-from data_analytics_agent.schemas import Decision, SQLAnalysisResult
+from data_analytics_agent.schemas import Decision, SQLAnalysisResponse
 
 GENERATED_SQL = "SELECT Name FROM Artist LIMIT 5"
 EDITED_SQL = "SELECT Name FROM Artist ORDER BY Name LIMIT 3"
@@ -34,9 +31,7 @@ PROFILE = {
         {
             "name": "Name",
             "physical_kind": "text",
-            "role_candidates": [
-                {"role": "categorical", "confidence": 1.0}
-            ],
+            "role_candidates": [{"role": "categorical", "confidence": 1.0}],
             "temporal_kind": None,
             "null_count": 0,
             "non_null_count": 1,
@@ -121,9 +116,7 @@ class ScriptedChatModel(BaseChatModel):
 
     def _sql_response(self, messages: list[BaseMessage]) -> AIMessage:
         tool_messages = [
-            message
-            for message in messages
-            if isinstance(message, ToolMessage)
+            message for message in messages if isinstance(message, ToolMessage)
         ]
         if not tool_messages:
             return self._execute_call(GENERATED_SQL, "generated-sql")
@@ -131,27 +124,6 @@ class ScriptedChatModel(BaseChatModel):
         latest = tool_messages[-1]
         if latest.name == "execute_sql" and latest.status == "error":
             self.script_state.rejection_feedback = str(latest.content)
-            return AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "SQLAnalysisResult",
-                        "args": {
-                            "answer": "The query was rejected.",
-                            "sql": GENERATED_SQL,
-                            "result_id": None,
-                            "row_count": None,
-                            "assumptions": [],
-                            "interpretation": "No query was executed.",
-                        },
-                        "id": "invalid-completion",
-                    }
-                ],
-            )
-
-        if latest.name == "SQLAnalysisResult":
-            self.script_state.validation_retry_seen = True
-            assert SQL_OUTPUT_RETRY_MESSAGE.strip() in str(latest.content)
             return self._execute_call(REVISED_SQL, "revised-sql")
 
         if latest.name == "execute_sql":
@@ -160,16 +132,11 @@ class ScriptedChatModel(BaseChatModel):
                 content="",
                 tool_calls=[
                     {
-                        "name": "SQLAnalysisResult",
+                        "name": "SQLAnalysisResponse",
                         "args": {
                             "answer": "The reviewed query executed.",
                             "sql": executed_sql,
                             "result_id": "result-1",
-                            "columns": ["Name"],
-                            "sample_rows": [{"Name": "AC/DC"}],
-                            "profile": PROFILE,
-                            "row_count": 1,
-                            "truncated": False,
                             "assumptions": [],
                             "interpretation": "One result was returned.",
                         },
@@ -273,15 +240,13 @@ def _build_graph(
         "tools": [execute_sql],
         "model": ScriptedChatModel(role="sql", script_state=state),
         "response_format": ToolStrategy(
-            SQLAnalysisResult,
-            handle_errors=SQL_OUTPUT_RETRY_MESSAGE,
+            SQLAnalysisResponse,
+            handle_errors="Please fix your mistakes",
         ),
     }
     if require_approval:
         sql_subagent["interrupt_on"] = {
-            "execute_sql": {
-                "allowed_decisions": ["approve", "edit", "reject"]
-            }
+            "execute_sql": {"allowed_decisions": ["approve", "edit", "reject"]}
         }
     return create_deep_agent(
         model=coordinator_model
@@ -320,7 +285,7 @@ def test_editor_sql_is_the_only_sql_executed() -> None:
     assert state.executed == [EDITED_SQL]
 
 
-def test_rejection_feedback_forces_revision_and_invalid_completion_retries() -> None:
+def test_rejection_feedback_forces_revision() -> None:
     state = ScriptState()
     graph = _build_graph(state)
     config = _config("rejected-sql")
@@ -342,12 +307,9 @@ def test_rejection_feedback_forces_revision_and_invalid_completion_retries() -> 
     )
 
     assert revised_interrupt["__interrupt__"]
-    action = revised_interrupt["__interrupt__"][0].value[
-        "action_requests"
-    ][0]
+    action = revised_interrupt["__interrupt__"][0].value["action_requests"][0]
     assert action["args"]["query"] == REVISED_SQL
     assert feedback in (state.rejection_feedback or "")
-    assert state.validation_retry_seen is True
     assert state.executed == []
 
     revised_approval = _extract_approval(revised_interrupt["__interrupt__"])

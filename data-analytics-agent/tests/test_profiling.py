@@ -40,18 +40,13 @@ def test_full_result_profile_infers_roles_counts_ranges_and_dates() -> None:
     assert by_name["genre"].null_count == 1
     assert by_name["genre"].distinct_count == 2
     assert AnalyticalRole.NUMERIC in _roles(profile, "sales")
-    assert AnalyticalRole.DISCRETE_NUMERIC in _roles(
-        profile, "month_number"
-    )
+    assert AnalyticalRole.DISCRETE_NUMERIC in _roles(profile, "month_number")
     assert by_name["month_number"].minimum == 1
     assert by_name["month_number"].maximum == 2
 
 
 def test_consistent_iso_dates_are_temporal() -> None:
-    rows = [
-        {"month_start": f"2025-{month:02d}-01"}
-        for month in range(1, 6)
-    ]
+    rows = [{"month_start": f"2025-{month:02d}-01"} for month in range(1, 6)]
 
     profile = profile_result(["month_start"], rows)
     column = profile.columns[0]

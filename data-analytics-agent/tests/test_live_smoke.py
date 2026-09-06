@@ -28,9 +28,7 @@ def test_agent_graph_builds_without_network(
 ) -> None:
     database = tmp_path / "chinook.db"
     connection = sqlite3.connect(database)
-    connection.execute(
-        "CREATE TABLE Artist (ArtistId INTEGER PRIMARY KEY, Name TEXT)"
-    )
+    connection.execute("CREATE TABLE Artist (ArtistId INTEGER PRIMARY KEY, Name TEXT)")
     connection.close()
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     settings = Settings()
@@ -48,9 +46,7 @@ def test_agent_graph_builds_without_network(
     assert graph.name == "data-analytics-agent"
     assert graph.context_schema is None
     state_properties = graph.get_input_jsonschema()["properties"]
-    assert {"thread_id", "run_id", "source_id", "question"} <= set(
-        state_properties
-    )
+    assert {"thread_id", "run_id", "source_id", "question"} <= set(state_properties)
     assert {"model", "tools"} <= set(graph.nodes)
 
 
@@ -61,18 +57,14 @@ def test_live_agent_builds() -> None:
     settings = Settings()
     if settings.readiness_errors():
         pytest.skip("OPENAI_API_KEY and a source registry are required.")
-    source = settings.load_catalog().get(
-        settings.load_catalog().default_source_id
-    )
+    source = settings.load_catalog().get(settings.load_catalog().default_source_id)
     assert (
         build_agent(
             settings,
             ResultStore(),
             source=source,
             semantic_catalog=_semantic_catalog(source),
-            backend=SQLiteBackend(
-                settings.project_root / str(source.target["path"])
-            ),
+            backend=SQLiteBackend(settings.project_root / str(source.target["path"])),
         )
         is not None
     )

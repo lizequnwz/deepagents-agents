@@ -5,7 +5,6 @@ from typing import Any
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
     HumanInTheLoopMiddleware,
-    TodoListMiddleware,
 )
 from langchain.agents.middleware.model_call_limit import (
     ModelCallLimitExceededError,
@@ -26,10 +25,10 @@ import pytest
 from data_analytics_agent.agents.text_to_sql.agent import (
     build_text_to_sql_subagent,
 )
-from data_analytics_agent.agents.statistical_analysis.agent import (
-    build_statistical_analysis_subagent,
+from data_analytics_agent.agents.data_analysis.agent import (
+    build_data_analysis_subagent,
 )
-from data_analytics_agent.agents.statistical_analysis.runner import (
+from data_analytics_agent.agents.data_analysis.runner import (
     PythonExecutionLimits,
 )
 from data_analytics_agent.backends import create_backend
@@ -39,7 +38,7 @@ from data_analytics_agent.execution_budget import (
     execution_budget_middleware,
 )
 from data_analytics_agent.semantic import load_semantic_catalog
-from data_analytics_agent.stores import ResultStore, RunStore
+from data_analytics_agent.stores import ResultStore, RunStore, DataAnalysisStore
 
 
 @pytest.fixture(autouse=True)
@@ -91,9 +90,7 @@ class LoopingToolModel(BaseChatModel):
             )
         return ChatResult(
             generations=[
-                ChatGeneration(
-                    message=AIMessage(content="", tool_calls=tool_calls)
-                )
+                ChatGeneration(message=AIMessage(content="", tool_calls=tool_calls))
             ]
         )
 
@@ -122,9 +119,7 @@ class ReviewingModel(BaseChatModel):
                         tool_calls=[
                             {
                                 "name": "execute_sql",
-                                "args": {
-                                    "query": f"SELECT {self.calls}"
-                                },
+                                "args": {"query": f"SELECT {self.calls}"},
                                 "id": f"execute-{self.calls}",
                             }
                         ],
@@ -160,24 +155,20 @@ def test_settings_use_confirmed_budget_defaults(
         "SQL_EXECUTE_CALL_LIMIT",
         "VISUALIZATION_AGENT_MODEL_CALL_LIMIT",
         "VISUALIZATION_AGENT_TOOL_CALL_LIMIT",
-        "STATISTICAL_AGENT_MODEL_CALL_LIMIT",
-        "STATISTICAL_AGENT_TOOL_CALL_LIMIT",
+        "ANALYSIS_AGENT_MODEL_CALL_LIMIT",
+        "ANALYSIS_AGENT_TOOL_CALL_LIMIT",
     ]
     for name in names:
         monkeypatch.delenv(name, raising=False)
 
     settings = Settings()
 
-    assert settings.coordinator_model_call_limit == 32
-    assert settings.coordinator_tool_call_limit == 24
-    assert settings.coordinator_task_call_limit == 12
-    assert settings.sql_agent_model_call_limit == 24
-    assert settings.sql_agent_tool_call_limit == 30
-    assert settings.sql_execute_call_limit == 3
-    assert settings.visualization_agent_model_call_limit == 12
-    assert settings.visualization_agent_tool_call_limit == 16
-    assert settings.statistical_agent_model_call_limit == 24
-    assert settings.statistical_agent_tool_call_limit == 24
+    assert settings.coordinator_model_call_limit == 96
+    assert settings.coordinator_tool_call_limit == 120
+    assert settings.sql_agent_model_call_limit == 48
+    assert settings.sql_agent_tool_call_limit == 64
+    assert settings.analysis_agent_model_call_limit == 64
+    assert settings.analysis_agent_tool_call_limit == 80
 
 
 def test_settings_use_independent_approval_defaults(
@@ -189,7 +180,7 @@ def test_settings_use_independent_approval_defaults(
     settings = Settings()
 
     assert settings.require_sql_approval is False
-    assert settings.require_python_approval is True
+    assert settings.require_python_approval is False
 
 
 @pytest.mark.parametrize(
@@ -208,32 +199,36 @@ def test_execution_approval_modes_construct_independently(
         semantic_catalog=_semantic_catalog(source),
         backend=create_backend(source, test_settings.project_root),
         result_store=result_store,
+        run_store=RunStore(),
         model=ReviewingModel(),
         permissions=[],
         require_approval=sql_approval,
     )
-    python_spec = build_statistical_analysis_subagent(
+    python_spec = build_data_analysis_subagent(
         source=source,
         result_store=result_store,
         run_store=RunStore(),
         execution_limits=PythonExecutionLimits(),
+        analysis_store=DataAnalysisStore(),
         model=ReviewingModel(),
         permissions=[],
         require_approval=python_approval,
     )
 
-    assert any(
-        isinstance(item, HumanInTheLoopMiddleware)
-        for item in sql_spec["middleware"]
-    ) is sql_approval
-    assert any(
-        isinstance(item, HumanInTheLoopMiddleware)
-        for item in python_spec["middleware"]
-    ) is python_approval
-    assert ("pauses for human" in sql_spec["system_prompt"]) is sql_approval
     assert (
-        "pauses for human" in python_spec["system_prompt"]
-    ) is python_approval
+        any(
+            isinstance(item, HumanInTheLoopMiddleware)
+            for item in sql_spec["middleware"]
+        )
+        is sql_approval
+    )
+    assert (
+        any(
+            isinstance(item, HumanInTheLoopMiddleware)
+            for item in python_spec["middleware"]
+        )
+        is python_approval
+    )
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "invalid"])
@@ -285,6 +280,7 @@ def test_sql_agent_checks_budgets_before_requesting_review(
         semantic_catalog=_semantic_catalog(source),
         backend=create_backend(source, test_settings.project_root),
         result_store=ResultStore(),
+        run_store=RunStore(),
         model=ReviewingModel(),
         permissions=[],
         require_approval=True,
@@ -293,12 +289,11 @@ def test_sql_agent_checks_budgets_before_requesting_review(
 
     middleware = spec["middleware"]
     assert isinstance(middleware[0], HumanInTheLoopMiddleware)
-    assert isinstance(middleware[1], TodoListMiddleware)
-    assert isinstance(middleware[2], ModelCallLimitMiddleware)
+    assert isinstance(middleware[1], ModelCallLimitMiddleware)
+    assert isinstance(middleware[2], ToolCallLimitMiddleware)
+    assert middleware[2].tool_name is None
     assert isinstance(middleware[3], ToolCallLimitMiddleware)
-    assert middleware[3].tool_name is None
-    assert isinstance(middleware[4], ToolCallLimitMiddleware)
-    assert middleware[4].tool_name == "execute_sql"
+    assert middleware[3].tool_name == "execute_sql"
     assert "interrupt_on" not in spec
 
 
@@ -347,9 +342,7 @@ def test_over_budget_parallel_batch_executes_nothing() -> None:
     )
 
     with pytest.raises(ToolCallLimitExceededError):
-        agent.invoke(
-            {"messages": [{"role": "user", "content": "Call twice"}]}
-        )
+        agent.invoke({"messages": [{"role": "user", "content": "Call twice"}]})
 
     assert executed == []
 
@@ -362,9 +355,7 @@ def test_budget_counts_persist_across_hitl_resume() -> None:
         middleware=[
             HumanInTheLoopMiddleware(
                 interrupt_on={
-                    "execute_sql": {
-                        "allowed_decisions": ["approve", "reject"]
-                    }
+                    "execute_sql": {"allowed_decisions": ["approve", "reject"]}
                 }
             ),
             ToolCallLimitMiddleware(
@@ -385,13 +376,7 @@ def test_budget_counts_persist_across_hitl_resume() -> None:
 
     with pytest.raises(ToolCallLimitExceededError):
         agent.invoke(
-            Command(
-                resume={
-                    "decisions": [
-                        {"type": "reject", "message": "Revise it"}
-                    ]
-                }
-            ),
+            Command(resume={"decisions": [{"type": "reject", "message": "Revise it"}]}),
             config,
         )
 
@@ -406,9 +391,7 @@ def test_model_budget_persists_across_hitl_resume() -> None:
         middleware=[
             HumanInTheLoopMiddleware(
                 interrupt_on={
-                    "execute_sql": {
-                        "allowed_decisions": ["approve", "reject"]
-                    }
+                    "execute_sql": {"allowed_decisions": ["approve", "reject"]}
                 }
             ),
             ModelCallLimitMiddleware(
@@ -428,13 +411,7 @@ def test_model_budget_persists_across_hitl_resume() -> None:
 
     with pytest.raises(ModelCallLimitExceededError):
         agent.invoke(
-            Command(
-                resume={
-                    "decisions": [
-                        {"type": "reject", "message": "Revise it"}
-                    ]
-                }
-            ),
+            Command(resume={"decisions": [{"type": "reject", "message": "Revise it"}]}),
             config,
         )
 

@@ -1,4 +1,4 @@
-"""Thread-safe, process-local stores for the POC."""
+"""Thread-safe durable stores for conversations, runs, and presentation artifacts."""
 
 from __future__ import annotations
 
@@ -7,15 +7,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
 from threading import RLock
-from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
-from data_analytics_agent.agents.statistical_analysis.schemas import (
+from data_analytics_agent.agents.data_analysis.schemas import (
     PythonExecutionResult,
-    StatisticalAnalysisResult,
+    DataAnalysisResult,
 )
-from data_analytics_agent.profiling import profile_result
 from data_analytics_agent.reporting.schemas import (
     ReportArtifact,
     ReportResponse,
@@ -33,161 +31,46 @@ from data_analytics_agent.schemas import (
     ConversationResponse,
     ExecutionBudgetDiagnostics,
     FinalAnswer,
-    ResultPage,
     RunDiagnostics,
     RunResponse,
     RunStatus,
-    SavedResult,
-    SavedStatisticalAnalysis,
+    SavedDataAnalysis,
     TokenUsage,
 )
 
 
-class StoreNotFound(KeyError):
-    pass
+from data_analytics_agent.datasets import StoreNotFound
+from data_analytics_agent.datasets import ResultStore as ResultStore
+from data_analytics_agent.persistence import LocalStorage, persist_run
 
 
-class ResultStore:
-    """Stores capped SQL artifacts outside the model/checkpoint context."""
-
-    def __init__(self) -> None:
-        self._items: dict[str, SavedResult] = {}
-        self._lock = RLock()
-
-    def save(
-        self,
-        *,
-        thread_id: str,
-        source_id: str,
-        executed_sql: str,
-        columns: list[str],
-        rows: list[dict[str, Any]],
-        truncated: bool,
-        elapsed_ms: float,
-        originating_question: str = "",
-    ) -> SavedResult:
-        clean_question = " ".join(originating_question.split())
-        result = SavedResult(
-            result_id=str(uuid4()),
-            thread_id=thread_id,
-            source_id=source_id,
-            executed_sql=executed_sql,
-            originating_question=clean_question,
-            short_label=(
-                clean_question[:77] + "…"
-                if len(clean_question) > 78
-                else clean_question or "SQL result"
-            ),
-            columns=columns,
-            rows=rows,
-            profile=profile_result(columns, rows),
-            row_count=len(rows),
-            truncated=truncated,
-            elapsed_ms=elapsed_ms,
-            created_at=datetime.now(timezone.utc),
-        )
-        with self._lock:
-            self._items[result.result_id] = result
-        return result
-
-    def list_for_conversation(
-        self,
-        thread_id: str,
-        *,
-        source_id: str,
-    ) -> list[SavedResult]:
-        """List scoped artifacts in creation order without exposing rows."""
-
-        with self._lock:
-            results = [
-                result
-                for result in self._items.values()
-                if result.thread_id == thread_id
-                and result.source_id == source_id
-            ]
-        return sorted(results, key=lambda result: result.created_at)
-
-    def get(
-        self,
-        result_id: str,
-        thread_id: str,
-        *,
-        source_id: str | None = None,
-    ) -> SavedResult:
-        with self._lock:
-            result = self._items.get(result_id)
-        if (
-            result is None
-            or result.thread_id != thread_id
-            or (source_id is not None and result.source_id != source_id)
-        ):
-            raise StoreNotFound(result_id)
-        return result
-
-    def get_unscoped(self, result_id: str) -> SavedResult:
-        """Fetch by opaque ID for the local single-user HTTP result endpoint."""
-
-        with self._lock:
-            result = self._items.get(result_id)
-        if result is None:
-            raise StoreNotFound(result_id)
-        return result
-
-    def page(
-        self,
-        result_id: str,
-        thread_id: str,
-        *,
-        source_id: str | None = None,
-        offset: int = 0,
-        limit: int = 100,
-    ) -> ResultPage:
-        result = self.get(result_id, thread_id, source_id=source_id)
-        bounded_limit = min(max(limit, 1), 10_000)
-        bounded_offset = max(offset, 0)
-        return ResultPage(
-            result_id=result.result_id,
-            source_id=result.source_id,
-            executed_sql=result.executed_sql,
-            columns=result.columns,
-            rows=result.rows[bounded_offset : bounded_offset + bounded_limit],
-            profile=result.profile,
-            row_count=result.row_count,
-            truncated=result.truncated,
-            elapsed_ms=result.elapsed_ms,
-            offset=bounded_offset,
-            limit=bounded_limit,
-        )
-
-    def page_unscoped(
-        self, result_id: str, *, offset: int = 0, limit: int = 100
-    ) -> ResultPage:
-        result = self.get_unscoped(result_id)
-        return self.page(
-            result_id,
-            result.thread_id,
-            offset=offset,
-            limit=limit,
-        )
-
-
-class StatisticalAnalysisStore:
+class DataAnalysisStore:
     """Retains reusable, source-scoped statistical analysis artifacts."""
 
-    def __init__(self) -> None:
-        self._items: dict[str, SavedStatisticalAnalysis] = {}
+    def __init__(self, storage: LocalStorage | None = None) -> None:
+        self.storage = storage or LocalStorage()
+        self._items = self.storage.load("analyses", SavedDataAnalysis)
         self._lock = RLock()
+
+    def forget_conversations(self, thread_ids: set[str]) -> None:
+        """Evict records after durable history deletion."""
+        with self._lock:
+            keys = [
+                key for key, item in self._items.items() if item.thread_id in thread_ids
+            ]
+            for key in keys:
+                del self._items[key]
 
     def save(
         self,
         *,
         thread_id: str,
         source_id: str,
-        analysis: StatisticalAnalysisResult,
-    ) -> SavedStatisticalAnalysis:
+        analysis: DataAnalysisResult,
+    ) -> SavedDataAnalysis:
         analysis_id = str(uuid4())
         authoritative = analysis.model_copy(update={"analysis_id": analysis_id})
-        saved = SavedStatisticalAnalysis(
+        saved = SavedDataAnalysis(
             analysis_id=analysis_id,
             thread_id=thread_id,
             source_id=source_id,
@@ -196,6 +79,7 @@ class StatisticalAnalysisStore:
         )
         with self._lock:
             self._items[analysis_id] = saved
+            self.storage.put("analyses", analysis_id, saved)
         return saved
 
     def get(
@@ -204,7 +88,7 @@ class StatisticalAnalysisStore:
         thread_id: str,
         *,
         source_id: str | None = None,
-    ) -> SavedStatisticalAnalysis:
+    ) -> SavedDataAnalysis:
         with self._lock:
             item = self._items.get(analysis_id)
         if (
@@ -220,7 +104,7 @@ class StatisticalAnalysisStore:
         thread_id: str,
         *,
         source_id: str,
-    ) -> list[SavedStatisticalAnalysis]:
+    ) -> list[SavedDataAnalysis]:
         with self._lock:
             items = [
                 item
@@ -233,9 +117,19 @@ class StatisticalAnalysisStore:
 class ReportStore:
     """Stores exact rendered HTML outside model and checkpoint context."""
 
-    def __init__(self) -> None:
-        self._items: dict[str, ReportArtifact] = {}
+    def __init__(self, storage: LocalStorage | None = None) -> None:
+        self.storage = storage or LocalStorage()
+        self._items = self.storage.load("reports", ReportArtifact)
         self._lock = RLock()
+
+    def forget_conversations(self, thread_ids: set[str]) -> None:
+        """Evict records after durable history deletion."""
+        with self._lock:
+            keys = [
+                key for key, item in self._items.items() if item.thread_id in thread_ids
+            ]
+            for key in keys:
+                del self._items[key]
 
     def save(
         self,
@@ -254,15 +148,18 @@ class ReportStore:
                 thread_id,
                 source_id=source_id,
             )
+        report_id = str(uuid4())
+        html_path = self.storage.artifacts / f"{report_id}.html"
+        html_path.write_text(html, encoding="utf-8")
         artifact = ReportArtifact(
-            report_id=str(uuid4()),
+            report_id=report_id,
             thread_id=thread_id,
             source_id=source_id,
             title=spec.title,
             version=(previous.version + 1 if previous else 1),
             previous_report_id=previous.report_id if previous else None,
             spec=spec,
-            html=html,
+            html_path=str(html_path),
             html_sha256=hashlib.sha256(html.encode("utf-8")).hexdigest(),
             renderer_version=REPORT_RENDERER_VERSION,
             input_result_ids=list(dict.fromkeys(input_result_ids)),
@@ -271,6 +168,7 @@ class ReportStore:
         )
         with self._lock:
             self._items[artifact.report_id] = artifact
+            self.storage.put("reports", artifact.report_id, artifact)
         return artifact
 
     def get(
@@ -324,9 +222,19 @@ class _Conversation:
 
 
 class ConversationStore:
-    def __init__(self) -> None:
-        self._items: dict[str, _Conversation] = {}
+    def __init__(self, storage: LocalStorage | None = None) -> None:
+        self.storage = storage or LocalStorage()
+        self._items = self.storage.load("conversations", _Conversation)
         self._lock = RLock()
+
+    def forget_conversations(self, thread_ids: set[str]) -> None:
+        """Evict records after durable history deletion."""
+        with self._lock:
+            keys = [
+                key for key, item in self._items.items() if item.thread_id in thread_ids
+            ]
+            for key in keys:
+                del self._items[key]
 
     def create(self, source_id: str) -> str:
         thread_id = str(uuid4())
@@ -335,6 +243,7 @@ class ConversationStore:
                 thread_id=thread_id,
                 source_id=source_id,
             )
+        self.storage.put("conversations", thread_id, self._items[thread_id])
         return thread_id
 
     def exists(self, thread_id: str) -> bool:
@@ -361,8 +270,10 @@ class ConversationStore:
                 raise StoreNotFound(thread_id)
             if item.active_run_id is not None:
                 raise RuntimeError("A run is already active for this conversation.")
-            item.run_ids.append(run_id)
+            if run_id not in item.run_ids:
+                item.run_ids.append(run_id)
             item.active_run_id = run_id
+            self.storage.put("conversations", thread_id, item)
 
     def complete_run(self, thread_id: str, run_id: str, turn: ChatTurn) -> None:
         with self._lock:
@@ -373,12 +284,23 @@ class ConversationStore:
                 raise RuntimeError("Run does not own the conversation.")
             item.turns.append(turn)
             item.active_run_id = None
+            self.storage.put("conversations", thread_id, item)
 
     def fail_run(self, thread_id: str, run_id: str) -> None:
         with self._lock:
             item = self._items.get(thread_id)
             if item is not None and item.active_run_id == run_id:
                 item.active_run_id = None
+                self.storage.put("conversations", thread_id, item)
+
+    def list(self):
+        return [self.get(key) for key in reversed(list(self._items))]
+
+    def save_investigation(self, thread_id: str, record: dict):
+        self.storage.put("investigations", thread_id, record, dict)
+
+    def investigation(self, thread_id: str):
+        return self.storage.load("investigations", dict).get(thread_id, {})
 
 
 @dataclass
@@ -396,14 +318,8 @@ class _TokenTotals:
         input_details = usage.get("input_token_details")
         if isinstance(input_details, Mapping):
             cached = input_details.get("cache_read")
-            if (
-                isinstance(cached, int)
-                and not isinstance(cached, bool)
-                and cached >= 0
-            ):
-                self.cached_input_tokens = (
-                    (self.cached_input_tokens or 0) + cached
-                )
+            if isinstance(cached, int) and not isinstance(cached, bool) and cached >= 0:
+                self.cached_input_tokens = (self.cached_input_tokens or 0) + cached
         output_details = usage.get("output_token_details")
         if isinstance(output_details, Mapping):
             reasoning = output_details.get("reasoning")
@@ -413,8 +329,8 @@ class _TokenTotals:
                 and reasoning >= 0
             ):
                 self.reasoning_output_tokens = (
-                    (self.reasoning_output_tokens or 0) + reasoning
-                )
+                    self.reasoning_output_tokens or 0
+                ) + reasoning
 
     def schema(self) -> TokenUsage:
         return TokenUsage(
@@ -452,6 +368,7 @@ class _Run:
     source_id: str
     question: str
     created_at: float
+    last_saved_at: float = 0
     model: str = ""
     status: RunStatus = RunStatus.QUEUED
     events: list[ActivityEvent] = field(default_factory=list)
@@ -460,8 +377,13 @@ class _Run:
     answer: FinalAnswer | None = None
     error: str | None = None
     diagnostics: ExecutionBudgetDiagnostics | None = None
-    statistical_execution_attempts: int = 0
-    statistical_execution: PythonExecutionResult | None = None
+    python_execution_attempts: int = 0
+    python_executions: list[PythonExecutionResult] = field(default_factory=list)
+    phase: str = "understanding"
+    findings: FinalAnswer | None = None
+    report_spec: dict | None = None
+    chart_specs: list[dict] = field(default_factory=list)
+    report_reference: dict | None = None
     last_review_type: str = "sql"
     terminal_at: float | None = None
     active_started_at: float | None = None
@@ -503,18 +425,36 @@ def _sum_tokens(values: list[TokenUsage]) -> TokenUsage:
         output_tokens=sum(value.output_tokens for value in values),
         total_tokens=sum(value.total_tokens for value in values),
         cached_input_tokens=(sum(cached_values) if cached_values else None),
-        reasoning_output_tokens=(
-            sum(reasoning_values) if reasoning_values else None
-        ),
+        reasoning_output_tokens=(sum(reasoning_values) if reasoning_values else None),
     )
 
 
 class RunStore:
-    def __init__(self, *, clock: Callable[[], float] = perf_counter) -> None:
-        self._items: dict[str, _Run] = {}
+    def __init__(
+        self,
+        storage: LocalStorage | None = None,
+        *,
+        clock: Callable[[], float] = __import__("time").time,
+    ) -> None:
+        self.storage = storage or LocalStorage()
+        self._items = self.storage.load("runs", _Run)
         self._lock = RLock()
         self._clock = clock
 
+    def forget_conversations(self, thread_ids: set[str]) -> None:
+        """Evict records after durable history deletion."""
+        with self._lock:
+            keys = [
+                key for key, item in self._items.items() if item.thread_id in thread_ids
+            ]
+            for key in keys:
+                del self._items[key]
+                for name in ("_cancel_events", "_workers"):
+                    getattr(self, name, {}).pop(key, None)
+            for key in thread_ids:
+                getattr(self, "_source_locks", {}).pop(key, None)
+
+    @persist_run
     def create(
         self,
         thread_id: str,
@@ -561,7 +501,7 @@ class RunStore:
         preferred_order = {
             "coordinator": 0,
             "text-to-sql": 1,
-            "statistical-analysis": 2,
+            "data-analysis": 2,
             "data-visualization": 3,
             "unknown": 99,
         }
@@ -573,9 +513,7 @@ class RunStore:
                 model_call_errors=metrics.model_call_errors,
                 model_calls_missing_usage=metrics.model_calls_missing_usage,
                 model_ms=_rounded_ms(metrics.model_seconds),
-                max_model_call_ms=_rounded_ms(
-                    metrics.max_model_call_seconds
-                ),
+                max_model_call_ms=_rounded_ms(metrics.max_model_call_seconds),
                 tool_calls=metrics.tool_calls,
                 tool_call_errors=metrics.tool_call_errors,
                 tool_ms=_rounded_ms(metrics.tool_seconds),
@@ -593,9 +531,7 @@ class RunStore:
             tokens=_sum_tokens([agent.tokens for agent in agents]),
             token_usage_partial=(
                 bool(item.pending_model_calls)
-                or any(
-                    agent.model_calls_missing_usage for agent in agents
-                )
+                or any(agent.model_calls_missing_usage for agent in agents)
             ),
             model_calls=sum(agent.model_calls for agent in agents),
             model_call_errors=sum(agent.model_call_errors for agent in agents),
@@ -624,6 +560,8 @@ class RunStore:
                 thread_id=item.thread_id,
                 source_id=item.source_id,
                 question=item.question,
+                phase=item.phase,
+                findings=item.findings,
                 status=item.status,
                 events=events,
                 next_event_id=len(item.events),
@@ -637,26 +575,16 @@ class RunStore:
 
     def diagnostics(self, run_id: str) -> RunDiagnostics:
         with self._lock:
-            return self._run_diagnostics(
-                self._get_mutable(run_id), self._clock()
-            )
+            return self._run_diagnostics(self._get_mutable(run_id), self._clock())
 
-    def conversation_diagnostics(
-        self, run_ids: list[str]
-    ) -> ConversationDiagnostics:
+    def conversation_diagnostics(self, run_ids: list[str]) -> ConversationDiagnostics:
         with self._lock:
             now = self._clock()
-            items = [
-                self._items[run_id]
-                for run_id in run_ids
-                if run_id in self._items
-            ]
+            items = [self._items[run_id] for run_id in run_ids if run_id in self._items]
             runs = [self._run_diagnostics(item, now) for item in items]
             return ConversationDiagnostics(
                 tokens=_sum_tokens([run.tokens for run in runs]),
-                token_usage_partial=any(
-                    run.token_usage_partial for run in runs
-                ),
+                token_usage_partial=any(run.token_usage_partial for run in runs),
                 model_calls=sum(run.model_calls for run in runs),
                 model_call_errors=sum(run.model_call_errors for run in runs),
                 model_calls_missing_usage=sum(
@@ -668,9 +596,7 @@ class RunStore:
                 tool_ms=sum(run.tool_ms for run in runs),
                 elapsed_ms=sum(run.elapsed_ms for run in runs),
                 active_ms=sum(run.active_ms for run in runs),
-                approval_wait_ms=sum(
-                    run.approval_wait_ms for run in runs
-                ),
+                approval_wait_ms=sum(run.approval_wait_ms for run in runs),
                 run_count=len(runs),
                 has_active_run=any(
                     item.status
@@ -683,6 +609,7 @@ class RunStore:
                 ),
             )
 
+    @persist_run
     def start_active(self, run_id: str) -> None:
         with self._lock:
             item = self._get_mutable(run_id)
@@ -690,13 +617,13 @@ class RunStore:
                 item.active_started_at = self._clock()
             item.status = RunStatus.RUNNING
 
+    @persist_run
     def set_status(self, run_id: str, status: RunStatus) -> None:
         with self._lock:
             self._get_mutable(run_id).status = status
 
-    def start_model_call(
-        self, run_id: str, call_id: str, *, agent: str
-    ) -> None:
+    @persist_run
+    def start_model_call(self, run_id: str, call_id: str, *, agent: str) -> None:
         with self._lock:
             item = self._get_mutable(run_id)
             if call_id in item.pending_model_calls:
@@ -708,6 +635,7 @@ class RunStore:
                 started_at=self._clock(),
             )
 
+    @persist_run
     def finish_model_call(
         self,
         run_id: str,
@@ -737,9 +665,8 @@ class RunStore:
                 metrics.tokens.add(usage)
             return _rounded_ms(duration)
 
-    def start_tool_call(
-        self, run_id: str, call_id: str, *, agent: str
-    ) -> None:
+    @persist_run
+    def start_tool_call(self, run_id: str, call_id: str, *, agent: str) -> None:
         with self._lock:
             item = self._get_mutable(run_id)
             if call_id in item.pending_tool_calls:
@@ -751,6 +678,7 @@ class RunStore:
                 started_at=self._clock(),
             )
 
+    @persist_run
     def finish_tool_call(
         self, run_id: str, call_id: str, *, agent: str, failed: bool
     ) -> int:
@@ -772,31 +700,28 @@ class RunStore:
                 metrics.tool_call_errors += 1
             return _rounded_ms(duration)
 
-    def reserve_statistical_execution_attempt(
+    @persist_run
+    def reserve_python_execution_attempt(
         self,
         run_id: str,
         *,
-        maximum: int,
+        maximum: int = 0,
     ) -> int:
         """Count actual executions, excluding review rejections."""
 
         with self._lock:
             item = self._get_mutable(run_id)
-            if item.statistical_execution_attempts >= maximum:
-                raise RuntimeError(
-                    f"The run already used all {maximum} statistical Python "
-                    "execution attempts."
-                )
-            item.statistical_execution_attempts += 1
-            return item.statistical_execution_attempts
+            item.python_execution_attempts += 1
+            return item.python_execution_attempts
 
-    def statistical_execution_attempt_count(self, run_id: str) -> int:
+    def python_execution_attempt_count(self, run_id: str) -> int:
         """Return actual statistical Python executions used by this run."""
 
         with self._lock:
-            return self._get_mutable(run_id).statistical_execution_attempts
+            return self._get_mutable(run_id).python_execution_attempts
 
-    def record_statistical_execution(
+    @persist_run
+    def record_python_execution(
         self,
         run_id: str,
         execution: PythonExecutionResult,
@@ -804,19 +729,20 @@ class RunStore:
         """Retain the authoritative successful execution for final validation."""
 
         with self._lock:
-            self._get_mutable(run_id).statistical_execution = execution
+            self._get_mutable(run_id).python_executions.append(execution)
 
-    def get_statistical_execution(
+    def get_python_execution(
         self,
         run_id: str,
-    ) -> PythonExecutionResult | None:
+    ) -> list[PythonExecutionResult]:
         with self._lock:
-            return self._get_mutable(run_id).statistical_execution
+            return list(self._get_mutable(run_id).python_executions)
 
     def get_last_review_type(self, run_id: str) -> str:
         with self._lock:
             return self._get_mutable(run_id).last_review_type
 
+    @persist_run
     def add_event(
         self,
         run_id: str,
@@ -842,6 +768,7 @@ class RunStore:
             item.events.append(event)
             return event
 
+    @persist_run
     def set_debug_state(
         self,
         run_id: str,
@@ -852,6 +779,7 @@ class RunStore:
         with self._lock:
             self._get_mutable(run_id).debug_states[snapshot.agent] = snapshot
 
+    @persist_run
     def require_approval(
         self,
         run_id: str,
@@ -865,6 +793,7 @@ class RunStore:
             item.approval = approval
             item.approval_started_at = now
 
+    @persist_run
     def resume(self, run_id: str) -> None:
         with self._lock:
             item = self._get_mutable(run_id)
@@ -872,6 +801,7 @@ class RunStore:
             item.approval = None
             item.error = None
 
+    @persist_run
     def claim_approval(
         self,
         run_id: str,
@@ -881,13 +811,8 @@ class RunStore:
 
         with self._lock:
             item = self._get_mutable(run_id)
-            if (
-                item.status != RunStatus.APPROVAL_REQUIRED
-                or item.approval != expected
-            ):
-                raise RuntimeError(
-                    "This run is no longer awaiting that decision."
-                )
+            if item.status != RunStatus.APPROVAL_REQUIRED or item.approval != expected:
+                raise RuntimeError("This run is no longer awaiting that decision.")
             now = self._clock()
             wait_seconds = 0.0
             if item.approval_started_at is not None:
@@ -900,6 +825,7 @@ class RunStore:
             item.error = None
             return _rounded_ms(wait_seconds)
 
+    @persist_run
     def complete(self, run_id: str, answer: FinalAnswer) -> None:
         with self._lock:
             item = self._get_mutable(run_id)
@@ -910,6 +836,7 @@ class RunStore:
             item.answer = answer
             item.approval = None
 
+    @persist_run
     def fail(
         self,
         run_id: str,
@@ -926,3 +853,101 @@ class RunStore:
             item.error = error
             item.diagnostics = diagnostics
             item.approval = None
+
+    @persist_run
+    def set_phase(self, run_id: str, phase: str):
+        self._get_mutable(run_id).phase = phase
+
+    @persist_run
+    def publish(self, run_id: str, answer: FinalAnswer):
+        item = self._get_mutable(run_id)
+        item.findings = answer
+        item.phase = "findings_ready"
+
+    @persist_run
+    def save_report_spec(self, run_id: str, spec: dict):
+        self._get_mutable(run_id).report_spec = spec
+
+    def report_spec(self, run_id: str):
+        return self._get_mutable(run_id).report_spec
+
+    @persist_run
+    def add_chart(self, run_id: str, spec: dict):
+        item = self._get_mutable(run_id)
+        if spec not in item.chart_specs:
+            item.chart_specs.append(spec)
+
+    def charts(self, run_id: str):
+        return self._get_mutable(run_id).chart_specs
+
+    @persist_run
+    def pause(self, run_id: str):
+        item = self._get_mutable(run_id)
+        self._stop_active(item, self._clock())
+        item.status = RunStatus.PAUSED
+        item.pending_model_calls.clear()
+        item.pending_tool_calls.clear()
+
+    def recover(self):
+        for key, item in self._items.items():
+            if item.status in {RunStatus.RUNNING, RunStatus.QUEUED, RunStatus.STOPPING}:
+                self._stop_active(
+                    item, item.last_saved_at or item.active_started_at or self._clock()
+                )
+                self.pause(key)
+
+    def cancel_event(self, run_id: str):
+        from threading import Event
+
+        with self._lock:
+            if not hasattr(self, "_cancel_events"):
+                self._cancel_events = {}
+            return self._cancel_events.setdefault(run_id, Event())
+
+    def analysis_stop_reason(self, run_id: str):
+        if self.cancel_event(run_id).is_set():
+            raise InterruptedError("Run stopped.")
+        if self.get(run_id).findings is not None:
+            return "Findings are published. Only presentation work remains; do not rerun analysis."
+        if (
+            self.diagnostics(run_id).active_ms
+            >= getattr(self, "analysis_budget_seconds", 900) * 1000
+        ):
+            return "Analysis time budget exhausted. Synthesize supported partial findings and create their report now."
+        return None
+
+    @persist_run
+    def attach_report(self, run_id: str, reference):
+        self._get_mutable(run_id).report_reference = reference.model_dump(mode="json")
+
+    def report_reference(self, run_id: str):
+        return self._get_mutable(run_id).report_reference
+
+    def workers_active(self, run_id):
+        return getattr(self, "_workers", {}).get(run_id, 0)
+
+    @__import__("contextlib").contextmanager
+    def source_worker(self, run_id):
+        from threading import Lock
+
+        thread_id = self.get(run_id).thread_id
+        with self._lock:
+            if not hasattr(self, "_source_locks"):
+                self._source_locks = {}
+            lock = self._source_locks.setdefault(thread_id, Lock())
+        with self.worker(run_id), lock:
+            if self.cancel_event(run_id).is_set():
+                raise InterruptedError("Run stopped before source execution.")
+            yield
+
+    @__import__("contextlib").contextmanager
+    def worker(self, run_id):
+        with self._lock:
+            if not hasattr(self, "_workers"):
+                self._workers = {}
+            self._workers[run_id] = self._workers.get(run_id, 0) + 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._workers[run_id] -= 1

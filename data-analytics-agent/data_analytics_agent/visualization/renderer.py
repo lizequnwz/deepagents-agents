@@ -4,22 +4,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from numbers import Real
+from decimal import Decimal
 from typing import Any
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from data_analytics_agent.agents.visualization.geocoding import (
+from data_analytics_agent.visualization.geocoding import (
     USLocationResolver,
     normalize_us_state,
 )
-from data_analytics_agent.agents.visualization.schemas import (
+from data_analytics_agent.visualization.schemas import (
     ChartSpec,
     ChartType,
     Palette,
 )
-from data_analytics_agent.agents.visualization.validation import (
+from data_analytics_agent.visualization.validation import (
     presentation_rows,
 )
 
@@ -41,7 +42,7 @@ class ChartRenderStyle:
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, Real) and not isinstance(value, bool)
+    return isinstance(value, (Real, Decimal)) and not isinstance(value, bool)
 
 
 def _palette(
@@ -87,16 +88,19 @@ def _numeric_column(
         nonlocal invalid
         if value is None:
             return None
+        if isinstance(value, str):
+            try:
+                value = float(value)
+            except ValueError:
+                pass
         if not _is_number(value) or (nonnegative and value < 0):
             invalid += 1
             return None
-        return value
+        return float(value)
 
     frame[column] = frame[column].map(clean)
     if invalid:
-        warnings.append(
-            f"Excluded {invalid} incompatible value(s) from {column!r}."
-        )
+        warnings.append(f"Excluded {invalid} incompatible value(s) from {column!r}.")
 
 
 def _drop_missing(
@@ -108,9 +112,7 @@ def _drop_missing(
     usable = frame.dropna(subset=columns)
     dropped = before - len(usable)
     if dropped:
-        warnings.append(
-            f"Excluded {dropped} row(s) missing required chart values."
-        )
+        warnings.append(f"Excluded {dropped} row(s) missing required chart values.")
     if usable.empty:
         raise ValueError("No usable chart points remain after validation.")
     return usable
@@ -124,9 +126,7 @@ def _style_figure(
     show_title = style is None or style.show_title
     fig.update_layout(
         title=(
-            {"text": spec.title, "x": 0.01, "xanchor": "left"}
-            if show_title
-            else None
+            {"text": spec.title, "x": 0.01, "xanchor": "left"} if show_title else None
         ),
         margin={
             "l": 24,
@@ -150,19 +150,12 @@ def _style_figure(
         plot_bgcolor="rgba(0,0,0,0)",
     )
     if spec.chart_type not in {ChartType.PIE, ChartType.MAP}:
-        if (
-            spec.chart_type is ChartType.BAR
-            and spec.orientation == "horizontal"
-        ):
-            x_title = spec.y_label or (
-                spec.y[0] if len(spec.y) == 1 else None
-            )
+        if spec.chart_type is ChartType.BAR and spec.orientation == "horizontal":
+            x_title = spec.y_label or (spec.y[0] if len(spec.y) == 1 else None)
             y_title = spec.x_label or spec.x
         else:
             x_title = spec.x_label or spec.x
-            y_title = spec.y_label or (
-                spec.y[0] if len(spec.y) == 1 else None
-            )
+            y_title = spec.y_label or (spec.y[0] if len(spec.y) == 1 else None)
         fig.update_layout(
             xaxis={
                 "title": {"text": x_title},
@@ -178,9 +171,7 @@ def _style_figure(
         if spec.secondary_y:
             fig.update_layout(
                 yaxis2={
-                    "title": {
-                        "text": spec.secondary_y_label or spec.secondary_y
-                    },
+                    "title": {"text": spec.secondary_y_label or spec.secondary_y},
                     "overlaying": "y",
                     "side": "right",
                     "showgrid": False,
@@ -203,9 +194,7 @@ def _render_cartesian(
         _numeric_column(frame, spec.secondary_y, warnings)
     if spec.size:
         _numeric_column(frame, spec.size, warnings, nonnegative=True)
-    y_mapping: str | list[str] = (
-        spec.y[0] if len(spec.y) == 1 else spec.y
-    )
+    y_mapping: str | list[str] = spec.y[0] if len(spec.y) == 1 else spec.y
 
     if spec.chart_type is ChartType.BAR:
         frame = _drop_missing(
@@ -215,9 +204,7 @@ def _render_cartesian(
         )
         missing_points = int(frame[spec.y].isna().sum().sum())
         if missing_points:
-            warnings.append(
-                f"Excluded {missing_points} missing bar point(s)."
-            )
+            warnings.append(f"Excluded {missing_points} missing bar point(s).")
         plotted_columns = [*spec.y]
         if spec.secondary_y:
             plotted_columns.append(spec.secondary_y)
@@ -281,11 +268,7 @@ def _render_cartesian(
     if spec.chart_type is ChartType.SCATTER:
         frame = _drop_missing(
             frame,
-            [
-                column
-                for column in [spec.x, spec.y[0], spec.size]
-                if column
-            ],
+            [column for column in [spec.x, spec.y[0], spec.size] if column],
             warnings,
         )
         return px.scatter(
@@ -396,16 +379,59 @@ def _render_map(
             warnings,
         )
         if spec.location_mode == "us_state":
-            frame["__location_code"] = frame[spec.location].map(
-                normalize_us_state
-            )
+            frame["__location_code"] = frame[spec.location].map(normalize_us_state)
             valid_states = {
-                "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC",
-                "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY",
-                "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT",
-                "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH",
-                "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT",
-                "VT", "VA", "WA", "WV", "WI", "WY",
+                "AL",
+                "AK",
+                "AZ",
+                "AR",
+                "CA",
+                "CO",
+                "CT",
+                "DE",
+                "DC",
+                "FL",
+                "GA",
+                "HI",
+                "ID",
+                "IL",
+                "IN",
+                "IA",
+                "KS",
+                "KY",
+                "LA",
+                "ME",
+                "MD",
+                "MA",
+                "MI",
+                "MN",
+                "MS",
+                "MO",
+                "MT",
+                "NE",
+                "NV",
+                "NH",
+                "NJ",
+                "NM",
+                "NY",
+                "NC",
+                "ND",
+                "OH",
+                "OK",
+                "OR",
+                "PA",
+                "RI",
+                "SC",
+                "SD",
+                "TN",
+                "TX",
+                "UT",
+                "VT",
+                "VA",
+                "WA",
+                "WV",
+                "WI",
+                "WY",
             }
             valid = frame["__location_code"].isin(valid_states)
         else:
@@ -426,9 +452,7 @@ def _render_map(
             frame,
             locations=locations,
             locationmode=(
-                "USA-states"
-                if spec.location_mode == "us_state"
-                else "ISO-3"
+                "USA-states" if spec.location_mode == "us_state" else "ISO-3"
             ),
             color=spec.value,
             scope="usa" if spec.location_mode == "us_state" else None,
@@ -459,10 +483,7 @@ def _render_map(
                 point = (resolved.latitude, resolved.longitude)
         elif spec.location_mode == "us_city_state":
             assert spec.location is not None and spec.region is not None
-            label = (
-                f"{row.get(spec.location) or ''}, "
-                f"{row.get(spec.region) or ''}"
-            )
+            label = f"{row.get(spec.location) or ''}, {row.get(spec.region) or ''}"
             resolved = resolver.resolve_city_state(
                 row.get(spec.location),
                 row.get(spec.region),
@@ -516,11 +537,9 @@ def build_chart(
 ) -> RenderedChart:
     """Build one Plotly figure from a previously validated ChartSpec."""
 
-    warnings: list[str] = []
+    warnings: list[str] = list(spec.notes)
     presented_rows = presentation_rows(rows, spec)
-    category_column = (
-        spec.location if spec.chart_type is ChartType.MAP else spec.x
-    )
+    category_column = spec.location if spec.chart_type is ChartType.MAP else spec.x
     if spec.category_limit is not None and category_column is not None:
         all_categories = {
             (type(row.get(category_column)), str(row.get(category_column)))
@@ -539,6 +558,18 @@ def build_chart(
                 f"{spec.sort_by} {spec.sort_direction}."
             )
     frame = pd.DataFrame(presented_rows)
+    for column in set(
+        [
+            *([] if spec.chart_type is ChartType.HEATMAP else spec.y),
+            spec.value,
+            spec.size,
+            spec.lower_bound,
+            spec.upper_bound,
+            spec.error_y,
+        ]
+    ):
+        if column and column in frame:
+            _numeric_column(frame, column, warnings)
     if frame.empty:
         raise ValueError("No rows remain for chart rendering.")
 
@@ -556,6 +587,38 @@ def build_chart(
         )
     else:
         figure = _render_cartesian(frame, spec, warnings, style)
+    if spec.lower_bound and spec.upper_bound:
+        band = frame.sort_values(spec.x)
+        figure.add_trace(
+            go.Scatter(
+                x=band[spec.x],
+                y=band[spec.upper_bound],
+                line=dict(width=0),
+                mode="lines",
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        figure.add_trace(
+            go.Scatter(
+                x=band[spec.x],
+                y=band[spec.lower_bound],
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor="rgba(54,135,39,.15)",
+                name="Uncertainty interval",
+                hoverinfo="skip",
+            )
+        )
+    if spec.error_y:
+        axis = (
+            "error_x"
+            if spec.chart_type is ChartType.BAR and spec.orientation == "horizontal"
+            else "error_y"
+        )
+        figure.update_traces(
+            **{axis: dict(type="data", array=frame[spec.error_y], visible=True)}
+        )
     return RenderedChart(
         figure=_style_figure(figure, spec, style),
         warnings=tuple(dict.fromkeys(warnings)),

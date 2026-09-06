@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from data_analytics_agent.run_manager import decisions_to_command
+from data_analytics_agent.approvals import decisions_to_command
 from data_analytics_agent.schemas import (
     ApprovalRequest,
     Decision,
@@ -57,9 +57,7 @@ def test_reject_includes_feedback(approval: ApprovalRequest) -> None:
     )
     assert command.resume == {
         approval.interrupt_id: {
-            "decisions": [
-                {"type": "reject", "message": "Group by country instead."}
-            ]
+            "decisions": [{"type": "reject", "message": "Group by country instead."}]
         }
     }
 
@@ -67,11 +65,11 @@ def test_reject_includes_feedback(approval: ApprovalRequest) -> None:
 def test_python_edit_preserves_parent_result_and_exact_code() -> None:
     approval = ApprovalRequest(
         interrupt_id="python-review-1",
-        action_name="execute_statistical_python",
+        action_name="execute_analysis_python",
         query='analysis_outputs = {"Mean": df.value.mean()}',
         allowed_decisions=["approve", "edit", "reject"],
         review_type="python",
-        parent_result_id="result-1",
+        arguments={"inputs": {"data": "result-1"}},
     )
     edited = 'analysis_outputs = {"Median": df.value.median()}\n'
 
@@ -82,6 +80,6 @@ def test_python_edit_preserves_parent_result_and_exact_code() -> None:
 
     resume_value = command.resume[approval.interrupt_id]
     assert resume_value["decisions"][0]["edited_action"] == {
-        "name": "execute_statistical_python",
-        "args": {"result_id": "result-1", "code": edited},
+        "name": "execute_analysis_python",
+        "args": {"inputs": {"data": "result-1"}, "code": edited},
     }

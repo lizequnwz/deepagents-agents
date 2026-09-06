@@ -1,218 +1,57 @@
 # Backend development
 
-## Purpose and mental model
+`SQLBackend` owns connection setup, SQL dialect, exact execution, cancellation,
+and live schema inspection. It never composes an agent answer. The current
+adapters are SQLite and Snowflake; register new adapters in the backend factory
+and keep source-specific configuration in the trusted data-source registry.
 
-`SQLBackend` is the database-provider boundary. The agent supplies SQL and
-execution limits; the adapter validates once immediately before execution,
-executes, caps, normalizes, and returns metadata through stable Python values.
+## Contract
 
-The protocol is defined in
-[`backends/base.py`](../data_analytics_agent/backends/base.py). It is structural:
-adapters do not need to subclass a base class if they satisfy the contract.
+See [`backends/base.py`](../data_analytics_agent/backends/base.py):
 
-## Required contract
+- `dialect` is the SQLGlot dialect; `backend_type` identifies the adapter.
+- `execute_batches(query, *, timeout_seconds, cancel=None)` yields typed
+  PyArrow `RecordBatch` objects. Validate the exact submitted SQL immediately
+  before execution. The optional cancellation event belongs to the run.
+- `get_table_schema(table_names)` returns metadata for requested declared tables
+  in the same source context used for execution.
 
-| Member | Responsibility |
-| --- | --- |
-| `dialect` | SQLGlot dialect expected by the adapter |
-| `backend_type` | Registry/factory discriminator |
-| `execute(query, timeout_seconds, max_rows)` | Validate and execute exact SQL, returning a normalized capped result |
-| `get_table_schema(table_names)` | Return live metadata for requested OSI-declared tables |
+Yield bounded batches instead of collecting all rows in dictionaries. Preserve
+Decimal and temporal types. The application artifact writer unifies compatible
+batch schemas, applies row and uncompressed-byte budgets, writes Parquet, and
+records incomplete extraction explicitly. It closes the iterator on budget
+exhaustion; adapters must release cursors and connections in `finally` blocks.
+Default dataset budgets are one million rows and 256 MiB. Agent previews contain
+at most ten rows; full downloads read the complete saved artifact.
 
-`execute` raises `SQLValidationError` for unsafe SQL, `SQLExecutionError` for
-expected provider rejection of a safe query, and `TimeoutError` for its
-deadline. The text-to-SQL tool converts those outcomes into model-visible error
-observations so the specialist can revise within its existing budget.
-Unexpected adapter or application defects must not be relabeled as query
-errors.
+Raise `SQLExecutionError` for expected provider query rejection,
+`SQLValidationError` for disallowed SQL, and `TimeoutError` for execution
+expiry. Return useful, credential-free errors so SQL can revise its query.
+Do not disguise application defects as query errors. Execute human-edited SQL
+exactly, without silently adding limits or changing predicates.
 
-Execution returns:
+## Cancellation and source access
 
-```text
-BackendExecutionResult
-├── columns: list[str]
-├── rows: list[dict[str, Any]]
-├── truncated: bool
-└── elapsed_ms: float
-```
+Execution runs in workers with per-conversation source serialization. Check the
+cancellation event between batches and use provider-native interruption where
+available. SQLite installs a progress handler. A blocking provider request may
+not exit immediately; the UI remains **Stopping** until the worker exits.
+Never claim cancellation finished while source execution is still active.
 
-## Execution invariants
+Source access belongs to the SQL specialist. Python reads saved datasets only.
+Saved-data SQL uses DuckDB with explicit artifact bindings; it does not pass
+artifact IDs to a warehouse or require a new source connection. Chart creation
+also consumes saved artifacts through its own shared tool.
 
-Every adapter must:
+## Verification
 
-1. Validate exactly once inside `execute`.
-2. Execute the exact submitted or human-edited query without invisible rewriting.
-3. Enforce `timeout_seconds` using provider-native cancellation or deadline
-   controls.
-4. fetch at most `max_rows + 1` when practical;
-5. return no more than `max_rows`;
-6. report `truncated` accurately;
-7. close/release cursors and connections in success and failure paths;
-8. normalize provider-native values;
-9. wrap expected query rejection as `SQLExecutionError` with an actionable,
-   credential-free message.
+Follow [`test_backends.py`](../tests/test_backends.py) and
+[`test_persistent_analyst.py`](../tests/test_persistent_analyst.py). Cover exact
+SQL and reviewed edits, typed values including null-first batches and decimals,
+source provenance, errors, resource cleanup, timeout/cancellation, and writer
+budget exhaustion. A 100,000-row fixture must survive storage, analysis,
+pagination and full download without becoming a preview-sized dataset.
 
-Use [`normalize_result_value`](../data_analytics_agent/backends/base.py) for common
-values:
-
-- `Decimal` becomes string to avoid precision loss;
-- dates/times become ISO strings;
-- bytes become hexadecimal;
-- unknown native objects become strings.
-
-If a provider returns pandas or Arrow objects, convert at the backend boundary.
-The rest of the application should never depend on that provider library.
-
-## Metadata methods
-
-`get_table_schema` supports startup source/OSI readiness. It receives only the
-physical tables declared by the OSI model; do not enumerate the complete live
-schema or expose metadata discovery to the model.
-
-Return provider-independent `TableInfo` and `ColumnInfo`. Preserve the
-provider's physical name while making lookup behavior explicit.
-
-Metadata operations may use provider-specific catalog APIs or targeted
-`INFORMATION_SCHEMA` queries. They are not user-generated SQL actions, but
-should still use least-privilege credentials and bounded operations.
-
-## Validation
-
-Reuse:
-
-```python
-validate_readonly_sql(query, dialect=self.dialect)
-```
-
-The shared validator parses exactly one statement with SQLGlot and accepts
-`SELECT`, CTE, and set-operation queries while rejecting DDL, DML,
-administrative/session commands, procedures, transactions, metadata commands,
-and multiple statements.
-
-Provider-native safety is still required. SQLite adds a read-only connection,
-authorizer, and progress handler. A cloud warehouse should add least-privilege
-roles, provider timeout/cancellation, and restricted source context.
-
-## Adapter procedure
-
-### 1. Define connection ownership
-
-Decide whether the adapter receives:
-
-- an existing client;
-- a connection factory;
-- a pool/provider;
-- immutable connection settings resolved by the API.
-
-Prefer dependency injection. Do not load credentials from the semantic model,
-agent prompt, or user request.
-
-For a stateful cloud provider, avoid one globally shared connection whose
-database, schema, warehouse, or role is changed per request. Acquire a correctly
-configured connection/session for each source-bound operation.
-
-### 2. Implement the protocol
-
-Create `data_analytics_agent/backends/<provider>.py`. Keep imports provider-local so
-SQLite-only development does not require the optional cloud package.
-
-### 3. Register construction
-
-[`backends/factory.py`](../data_analytics_agent/backends/factory.py) currently uses a
-small explicit branch. Add the backend type and verify its declared dialect
-matches the constructed adapter.
-
-The Snowflake integration adds one explicit branch and injects a long-lived
-`snowlib` client. Do not introduce a provider registry or pool abstraction
-unless another backend or multiple Snowflake contexts create a concrete need.
-
-### 4. Add registry support
-
-`BackendDefinition.options` and `SourceDefinition.target` are generic mappings:
-
-- `options` identifies non-secret backend/profile configuration;
-- `target` selects trusted source-specific context.
-
-Never serialize a client object or credential into YAML.
-
-### 5. Add contract tests
-
-Follow [`test_backends.py`](../tests/test_backends.py). A fake cloud-like
-adapter should prove that `execute_query`:
-
-- accepts dependency injection;
-- passes limits;
-- preserves exact SQL;
-- stores source provenance;
-- separates full result and model sample.
-
-Provider-specific tests should also cover:
-
-- readiness failures;
-- invalid/multiple/mutating SQL;
-- timeout and cancellation;
-- row truncation;
-- null/decimal/date/binary normalization;
-- cursor/connection cleanup;
-- table and schema introspection;
-- quoted/case-sensitive identifiers;
-- provider error sanitization.
-- provider query rejection wrapped as `SQLExecutionError`.
-
-Do not require live cloud credentials in the normal suite. Put live smoke tests
-behind an explicit marker and environment opt-in.
-
-## Current factory limitations
-
-The current construction layer is adequate for SQLite and one next adapter, but
-is not yet a plugin system:
-
-- backend types are registered manually;
-- instances are cached per source;
-- no explicit close/cancel lifecycle exists in the protocol;
-- execution is synchronous;
-- result metadata has no provider query ID or cost information.
-
-Do not expand the protocol speculatively. Add optional execution metadata,
-cancellation, or async methods only when a real adapter requires them and tests
-can define the behavior.
-
-## Keep backend and agent contracts separate
-
-A new database backend should not require a new subagent. A new specialist
-agent should not know how a cursor works.
-
-Use this division:
-
-- backend: connection, SQL dialect, safety, execution, metadata, normalization;
-- text-to-SQL specialist: semantic interpretation and query design;
-- coordinator: capability routing and final response;
-- application: lifecycle, persistence, UI, and artifact access.
-
-The visualization specialist demonstrates this separation: it consumes a
-scoped saved result and never imports a database driver.
-
-## Common mistakes
-
-- Returning a DataFrame directly to the model.
-- Applying an unreviewed `LIMIT` rewrite.
-- Validating only before HITL, not inside execution.
-- Treating SQLGlot as the database authorization layer.
-- Fetching all cloud rows before applying the cap.
-- Mutating a shared cloud session context across concurrent sources.
-- Returning exception text that includes a connection string.
-- Implementing metadata methods with different source context than execution.
-- Adding provider-specific fields to generic API response schemas.
-
-## Verification checklist
-
-- Adapter satisfies `SQLBackend` at runtime.
-- Source dialect equals backend dialect.
-- One invalid source does not break healthy sources.
-- Exact approved/edited SQL is executed.
-- Timeout and cap are enforced by the adapter.
-- Normalized values are JSON compatible and precision safe.
-- Metadata matches the same target used by execution.
-- Result artifact contains the correct source and thread.
-- Normal tests use fakes; live smoke is opt-in.
-- Agent, API schemas, and Streamlit contain no provider-specific branches.
+Normal tests use local fixtures and fake provider clients. Live provider tests
+are opt-in. Avoid adding speculative plugin abstractions, cost metadata, or
+provider-specific fields to the agent/API contracts.

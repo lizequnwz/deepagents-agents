@@ -70,3 +70,12 @@ dual-axis chart; do not encode unsupported styling or invent fields.
   higher-energy direction. Keep one palette language across related charts.
 - Never rely on hue alone. Retain axis labels, legends, hover values, the text
   summary, and the accessible table alternative.
+
+## Shared chart artifacts
+
+The coordinator calls create_chart directly. It validates, stores an immutable
+chart version and returns chart_id. No visualization subagent or terminal
+outcome protocol is used. Reference the same chart_id in reports. Revise with
+previous_chart_id. Several purposeful charts are allowed. Use saved SQL or
+Python-derived datasets. Forecast lines may specify lower_bound/upper_bound;
+bar/scatter estimates may use error_y. Label uncertainty and downsampling.

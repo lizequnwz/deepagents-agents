@@ -111,7 +111,7 @@ sources:
 Limit constraints:
 
 - `timeout_seconds` must be greater than zero;
-- `max_result_rows` is 1–10,000;
+- `max_result_rows` is positive (default 1,000,000; the application also applies its byte budget);
 - `model_sample_rows` is 1–10 and cannot exceed the result cap.
 
 Omitted limits inherit validated global defaults.

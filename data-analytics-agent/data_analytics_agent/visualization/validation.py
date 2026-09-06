@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from numbers import Real
+from decimal import Decimal
 from typing import Any
 
-from data_analytics_agent.agents.visualization.schemas import (
+from data_analytics_agent.visualization.schemas import (
     ChartSpec,
     ChartType,
 )
@@ -18,20 +19,15 @@ from data_analytics_agent.schemas import (
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, Real) and not isinstance(value, bool)
+    return isinstance(value, (Real, Decimal)) and not isinstance(value, bool)
 
 
 def _has_numeric_value(rows: Iterable[dict[str, Any]], column: str) -> bool:
     return any(_is_number(row.get(column)) for row in rows)
 
 
-def _has_nonnegative_numeric_value(
-    rows: Iterable[dict[str, Any]], column: str
-) -> bool:
-    return any(
-        _is_number(row.get(column)) and row[column] >= 0
-        for row in rows
-    )
+def _has_nonnegative_numeric_value(rows: Iterable[dict[str, Any]], column: str) -> bool:
+    return any(_is_number(row.get(column)) and row[column] >= 0 for row in rows)
 
 
 def _column_profile(result: SavedResult, column: str) -> ColumnProfile:
@@ -59,15 +55,16 @@ def _require_role(
     description: str,
 ) -> None:
     if not _supports_role(result, column, roles):
-        raise ValueError(
-            f"Chart column {column!r} must be {description}."
-        )
+        raise ValueError(f"Chart column {column!r} must be {description}.")
 
 
 def chart_columns(spec: ChartSpec) -> set[str]:
     """Return every saved-result column referenced by a chart specification."""
 
     values = {
+        spec.lower_bound,
+        spec.upper_bound,
+        spec.error_y,
         spec.x,
         *spec.y,
         spec.secondary_y,
@@ -104,11 +101,7 @@ def presentation_rows(
             reverse=spec.sort_direction == "descending",
         )
 
-    category_column = (
-        spec.location
-        if spec.chart_type is ChartType.MAP
-        else spec.x
-    )
+    category_column = spec.location if spec.chart_type is ChartType.MAP else spec.x
     if spec.category_limit is None or category_column is None:
         return presented
 
@@ -127,8 +120,7 @@ def presentation_rows(
     return [
         row
         for row in presented
-        if (type(row.get(category_column)), str(row.get(category_column)))
-        in allowed
+        if (type(row.get(category_column)), str(row.get(category_column))) in allowed
     ]
 
 
@@ -140,8 +132,7 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     missing = sorted(chart_columns(spec) - set(result.columns))
     if missing:
         raise ValueError(
-            "Chart columns are not present in the saved result: "
-            + ", ".join(missing)
+            "Chart columns are not present in the saved result: " + ", ".join(missing)
         )
     if not result.rows:
         raise ValueError("The saved result has no rows to visualize.")
@@ -149,6 +140,22 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     rows = presentation_rows(result.rows, spec)
     if not rows:
         raise ValueError("The reviewed presentation operations removed all rows.")
+
+    if spec.error_y and any(
+        _is_number(row.get(spec.error_y)) and row[spec.error_y] < 0 for row in rows
+    ):
+        raise ValueError("Error bars must be nonnegative.")
+    if (
+        spec.lower_bound
+        and spec.upper_bound
+        and any(
+            _is_number(row.get(spec.lower_bound))
+            and _is_number(row.get(spec.upper_bound))
+            and row[spec.lower_bound] > row[spec.upper_bound]
+            for row in rows
+        )
+    ):
+        raise ValueError("Uncertainty lower bounds must not exceed upper bounds.")
 
     dimensions = {
         AnalyticalRole.CATEGORICAL,
@@ -214,7 +221,9 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
                 "a usable region identifier",
             )
 
-    numeric_columns: list[str] = []
+    numeric_columns: list[str] = [
+        name for name in (spec.lower_bound, spec.upper_bound, spec.error_y) if name
+    ]
     if spec.chart_type in {
         ChartType.BAR,
         ChartType.LINE,
@@ -239,15 +248,12 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     for column in numeric_columns:
         _require_role(result, column, numeric, "numeric")
         if not _has_numeric_value(rows, column):
-            raise ValueError(
-                f"Chart column {column!r} has no usable numeric values."
-            )
+            raise ValueError(f"Chart column {column!r} has no usable numeric values.")
     if spec.size and not _has_nonnegative_numeric_value(rows, spec.size):
         raise ValueError("A size column requires nonnegative numeric values.")
 
-    if (
-        spec.chart_type is ChartType.PIE
-        and not _has_nonnegative_numeric_value(rows, spec.y[0])
+    if spec.chart_type is ChartType.PIE and not _has_nonnegative_numeric_value(
+        rows, spec.y[0]
     ):
         raise ValueError("A pie chart requires nonnegative numeric values.")
     if (
@@ -271,8 +277,7 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
         )
     ):
         raise ValueError(
-            "A coordinate map requires at least one valid latitude/longitude "
-            "pair."
+            "A coordinate map requires at least one valid latitude/longitude pair."
         )
 
     if spec.chart_type is ChartType.HEATMAP:
@@ -298,8 +303,7 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
         populated_categories = [
             row.get(category_column)
             for row in rows
-            if row.get(category_column) is not None
-            and _is_number(row.get(spec.y[0]))
+            if row.get(category_column) is not None and _is_number(row.get(spec.y[0]))
         ]
         count = len(set(populated_categories))
         if count != len(populated_categories):
@@ -319,13 +323,11 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
         locations = [
             row.get(spec.location)
             for row in rows
-            if row.get(spec.location) is not None
-            and _is_number(row.get(spec.value))
+            if row.get(spec.location) is not None and _is_number(row.get(spec.value))
         ]
         if len(set(locations)) != len(locations):
             raise ValueError(
-                "Choropleth locations must be unique; aggregate duplicates "
-                "in SQL."
+                "Choropleth locations must be unique; aggregate duplicates in SQL."
             )
     if spec.chart_type in {ChartType.BAR, ChartType.BOX} and category_column:
         count = len({row.get(category_column) for row in rows})

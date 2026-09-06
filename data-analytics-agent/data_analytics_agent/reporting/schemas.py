@@ -13,8 +13,6 @@ from pydantic import (
     model_validator,
 )
 
-from data_analytics_agent.agents.visualization.schemas import ChartSpec
-
 
 class ReportingModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -29,9 +27,7 @@ class ReportTheme(ReportingModel):
     background_color: str = "#F9F7F5"
     text_color: str = "#141414"
     muted_color: str = "#525150"
-    font_style: Literal["modern", "editorial", "technical", "humanist"] = (
-        "humanist"
-    )
+    font_style: Literal["modern", "editorial", "technical", "humanist"] = "humanist"
     density: Literal["spacious", "balanced", "dense"] = "balanced"
     corner_style: Literal["square", "soft", "rounded"] = "soft"
     color_mode: Literal["light", "dark", "adaptive"] = "light"
@@ -51,9 +47,7 @@ class ReportTheme(ReportingModel):
         try:
             int(value[1:], 16)
         except ValueError as exc:
-            raise ValueError(
-                "Report colors must use six-digit hex notation."
-            ) from exc
+            raise ValueError("Report colors must use six-digit hex notation.") from exc
         return value.upper()
 
     @model_validator(mode="after")
@@ -61,9 +55,7 @@ class ReportTheme(ReportingModel):
         def luminance(color: str) -> float:
             channels = [int(color[index : index + 2], 16) / 255 for index in (1, 3, 5)]
             linear = [
-                value / 12.92
-                if value <= 0.04045
-                else ((value + 0.055) / 1.055) ** 2.4
+                value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
                 for value in channels
             ]
             return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
@@ -82,7 +74,9 @@ class ReportTheme(ReportingModel):
             ("#FFFFFF", self.primary_color, "hero text/primary"),
         ]
         failures = [
-            name for foreground, background, name in pairs if ratio(foreground, background) < 4.5
+            name
+            for foreground, background, name in pairs
+            if ratio(foreground, background) < 4.5
         ]
         if failures:
             raise ValueError(
@@ -110,7 +104,12 @@ class ReportBrief(ReportingModel):
 
 class ReportMetric(ReportingModel):
     label: str = Field(min_length=1, max_length=100)
-    value: str = Field(min_length=1, max_length=120)
+    result_id: str
+    column: str
+    row_index: int = Field(default=0, ge=0)
+    number_format: str = Field(default=",.2f", max_length=20)
+    prefix: str = Field(default="", max_length=20)
+    suffix: str = Field(default="", max_length=20)
     change: str | None = Field(default=None, max_length=100)
     context: str | None = Field(default=None, max_length=240)
 
@@ -162,36 +161,18 @@ class ReportTableBlock(ReportingModel):
 
 class ReportChartBlock(ReportingModel):
     type: Literal["chart"] = "chart"
-    chart: ChartSpec
+    chart_id: str
     summary: str = Field(min_length=1, max_length=2_000)
     caption: str | None = Field(default=None, max_length=1_000)
     show_data_table: bool = True
 
 
-class ReportStatisticalBlock(ReportingModel):
-    type: Literal["statistical_analysis"] = "statistical_analysis"
+class ReportAnalysisBlock(ReportingModel):
+    type: Literal["data_analysis"] = "data_analysis"
     title: str = Field(min_length=1, max_length=160)
-    analysis_id: str | None = None
-    use_current_run: bool = False
-    parent_result_id: str | None = None
+    analysis_id: str
     summary: str = Field(min_length=1, max_length=5_000)
-    method: str = Field(default="", max_length=5_000)
-    assumptions: list[str] = Field(default_factory=list, max_length=20)
-    interpretation: str = Field(default="", max_length=5_000)
     include_outputs: bool = True
-
-    @model_validator(mode="after")
-    def validate_analysis_reference(self) -> ReportStatisticalBlock:
-        if bool(self.analysis_id) == self.use_current_run:
-            raise ValueError(
-                "Statistical blocks require exactly one of analysis_id or "
-                "use_current_run=true."
-            )
-        if self.use_current_run and not self.parent_result_id:
-            raise ValueError(
-                "Current-run statistical blocks require parent_result_id."
-            )
-        return self
 
 
 ReportBlock = Annotated[
@@ -201,7 +182,7 @@ ReportBlock = Annotated[
     | ReportInfographicBlock
     | ReportTableBlock
     | ReportChartBlock
-    | ReportStatisticalBlock,
+    | ReportAnalysisBlock,
     Field(discriminator="type"),
 ]
 
@@ -238,12 +219,18 @@ class ReportArtifact(ReportingModel):
     version: int = Field(ge=1)
     previous_report_id: str | None = None
     spec: ReportSpec
-    html: str
+    html_path: str
     html_sha256: str
     renderer_version: str
     input_result_ids: list[str] = Field(default_factory=list)
     input_analysis_ids: list[str] = Field(default_factory=list)
     created_at: datetime
+
+    @property
+    def html(self):
+        from pathlib import Path
+
+        return Path(self.html_path).read_text(encoding="utf-8")
 
     def reference(self) -> ReportReference:
         return ReportReference(
@@ -270,40 +257,11 @@ class ReportResponse(ReportingModel):
     created_at: datetime
 
 
-class ReportToolResult(ReportingModel):
-    ok: Literal[True] = True
-    report: ReportReference
-    message: str
-
-
-class ReportToolIssue(ReportingModel):
-    """One compact, model-actionable report validation issue."""
-
-    path: str
-    message: str
-
-
-class ReportToolFailure(ReportingModel):
-    """Expected report-spec failure returned without failing the tool call."""
-
-    ok: Literal[False] = False
-    code: Literal[
-        "invalid_report_json",
-        "invalid_report_spec",
-        "artifact_not_found",
-        "artifact_not_ready",
-        "report_render_failed",
-    ]
-    message: str
-    retryable: bool = True
-    issues: list[ReportToolIssue] = Field(default_factory=list, max_length=8)
-
-
-class ResolvedStatisticalAnalysis(ReportingModel):
+class ResolvedDataAnalysis(ReportingModel):
     """Renderer input for a stored or current-run statistical block."""
 
     reference_id: str
-    parent_result_id: str
+    input_result_ids: list[str]
     answer: str
     method: str = ""
     assumptions: list[str] = Field(default_factory=list)

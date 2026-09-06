@@ -17,7 +17,7 @@ import yaml
 from data_analytics_agent.backends import SQLBackend
 
 SIMPLE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
-TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
+TOKEN_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
 SEARCH_STOP_WORDS = frozenset(
     {"a", "an", "and", "by", "for", "in", "of", "or", "the", "to", "with"}
 )
@@ -140,8 +140,11 @@ class SemanticCatalog:
                         kind="field",
                         name=field.name,
                         parent_dataset=dataset.name,
-                        description=field.description,
-                        synonyms=field.synonyms,
+                        description=f"{field.description} {dataset.description}",
+                        synonyms=(
+                            *field.synonyms,
+                            *(f"{word} {field.name}" for word in dataset.synonyms),
+                        ),
                     )
                     if match:
                         matches.append(match)
@@ -175,9 +178,7 @@ class SemanticCatalog:
         include_adjacent = len(selected) == 1
         return tuple(
             relationship
-            for relationship in sorted(
-                self.relationships, key=lambda item: item.name
-            )
+            for relationship in sorted(self.relationships, key=lambda item: item.name)
             if (
                 relationship.from_dataset in selected
                 and relationship.to_dataset in selected
@@ -249,13 +250,9 @@ def _ai_context(
     synonyms = context.get("synonyms")
     examples = context.get("examples")
     return (
-        tuple(str(value) for value in synonyms)
-        if isinstance(synonyms, list)
-        else (),
+        tuple(str(value) for value in synonyms) if isinstance(synonyms, list) else (),
         _compact_text(context.get("instructions")),
-        tuple(str(value) for value in examples)
-        if isinstance(examples, list)
-        else (),
+        tuple(str(value) for value in examples) if isinstance(examples, list) else (),
     )
 
 
@@ -294,14 +291,18 @@ def _read_model(
     if not isinstance(document, dict):
         return raw, None, [f"OSI semantic model at {path} must be a YAML mapping."]
     if document.get("version") != "0.1.1":
-        return raw, None, [
-            f'OSI semantic model at {path} must declare version "0.1.1".'
-        ]
+        return (
+            raw,
+            None,
+            [f'OSI semantic model at {path} must declare version "0.1.1".'],
+        )
     models = document.get("semantic_model")
     if not isinstance(models, list) or len(models) != 1:
-        return raw, None, [
-            f"OSI semantic model at {path} must contain exactly one model."
-        ]
+        return (
+            raw,
+            None,
+            [f"OSI semantic model at {path} must contain exactly one model."],
+        )
     model = models[0]
     if not isinstance(model, dict):
         return raw, None, [f"OSI semantic model entry at {path} is invalid."]
@@ -363,9 +364,7 @@ def load_semantic_catalog(
                 errors.append(f"Dataset {name!r} contains an invalid field.")
                 continue
             if field_name in fields:
-                errors.append(
-                    f"Dataset {name!r} repeats field {field_name!r}."
-                )
+                errors.append(f"Dataset {name!r} repeats field {field_name!r}.")
                 continue
             expression = _dialect_expression(field_value, dialect)
             if expression is None:
@@ -389,9 +388,9 @@ def load_semantic_catalog(
             )
 
         primary_key_value = dataset_value.get("primary_key") or []
-        if not isinstance(primary_key_value, list) or not set(
-            primary_key_value
-        ) <= set(fields):
+        if not isinstance(primary_key_value, list) or not set(primary_key_value) <= set(
+            fields
+        ):
             errors.append(f"Dataset {name!r} has an invalid primary key.")
             primary_key: tuple[str, ...] = ()
         else:
@@ -421,18 +420,14 @@ def load_semantic_catalog(
             from_name = value.get("from")
             to_name = value.get("to")
             if not isinstance(name, str) or not name:
-                errors.append(
-                    "Every OSI relationship must have a non-empty name."
-                )
+                errors.append("Every OSI relationship must have a non-empty name.")
                 continue
             if name in relationship_names:
                 errors.append(f"Duplicate OSI relationship name {name!r}.")
                 continue
             relationship_names.add(name)
             if from_name not in datasets or to_name not in datasets:
-                errors.append(
-                    f"Relationship {name!r} references an unknown dataset."
-                )
+                errors.append(f"Relationship {name!r} references an unknown dataset.")
                 continue
             from_columns = value.get("from_columns") or []
             to_columns = value.get("to_columns") or []
@@ -442,16 +437,12 @@ def load_semantic_catalog(
                 or len(from_columns) != len(to_columns)
                 or not from_columns
             ):
-                errors.append(
-                    f"Relationship {name!r} has invalid column mappings."
-                )
+                errors.append(f"Relationship {name!r} has invalid column mappings.")
                 continue
-            if not set(from_columns) <= set(
-                datasets[str(from_name)].fields
-            ) or not set(to_columns) <= set(datasets[str(to_name)].fields):
-                errors.append(
-                    f"Relationship {name!r} references an unknown field."
-                )
+            if not set(from_columns) <= set(datasets[str(from_name)].fields) or not set(
+                to_columns
+            ) <= set(datasets[str(to_name)].fields):
+                errors.append(f"Relationship {name!r} references an unknown field.")
                 continue
             _, instructions, _ = _ai_context(value)
             relationships.append(
@@ -517,9 +508,7 @@ def load_semantic_catalog(
                     errors.append(f"Could not inspect table {dataset.source!r}.")
                     annotated[name] = dataset
                     continue
-                columns = {
-                    column.name.casefold(): column for column in table.columns
-                }
+                columns = {column.name.casefold(): column for column in table.columns}
                 fields: dict[str, SemanticField] = {}
                 for field_name, field in dataset.fields.items():
                     column = (
@@ -527,10 +516,7 @@ def load_semantic_catalog(
                         if SIMPLE_IDENTIFIER.fullmatch(field.expression)
                         else None
                     )
-                    if (
-                        SIMPLE_IDENTIFIER.fullmatch(field.expression)
-                        and column is None
-                    ):
+                    if SIMPLE_IDENTIFIER.fullmatch(field.expression) and column is None:
                         errors.append(
                             f"OSI field {dataset.name}.{field.name} references "
                             f"missing column {dataset.source}.{field.expression}."
@@ -550,9 +536,7 @@ def load_semantic_catalog(
             ),
         )
 
-    adjacency: dict[str, list[SemanticRelationship]] = {
-        name: [] for name in datasets
-    }
+    adjacency: dict[str, list[SemanticRelationship]] = {name: [] for name in datasets}
     for relationship in relationships:
         adjacency[relationship.from_dataset].append(relationship)
         if relationship.to_dataset != relationship.from_dataset:
@@ -616,8 +600,7 @@ def render_semantic_overview(
             lines.append(line)
     if omitted_datasets:
         lines.append(
-            f"- … {omitted_datasets} additional datasets omitted; "
-            "use semantic search."
+            f"- … {omitted_datasets} additional datasets omitted; use semantic search."
         )
     lines.append("Metrics:")
     omitted_metrics = 0
@@ -629,8 +612,7 @@ def render_semantic_overview(
             lines.append(line)
     if omitted_metrics:
         lines.append(
-            f"- … {omitted_metrics} additional metrics omitted; "
-            "use semantic search."
+            f"- … {omitted_metrics} additional metrics omitted; use semantic search."
         )
     return "\n".join(lines)
 
@@ -658,9 +640,7 @@ def _score_entity(
     synonyms: tuple[str, ...],
 ) -> SemanticMatch | None:
     normalized_name = _normalize_search_text(name)
-    normalized_synonyms = tuple(
-        _normalize_search_text(value) for value in synonyms
-    )
+    normalized_synonyms = tuple(_normalize_search_text(value) for value in synonyms)
     if query == normalized_name:
         return SemanticMatch(
             kind, name, parent_dataset, description, name, "exact_name", 500
@@ -691,9 +671,7 @@ def _score_entity(
     searchable.extend((value, _tokens(value)) for value in synonyms)
     full_matches = [item for item in searchable if query_tokens <= item[1]]
     if full_matches:
-        matched = sorted(
-            full_matches, key=lambda item: (len(item[1]), item[0])
-        )[0]
+        matched = sorted(full_matches, key=lambda item: (len(item[1]), item[0]))[0]
         return SemanticMatch(
             kind,
             name,

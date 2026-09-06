@@ -1,366 +1,236 @@
-"""Coordinator-owned, source-scoped report generation tool."""
+"""Shared evidence resolution and coordinator-owned report generation."""
 
 from __future__ import annotations
-
+import base64
 from datetime import datetime, timezone
+from pathlib import Path
 import json
-from typing import Any
-
-from langchain.tools import ToolRuntime, tool
-from pydantic import ValidationError
-
-from data_analytics_agent.agents.statistical_analysis.schemas import (
-    StatisticalAnalysisOutcome,
-)
+from langchain.tools import tool, ToolRuntime
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
-from data_analytics_agent.reporting.renderer import render_report
 from data_analytics_agent.reporting.schemas import (
-    ReportChartBlock,
     ReportSpec,
-    ReportStatisticalBlock,
+    ReportChartBlock,
     ReportTableBlock,
-    ReportToolFailure,
-    ReportToolIssue,
-    ReportToolResult,
-    ResolvedStatisticalAnalysis,
+    ReportAnalysisBlock,
+    ReportMetricsBlock,
+    ResolvedDataAnalysis,
 )
-from data_analytics_agent.stores import (
-    ReportStore,
-    ResultStore,
-    RunStore,
-    StatisticalAnalysisStore,
-    StoreNotFound,
-)
+from data_analytics_agent.reporting.renderer import render_report
+from data_analytics_agent.visualization.schemas import ChartSpec
 
 
-def _report_failure(
-    code: str,
-    message: str,
+def generate_report(
+    spec,
     *,
-    issues: list[ReportToolIssue] | None = None,
-) -> str:
-    """Return an expected, compact failure as a successful tool result."""
-
-    return ReportToolFailure(
-        code=code,
-        message=message,
-        issues=issues or [],
-    ).model_dump_json()
-
-
-def _validation_issues(error: ValidationError) -> list[ReportToolIssue]:
-    issues: list[ReportToolIssue] = []
-    for item in error.errors(
-        include_input=False,
-        include_url=False,
-    )[:8]:
-        location = ".".join(str(part) for part in item.get("loc") or ())
-        issues.append(
-            ReportToolIssue(
-                path=location or "report",
-                message=str(item.get("msg") or "Invalid value."),
+    thread_id,
+    source_id,
+    result_store,
+    analysis_store,
+    run_store,
+    report_store,
+    findings=None,
+):
+    if findings:
+        blocks = list(spec.blocks)
+        chart_ids = {b.chart_id for b in blocks if isinstance(b, ReportChartBlock)}
+        analysis_ids = {
+            b.analysis_id for b in blocks if isinstance(b, ReportAnalysisBlock)
+        }
+        blocks.extend(
+            ReportChartBlock(chart_id=c.chart_id, summary=c.title)
+            for c in findings.charts
+            if c.chart_id not in chart_ids
+        )
+        blocks.extend(
+            ReportAnalysisBlock(
+                analysis_id=a.analysis_id, title="Analysis", summary=a.answer
             )
+            for a in findings.analyses
+            if a.analysis_id and a.analysis_id not in analysis_ids
         )
-    return issues
+        spec = spec.model_copy(update={"blocks": blocks})
+    results, analyses, charts = {}, {}, {}
 
+    def include(key):
+        if key in results:
+            return
+        item = result_store.get(key, thread_id, source_id=source_id)
+        results[key] = item
+        for parent in item.parent_result_ids:
+            include(parent)
 
-def _parse_report_spec(report_json: str) -> ReportSpec | str:
-    """Parse the documented JSON string, then apply the strict model."""
+    stored_charts = run_store.storage.load("charts", dict)
+    for block in spec.blocks:
+        if isinstance(block, ReportTableBlock):
+            include(block.result_id)
+        elif isinstance(block, ReportMetricsBlock):
+            for metric in block.metrics:
+                include(metric.result_id)
+        elif isinstance(block, ReportChartBlock):
+            entry = stored_charts.get(block.chart_id)
+            if (
+                not entry
+                or entry["thread_id"] != thread_id
+                or entry["source_id"] != source_id
+            ):
+                raise ValueError("Chart is outside this conversation.")
+            chart = ChartSpec.model_validate(entry["spec"])
+            charts[chart.chart_id] = chart
+            include(chart.result_id)
+        elif isinstance(block, ReportAnalysisBlock):
+            saved = analysis_store.get(
+                block.analysis_id, thread_id, source_id=source_id
+            ).analysis
+            outputs = []
+            for execution in saved.executions:
+                if execution.error:
+                    continue
+                for output in execution.outputs:
+                    value = output.model_dump(mode="json", exclude_none=True)
+                    if output.image_path:
+                        value["image_base64"] = base64.b64encode(
+                            Path(output.image_path).read_bytes()
+                        ).decode()
+                    outputs.append(value)
+            for key in saved.input_result_ids:
+                include(key)
+            for execution in saved.executions:
+                for key in [
+                    *execution.inputs.values(),
+                    *execution.output_datasets.values(),
+                ]:
+                    include(key)
+            analyses[block.analysis_id] = ResolvedDataAnalysis(
+                reference_id=block.analysis_id,
+                input_result_ids=saved.input_result_ids,
+                answer=saved.answer,
+                method=saved.method,
+                assumptions=saved.assumptions,
+                interpretation=saved.interpretation,
+                warnings=saved.warnings,
+                outputs=outputs,
+            )
+    if findings:
+        from data_analytics_agent.reporting.schemas import ReportCalloutBlock
 
-    try:
-        candidate: Any = json.loads(report_json)
-    except (TypeError, json.JSONDecodeError) as exc:
-        return _report_failure(
-            "invalid_report_json",
-            "The report was not valid JSON. Correct the JSON and retry once.",
-            issues=[
-                ReportToolIssue(
-                    path="report_json",
-                    message=f"{exc.msg} at line {exc.lineno}, column {exc.colno}.",
+        extra = []
+        for reference in findings.results:
+            if reference.result_id not in results:
+                include(reference.result_id)
+                extra.append(
+                    ReportTableBlock(
+                        result_id=reference.result_id,
+                        title=reference.short_label or "Supporting evidence",
+                        row_limit=10,
+                    )
                 )
-            ]
-            if isinstance(exc, json.JSONDecodeError)
-            else None,
-        )
+        if findings.partial:
+            extra.insert(
+                0,
+                ReportCalloutBlock(
+                    title="Partial investigation",
+                    body="These findings are supported by saved evidence, but the investigation is unfinished. "
+                    + " ".join(findings.unresolved_questions),
+                    variant="warning",
+                ),
+            )
+        spec = spec.model_copy(update={"blocks": [*spec.blocks, *extra]})
+    if spec.previous_report_id:
+        report_store.get(spec.previous_report_id, thread_id, source_id=source_id)
+    html = render_report(
+        spec,
+        results=results,
+        analyses=analyses,
+        charts=charts,
+        generated_at=datetime.now(timezone.utc),
+    )
+    return report_store.save(
+        thread_id=thread_id,
+        source_id=source_id,
+        spec=spec,
+        html=html,
+        input_result_ids=list(results),
+        input_analysis_ids=list(analyses),
+    )
 
-    try:
-        return ReportSpec.model_validate(candidate)
-    except ValidationError as exc:
-        return _report_failure(
-            "invalid_report_spec",
-            "The report specification was invalid. Fix the listed fields "
-            "and retry once.",
-            issues=_validation_issues(exc),
-        )
 
-
-def create_list_conversation_analyses_tool(
-    analysis_store: StatisticalAnalysisStore,
-    *,
-    source_id: str,
+def create_create_report_tool(
+    result_store, analysis_store, run_store, report_store, *, source_id
 ):
     @tool
-    def list_conversation_analyses(runtime: ToolRuntime) -> dict:
-        """List reusable completed statistical analyses without binary figures."""
+    def create_report(report_json: str, runtime: ToolRuntime) -> dict:
+        """Render the required HTML report from ReportSpec JSON with saved chart/analysis IDs.
 
+        Publish findings first. Use chart blocks with chart_id, table blocks
+        with result_id, and data_analysis blocks with analysis_id. Report metric
+        values must reference a dataset column and row_index. Do not write HTML.
+        """
         context = _runtime_context(runtime)
-        items = analysis_store.list_for_conversation(
-            context.thread_id,
-            source_id=source_id,
-        )
+        if saved := run_store.storage.committed(context.run_id, runtime.tool_call_id):
+            return json.loads(saved)
+        try:
+            spec = ReportSpec.model_validate_json(report_json)
+            if run_store.get(context.run_id).findings is None:
+                raise ValueError("Call publish_findings before creating the report.")
+            run_store.save_report_spec(context.run_id, spec.model_dump(mode="json"))
+            run_store.set_phase(context.run_id, "preparing_report")
+            artifact = generate_report(
+                spec,
+                thread_id=context.thread_id,
+                source_id=source_id,
+                result_store=result_store,
+                analysis_store=analysis_store,
+                run_store=run_store,
+                report_store=report_store,
+                findings=run_store.get(context.run_id).findings,
+            )
+            run_store.attach_report(context.run_id, artifact.reference())
+            response = {
+                "ok": True,
+                "report": artifact.reference().model_dump(mode="json"),
+            }
+            run_store.storage.commit(
+                context.run_id, runtime.tool_call_id, json.dumps(response)
+            )
+            return response
+        except (ValueError, KeyError, IndexError, OSError) as exc:
+            return {"ok": False, "error": str(exc), "retryable": True}
+
+    return create_report
+
+
+def create_list_conversation_analyses_tool(analysis_store, *, source_id):
+    @tool
+    def list_conversation_analyses(runtime: ToolRuntime) -> dict:
+        """Discover saved analytical findings and their execution IDs."""
+        context = _runtime_context(runtime)
         return {
             "analyses": [
                 {
-                    "analysis_id": item.analysis_id,
-                    "parent_result_id": item.analysis.parent_result_id,
-                    "answer": item.analysis.answer,
-                    "method": item.analysis.method,
-                    "interpretation": item.analysis.interpretation,
-                    "output_names": [output.name for output in item.analysis.outputs],
-                    "created_at": item.created_at.isoformat(),
+                    "analysis_id": saved.analysis_id,
+                    "answer": saved.analysis.answer,
+                    "outcome": saved.analysis.outcome,
+                    "input_result_ids": saved.analysis.input_result_ids,
+                    "execution_ids": [
+                        e.execution_id for e in saved.analysis.executions
+                    ],
                 }
-                for item in items
+                for saved in analysis_store.list_for_conversation(
+                    context.thread_id, source_id=source_id
+                )
             ]
         }
 
     return list_conversation_analyses
 
 
-def create_inspect_conversation_analysis_tool(
-    analysis_store: StatisticalAnalysisStore,
-    *,
-    source_id: str,
-):
+def create_inspect_conversation_analysis_tool(analysis_store, *, source_id):
     @tool
-    def inspect_conversation_analysis(
-        analysis_id: str,
-        runtime: ToolRuntime,
-    ) -> dict:
-        """Inspect one reusable statistical analysis without binary figures."""
-
+    def inspect_conversation_analysis(analysis_id: str, runtime: ToolRuntime) -> dict:
+        """Inspect an analysis without returning binary figures or complete datasets."""
         context = _runtime_context(runtime)
-        try:
-            item = analysis_store.get(
-                analysis_id,
-                context.thread_id,
-                source_id=source_id,
-            )
-        except StoreNotFound as exc:
-            raise ValueError(
-                "That statistical analysis does not exist in this data-source "
-                "conversation."
-            ) from exc
-        payload = item.analysis.model_dump(mode="json", exclude_none=True)
-        for output in payload.get("outputs") or []:
-            if output.get("kind") == "figure":
-                output.pop("image_base64", None)
-                output["rendered"] = True
-        return payload
+        return analysis_store.get(
+            analysis_id, context.thread_id, source_id=source_id
+        ).analysis.model_facing()
 
     return inspect_conversation_analysis
-
-
-def create_create_report_tool(
-    result_store: ResultStore,
-    analysis_store: StatisticalAnalysisStore,
-    run_store: RunStore,
-    report_store: ReportStore,
-    *,
-    source_id: str,
-):
-    @tool
-    def create_report(report_json: str, runtime: ToolRuntime) -> str:
-        """Create one validated, self-contained HTML report artifact.
-
-        Use only after loading the report-design skill and obtaining every
-        required analysis artifact. Pass a JSON-encoded ReportSpec string in
-        `report_json`; do not pass an object or HTML. Trusted application code
-        validates the JSON, resolves scoped data, renders the HTML, and owns all
-        JavaScript.
-        """
-
-        parsed = _parse_report_spec(report_json)
-        if isinstance(parsed, str):
-            return parsed
-        spec = parsed
-        context = _runtime_context(runtime)
-        if context.source_id != source_id:
-            raise ValueError(
-                "The conversation source does not match this report renderer."
-            )
-
-        results = {}
-        analyses = {}
-        analysis_references: list[str] = []
-        for block in spec.blocks:
-            result_id: str | None = None
-            if isinstance(block, ReportTableBlock):
-                result_id = block.result_id
-            elif isinstance(block, ReportChartBlock):
-                result_id = block.chart.result_id
-            elif isinstance(block, ReportStatisticalBlock):
-                if block.analysis_id:
-                    try:
-                        saved = analysis_store.get(
-                            block.analysis_id,
-                            context.thread_id,
-                            source_id=source_id,
-                        )
-                    except StoreNotFound:
-                        return _report_failure(
-                            "artifact_not_found",
-                            "That statistical analysis does not exist in this "
-                            "data-source conversation.",
-                            issues=[
-                                ReportToolIssue(
-                                    path="blocks.analysis_id",
-                                    message=(
-                                        "Use a listed analysis ID or run the "
-                                        "required analysis first."
-                                    ),
-                                )
-                            ],
-                        )
-                    if (
-                        saved.analysis.outcome
-                        is not StatisticalAnalysisOutcome.ANALYSIS_COMPLETED
-                    ):
-                        return _report_failure(
-                            "artifact_not_ready",
-                            "Only completed statistical analyses can be embedded.",
-                        )
-                    key = block.analysis_id
-                    analyses[key] = ResolvedStatisticalAnalysis(
-                        reference_id=key,
-                        parent_result_id=saved.analysis.parent_result_id,
-                        answer=saved.analysis.answer,
-                        method=saved.analysis.method,
-                        assumptions=saved.analysis.assumptions,
-                        interpretation=saved.analysis.interpretation,
-                        warnings=saved.analysis.warnings,
-                        outputs=[
-                            output.model_dump(mode="json", exclude_none=True)
-                            for output in saved.analysis.outputs
-                        ],
-                    )
-                    analysis_references.append(key)
-                    result_id = saved.analysis.parent_result_id
-                else:
-                    execution = run_store.get_statistical_execution(context.run_id)
-                    if execution is None:
-                        return _report_failure(
-                            "artifact_not_ready",
-                            "The current run has no completed reviewed "
-                            "statistical execution to embed.",
-                        )
-                    if execution.parent_result_id != block.parent_result_id:
-                        return _report_failure(
-                            "artifact_not_found",
-                            "The current statistical block references a "
-                            "different parent result.",
-                            issues=[
-                                ReportToolIssue(
-                                    path="blocks.parent_result_id",
-                                    message=(
-                                        "Use the exact result ID reviewed by "
-                                        "the statistical analysis."
-                                    ),
-                                )
-                            ],
-                        )
-                    key = f"current:{block.parent_result_id}"
-                    analyses[key] = ResolvedStatisticalAnalysis(
-                        reference_id=f"run:{context.run_id}",
-                        parent_result_id=execution.parent_result_id,
-                        answer=block.summary,
-                        method=block.method,
-                        assumptions=block.assumptions,
-                        interpretation=block.interpretation,
-                        warnings=execution.warnings,
-                        outputs=[
-                            output.model_dump(mode="json", exclude_none=True)
-                            for output in execution.outputs
-                        ],
-                    )
-                    analysis_references.append(f"run:{context.run_id}")
-                    result_id = execution.parent_result_id
-            if result_id and result_id not in results:
-                try:
-                    results[result_id] = result_store.get(
-                        result_id,
-                        context.thread_id,
-                        source_id=source_id,
-                    )
-                except StoreNotFound:
-                    return _report_failure(
-                        "artifact_not_found",
-                        "A report block references a result outside this "
-                        "data-source conversation.",
-                        issues=[
-                            ReportToolIssue(
-                                path="blocks.result_id",
-                                message=(
-                                    "Use a listed result ID or obtain the "
-                                    "required result first."
-                                ),
-                            )
-                        ],
-                    )
-
-        if spec.previous_report_id:
-            try:
-                report_store.get(
-                    spec.previous_report_id,
-                    context.thread_id,
-                    source_id=source_id,
-                )
-            except StoreNotFound:
-                return _report_failure(
-                    "artifact_not_found",
-                    "The previous report does not exist in this conversation.",
-                    issues=[
-                        ReportToolIssue(
-                            path="previous_report_id",
-                            message=(
-                                "Use the exact prior report ID or omit this "
-                                "field for a new report."
-                            ),
-                        )
-                    ],
-                )
-
-        generated_at = datetime.now(timezone.utc)
-        try:
-            html = render_report(
-                spec,
-                results=results,
-                analyses=analyses,
-                generated_at=generated_at,
-            )
-        except ValueError as exc:
-            return _report_failure(
-                "report_render_failed",
-                "The report could not be rendered from the supplied "
-                "specification. Correct it and retry once.",
-                issues=[
-                    ReportToolIssue(path="blocks", message=str(exc))
-                ],
-            )
-        artifact = report_store.save(
-            thread_id=context.thread_id,
-            source_id=source_id,
-            spec=spec,
-            html=html,
-            input_result_ids=list(results),
-            input_analysis_ids=analysis_references,
-        )
-        result = ReportToolResult(
-            report=artifact.reference(),
-            message=(
-                f"Self-contained HTML report {artifact.title!r} created "
-                f"successfully as version {artifact.version}."
-            ),
-        )
-        return result.model_dump_json()
-
-    return create_report

@@ -293,3 +293,42 @@ def test_services_cache_catalogs_built_during_readiness(
 
     assert first is second
     assert first.datasets["artists"].fields["artist_id"].physical_data_type
+
+
+def test_browse_and_reviewed_value_lookup_do_not_bypass_sql_review(test_settings):
+    from types import SimpleNamespace
+    from data_analytics_agent.semantic_tools import (
+        create_browse_semantic_tool,
+        create_lookup_values_tool,
+    )
+    from data_analytics_agent.semantic import load_semantic_catalog
+    from data_analytics_agent.stores import ResultStore, RunStore
+
+    source = test_settings.load_catalog().get("test")
+    catalog = load_semantic_catalog(
+        source.semantic_model_path, dialect="sqlite"
+    ).catalog
+    page = create_browse_semantic_tool(catalog).func(
+        dataset_name="artists", offset=0, limit=1
+    )
+    assert len(page["items"]) == 1 and page["next_offset"] == 1
+
+    class NoExecution:
+        def execute_batches(self, *args, **kwargs):
+            raise AssertionError("Value lookup bypassed SQL review")
+
+    runs = RunStore()
+    run = runs.create("thread", "test", "Find artists")
+    lookup = create_lookup_values_tool(
+        catalog, source, NoExecution(), ResultStore(), runs, require_approval=True
+    )
+    result = lookup.func(
+        dataset_name="artists",
+        field_name="name",
+        search="O'Reilly",
+        runtime=SimpleNamespace(
+            state={"thread_id": "thread", "run_id": run, "source_id": "test"},
+            tool_call_id="lookup",
+        ),
+    )
+    assert result["requires_sql_execution"] and "o''reilly" in result["query"]

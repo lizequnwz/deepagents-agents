@@ -34,9 +34,7 @@ def test_api_logging_uses_one_rotating_file_and_disables_access_logs(
     )
     assert len(managed_handlers) == 2
     rotating = next(
-        handler
-        for handler in managed_handlers
-        if hasattr(handler, "maxBytes")
+        handler for handler in managed_handlers if hasattr(handler, "maxBytes")
     )
     assert rotating.maxBytes == LOG_MAX_BYTES
     assert rotating.backupCount == LOG_BACKUP_COUNT

@@ -8,13 +8,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from data_analytics_agent.agents.statistical_analysis.schemas import (
-    StatisticalAnalysisResult,
+from data_analytics_agent.agents.data_analysis.schemas import (
+    DataAnalysisResult,
 )
-from data_analytics_agent.agents.visualization.schemas import ChartSpec
+from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 7
+API_CONTRACT_VERSION = 9
 
 
 class StrictModel(BaseModel):
@@ -76,7 +76,7 @@ class ResultProfile(StrictModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     scope: Literal["stored_rows"] = "stored_rows"
-    row_count: int = Field(ge=0, le=10_000)
+    row_count: int = Field(ge=0)
     columns: tuple[ColumnProfile, ...]
 
 
@@ -88,24 +88,9 @@ class QueryResult(StrictModel):
     columns: list[str]
     sample_rows: list[dict[str, Any]]
     profile: ResultProfile
-    row_count: int = Field(ge=0, le=10_000)
+    row_count: int = Field(ge=0)
     truncated: bool
     elapsed_ms: float = Field(ge=0)
-
-
-class SQLAnalysisResult(StrictModel):
-    """Successful SQL analysis backed by an exact, saved execution."""
-
-    answer: str
-    sql: str
-    result_id: str
-    columns: list[str]
-    sample_rows: list[dict[str, Any]]
-    profile: ResultProfile
-    row_count: int = Field(ge=0, le=10_000)
-    truncated: bool
-    assumptions: list[str] = Field(default_factory=list)
-    interpretation: str = ""
 
 
 class SQLAnalysisResponse(StrictModel):
@@ -116,8 +101,8 @@ class SQLAnalysisResponse(StrictModel):
     """
 
     answer: str
-    sql: str
-    result_id: str
+    sql: str = ""
+    result_id: str | None = None
     assumptions: list[str] = Field(default_factory=list)
     interpretation: str = ""
 
@@ -125,6 +110,10 @@ class SQLAnalysisResponse(StrictModel):
 class CoordinatorResponse(StrictModel):
     """Small provider-facing response; trusted artifacts are attached later."""
 
+    analysis_ids: list[str] = Field(default_factory=list)
+    chart_ids: list[str] = Field(default_factory=list)
+    partial: bool = False
+    unresolved_questions: list[str] = Field(default_factory=list)
     answer: str
     primary_result_id: str | None = None
     supporting_result_ids: list[str] = Field(default_factory=list)
@@ -147,16 +136,18 @@ class FinalAnswer(StrictModel):
     results: list[ResultReference] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     interpretation: str = ""
-    chart: ChartSpec | None = None
-    statistical_analysis: StatisticalAnalysisResult | None = None
+    charts: list[ChartSpec] = Field(default_factory=list)
+    analyses: list[DataAnalysisResult] = Field(default_factory=list)
+    partial: bool = False
+    unresolved_questions: list[str] = Field(default_factory=list)
     report: ReportReference | None = None
 
 
-class SavedStatisticalAnalysis(StrictModel):
+class SavedDataAnalysis(StrictModel):
     analysis_id: str
     thread_id: str
     source_id: str
-    analysis: StatisticalAnalysisResult
+    analysis: DataAnalysisResult
     created_at: datetime
 
 
@@ -168,12 +159,35 @@ class SavedResult(StrictModel):
     originating_question: str
     short_label: str
     columns: list[str]
-    rows: list[dict[str, Any]]
+    parquet_path: str
+    preview: list[dict[str, Any]] = Field(default_factory=list)
+    parent_result_ids: list[str] = Field(default_factory=list)
+    kind: Literal["source_sql", "saved_sql", "python", "presentation"] = "source_sql"
+    execution_id: str | None = None
+    byte_count: int = 0
     profile: ResultProfile
     row_count: int
     truncated: bool
     elapsed_ms: float
     created_at: datetime
+
+    def read_rows(self, limit: int, offset: int = 0, columns: list[str] | None = None):
+        import duckdb
+
+        with duckdb.connect() as db:
+            relation = db.read_parquet(self.parquet_path)
+            if columns:
+                relation = relation.project(
+                    ",".join('"' + name.replace('"', '""') + '"' for name in columns)
+                )
+            return relation.limit(limit, offset).to_arrow_table().to_pylist()
+
+    @property
+    def rows(self) -> list[dict[str, Any]]:
+        """Load rows for a renderer or local computation, never for a tool preview."""
+        import pyarrow.parquet as pq
+
+        return pq.read_table(self.parquet_path).to_pylist()
 
 
 class ResultPage(StrictModel):
@@ -196,6 +210,8 @@ class RunStatus(StrEnum):
     APPROVAL_REQUIRED = "approval_required"
     COMPLETED = "completed"
     FAILED = "failed"
+    PAUSED = "paused"
+    STOPPING = "stopping"
 
 
 class TokenUsage(StrictModel):
@@ -262,18 +278,14 @@ class ToolCallDiagnostic(StrictModel):
 
 
 class ExecutionBudgetDiagnostics(StrictModel):
-    code: Literal["execution_budget_exceeded"] = (
-        "execution_budget_exceeded"
-    )
+    code: Literal["execution_budget_exceeded"] = "execution_budget_exceeded"
     agent: str
     budget_type: Literal["model_calls", "tool_calls"]
     limit: int = Field(ge=1)
     attempted_count: int = Field(ge=1)
     run_id: str
     tool_name: str | None = None
-    recent_tool_calls: list[ToolCallDiagnostic] = Field(
-        default_factory=list
-    )
+    recent_tool_calls: list[ToolCallDiagnostic] = Field(default_factory=list)
 
 
 class ActivityTool(StrictModel):
@@ -293,9 +305,7 @@ class ActivityEvent(StrictModel):
     agent: str | None = None
     tool: ActivityTool | None = None
     duration_ms: int | None = Field(default=None, ge=0)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class AgentStateSnapshot(StrictModel):
@@ -307,15 +317,14 @@ class AgentStateSnapshot(StrictModel):
     truncated: bool = False
     omitted_items: int = Field(default=0, ge=0)
     omitted_messages: int = Field(default=0, ge=0)
-    captured_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ApprovalRequest(StrictModel):
     interrupt_id: str = Field(min_length=1)
     action_name: str
     query: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
     allowed_decisions: list[Literal["approve", "edit", "reject"]]
     review_type: Literal["sql", "python"] = "sql"
     source_id: str = ""
@@ -339,9 +348,7 @@ class ChatTurn(StrictModel):
     activities: list[ActivityEvent] = Field(default_factory=list)
     debug_states: list[AgentStateSnapshot] = Field(default_factory=list)
     diagnostics: RunDiagnostics = Field(default_factory=RunDiagnostics)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ConversationResponse(StrictModel):
@@ -378,6 +385,8 @@ class RunResponse(StrictModel):
     thread_id: str
     source_id: str
     question: str
+    phase: str = "understanding"
+    findings: FinalAnswer | None = None
     status: RunStatus
     events: list[ActivityEvent]
     next_event_id: int
@@ -407,9 +416,9 @@ class HealthResponse(StrictModel):
     default_source_id: str | None = None
     ready_source_count: int = 0
     sql_approval_required: bool = False
-    python_approval_required: bool = True
+    python_approval_required: bool = False
     visualization_enabled: bool = False
-    statistical_analysis_enabled: bool = False
+    data_analysis_enabled: bool = False
     reporting_enabled: bool = False
     errors: list[str]
 

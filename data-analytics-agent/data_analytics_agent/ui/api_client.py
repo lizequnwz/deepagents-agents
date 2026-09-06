@@ -60,9 +60,7 @@ class AgentAPIClient:
                 detail = body.get("detail", exc.response.text)
             except ValueError:
                 detail = exc.response.text
-            raise APIError(
-                str(detail), status_code=exc.response.status_code
-            ) from exc
+            raise APIError(str(detail), status_code=exc.response.status_code) from exc
         except httpx.HTTPError as exc:
             raise APIError(
                 f"Cannot reach the API at {self.base_url}. "
@@ -93,54 +91,48 @@ class AgentAPIClient:
             json={"message": message},
         )
 
-    def get_run(
-        self, run_id: str, *, after_event_id: int = 0
-    ) -> dict[str, Any]:
+    def get_run(self, run_id: str, *, after_event_id: int = 0) -> dict[str, Any]:
         return self.request(
             "GET",
             f"/api/runs/{run_id}?after_event_id={after_event_id}",
             timeout=10,
         )
 
-    def submit_decision(
-        self, run_id: str, decision: dict[str, Any]
-    ) -> dict[str, Any]:
+    def submit_decision(self, run_id: str, decision: dict[str, Any]) -> dict[str, Any]:
         return self.request(
             "POST",
             f"/api/runs/{run_id}/decisions",
             json={"decisions": [decision]},
         )
 
-    def get_result(
-        self,
-        result_id: str,
-        *,
-        page_size: int = 1_000,
-    ) -> dict[str, Any]:
-        """Fetch every stored result page up to the backend retrieval cap."""
+    def delete_conversation(self, thread_id: str) -> dict[str, Any]:
+        return self.request("DELETE", f"/api/conversations/{thread_id}")
 
-        bounded_page_size = min(max(page_size, 1), 10_000)
-        offset = 0
-        combined: dict[str, Any] | None = None
-        rows: list[dict[str, Any]] = []
-        while True:
-            page = self.request(
-                "GET",
-                f"/api/results/{result_id}?offset={offset}"
-                f"&limit={bounded_page_size}",
-            )
-            if combined is None:
-                combined = dict(page)
-            page_rows = list(page.get("rows") or [])
-            rows.extend(page_rows)
-            offset += len(page_rows)
-            if not page_rows or offset >= int(page["row_count"]):
-                break
-        assert combined is not None
-        combined["rows"] = rows
-        combined["offset"] = 0
-        combined["limit"] = len(rows)
-        return combined
+    def clear_history(self) -> dict[str, Any]:
+        return self.request("DELETE", "/api/conversations")
+
+    def list_conversations(self) -> list[dict[str, Any]]:
+        return self.request("GET", "/api/conversations")
+
+    def stop_run(self, run_id: str):
+        return self.request("POST", f"/api/runs/{run_id}/stop")
+
+    def resume_run(self, run_id: str):
+        return self.request("POST", f"/api/runs/{run_id}/resume")
+
+    def retry_report(self, run_id: str):
+        return self.request("POST", f"/api/runs/{run_id}/retry-report")
+
+    def get_result(self, result_id: str, *, offset: int = 0, limit: int = 100):
+        """Retrieve one explicit preview page, never a disguised full export."""
+        return self.request(
+            "GET",
+            f"/api/results/{result_id}",
+            params={"offset": offset, "limit": limit},
+        )
+
+    def dataset_download_url(self, result_id: str, format: str = "csv") -> str:
+        return f"{self.base_url.rstrip('/')}/api/results/{result_id}/download?format={format}"
 
     def get_report(self, report_id: str) -> dict[str, Any]:
         """Fetch the exact stored HTML and immutable report metadata."""
