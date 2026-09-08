@@ -49,4 +49,31 @@ History deletion is available through `DELETE /api/conversations/{thread_id}` an
 computations return HTTP 409; stop them and wait for pause before retrying. Deleted
 work is removed from metadata, tool execution records, owned artifact files, and
 LangGraph checkpoints. The Streamlit controls require confirmation. API contract
-version 9 requires restarting both services after upgrading.
+version 10 requires restarting both services after upgrading.
+
+
+## Semantic versions and steering
+
+Restart both services to load OSI edits. Graphs and semantic packages are keyed by
+source identity, catalog content hash and dialect; business/physical projections
+and request selections are separate cache keys. A run records the loaded content
+hash. Resuming with a different hash fails explicitly, retaining saved evidence.
+This prevents an investigation from silently changing business definitions. Older
+unversioned checkpoints cannot resume safely; start a new turn using their saved
+evidence. No checkpoint migration or live catalog reload is provided.
+
+`POST /api/runs/{run_id}/corrections` accepts `{ "message": "..." }` and returns
+`run_id`, durable `message_id`, `disposition` (`pending` or `follow_up`) and an
+acknowledgement. Pending corrections appear in run/history records with their
+ordered original text and `delivered_to` agents. Published findings are immutable;
+post-publication input gets a new run and waits for the current owner to finish.
+
+`request_clarification` uses LangGraph interrupts. The run status becomes
+`clarification_required`, separate from `approval_required`, with question,
+choices and interrupt ID. `POST /api/runs/{run_id}/clarification` accepts free text
+in `message` and resumes that interrupt. Corrections during a code review reject
+the previous proposal; they do not approve it.
+
+The test bootstrap overrides inherited storage before importing the application.
+An autouse fixture assigns fresh storage to every test. Live model calls remain
+opt-in. See `agent-efficiency-and-progress.md` for verification and timing limits.

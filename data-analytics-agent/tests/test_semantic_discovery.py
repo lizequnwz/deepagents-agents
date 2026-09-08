@@ -12,7 +12,7 @@ from data_analytics_agent.semantic import (
     load_semantic_catalog,
     render_semantic_overview,
 )
-from data_analytics_agent.semantic_tools import create_semantic_tools
+from data_analytics_agent.semantic_tools import create_semantic_context_tool
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -26,14 +26,13 @@ def _chinook_catalog() -> SemanticCatalog:
     return loaded.catalog
 
 
-def _tools(catalog: SemanticCatalog, *, physical: bool = False):
-    return {
-        item.name: item
-        for item in create_semantic_tools(
-            catalog,
-            include_physical=physical,
-        )
-    }
+def context(catalog, *, physical=False, **kwargs):
+    return create_semantic_context_tool(
+        catalog,
+        source_id="test",
+        dialect="sqlite",
+        include_physical=physical,
+    ).invoke({"question": "", **kwargs})
 
 
 def test_catalog_retains_complete_immutable_osi_structure() -> None:
@@ -103,14 +102,9 @@ semantic_model:
     assert "additional datasets omitted" in overview
     assert "source: Table" not in overview
     assert "expression:" not in overview
-    disconnected = _tools(catalog)["get_relationships"].invoke(
-        {
-            "dataset_names": ["dataset_000"],
-            "target_dataset": "dataset_199",
-        }
-    )
-    assert disconnected["path_found"] is False
-    assert disconnected["path"] is None
+    disconnected = context(catalog, dataset_names=["dataset_000", "dataset_199"])
+    assert disconnected["disconnected"] == [["dataset_000", "dataset_199"]]
+    assert not disconnected["unresolved_references"]
 
 
 def test_search_is_deterministic_bounded_and_filterable() -> None:
@@ -132,154 +126,118 @@ def test_search_is_deterministic_bounded_and_filterable() -> None:
         catalog.search("revenue", limit=26)
 
 
-def test_entity_tools_apply_role_specific_projections_and_field_selection() -> None:
+def test_context_includes_metric_dependencies_and_role_projection():
     catalog = _chinook_catalog()
-    business = _tools(catalog)
-    sql = _tools(catalog, physical=True)
+    business = context(catalog, metric_names=["total_revenue"])
+    sql = context(catalog, physical=True, metric_names=["total_revenue"])
+    assert sql["complete"]
+    assert sql["datasets"][0]["name"] == "invoices"
+    assert sql["datasets"][0]["source"] == "Invoice"
+    assert sql["metrics"][0]["expression"] == "SUM(invoices.Total)"
+    assert "source" not in business["datasets"][0]
+    assert "expression" not in business["metrics"][0]
+    assert "expression" not in business["datasets"][0]["fields"][0]
 
-    business_result = business["get_semantic_entities"].invoke(
-        {"dataset_names": ["invoices"], "metric_names": ["total_revenue"]}
+
+def test_context_includes_bridge_definitions_and_keys():
+    result = context(
+        _chinook_catalog(), physical=True, dataset_names=["artists", "invoices"]
     )
-    sql_result = sql["get_semantic_entities"].invoke(
-        {
-            "dataset_names": ["invoices"],
-            "metric_names": ["total_revenue"],
-            "field_names": {"invoices": ["invoice_date", "total"]},
-        }
-    )
-
-    business_dataset = business_result["datasets"][0]
-    sql_dataset = sql_result["datasets"][0]
-    assert len(business_dataset["fields"]) == 9
-    assert "source" not in business_dataset
-    assert "expression" not in business_dataset["fields"][0]
-    assert "expression" not in business_result["metrics"][0]
-    assert sql_dataset["source"] == "Invoice"
-    assert [field["name"] for field in sql_dataset["fields"]] == [
-        "invoice_date",
-        "total",
-    ]
-    assert sql_dataset["fields"][1]["expression"] == "Total"
-    assert sql_result["metrics"][0]["expression"] == "SUM(invoices.Total)"
-    assert business_result["model_hash"] == catalog.content_hash
-
-
-def test_entity_tool_batches_common_multi_dataset_queries() -> None:
-    catalog = _chinook_catalog()
-    sql = _tools(catalog, physical=True)
-
-    result = sql["get_semantic_entities"].invoke(
-        {
-            "dataset_names": [
-                "invoice_lines",
-                "invoices",
-                "customers",
-                "tracks",
-                "genres",
-                "albums",
-                "artists",
-            ],
-            "field_names": {
-                "invoice_lines": ["invoice_id", "track_id", "unit_price"],
-                "invoices": ["invoice_id", "customer_id", "invoice_date"],
-                "customers": ["customer_id", "country"],
-                "tracks": ["track_id", "genre_id", "album_id"],
-                "genres": ["genre_id", "name"],
-                "albums": ["album_id", "artist_id"],
-                "artists": ["artist_id", "name"],
-            },
-        }
-    )
-
-    assert [dataset["name"] for dataset in result["datasets"]] == [
-        "invoice_lines",
-        "invoices",
-        "customers",
-        "tracks",
-        "genres",
-        "albums",
+    assert result["complete"]
+    assert {d["name"] for d in result["datasets"]} == {
         "artists",
-    ]
-
-
-def test_entity_tool_requires_field_selection_for_broad_requests() -> None:
-    catalog = _chinook_catalog()
-    sql = _tools(catalog, physical=True)
-
-    result = sql["get_semantic_entities"].invoke(
-        {
-            "dataset_names": ["invoice_lines", "invoices", "customers"],
-        }
-    )
-
-    assert "field_names is required" in result
-    assert "use an empty list" in result
-
-
-def test_entity_tool_error_explains_logical_field_names() -> None:
-    catalog = _chinook_catalog()
-    sql = _tools(catalog, physical=True)
-
-    result = sql["get_semantic_entities"].invoke(
-        {
-            "dataset_names": ["invoices"],
-            "field_names": {"invoices": ["InvoiceId"]},
-        }
-    )
-
-    assert "logical names, not physical column names" in result
-    assert "invoice_id" in result
-
-
-def test_relationship_tool_returns_declared_adjacency_and_shortest_path() -> None:
-    catalog = _chinook_catalog()
-    relationships = _tools(catalog)["get_relationships"].invoke(
-        {"dataset_names": ["artists"], "target_dataset": "invoices"}
-    )
-
-    assert relationships["path_found"] is True
-    assert [edge["name"] for edge in relationships["relationships"]] == [
-        "albums_to_artists"
-    ]
-    assert [edge["name"] for edge in relationships["path"]] == [
-        "albums_to_artists",
-        "tracks_to_albums",
-        "invoice_lines_to_tracks",
-        "invoice_lines_to_invoices",
-    ]
-    assert relationships["path_dataset_names"] == [
-        "albums",
-        "artists",
-        "invoice_lines",
         "invoices",
+        "albums",
         "tracks",
-    ]
+        "invoice_lines",
+    }
+    assert len(result["relationships"]) == 4
+    assert not result["disconnected"]
 
 
-def test_relationship_tool_focuses_multi_dataset_requests() -> None:
-    catalog = _chinook_catalog()
-    relationships = _tools(catalog)["get_relationships"].invoke(
-        {"dataset_names": ["invoice_lines", "invoices", "customers"]}
+def test_context_invalid_names_are_repairable():
+    result = context(_chinook_catalog(), dataset_names=["Invoice"])
+    assert not result["complete"]
+    assert "invoices" in result["alternatives"]["datasets"]
+    result = context(
+        _chinook_catalog(),
+        dataset_names=["invoices"],
+        field_names={"invoices": ["InvoiceId"]},
     )
-
-    assert [edge["name"] for edge in relationships["relationships"]] == [
-        "invoice_lines_to_invoices",
-        "invoices_to_customers",
-    ]
-    assert relationships["path_dataset_names"] == []
+    assert not result["complete"]
+    assert "logical names" in result["unresolved_references"][0]
 
 
-def test_semantic_tool_schema_exposes_limits_and_logical_name_contract() -> None:
+def test_context_budget_never_splits_required_definitions():
+    from data_analytics_agent.semantic_context import build_semantic_context
+    import json
+
+    result = build_semantic_context(
+        _chinook_catalog(),
+        source_id="test",
+        dialect="sqlite",
+        include_physical=True,
+        full=True,
+        budget=1000,
+    )
+    assert len(json.dumps(result)) <= 1000
+    assert not result["complete"] and result["omissions"]
+    assert result["datasets"] == []
+
+
+def test_context_cache_is_version_source_dialect_and_projection_bound():
+    from dataclasses import replace
+    from data_analytics_agent.semantic_context import build_semantic_context
+
     catalog = _chinook_catalog()
-    tools = _tools(catalog, physical=True)
+    first = build_semantic_context(
+        catalog,
+        source_id="a",
+        dialect="sqlite",
+        include_physical=True,
+        metric_names=["total_revenue"],
+    )
+    revised = replace(
+        catalog, content_hash="new", instructions="Revised business policy"
+    )
+    second = build_semantic_context(
+        revised,
+        source_id="a",
+        dialect="sqlite",
+        include_physical=True,
+        metric_names=["total_revenue"],
+    )
+    assert first["model_hash"] != second["model_hash"]
+    assert second["instructions"] == "Revised business policy"
+    third = build_semantic_context(
+        catalog,
+        source_id="b",
+        dialect="duckdb",
+        include_physical=False,
+        metric_names=["total_revenue"],
+    )
+    assert third["source_id"] == "b" and third["dialect"] == "duckdb"
+    assert "expression" not in third["metrics"][0]
+    first["datasets"].clear()
+    assert build_semantic_context(
+        catalog,
+        source_id="a",
+        dialect="sqlite",
+        include_physical=True,
+        metric_names=["total_revenue"],
+    )["datasets"]
 
-    search_schema = tools["search_semantic_model"].args_schema.model_json_schema()
-    entity_schema = tools["get_semantic_entities"].args_schema.model_json_schema()
-    serialized = str({"search": search_schema, "entities": entity_schema})
 
-    assert "Maximum matches to return, from 1 through 10." in serialized
-    assert "Up to 10 exact logical dataset names" in serialized
-    assert "never physical names such as InvoiceId" in serialized
+def test_small_catalog_inline_definitions(test_settings):
+    from data_analytics_agent.semantic_context import render_sql_context
+
+    catalog = load_semantic_catalog(
+        test_settings.load_catalog().get("test").semantic_model_path, dialect="sqlite"
+    ).catalog
+    prompt = render_sql_context(catalog, source_id="test", dialect="sqlite")
+    assert "Complete exact catalog definitions" in prompt
+    assert '"expression":"ArtistId"' in prompt
+    assert catalog.content_hash in prompt
 
 
 def test_services_cache_catalogs_built_during_readiness(
@@ -332,3 +290,55 @@ def test_browse_and_reviewed_value_lookup_do_not_bypass_sql_review(test_settings
         ),
     )
     assert result["requires_sql_execution"] and "o''reilly" in result["query"]
+
+
+def test_ambiguous_declared_routes_are_explicit():
+    from dataclasses import replace
+    from data_analytics_agent.semantic import SemanticRelationship
+
+    catalog = _chinook_catalog()
+    extra = SemanticRelationship(
+        "alternate",
+        "artists",
+        "albums",
+        ("artist_id",),
+        ("artist_id",),
+        "A different business role",
+    )
+    adjacency = dict(catalog.adjacency)
+    adjacency["artists"] = (*adjacency["artists"], extra)
+    adjacency["albums"] = (*adjacency["albums"], extra)
+    revised = replace(
+        catalog,
+        content_hash="alternate",
+        relationships=(*catalog.relationships, extra),
+        adjacency=adjacency,
+    )
+    result = context(revised, dataset_names=["artists", "albums"])
+    assert result["ambiguities"]
+    assert len(result["ambiguities"][0]["routes"]) == 2
+
+
+def test_large_catalog_question_resolves_outside_overview(test_settings):
+    from dataclasses import replace
+    from data_analytics_agent.semantic import SemanticDataset, SemanticField
+
+    catalog = load_semantic_catalog(
+        test_settings.load_catalog().get("test").semantic_model_path, dialect="sqlite"
+    ).catalog
+    datasets = {
+        f"unrelated_{i}": SemanticDataset(
+            f"unrelated_{i}",
+            f"Table{i}",
+            "Unrelated",
+            ("id",),
+            {"id": SemanticField("id", "Identifier", "Id")},
+        )
+        for i in range(300)
+    }
+    datasets.update(catalog.datasets)
+    catalog = replace(catalog, datasets=datasets, content_hash="large-test")
+    result = context(catalog, physical=True, question="artist_count")
+    assert result["complete"]
+    assert result["metrics"][0]["name"] == "artist_count"
+    assert any(d["source"] == "Artist" for d in result["datasets"])

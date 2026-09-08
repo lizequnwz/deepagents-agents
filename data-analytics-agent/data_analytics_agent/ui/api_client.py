@@ -91,6 +91,16 @@ class AgentAPIClient:
             json={"message": message},
         )
 
+    def send_correction(self, run_id: str, message: str):
+        return self.request(
+            "POST", f"/api/runs/{run_id}/corrections", json={"message": message}
+        )
+
+    def answer_clarification(self, run_id: str, message: str):
+        return self.request(
+            "POST", f"/api/runs/{run_id}/clarification", json={"message": message}
+        )
+
     def get_run(self, run_id: str, *, after_event_id: int = 0) -> dict[str, Any]:
         return self.request(
             "GET",

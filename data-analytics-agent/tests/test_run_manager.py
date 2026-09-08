@@ -149,3 +149,33 @@ async def test_analysis_budget_reserves_presentation_phase(workspace):
     assert (
         len(graph.inputs) == 2 and "budget" in graph.inputs[1]["messages"][0]["content"]
     )
+
+
+async def test_queued_follow_up_runs_after_report_failure_and_preserves_parent(
+    workspace,
+):
+    w = workspace
+    result = save(w, [{"value": 7}])
+    response = CoordinatorResponse(answer="Seven", primary_result_id=result.result_id)
+    w.runs.publish(
+        w.run,
+        resolve_answer(
+            response,
+            thread_id=w.thread,
+            source_id="test",
+            results=w.results,
+            analyses=w.analyses,
+            runs=w.runs,
+        ),
+    )
+    follow_up = w.runs.create(w.thread, "test", "Explain the saved result")
+    w.runs.add_follow_up(w.run, follow_up)
+    w.conversations.queue_run(w.thread, follow_up)
+    graph = Graph([Stream(response), Stream(CoordinatorResponse(answer="Explanation"))])
+    await manager(w, graph).start(w.run)
+    assert w.runs.get(w.run).status == RunStatus.FAILED  # Required report missing.
+    assert w.runs.get(w.run).findings.answer == "Seven"
+    assert w.runs.get(follow_up).status == RunStatus.COMPLETED
+    assert w.conversations.get(w.thread).turns[0].run_id == follow_up
+    assert len(w.results.list_for_conversation(w.thread, source_id="test")) == 1
+    assert any("Seven" in message["content"] for message in graph.inputs[1]["messages"])

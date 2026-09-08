@@ -1,11 +1,25 @@
 from __future__ import annotations
 
 import sqlite3
+import os
+import tempfile
+import atexit
 from pathlib import Path
 
 import pytest
 
-from data_analytics_agent.config import Settings
+# Collection imports api.app before fixtures run. Override inherited/.env storage
+# before importing any application module, and retain the directory until exit.
+_collection_storage = tempfile.TemporaryDirectory(prefix="analytics-collection-")
+os.environ["ANALYTICS_STORAGE_DIR"] = _collection_storage.name
+atexit.register(_collection_storage.cleanup)
+
+from data_analytics_agent.config import Settings  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def isolated_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("ANALYTICS_STORAGE_DIR", str(tmp_path / "storage"))
 
 
 @pytest.fixture
@@ -87,6 +101,7 @@ sources:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("SQL_MAX_RESULT_ROWS", "10000")
     monkeypatch.setenv("AGENT_DEBUG_DETAILS", "false")
+    monkeypatch.setenv("ANALYTICS_STORAGE_DIR", str(tmp_path / "storage"))
     return Settings(
         project_root=project_root,
         data_sources_config_path=registry_path,

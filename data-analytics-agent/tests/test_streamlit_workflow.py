@@ -98,3 +98,79 @@ def test_history_confirmation_cancel_delete_and_clear_all(test_settings, monkeyp
         assert (
             len(remaining) == 1 and not remaining[0].turns and not remaining[0].run_ids
         )
+
+
+def test_one_turn_preserves_activity_identity_through_publication(
+    test_settings, monkeypatch
+):
+    from data_analytics_agent.schemas import FinalAnswer, ActivityTool
+
+    services = Services(settings=test_settings, agent=Graph([]))
+    thread = services.conversations.create("test")
+    run = services.runs.create(thread, "test", "Synthetic question before activity")
+    services.conversations.begin_run(thread, run)
+    services.runs.start_active(run)
+    services.runs.add_event(
+        run,
+        "tool",
+        "Count artists",
+        phase="completed",
+        agent="text-to-sql",
+        tool=ActivityTool(
+            call_id="step",
+            name="execute_sql",
+            input={"purpose": "Count artists"},
+            output={"row_count": 1},
+        ),
+    )
+    with TestClient(create_app(services)) as api:
+
+        def request(self, method, path, **kwargs):
+            kwargs.pop("timeout", None)
+            response = api.request(method, path, **kwargs)
+            response.raise_for_status()
+            return response.json()
+
+        monkeypatch.setattr(AgentAPIClient, "request", request)
+        app = AppTest.from_file(str(Path(__file__).parents[1] / "streamlit_app.py"))
+        app.query_params["thread_id"] = thread
+        app.run(timeout=15)
+        assert not app.exception and len(app.chat_input) == 1
+        assert [m.name for m in app.chat_message] == ["user", "assistant"]
+        activity_id = next(e for e in app.expander if e.label == "Activity").proto.id
+        app.run(timeout=15)
+        findings = FinalAnswer(answer="Synthetic published findings")
+        services.runs.publish(run, findings)
+        app.run(timeout=15)
+        assert not app.exception
+        assert (
+            next(e for e in app.expander if e.label == "Activity").proto.id
+            == activity_id
+        )
+        assert (
+            sum(m.value == "Synthetic question before activity" for m in app.markdown)
+            == 1
+        )
+        assert sum(m.value == "Synthetic published findings" for m in app.markdown) == 1
+        assert sum(e.label == "Activity" for e in app.expander) == 1
+        services.runs.fail(run, "Report rendering needs retry")
+        services.conversations.fail_run(thread, run)
+        app.run(timeout=15)
+        assert any(
+            "Findings ready · Report needs retry" in m.value for m in app.markdown
+        )
+        assert any(b.label == "Retry report" for b in app.button)
+        services.conversations.begin_run(thread, run)
+        services.manager()._finish(run, findings)
+        app.run(timeout=15)
+        assert not app.exception
+        assert (
+            next(e for e in app.expander if e.label == "Activity").proto.id
+            == activity_id
+        )
+        assert (
+            sum(m.value == "Synthetic question before activity" for m in app.markdown)
+            == 1
+        )
+        assert sum(m.value == "Synthetic published findings" for m in app.markdown) == 1
+        assert sum(e.label == "Activity" for e in app.expander) == 1

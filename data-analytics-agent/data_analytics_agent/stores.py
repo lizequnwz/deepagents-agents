@@ -27,6 +27,8 @@ from data_analytics_agent.schemas import (
     AgentStateSnapshot,
     ApprovalRequest,
     ChatTurn,
+    Correction,
+    ClarificationRequest,
     ConversationDiagnostics,
     ConversationResponse,
     ExecutionBudgetDiagnostics,
@@ -40,6 +42,7 @@ from data_analytics_agent.schemas import (
 
 
 from data_analytics_agent.datasets import StoreNotFound
+from data_analytics_agent.steering import PendingCorrections
 from data_analytics_agent.datasets import ResultStore as ResultStore
 from data_analytics_agent.persistence import LocalStorage, persist_run
 
@@ -263,6 +266,13 @@ class ConversationStore:
                 active_run_id=item.active_run_id,
             )
 
+    def queue_run(self, thread_id, run_id):
+        with self._lock:
+            item = self._items[thread_id]
+            if run_id not in item.run_ids:
+                item.run_ids.append(run_id)
+            self.storage.put("conversations", thread_id, item)
+
     def begin_run(self, thread_id: str, run_id: str) -> None:
         with self._lock:
             item = self._items.get(thread_id)
@@ -283,6 +293,8 @@ class ConversationStore:
             if item.active_run_id != run_id:
                 raise RuntimeError("Run does not own the conversation.")
             item.turns.append(turn)
+            positions = {key: index for index, key in enumerate(item.run_ids)}
+            item.turns.sort(key=lambda saved: positions.get(saved.run_id, -1))
             item.active_run_id = None
             self.storage.put("conversations", thread_id, item)
 
@@ -379,8 +391,15 @@ class _Run:
     diagnostics: ExecutionBudgetDiagnostics | None = None
     python_execution_attempts: int = 0
     python_executions: list[PythonExecutionResult] = field(default_factory=list)
+    corrections: list[Correction] = field(default_factory=list)
+    clarification: ClarificationRequest | None = None
+    catalog_hash: str | None = None
+    started: bool = False
+    follow_up_ids: list[str] = field(default_factory=list)
     phase: str = "understanding"
     findings: FinalAnswer | None = None
+    findings_at: float | None = None
+    report_completed_at: float | None = None
     report_spec: dict | None = None
     chart_specs: list[dict] = field(default_factory=list)
     report_reference: dict | None = None
@@ -527,6 +546,14 @@ class RunStore:
             )
         ]
         return RunDiagnostics(
+            time_to_findings_ms=_rounded_ms(item.findings_at - item.created_at)
+            if item.findings_at is not None
+            else None,
+            report_preparation_ms=_rounded_ms(
+                (item.report_completed_at or ended_at) - item.findings_at
+            )
+            if item.findings_at is not None
+            else None,
             model=item.model,
             tokens=_sum_tokens([agent.tokens for agent in agents]),
             token_usage_partial=(
@@ -560,6 +587,8 @@ class RunStore:
                 thread_id=item.thread_id,
                 source_id=item.source_id,
                 question=item.question,
+                corrections=[c.model_copy(deep=True) for c in item.corrections],
+                clarification=item.clarification,
                 phase=item.phase,
                 findings=item.findings,
                 status=item.status,
@@ -616,6 +645,7 @@ class RunStore:
             if item.active_started_at is None:
                 item.active_started_at = self._clock()
             item.status = RunStatus.RUNNING
+            item.terminal_at = None
 
     @persist_run
     def set_status(self, run_id: str, status: RunStatus) -> None:
@@ -800,6 +830,7 @@ class RunStore:
             item.status = RunStatus.RUNNING
             item.approval = None
             item.error = None
+            item.clarification = None
 
     @persist_run
     def claim_approval(
@@ -829,6 +860,10 @@ class RunStore:
     def complete(self, run_id: str, answer: FinalAnswer) -> None:
         with self._lock:
             item = self._get_mutable(run_id)
+            if self.pending_corrections(run_id):
+                raise PendingCorrections(
+                    "Accepted corrections must be applied before completion."
+                )
             now = self._clock()
             self._stop_active(item, now)
             item.status = RunStatus.COMPLETED
@@ -861,7 +896,14 @@ class RunStore:
     @persist_run
     def publish(self, run_id: str, answer: FinalAnswer):
         item = self._get_mutable(run_id)
+        if self.pending_corrections(run_id):
+            raise PendingCorrections(
+                "Accepted corrections must be applied before publication."
+            )
+        if item.findings is not None:
+            return
         item.findings = answer
+        item.findings_at = self._clock()
         item.phase = "findings_ready"
 
     @persist_run
@@ -896,6 +938,68 @@ class RunStore:
                 )
                 self.pause(key)
 
+    @persist_run
+    def accept_correction(self, run_id, message):
+        item = self._get_mutable(run_id)
+        if item.findings is not None or item.status == RunStatus.COMPLETED:
+            return None
+        correction = Correction(message_id=str(uuid4()), message=message)
+        item.corrections.append(correction)
+        return correction.model_copy(deep=True)
+
+    def pending_corrections(self, run_id, agent="coordinator"):
+        with self._lock:
+            return [
+                c.model_copy(deep=True)
+                for c in self._get_mutable(run_id).corrections
+                if agent not in c.delivered_to
+            ]
+
+    @persist_run
+    def mark_corrections_applied(self, run_id, message_ids, agent):
+        for correction in self._get_mutable(run_id).corrections:
+            if (
+                correction.message_id in message_ids
+                and agent not in correction.delivered_to
+            ):
+                correction.delivered_to.append(agent)
+
+    @persist_run
+    def require_clarification(self, run_id, clarification):
+        item = self._get_mutable(run_id)
+        self._stop_active(item, self._clock())
+        item.clarification = clarification
+        item.status = RunStatus.CLARIFICATION_REQUIRED
+
+    @persist_run
+    def bind_catalog(self, run_id, content_hash, *, require_existing=False):
+        item = self._get_mutable(run_id)
+        if require_existing and item.catalog_hash is None:
+            raise ValueError(
+                "This checkpoint has no recorded semantic catalog version. Start a new turn using the saved evidence."
+            )
+        if item.catalog_hash and item.catalog_hash != content_hash:
+            raise ValueError(
+                "The semantic catalog changed since this run started. Start a new turn; saved evidence is retained."
+            )
+        item.catalog_hash = content_hash
+
+    @persist_run
+    def mark_started(self, run_id):
+        self._get_mutable(run_id).started = True
+
+    def has_started(self, run_id):
+        with self._lock:
+            return self._get_mutable(run_id).started
+
+    @persist_run
+    def add_follow_up(self, run_id, follow_up_id):
+        self._get_mutable(run_id).follow_up_ids.append(follow_up_id)
+
+    def follow_ups(self, run_id):
+        with self._lock:
+            return list(self._get_mutable(run_id).follow_up_ids)
+
     def cancel_event(self, run_id: str):
         from threading import Event
 
@@ -918,7 +1022,9 @@ class RunStore:
 
     @persist_run
     def attach_report(self, run_id: str, reference):
-        self._get_mutable(run_id).report_reference = reference.model_dump(mode="json")
+        item = self._get_mutable(run_id)
+        item.report_reference = reference.model_dump(mode="json")
+        item.report_completed_at = self._clock()
 
     def report_reference(self, run_id: str):
         return self._get_mutable(run_id).report_reference

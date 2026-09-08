@@ -26,7 +26,7 @@ from data_analytics_agent.agents.text_to_sql.tools import (
 )
 from data_analytics_agent.semantic import render_semantic_overview
 from data_analytics_agent.semantic_tools import (
-    create_semantic_tools,
+    create_semantic_context_tool,
     create_browse_semantic_tool,
 )
 from data_analytics_agent.reporting.tools import (
@@ -43,6 +43,7 @@ from data_analytics_agent.stores import (
     ConversationStore,
 )
 from data_analytics_agent.execution_budget import execution_budget_middleware
+from data_analytics_agent.steering import SteeringMiddleware, request_clarification
 
 
 def _project_backend(project_root: Path) -> CompositeBackend:
@@ -134,7 +135,13 @@ def build_agent(
         FilesystemPermission(operations=["read", "write"], paths=["/**"], mode="deny"),
     ]
     tools = [
-        *create_semantic_tools(semantic_catalog, include_physical=False),
+        request_clarification,
+        create_semantic_context_tool(
+            semantic_catalog,
+            source_id=source.source_id,
+            dialect=source.dialect,
+            include_physical=False,
+        ),
         create_browse_semantic_tool(semantic_catalog),
         create_list_conversation_results_tool(result_store, source_id=source.source_id),
         create_inspect_conversation_result_tool(
@@ -161,10 +168,13 @@ def build_agent(
             model=chat_model,
             permissions=permissions,
             require_approval=settings.require_sql_approval,
-            middleware=execution_budget_middleware(
-                model_calls=settings.sql_agent_model_call_limit,
-                tool_calls=settings.sql_agent_tool_call_limit,
-            ),
+            middleware=[
+                SteeringMiddleware(runs, "text-to-sql"),
+                *execution_budget_middleware(
+                    model_calls=settings.sql_agent_model_call_limit,
+                    tool_calls=settings.sql_agent_tool_call_limit,
+                ),
+            ],
         )
     ]
     if settings.enable_data_analysis:
@@ -178,17 +188,37 @@ def build_agent(
                 model=chat_model,
                 permissions=permissions,
                 require_approval=settings.require_python_approval,
-                middleware=execution_budget_middleware(
-                    model_calls=settings.analysis_agent_model_call_limit,
-                    tool_calls=settings.analysis_agent_tool_call_limit,
-                ),
+                middleware=[
+                    SteeringMiddleware(runs, "data-analysis"),
+                    *execution_budget_middleware(
+                        model_calls=settings.analysis_agent_model_call_limit,
+                        tool_calls=settings.analysis_agent_tool_call_limit,
+                    ),
+                ],
             )
         )
+    chart_guidance = (
+        """
+Use create_chart for purposeful charts over saved SQL or Python-derived datasets.
+Respect explicitly requested types. Otherwise prefer lines for ordered trends,
+bars for categories, scatter for numeric relationships and histogram/box for
+observation distributions. Scalars need no artificial chart. Use exact stored
+column names and appropriate grain; ask SQL to reshape business data when needed.
+Use full-result profiles, not sample rows, to assess suitability. Preserve and
+label forecast bounds or estimate errors and any downsampling. Choose readable
+labels and colors. Use previous_chart_id for revisions and share the resulting
+chart_id with the report. Shape constraints are in ChartSpec and tool feedback.
+"""
+        if settings.enable_data_visualization
+        else ""
+    )
     prompt = f"""You coordinate a source-bound analyst for {source.name} ({source.source_id}).
 {source.description}
 {render_semantic_overview(semantic_catalog)}
 Examples: {[example.question for example in source.examples]}
-Follow AGENTS.md. Handle greetings, help, and metadata research directly. Never
+Follow AGENTS.md. Use request_clarification for necessary business input, including
+needs_clarification from data-analysis. Apply corrections before publishing; preserve
+older artifacts with their original scope. Resume with the answer and saved evidence. Handle greetings, help, and metadata research directly. Never
 claim observed database values without saved evidence. Metadata-only questions
 need neither execution nor an empty report.
 Delegate retrieval/descriptive questions and dataset shaping to text-to-sql.
@@ -197,14 +227,21 @@ forecasting and model evaluation to data-analysis. Choose by required work,
 not keywords alone. SQL requests must be sequential and complete. Multiple
 SQL and Python assignments are allowed; revise the plan after observing results.
 Keep a compact investigation record with save_investigation for complex work.
+
+Match effort to the work: simple totals/rankings need one complete SQL assignment,
+without todos, investigation records, Python, or forced charts. Descriptive monthly
+series also belongs in SQL; chart when useful or requested. Forecasts, uncertain
+estimates and competing explanations can need plans and SQL/Python iteration.
+A simple task may grow after unexpected findings; stop investigations when evidence
+is sufficient. Chart title/type refinements reuse suitable saved evidence and the
+existing chart ID. Inspect returned evidence only as needed for synthesis, avoiding
+repeated lookups. Every data-backed answer, including a scalar, needs a compact report.
+
 Use saved-result and analysis discovery to resolve follow-ups. Reuse suitable
 snapshots; fresh/current requests need new source SQL. Saved IDs are opaque
 artifacts, never warehouse tables. Python can consume multiple same-source
 saved inputs and save derived datasets. Supply IDs rather than copying rows.
-Load chart-design when useful. create_chart is a shared tool, not an agent;
-create as many purposeful charts as needed, including forecasts over derived
-datasets. Preserve explicit chart types. Ask SQL for saved-data reshaping if
-needed. Scalar or non-chartable evidence needs no artificial chart.
+{chart_guidance}
 After selecting final evidence, call publish_findings with the answer and all
 material result, analysis and chart IDs. Then load report-design and create the
 required HTML report using those same artifacts. Use saved chart_id references,
@@ -224,14 +261,17 @@ application owns exact SQL, Python, outputs, charts and report references.
         tools=tools,
         system_prompt=prompt,
         memory=["/project/AGENTS.md"],
-        skills=["/project/skills/reporting/", "/project/skills/data-visualization/"],
+        skills=["/project/skills/reporting/"],
         subagents=subagents,
         backend=_project_backend(settings.project_root),
         permissions=permissions,
-        middleware=execution_budget_middleware(
-            model_calls=settings.coordinator_model_call_limit,
-            tool_calls=settings.coordinator_tool_call_limit,
-        ),
+        middleware=[
+            SteeringMiddleware(runs, "coordinator"),
+            *execution_budget_middleware(
+                model_calls=settings.coordinator_model_call_limit,
+                tool_calls=settings.coordinator_tool_call_limit,
+            ),
+        ],
         response_format=_final_answer_response_format(),
         state_schema=AnalyticsAgentState,
         checkpointer=checkpointer or InMemorySaver(),

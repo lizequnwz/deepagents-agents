@@ -13,8 +13,21 @@ For complex work, the analyst can gather several results, execute several Python
 steps and ask SQL for more data. The investigation record and artifacts preserve
 continuity. No notebook kernel needs to stay alive.
 
-Stop pauses work after execution exits; Resume continues it. You may stop and
-send a correction instead. Partial findings say what remains unresolved. Retry
+The question appears before one assistant activity view. Expand Activity for
+steps, exact SQL/Python, bounded inputs/outputs and developer diagnostics. Its
+open state is retained as findings appear and the report is prepared.
+
+Use the composer during a run to add context or correct the request. “Received”
+means the correction is saved; “Applied” means the coordinator has consumed it.
+An executing SQL/Python step may finish before the next model boundary delivers
+the correction. Its evidence retains the original scope. A correction after
+publication is accepted as a separate queued follow-up, with its own run ID.
+
+When clarification is needed, answer the inline business question (free text is
+always accepted). This resumes the same investigation. A correction invalidates
+an outstanding code proposal, so revised code requires a new review when enabled.
+
+Stop pauses work after execution exits; Resume continues it. Partial findings say what remains unresolved. Retry
 report preserves finished data work. Optional review settings expose exact SQL
 or Python edits before execution.
 

@@ -38,6 +38,7 @@ from data_analytics_agent.schemas import (
     ExecutionLimitsResponse,
     HealthResponse,
     MessageRequest,
+    SteeringResponse,
     ResultPage,
     RunResponse,
     RunStatus,
@@ -80,7 +81,7 @@ class Services:
     snowflake_client: Any | None = None
     _manager: RunManager | None = None
     _backends: dict[str, SQLBackend] = field(default_factory=dict)
-    _agents: dict[str, Any] = field(default_factory=dict)
+    _agents: dict[tuple[str, str, str], Any] = field(default_factory=dict)
     _semantic_catalogs: dict[str, SemanticCatalog] = field(default_factory=dict)
     _source_summaries: dict[str, DataSourceSummary] | None = None
     _lock: RLock = field(default_factory=RLock)
@@ -212,7 +213,9 @@ class Services:
         if self.agent is not None:
             return self.agent
         with self._lock:
-            graph = self._agents.get(source_id)
+            catalog = self.semantic_catalog_for_source(source_id)
+            key = (source_id, catalog.content_hash, self.source(source_id).dialect)
+            graph = self._agents.get(key)
             if graph is None:
                 source = self.require_ready_source(source_id)
                 graph = build_agent(
@@ -227,7 +230,7 @@ class Services:
                     semantic_catalog=self.semantic_catalog_for_source(source_id),
                     backend=self.backend_for_source(source_id),
                 )
-                self._agents[source_id] = graph
+                self._agents[key] = graph
             return graph
 
     def manager(self) -> RunManager:
@@ -236,6 +239,9 @@ class Services:
                 self._manager = RunManager(
                     agent_resolver=self.agent_for_source,
                     source_resolver=self.source,
+                    catalog_version_resolver=lambda source_id: (
+                        self.semantic_catalog_for_source(source_id).content_hash
+                    ),
                     conversations=self.conversations,
                     runs=self.runs,
                     results=self.results,
@@ -429,6 +435,87 @@ def create_app(services: Services | None = None) -> FastAPI:
         background_tasks.add_task(manager.start, run_id)
         return CreateRunResponse(run_id=run_id, status=RunStatus.QUEUED)
 
+    @app.post(
+        "/api/runs/{run_id}/corrections",
+        response_model=SteeringResponse,
+        status_code=202,
+    )
+    async def post_correction(
+        run_id: str, request: MessageRequest, background_tasks: BackgroundTasks
+    ):
+        from data_analytics_agent.schemas import Decision
+
+        run = container.runs.get(run_id)
+        ensure_not_deleting(run.thread_id)
+        message = request.message.strip()
+        if not message:
+            raise HTTPException(status_code=422, detail="Correction cannot be blank.")
+        # The run-store lock serializes acceptance with publication/completion.
+        correction = container.runs.accept_correction(run_id, message)
+        if correction is None:
+            follow_up = container.runs.create(
+                run.thread_id, run.source_id, message, model=container.settings.model
+            )
+            owner = container.conversations.get(run.thread_id).active_run_id or run_id
+            container.runs.add_follow_up(owner, follow_up)
+            container.conversations.queue_run(run.thread_id, follow_up)
+            if container.conversations.get(run.thread_id).active_run_id is None:
+                container.conversations.begin_run(run.thread_id, follow_up)
+                background_tasks.add_task(container.manager().start, follow_up)
+            return SteeringResponse(
+                run_id=follow_up,
+                message_id=follow_up,
+                disposition="follow_up",
+                message="Accepted as a follow-up turn; published findings are preserved.",
+            )
+        # A changed request invalidates the old proposal rather than approving it.
+        current = container.runs.get(run_id)
+        if current.status == RunStatus.APPROVAL_REQUIRED and current.approval:
+            command = decisions_to_command(
+                current.approval,
+                [
+                    Decision(
+                        action="reject",
+                        feedback="User corrected the request: " + message,
+                    )
+                ],
+            )
+            container.runs.claim_approval(run_id, current.approval)
+            background_tasks.add_task(container.manager().resume, run_id, command)
+        return SteeringResponse(
+            run_id=run_id,
+            message_id=correction.message_id,
+            disposition="pending",
+            message="Received; applying after the current step.",
+        )
+
+    @app.post(
+        "/api/runs/{run_id}/clarification",
+        response_model=CreateRunResponse,
+        status_code=202,
+    )
+    async def answer_clarification(
+        run_id: str, request: MessageRequest, background_tasks: BackgroundTasks
+    ):
+        from langgraph.types import Command
+
+        run = container.runs.get(run_id)
+        ensure_not_deleting(run.thread_id)
+        if run.status != RunStatus.CLARIFICATION_REQUIRED or run.clarification is None:
+            raise HTTPException(
+                status_code=409, detail="This run is not awaiting clarification."
+            )
+        if not request.message.strip():
+            raise HTTPException(status_code=422, detail="Answer cannot be blank.")
+        container.runs.accept_correction(run_id, request.message)
+        container.runs.resume(run_id)
+        background_tasks.add_task(
+            container.manager().resume,
+            run_id,
+            Command(resume={run.clarification.interrupt_id: request.message}),
+        )
+        return CreateRunResponse(run_id=run_id, status=RunStatus.RUNNING)
+
     @app.get("/api/runs/{run_id}", response_model=RunResponse)
     async def get_run(
         run_id: str,
@@ -535,6 +622,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             RunStatus.RUNNING,
             RunStatus.QUEUED,
             RunStatus.APPROVAL_REQUIRED,
+            RunStatus.CLARIFICATION_REQUIRED,
         }:
             raise HTTPException(409, "Run is not active.")
         await container.manager().stop(run_id)
@@ -543,14 +631,8 @@ def create_app(services: Services | None = None) -> FastAPI:
     def claim_saved_run(run_id):
         run = container.runs.get(run_id)
         ensure_not_deleting(run.thread_id)
-        conversation = container.conversations.get(run.thread_id)
         if run.status not in {RunStatus.PAUSED, RunStatus.FAILED}:
             raise HTTPException(409, "Run is not resumable.")
-        if conversation.run_ids[-1:] != [run_id]:
-            raise HTTPException(
-                409,
-                "Continue the latest conversation turn instead of resuming older work.",
-            )
         try:
             container.conversations.begin_run(run.thread_id, run_id)
         except RuntimeError as exc:

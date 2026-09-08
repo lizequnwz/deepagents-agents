@@ -1,0 +1,89 @@
+{
+  "scenario": "synthetic scalar, deterministic scripted model",
+  "diagnostics": {
+    "time_to_findings_ms": 1217,
+    "report_preparation_ms": 82,
+    "model": "",
+    "tokens": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "cached_input_tokens": null,
+      "reasoning_output_tokens": null
+    },
+    "token_usage_partial": true,
+    "model_calls": 6,
+    "model_call_errors": 0,
+    "model_calls_missing_usage": 6,
+    "model_ms": 44,
+    "max_model_call_ms": 11,
+    "tool_calls": 4,
+    "tool_call_errors": 0,
+    "tool_ms": 224,
+    "elapsed_ms": 1346,
+    "active_ms": 1332,
+    "approval_wait_ms": 0,
+    "agents": [
+      {
+        "agent": "coordinator",
+        "tokens": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null
+        },
+        "model_calls": 4,
+        "model_call_errors": 0,
+        "model_calls_missing_usage": 4,
+        "model_ms": 32,
+        "max_model_call_ms": 11,
+        "tool_calls": 3,
+        "tool_call_errors": 0,
+        "tool_ms": 185
+      },
+      {
+        "agent": "text-to-sql",
+        "tokens": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null
+        },
+        "model_calls": 2,
+        "model_call_errors": 0,
+        "model_calls_missing_usage": 2,
+        "model_ms": 12,
+        "max_model_call_ms": 6,
+        "tool_calls": 1,
+        "tool_call_errors": 0,
+        "tool_ms": 39
+      }
+    ]
+  },
+  "calls": [
+    {
+      "agent": "text-to-sql",
+      "tool": "execute_sql",
+      "duration_ms": 39
+    },
+    {
+      "agent": "coordinator",
+      "tool": "task",
+      "duration_ms": 124
+    },
+    {
+      "agent": "coordinator",
+      "tool": "publish_findings",
+      "duration_ms": 18
+    },
+    {
+      "agent": "coordinator",
+      "tool": "create_report",
+      "duration_ms": 43
+    }
+  ],
+  "findings_published": true,
+  "report_available": true
+}

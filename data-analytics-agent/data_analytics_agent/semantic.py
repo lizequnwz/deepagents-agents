@@ -600,7 +600,7 @@ def render_semantic_overview(
             lines.append(line)
     if omitted_datasets:
         lines.append(
-            f"- … {omitted_datasets} additional datasets omitted; use semantic search."
+            f"- … {omitted_datasets} additional datasets omitted; use get_semantic_context or paginated browsing."
         )
     lines.append("Metrics:")
     omitted_metrics = 0
@@ -612,7 +612,7 @@ def render_semantic_overview(
             lines.append(line)
     if omitted_metrics:
         lines.append(
-            f"- … {omitted_metrics} additional metrics omitted; use semantic search."
+            f"- … {omitted_metrics} additional metrics omitted; use get_semantic_context or paginated browsing."
         )
     return "\n".join(lines)
 

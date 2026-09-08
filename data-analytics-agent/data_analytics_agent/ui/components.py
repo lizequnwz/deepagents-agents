@@ -293,31 +293,73 @@ def render_debug_states(
                 st.json(snapshot.get("state") or {})
 
 
-def render_activity_summary(events: list[dict[str, Any]]) -> None:
-    """Keep current tools and recent completions visible without opening raw I/O."""
-    calls = [e for e in consolidate_activity_events(events) if e.get("tool")]
-    if not calls:
-        st.caption("Waiting for the agent’s next action…")
-        return
-    pending = [e for e in calls if e.get("phase") == "started"]
-    finished = [e for e in calls if e.get("phase") != "started"]
-    st.caption(f"{len(calls)} tool calls · {len(pending)} running")
-    for event in pending + finished[-5:]:
-        tool = event["tool"]
-        name = tool.get("name") or "tool"
-        arguments = tool.get("input") or {}
-        detail = ""
-        if isinstance(arguments, dict):
-            if name == "task" and arguments.get("subagent_type"):
-                detail = f" → {arguments['subagent_type']}"
-            elif name == "read_file" and arguments.get("file_path"):
-                detail = f" · {arguments['file_path']}"
-        phase = event.get("phase") or "completed"
-        duration = event.get("duration_ms")
-        timing = f" · {_format_duration(duration)}" if duration is not None else ""
-        st.caption(
-            f"{_agent_label(event.get('agent'))} · {name}{detail} · {phase}{timing}"
+def activity_label(event):
+    tool = event.get("tool") or {}
+    arguments = tool.get("input") or {}
+    if isinstance(arguments, dict) and arguments.get("purpose"):
+        label = arguments["purpose"]
+    else:
+        labels = {
+            "get_semantic_context": (
+                "Loading semantic definitions",
+                "Semantic definitions loaded",
+            ),
+            "execute_analysis_python": (
+                "Running Python analysis",
+                "Python analysis finished",
+            ),
+            "create_chart": ("Creating chart", "Chart saved"),
+            "create_report": ("Preparing HTML report", "HTML report ready"),
+            "publish_findings": ("Publishing findings", "Findings published"),
+        }
+        pair = labels.get(tool.get("name"))
+        label = (
+            pair[1 if event.get("phase") == "completed" else 0]
+            if pair
+            else event.get("label") or "Working"
         )
+    return f"Needs repair · {label}" if event.get("phase") == "failed" else label
+
+
+def current_activity(
+    events, *, phase="understanding", status="running", findings=False
+):
+    if findings:
+        return (
+            "Findings ready · Report needs retry"
+            if status == "failed"
+            else "Findings ready"
+        )
+    if status in {"paused", "stopping", "failed", "clarification_required", "queued"}:
+        return {
+            "clarification_required": "Input needed",
+            "queued": "Waiting to start",
+        }.get(status, status.capitalize())
+    pending = [
+        e for e in consolidate_activity_events(events) if e.get("phase") == "started"
+    ]
+    leaves = [e for e in pending if (e.get("tool") or {}).get("name") != "task"]
+    event = (leaves or pending or [None])[-1]
+    if event:
+        return activity_label(event)
+    return {
+        "retrieving_data": "Retrieving data",
+        "analyzing": "Analyzing data",
+        "preparing_report": "Preparing report",
+    }.get(phase, "Understanding the request")
+
+
+def render_activity(events, diagnostics, *, key):
+    panel = st.expander("Activity", key=f"activity_turn_{key}", on_change="rerun")
+    if panel.open:
+        with panel:
+            render_activity_timeline(events, key_prefix=key)
+            diagnostics_panel = st.expander(
+                "Developer diagnostics", key=f"diagnostics_{key}", on_change="rerun"
+            )
+            if diagnostics_panel.open:
+                with diagnostics_panel:
+                    render_run_diagnostics_content(diagnostics, activities=events)
 
 
 def render_activity_timeline(
@@ -340,7 +382,7 @@ def render_activity_timeline(
     for event in consolidated:
         phase = str(event.get("phase") or "info")
         icon = _PHASE_ICONS.get(phase, ":material/info:")
-        label = str(event.get("label") or "Agent activity")
+        label = activity_label(event)
         agent = _agent_label(event.get("agent"))
         duration = (
             f" · {_format_duration(event.get('duration_ms'))}"
@@ -865,90 +907,76 @@ def render_turn(
     with st.chat_message("user"):
         st.markdown(turn["user_message"])
 
-    answer = turn["answer"]
+    for correction in turn.get("corrections") or []:
+        with st.chat_message("user"):
+            st.markdown(correction["message"])
+    turn_key = turn.get("run_id") or turn_key
     with st.chat_message("assistant", avatar=":material/query_stats:"):
-        st.markdown(answer["answer"])
+        render_activity(
+            turn.get("activities") or [], turn.get("diagnostics") or {}, key=turn_key
+        )
+        render_answer(client, turn["answer"], turn_key=turn_key, source_id=source_id)
 
-        assumptions = answer.get("assumptions") or []
-        interpretation = answer.get("interpretation")
-        if assumptions or interpretation:
-            with st.container(border=True):
-                if assumptions:
-                    st.markdown("**Assumptions**")
-                    for assumption in assumptions:
-                        st.markdown(f"- {assumption}")
-                if interpretation:
-                    st.markdown("**Interpretation**")
-                    st.markdown(interpretation)
 
-        if answer.get("partial"):
-            st.warning("Partial findings — the investigation is unfinished.")
-        for question in answer.get("unresolved_questions") or []:
-            st.caption(f"Still to investigate: {question}")
-        for index, analysis in enumerate(answer.get("analyses") or []):
-            _render_data_analysis(
-                analysis, client=client, widget_key=f"{turn_key}_{index}"
-            )
-        for index, chart in enumerate(answer.get("charts") or []):
-            _render_result(
-                client,
-                chart["result_id"],
-                widget_key=f"{turn_key}_chart_{index}",
-                source_id=source_id,
-                chart=chart,
-            )
+def render_answer(client, answer, *, turn_key, source_id):
+    st.markdown(answer["answer"])
 
-        report = answer.get("report")
-        if report:
-            _render_report(
-                client,
-                report,
-                widget_key=turn_key,
-            )
+    assumptions = answer.get("assumptions") or []
+    interpretation = answer.get("interpretation")
+    if assumptions or interpretation:
+        with st.container(border=True):
+            if assumptions:
+                st.markdown("**Assumptions**")
+                for assumption in assumptions:
+                    st.markdown(f"- {assumption}")
+            if interpretation:
+                st.markdown("**Interpretation**")
+                st.markdown(interpretation)
 
-        results = answer.get("results") or []
-        chart = None
-        for index, reference in enumerate(results):
-            result_id = str(reference.get("result_id") or "")
-            label = str(reference.get("short_label") or "SQL evidence")
-            st.markdown(f"**Evidence {index + 1} · {label}**")
-            if result_id == answer.get("primary_result_id"):
-                st.badge(
-                    "Primary evidence",
-                    icon=":material/verified:",
-                    color="green",
-                )
-            _render_result(
-                client,
-                result_id,
-                widget_key=f"{turn_key}_{index}",
-                source_id=source_id,
-                chart=(
-                    chart if chart and chart.get("result_id") == result_id else None
-                ),
-                reference=reference,
-                expanded=index == 0 and chart is None,
-            )
+    if answer.get("partial"):
+        st.warning("Partial findings — the investigation is unfinished.")
+    for question in answer.get("unresolved_questions") or []:
+        st.caption(f"Still to investigate: {question}")
+    for index, analysis in enumerate(answer.get("analyses") or []):
+        _render_data_analysis(analysis, client=client, widget_key=f"{turn_key}_{index}")
+    for index, chart in enumerate(answer.get("charts") or []):
+        _render_result(
+            client,
+            chart["result_id"],
+            widget_key=f"{turn_key}_chart_{index}",
+            source_id=source_id,
+            chart=chart,
+        )
 
-        activities = turn.get("activities") or []
-        debug_states = turn.get("debug_states") or []
-        if activities or debug_states:
-            with st.status(
-                "How this was produced",
-                expanded=False,
-                state="complete",
-            ):
-                render_activity_timeline(
-                    activities,
-                    debug_states=debug_states,
-                    key_prefix=f"turn_{turn_key}",
-                )
-        if turn.get("diagnostics"):
-            render_run_diagnostics(
-                turn["diagnostics"],
-                activities=activities,
-                key=f"run_diagnostics_{turn_key}",
+    report = answer.get("report")
+    if report:
+        _render_report(
+            client,
+            report,
+            widget_key=turn_key,
+        )
+
+    results = answer.get("results") or []
+    chart = None
+    for index, reference in enumerate(results):
+        result_id = str(reference.get("result_id") or "")
+        label = str(reference.get("short_label") or "SQL evidence")
+        st.markdown(f"**Evidence {index + 1} · {label}**")
+        if result_id == answer.get("primary_result_id"):
+            st.badge(
+                "Primary evidence",
+                icon=":material/verified:",
+                color="green",
             )
+        _render_result(
+            client,
+            result_id,
+            widget_key=f"{turn_key}_{index}",
+            source_id=source_id,
+            chart=(chart if chart and chart.get("result_id") == result_id else None),
+            reference=reference,
+            expanded=index == 0 and chart is None,
+        )
 
 
 def _render_data_analysis(

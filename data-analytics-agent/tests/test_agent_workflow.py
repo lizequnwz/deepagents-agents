@@ -149,6 +149,28 @@ async def test_descriptive_question_through_real_harness_produces_report(
     assert calls["retrieve-artists"].agent == "coordinator"
     assert calls["report"].tool.name == "create_report"
     assert all(e.duration_ms is not None for e in calls.values())
+    assert not {
+        "get_semantic_context",
+        "write_todos",
+        "save_investigation",
+        "execute_analysis_python",
+    } & {e.tool.name for e in calls.values()}
+    assert not any(
+        e.agent == "text-to-sql" and e.tool.name == "read_file" for e in calls.values()
+    )
+    trace = {
+        "scenario": "synthetic scalar, deterministic scripted model",
+        "diagnostics": state.run_diagnostics.model_dump(mode="json"),
+        "calls": [
+            {"agent": e.agent, "tool": e.tool.name, "duration_ms": e.duration_ms}
+            for e in calls.values()
+        ],
+        "findings_published": bool(state.findings),
+        "report_available": bool(state.answer.report),
+    }
+    (test_settings.project_root / "efficiency-trace.json").write_text(
+        json.dumps(trace, indent=2)
+    )
 
 
 def test_tool_failures_keep_identity_and_record_failed_duration(workspace):
@@ -180,3 +202,39 @@ def test_tool_failures_keep_identity_and_record_failed_duration(workspace):
     assert all(event.agent == "data-analysis" for event in failed)
     assert all(event.tool.name == "execute_analysis_python" for event in failed)
     assert all(event.duration_ms is not None for event in failed)
+
+
+def test_owner_prompts_keep_only_analysis_and_report_skills(test_settings, monkeypatch):
+    from data_analytics_agent import coordinator
+
+    services = Services(settings=test_settings)
+    monkeypatch.setattr(coordinator, "create_deep_agent", lambda **kwargs: kwargs)
+    monkeypatch.setattr(coordinator, "_build_chat_model", lambda *args: AnalystModel())
+    specification = coordinator.build_agent(
+        test_settings,
+        services.results,
+        services.runs,
+        source=services.source("test"),
+        semantic_catalog=services.semantic_catalog_for_source("test"),
+        backend=services.backend_for_source("test"),
+    )
+    assert specification["skills"] == ["/project/skills/reporting/"]
+    specialists = {s["name"]: s for s in specification["subagents"]}
+    assert "skills" not in specialists["text-to-sql"]
+    assert specialists["data-analysis"]["skills"] == ["/project/skills/analysis/"]
+    assert (
+        "Complete exact catalog definitions"
+        in specialists["text-to-sql"]["system_prompt"]
+    )
+    assert "execute_sql" not in {t.name for t in specification["tools"]}
+    assert "execute_sql" not in {t.name for t in specialists["data-analysis"]["tools"]}
+    disabled = coordinator.build_agent(
+        replace(test_settings, enable_data_visualization=False),
+        services.results,
+        services.runs,
+        source=services.source("test"),
+        semantic_catalog=services.semantic_catalog_for_source("test"),
+        backend=services.backend_for_source("test"),
+    )
+    assert "Use create_chart for purposeful charts" not in disabled["system_prompt"]
+    assert "create_chart" not in {t.name for t in disabled["tools"]}

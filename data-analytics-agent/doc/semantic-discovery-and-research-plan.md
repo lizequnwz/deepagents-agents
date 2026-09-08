@@ -113,86 +113,38 @@ entities.
 
 Expose one shared catalog through role-specific read-only tools.
 
-#### `search_semantic_model`
+#### `get_semantic_context`
 
-Input:
+The implemented context tool replaces separate candidate search, exact entity
+fetching and relationship discovery. It accepts a business question, optional
+exact logical dataset/metric names, and optional logical field selections.
+It returns business definitions, metric dependencies, grain/keys and declared
+join routes together. The SQL projection additionally includes physical sources
+and dialect expressions. Bridge datasets and required keys are included.
 
-- natural-language query;
-- optional entity kinds: dataset, field, or metric;
-- bounded result limit.
+Packages are bounded to 12,000 serialized characters. Oversized packages return
+explicit omissions and a refinement path; expressions and instructions are never
+cut mid-definition. Alternative declared routes and unresolved references are
+explicit. Paginated browsing remains available for unknown vocabulary.
 
-Output:
-
-- matching logical names;
-- entity kind and parent dataset where applicable;
-- concise description;
-- matching synonym or text reason;
-- model hash.
-
-Search exact names, normalized names, synonyms, and descriptions. Begin with a
-simple deterministic scoring function. Search identifies candidates; it does
-not decide join paths or invent semantic definitions.
-
-#### `get_semantic_entities`
-
-Input:
-
-- up to ten exact logical dataset and metric names;
-- optional selected field names.
-
-Coordinator output:
-
-- logical names, descriptions, grain, keys, semantic field descriptions,
-  synonyms, time markers, metric definitions, and local AI context.
-
-Text-to-SQL output additionally includes:
-
-- exact physical dataset sources;
-- dialect-selected field and metric expressions.
-
-Batch the datasets needed by a normal multi-table analysis in one call. Field
-selection uses logical snake_case names, never physical SQL names. Expose these
-limits and naming rules in the tool schema so invalid calls are avoidable.
-
-#### `get_relationships`
-
-Input:
-
-- a bounded set of dataset names;
-- optional target dataset for path discovery.
-
-Output:
-
-- for one selected dataset, its adjacent declared relationships;
-- for multiple selected datasets, only declared relationships whose endpoints
-  are both selected;
-- declared join fields;
-- a shortest declared path when a target is supplied;
-- the dataset names participating in that path;
-- explicit failure when no declared path exists;
-- model hash.
-
-Use exact graph traversal over declared OSI relationships. Do not use semantic
-search or model inference to create relationship paths.
-
-These three tools are sufficient for the first release. A separate
-`list_datasets` tool is unnecessary because the overview and semantic search
-cover broad discovery. Split tools later only if observed tool payloads become
-too large or confusing.
+Small complete SQL catalogs are embedded directly in the specialist prompt.
+Compact representations and context packages use bounded process-local caches
+keyed by source, content hash, dialect, projection and request. Restart to load
+catalog edits; this is not live file reload.
 
 ### 4. Agent access
 
 The coordinator receives:
 
 - the compact semantic overview;
-- business-facing semantic search, entity, and relationship tools;
+- business-facing semantic context and paginated browsing;
 - existing result-inspection and reporting tools.
 
 The text-to-SQL specialist receives:
 
 - the same compact overview;
 - SQL-facing semantic search, entity, and relationship tools;
-- `execute_sql` and its existing query-writing skill.
+- `execute_sql` and its consolidated specialist prompt.
 
 The visualization and statistical specialists continue to consume saved result
 artifacts and do not need semantic-discovery tools.
@@ -342,8 +294,7 @@ Outcome: one application-owned representation of the semantic model.
 
 ### Phase 2: Semantic tools
 
-- Implement `search_semantic_model`, `get_semantic_entities`, and
-  `get_relationships` over the catalog.
+- Implement `get_semantic_context` and paginated browsing over the catalog.
 - Create coordinator-facing and SQL-facing projections from the same tool
   implementation.
 - Add the compact overview to both prompts.
@@ -411,7 +362,7 @@ needs.
 - a small semantic tool module under `data_analytics_agent/`
 - `data_analytics_agent/coordinator.py`
 - `data_analytics_agent/agents/text_to_sql/agent.py`
-- `skills/text-to-sql/query-writing/SKILL.md`
+- `data_analytics_agent/agents/text_to_sql/agent.py`
 - `AGENTS.md`
 - semantic-model, source, routing, and text-to-SQL tests
 - architecture and user documentation under `doc/`

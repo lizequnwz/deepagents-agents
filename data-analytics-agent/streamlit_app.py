@@ -15,14 +15,13 @@ from data_analytics_agent.ui.api_client import (
 )
 from data_analytics_agent.ui.components import (
     clear_artifact_cache,
-    render_activity_timeline,
-    render_activity_summary,
+    current_activity,
+    render_activity,
+    render_answer,
     render_approval,
     render_empty_state,
     render_page_header,
     render_pending_user_message,
-    render_run_diagnostics,
-    render_run_diagnostics_content,
     render_sidebar,
     render_turn,
 )
@@ -41,11 +40,6 @@ st.set_page_config(
 
 def initialize_session_state() -> None:
     st.session_state.setdefault("active_run_id", None)
-    st.session_state.setdefault("last_run_error", None)
-    st.session_state.setdefault("last_run_diagnostics", None)
-    st.session_state.setdefault("last_run_activities", None)
-    st.session_state.setdefault("last_run_debug_states", None)
-    st.session_state.setdefault("last_run_metrics", None)
     st.session_state.setdefault("conversation_notice", None)
     st.session_state.setdefault("review_notice", None)
     st.session_state.setdefault("source_selector", None)
@@ -71,11 +65,6 @@ def clear_conversation_state() -> None:
         if key.startswith(removable_prefixes):
             del st.session_state[key]
     st.session_state["active_run_id"] = None
-    st.session_state["last_run_error"] = None
-    st.session_state["last_run_diagnostics"] = None
-    st.session_state["last_run_activities"] = None
-    st.session_state["last_run_debug_states"] = None
-    st.session_state["last_run_metrics"] = None
     st.session_state["review_notice"] = None
 
 
@@ -179,99 +168,97 @@ def clear_completed_run(run_id: str) -> None:
     st.session_state.pop(f"review_phase_{run_id}", None)
 
 
-def render_execution_diagnostics(diagnostics: dict[str, Any]) -> None:
-    """Render bounded diagnostics for an execution-budget failure."""
-
-    with st.expander("Execution diagnostics", expanded=False):
-        safe_details = {
-            key: value
-            for key, value in diagnostics.items()
-            if key != "recent_tool_calls"
-        }
-        st.json(safe_details)
-        recent = diagnostics.get("recent_tool_calls") or []
-        if recent:
-            st.warning(
-                "Debug details may contain sensitive business data. "
-                "Credentials and recognized secrets are redacted."
-            )
-            st.json(recent)
-
-
 @st.fragment(run_every="1s")
 def render_active_run(
     client: AgentAPIClient, run_id: str, thread_id: str, source_id: str
 ):
     try:
-        run = client.get_run(run_id)
+        cursor = st.session_state.get(f"event_cursor_{run_id}", 0)
+        run = client.get_run(run_id, after_event_id=cursor)
+        events = st.session_state.get(f"event_activities_{run_id}", []) + (
+            run.get("events") or []
+        )
+        st.session_state[f"event_activities_{run_id}"] = events
+        st.session_state[f"event_cursor_{run_id}"] = run.get("next_event_id", cursor)
+        run["events"] = events
         state = run["status"]
         if state == "completed":
             clear_completed_run(run_id)
             st.rerun()
-        phases = {
-            "understanding": "Understanding",
-            "retrieving_data": "Retrieving data",
-            "analyzing": "Analyzing",
-            "findings_ready": "Findings ready",
-            "preparing_report": "Preparing report",
-        }
-        label = (
-            "Stopping"
-            if state == "stopping"
-            else phases.get(run.get("phase"), "Understanding")
-        )
-        if state in {"paused", "failed"}:
-            label = f"{state.capitalize()} · {label}"
-        st.markdown(f"**{label}**")
-        render_activity_summary(run.get("events") or [])
-        if run.get("findings"):
-            render_turn(
-                client,
-                {"user_message": run["question"], "answer": run["findings"]},
-                turn_key=f"pending_{run_id}",
-                source_id=source_id,
+        render_pending_user_message(run["question"])
+        with st.chat_message("assistant", avatar=":material/query_stats:"):
+            elapsed = (run.get("run_diagnostics") or {}).get("elapsed_ms", 0) / 1000
+            label = current_activity(
+                run.get("events") or [],
+                phase=run.get("phase"),
+                status=state,
+                findings=bool(run.get("findings")),
             )
-        else:
-            render_pending_user_message(run["question"])
-        if state in {"running", "queued", "approval_required"}:
-            if st.button("Stop", key=f"stop_{run_id}"):
-                client.stop_run(run_id)
-                st.rerun()
-        if state == "approval_required":
-            decision = render_approval(run)
-            if decision:
-                client.submit_decision(run_id, decision)
-                st.rerun()
-        elif state in {"paused", "failed"}:
-            # Re-run once to release the chat input after a stop.
-            if st.session_state.get("active_run_id"):
-                st.session_state["active_run_id"] = None
-                st.rerun()
-            if run.get("error"):
-                st.error(run["error"])
-            st.info(
-                "Work is saved. Resume this investigation or send a correction below."
+            with st.container(horizontal=True, vertical_alignment="center"):
+                st.markdown(f"**{label}** · {elapsed:.0f}s")
+                if state in {
+                    "running",
+                    "queued",
+                    "approval_required",
+                    "clarification_required",
+                }:
+                    if st.button("Stop", key=f"stop_{run_id}"):
+                        client.stop_run(run_id)
+                        st.rerun()
+            render_activity(
+                run.get("events") or [], run.get("run_diagnostics") or {}, key=run_id
             )
-            if st.button("Resume", key=f"resume_{run_id}"):
-                client.resume_run(run_id)
-                st.session_state["active_run_id"] = run_id
-                st.rerun()
-            if run.get("findings") and st.button(
-                "Retry report", key=f"retry_report_{run_id}"
-            ):
-                client.retry_report(run_id)
-                st.session_state["active_run_id"] = run_id
-                st.rerun()
-        with st.expander(
-            "Execution details", expanded=False, key=f"execution_details_{run_id}"
-        ):
-            render_activity_timeline(
-                run.get("events") or [], key_prefix=f"live_{run_id}"
-            )
-            with st.expander("Run diagnostics", expanded=False):
-                render_run_diagnostics_content(
-                    run.get("run_diagnostics") or {}, activities=run.get("events") or []
+            if run.get("findings"):
+                render_answer(
+                    client, run["findings"], turn_key=run_id, source_id=source_id
                 )
+                st.caption(
+                    "Report: retry available"
+                    if state == "failed"
+                    else "Report: preparing"
+                )
+            for correction in run.get("corrections") or []:
+                applied = "coordinator" in correction.get("delivered_to", [])
+                st.caption(
+                    f"{'Applied' if applied else 'Received; applying after the current step'} · {correction['message']}"
+                )
+            if state == "clarification_required":
+                clarification = run["clarification"]
+                st.markdown(clarification["question"])
+                for choice in clarification.get("choices") or []:
+                    st.caption(choice)
+                with st.form(f"clarification_{run_id}"):
+                    answer = st.text_input(
+                        "Your answer", key=f"clarification_answer_{run_id}"
+                    )
+                    if st.form_submit_button("Continue") and answer.strip():
+                        client.answer_clarification(run_id, answer)
+                        st.rerun()
+            if state == "approval_required":
+                decision = render_approval(run)
+                if decision:
+                    client.submit_decision(run_id, decision)
+                    st.rerun()
+            elif state in {"paused", "failed"}:
+                # Re-run once to release the chat input after a stop.
+                if st.session_state.get("active_run_id") == run_id:
+                    st.session_state["active_run_id"] = None
+                    st.rerun()
+                if run.get("error"):
+                    st.error(run["error"])
+                st.info(
+                    "Work is saved. Resume this investigation or send a correction below."
+                )
+                if st.button("Resume", key=f"resume_{run_id}"):
+                    client.resume_run(run_id)
+                    st.session_state["active_run_id"] = run_id
+                    st.rerun()
+                if run.get("findings") and st.button(
+                    "Retry report", key=f"retry_report_{run_id}"
+                ):
+                    client.retry_report(run_id)
+                    st.session_state["active_run_id"] = run_id
+                    st.rerun()
     except APIError as exc:
         st.error(str(exc))
 
@@ -428,72 +415,49 @@ if st.session_state.get("review_notice"):
         icon=":material/info:",
     )
 
-for turn_index, completed_turn in enumerate(conversation["turns"]):
-    render_turn(
-        client,
-        completed_turn,
-        turn_key=f"{thread_id}_{turn_index}",
-        source_id=conversation["source_id"],
-    )
-
-if st.session_state.get("last_run_error"):
-    st.error(
-        st.session_state["last_run_error"],
-        icon=":material/error:",
-    )
-    if st.session_state.get("last_run_diagnostics"):
-        render_execution_diagnostics(st.session_state["last_run_diagnostics"])
-    failed_activities = st.session_state.get("last_run_activities") or []
-    failed_debug_states = st.session_state.get("last_run_debug_states") or []
-    if failed_activities or failed_debug_states:
-        with st.status(
-            "How this run progressed",
-            expanded=False,
-            state="error",
-        ):
-            render_activity_timeline(
-                failed_activities,
-                debug_states=failed_debug_states,
-                key_prefix="last_failed_run",
-            )
-    if st.session_state.get("last_run_metrics"):
-        render_run_diagnostics(
-            st.session_state["last_run_metrics"],
-            key="last_failed_run_metrics",
+completed_turns = {turn["run_id"]: turn for turn in conversation["turns"]}
+for saved_run_id in conversation.get("run_ids") or []:
+    if saved_run_id in completed_turns:
+        render_turn(
+            client,
+            completed_turns[saved_run_id],
+            turn_key=saved_run_id,
+            source_id=conversation["source_id"],
         )
+    else:
+        if saved_run_id == active_run_id:
+            st.session_state["active_run_id"] = active_run_id
+        render_active_run(client, saved_run_id, thread_id, conversation["source_id"])
 
-latest_run_id = (conversation.get("run_ids") or [None])[-1]
-if active_run_id:
-    st.session_state["active_run_id"] = active_run_id
-    render_active_run(client, active_run_id, thread_id, conversation["source_id"])
-elif latest_run_id:
-    latest_run = client.get_run(latest_run_id)
-    if latest_run["status"] in {"paused", "failed"}:
-        render_active_run(client, latest_run_id, thread_id, conversation["source_id"])
-
-if not active_run_id:
-    chat_input_key = f"chat_input_{thread_id}"
-    if not conversation["turns"] and not conversation.get("run_ids"):
-        render_empty_state(
-            thread_id,
-            source,
-            chat_input_key=chat_input_key,
-        )
-
-    typed_question = st.chat_input(
-        f"Ask a business question about {source['name']}",
-        key=chat_input_key,
-        submit_mode="disable",
+chat_input_key = f"chat_input_{thread_id}"
+if not conversation["turns"] and not conversation.get("run_ids"):
+    render_empty_state(
+        thread_id,
+        source,
+        chat_input_key=chat_input_key,
     )
-    if typed_question:
-        try:
-            st.session_state["last_run_error"] = None
-            st.session_state["last_run_diagnostics"] = None
-            st.session_state["last_run_activities"] = None
-            st.session_state["last_run_debug_states"] = None
-            st.session_state["last_run_metrics"] = None
+
+typed_question = st.chat_input(
+    "Add context or correct the current request"
+    if active_run_id
+    else f"Ask a business question about {source['name']}",
+    key=chat_input_key,
+    submit_mode="disable",
+)
+if typed_question:
+    try:
+        if active_run_id:
+            if client.get_run(active_run_id)["status"] == "clarification_required":
+                run = client.answer_clarification(active_run_id, typed_question)
+                st.session_state["conversation_notice"] = (
+                    "Answer received; continuing the investigation."
+                )
+            else:
+                run = client.send_correction(active_run_id, typed_question)
+                st.session_state["conversation_notice"] = run["message"]
+        else:
             run = client.send_message(thread_id, typed_question)
-            st.session_state["active_run_id"] = run["run_id"]
-            st.rerun()
-        except APIError as exc:
-            st.error(str(exc), icon=":material/error:")
+        st.session_state["active_run_id"] = active_run_id or run["run_id"]
+        st.rerun()
+    except APIError as exc:
+        st.error(str(exc), icon=":material/error:")

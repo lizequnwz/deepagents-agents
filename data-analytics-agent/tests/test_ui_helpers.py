@@ -61,7 +61,7 @@ if submitted:
 
 
 def test_api_contract_mismatch_requires_service_restart() -> None:
-    assert api_contract_error({"api_contract_version": 9}) is None
+    assert api_contract_error({"api_contract_version": 10}) is None
     missing = api_contract_error({})
     stale = api_contract_error({"api_contract_version": 2})
 
@@ -119,7 +119,7 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
         {
             "id": 1,
             "kind": "skill",
-            "label": "Loading skill · query-writing",
+            "label": "Loading skill · data-analysis",
             "phase": "started",
             "agent": "text-to-sql",
             "duration_ms": 250,
@@ -133,7 +133,7 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
         {
             "id": 2,
             "kind": "skill",
-            "label": "Loaded skill · query-writing",
+            "label": "Loaded skill · data-analysis",
             "phase": "completed",
             "agent": "text-to-sql",
             "tool": {
@@ -162,7 +162,7 @@ def test_tool_lifecycle_consolidation_preserves_details_and_repeated_calls() -> 
 
     assert len(consolidated) == 2
     assert consolidated[0]["phase"] == "completed"
-    assert consolidated[0]["label"] == "Loaded skill · query-writing"
+    assert consolidated[0]["label"] == "Loaded skill · data-analysis"
     assert consolidated[0]["tool"]["input"] == {"file_path": "SKILL.md"}
     assert consolidated[0]["tool"]["output"] == {"content": "skill text"}
     assert consolidated[0]["duration_ms"] == 250
@@ -178,7 +178,7 @@ render_activity_timeline(
     [{
         "id": 1,
         "kind": "skill",
-        "label": "Loaded skill · query-writing",
+        "label": "Loaded skill · data-analysis",
         "phase": "completed",
         "agent": "text-to-sql",
         "tool": {
@@ -202,7 +202,7 @@ render_activity_timeline(
     }, {
         "id": 3,
         "kind": "skill",
-        "label": "Loaded skill · chart-design",
+        "label": "Loaded skill · report-design",
         "phase": "completed",
         "agent": "text-to-sql",
         "tool": {
@@ -228,7 +228,7 @@ render_activity_timeline(
 
     assert not app.exception
     assert any(
-        "Loaded skill · query-writing · Text-to-SQL" in caption.value
+        "Loaded skill · data-analysis · Text-to-SQL" in caption.value
         for caption in app.caption
     )
     panels = app.get("status")
@@ -259,7 +259,7 @@ render_activity_timeline(
         "agent": "text-to-sql",
         "tool": {
             "call_id": "call-1",
-            "name": "search_semantic_model",
+            "name": "get_semantic_context",
             "input": {"query": "Revenue"},
             "output": {"matches": []},
         },
@@ -270,7 +270,7 @@ render_activity_timeline(
     ).run()
 
     assert not app.exception
-    assert [panel.label for panel in app.get("status")] == ["search_semantic_model"]
+    assert [panel.label for panel in app.get("status")] == ["get_semantic_context"]
 
 
 def test_run_diagnostics_renderer_shows_operational_summary() -> None:
@@ -401,16 +401,35 @@ render_approval({
     )
 
 
-def test_visible_activity_summary_names_specialists_and_tools():
+def test_current_activity_prefers_leaf_and_preserves_report_failure():
+    from data_analytics_agent.ui.components import current_activity
+
+    events = [
+        {
+            "phase": "started",
+            "label": "Delegating",
+            "tool": {"call_id": "1", "name": "task"},
+        },
+        {
+            "phase": "started",
+            "tool": {
+                "call_id": "2",
+                "name": "execute_sql",
+                "input": {"purpose": "Count artists"},
+            },
+        },
+    ]
+    assert current_activity(events) == "Count artists"
+    assert (
+        current_activity(events, status="failed", findings=True)
+        == "Findings ready · Report needs retry"
+    )
+
+
+def test_activity_disclosure_is_keyed_and_lazy():
     app = AppTest.from_string("""
-from data_analytics_agent.ui.components import render_activity_summary
-render_activity_summary([
- {"agent":"coordinator","phase":"started","tool":{"call_id":"1","name":"task","input":{"subagent_type":"text-to-sql"}}},
- {"agent":"text-to-sql","phase":"completed","duration_ms":123,"tool":{"call_id":"2","name":"execute_sql"}},
-])
+from data_analytics_agent.ui.components import render_activity
+render_activity([], {}, key="stable")
 """).run()
     assert not app.exception
-    captions = " ".join(c.value for c in app.caption)
-    assert "task → text-to-sql" in captions
-    assert "execute_sql" in captions and "completed" in captions
-    assert "2 tool calls · 1 running" in captions
+    assert [e.label for e in app.expander] == ["Activity"]

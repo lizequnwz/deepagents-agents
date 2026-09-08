@@ -58,3 +58,25 @@ an app rerun; ordinary active-run refresh does not rebuild the conversation.
 Constraints: one process, one local user, one source per conversation, sequential
 source queries. No persistent arbitrary Python object state, cross-conversation
 learning, or obsolete in-memory-state migration.
+
+
+`semantic_context.py` builds one coherent metadata package for prompts and the
+context tool. SQL owns physical definitions; the coordinator sees the business
+projection. Whole oversized packages request refinement. Caches contain metadata,
+never source observations. SQL/chart operational guidance lives in owner prompts;
+analysis and report methodology remain on-demand skills.
+
+`steering.py` uses supported before-model and after-model middleware plus tool
+wrappers. Agent-private checkpoint state tracks correction IDs independently in
+each assignment. Ordered HumanMessages have stable IDs, making checkpoint replay
+idempotent. Later specialists receive the same durable corrections in their own
+context. Tool wrappers reject stale proposed steps; running steps may finish.
+Publication and completion share the run-store lock with acceptance and refuse
+pending coordinator corrections. No concurrent invoke or graph-internal mutation
+is used. Clarifications use interrupt/resume and remain distinct from code review.
+
+The UI has one Activity disclosure per run, retained across publication and
+completion. Incremental event cursors avoid retransmitting history each second;
+hidden activity/diagnostics are rendered lazily. Findings remain visible while
+reporting runs, fails or is retried. The composer remains outside the polling
+fragment so typing and focus persist.

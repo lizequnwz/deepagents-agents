@@ -14,7 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 9
+API_CONTRACT_VERSION = 10
 
 
 class StrictModel(BaseModel):
@@ -208,6 +208,7 @@ class RunStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     APPROVAL_REQUIRED = "approval_required"
+    CLARIFICATION_REQUIRED = "clarification_required"
     COMPLETED = "completed"
     FAILED = "failed"
     PAUSED = "paused"
@@ -236,6 +237,8 @@ class AgentDiagnostics(StrictModel):
 
 
 class RunDiagnostics(StrictModel):
+    time_to_findings_ms: int | None = Field(default=None, ge=0)
+    report_preparation_ms: int | None = Field(default=None, ge=0)
     model: str = ""
     tokens: TokenUsage = Field(default_factory=TokenUsage)
     token_usage_partial: bool = False
@@ -342,7 +345,29 @@ class ApprovalRequest(StrictModel):
     description: str = "Review the generated SQL before it is executed."
 
 
+class Correction(StrictModel):
+    message_id: str
+    message: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    delivered_to: list[str] = Field(default_factory=list)
+
+
+class ClarificationRequest(StrictModel):
+    interrupt_id: str
+    question: str
+    choices: list[str] = Field(default_factory=list)
+
+
+class SteeringResponse(StrictModel):
+    run_id: str
+    message_id: str
+    disposition: Literal["pending", "follow_up"]
+    message: str
+
+
 class ChatTurn(StrictModel):
+    run_id: str = ""
+    corrections: list[Correction] = Field(default_factory=list)
     user_message: str
     answer: FinalAnswer
     activities: list[ActivityEvent] = Field(default_factory=list)
@@ -381,6 +406,8 @@ class CreateRunResponse(StrictModel):
 
 
 class RunResponse(StrictModel):
+    corrections: list[Correction] = Field(default_factory=list)
+    clarification: ClarificationRequest | None = None
     run_id: str
     thread_id: str
     source_id: str

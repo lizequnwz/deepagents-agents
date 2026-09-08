@@ -5,6 +5,7 @@ import asyncio
 import json
 import time
 from data_analytics_agent.approvals import _extract_approval
+from data_analytics_agent.steering import PendingCorrections
 from data_analytics_agent.diagnostics import RunDiagnosticsCallback
 from data_analytics_agent.presentation import resolve_answer
 from data_analytics_agent.reporting.schemas import ReportReference, ReportSpec
@@ -12,6 +13,7 @@ from data_analytics_agent.reporting.tools import generate_report
 from data_analytics_agent.schemas import (
     CoordinatorResponse,
     ChatTurn,
+    ClarificationRequest,
     RunStatus,
 )
 
@@ -32,6 +34,7 @@ class RunManager:
         agent=None,
         agent_resolver=None,
         source_resolver=None,
+        catalog_version_resolver=None,
         python_execution_limits=None,
         debug_details=False,
         presentation_budget_seconds=120,
@@ -43,6 +46,7 @@ class RunManager:
             agent_resolver,
             source_resolver,
         )
+        self.catalog_version_resolver = catalog_version_resolver
         self.python_execution_limits = python_execution_limits
         self.presentation_budget_seconds = presentation_budget_seconds
         self.tasks = {}
@@ -51,12 +55,29 @@ class RunManager:
         return self.agent_resolver(source_id) if self.agent_resolver else self.agent
 
     async def start(self, run_id):
+        self.runs.mark_started(run_id)
         run = self.runs.get(run_id)
         conversation = self.conversations.get(run.thread_id)
         messages = []
-        for turn in conversation.turns:
+        completed = {turn.run_id: turn for turn in conversation.turns}
+        for prior_id in conversation.run_ids:
+            if prior_id == run_id:
+                break
+            turn = completed.get(prior_id)
+            if turn is None:
+                prior = self.runs.get(prior_id)
+                if prior.findings is None:
+                    continue
+                turn = ChatTurn(
+                    run_id=prior_id,
+                    user_message=prior.question,
+                    answer=prior.findings,
+                    corrections=prior.corrections,
+                )
+
             messages += [
                 {"role": "user", "content": turn.user_message},
+                *({"role": "user", "content": c.message} for c in turn.corrections),
                 {
                     "role": "assistant",
                     "content": json.dumps(
@@ -97,8 +118,38 @@ class RunManager:
         )
 
     async def resume(self, run_id, command=None):
-        self.runs.cancel_event(run_id).clear()
-        await self._drive(run_id, command)
+        self.tasks[run_id] = asyncio.current_task()
+        try:
+            graph = self._graph(self.runs.get(run_id).source_id)
+            if hasattr(graph, "aget_state"):
+                checkpoint = await graph.aget_state(
+                    {"configurable": {"thread_id": run_id}}
+                )
+                if not checkpoint.values:
+                    if command is not None:
+                        raise ValueError(
+                            "The saved interrupt checkpoint is unavailable. Start a new turn with the saved evidence."
+                        )
+                    return await self.start(run_id)
+                if self.catalog_version_resolver:
+                    self.runs.bind_catalog(
+                        run_id,
+                        self.catalog_version_resolver(self.runs.get(run_id).source_id),
+                        require_existing=True,
+                    )
+            if command is None and not self.runs.has_started(run_id):
+                return await self.start(run_id)
+            self.runs.cancel_event(run_id).clear()
+            await self._drive(run_id, command)
+        except asyncio.CancelledError:
+            self.runs.cancel_event(run_id).set()
+            self.runs.pause(run_id)
+            self.conversations.fail_run(self.runs.get(run_id).thread_id, run_id)
+        except Exception as exc:
+            self.runs.fail(run_id, str(exc))
+            self.conversations.fail_run(self.runs.get(run_id).thread_id, run_id)
+        finally:
+            self.tasks.pop(run_id, None)
 
     async def stop(self, run_id):
         self.runs.set_status(run_id, RunStatus.STOPPING)
@@ -127,6 +178,8 @@ class RunManager:
             run.thread_id,
             run_id,
             ChatTurn(
+                run_id=run_id,
+                corrections=run.corrections,
                 user_message=run.question,
                 answer=answer,
                 activities=run.events,
@@ -190,9 +243,26 @@ class RunManager:
             self.conversations.fail_run(run.thread_id, run_id)
         finally:
             self.tasks.pop(run_id, None)
+            await self._start_follow_up(run_id)
+
+    async def _start_follow_up(self, run_id):
+        parent = self.runs.get(run_id)
+        if parent.status not in {RunStatus.COMPLETED, RunStatus.FAILED}:
+            return
+        for candidate in self.runs.follow_ups(run_id):
+            if self.runs.get(candidate).status in {
+                RunStatus.QUEUED,
+                RunStatus.PAUSED,
+            } and not self.runs.has_started(candidate):
+                self.conversations.begin_run(parent.thread_id, candidate)
+                await self.start(candidate)
+                if self.runs.get(candidate).status == RunStatus.PAUSED:
+                    break
 
     async def _consume(self, run_id, agent_input):
         run = self.runs.get(run_id)
+        if self.catalog_version_resolver:
+            self.runs.bind_catalog(run_id, self.catalog_version_resolver(run.source_id))
         graph = self._graph(run.source_id)
         stream = await graph.astream_events(
             agent_input,
@@ -207,11 +277,24 @@ class RunManager:
             # namespaces contain execution IDs, not reliable specialist names.
             pass
         if await stream.interrupted():
+            interrupts = await stream.interrupts()
+            for item in interrupts:
+                value = getattr(item, "value", None)
+                if isinstance(value, dict) and value.get("kind") == "clarification":
+                    self.runs.require_clarification(
+                        run_id,
+                        ClarificationRequest(
+                            interrupt_id=item.id,
+                            question=value["question"],
+                            choices=value.get("choices", []),
+                        ),
+                    )
+                    return
             source = (
                 self.source_resolver(run.source_id) if self.source_resolver else None
             )
             approval = _extract_approval(
-                await stream.interrupts(),
+                interrupts,
                 source=source,
                 result_store=self.results,
                 thread_id=run.thread_id,
@@ -271,9 +354,21 @@ class RunManager:
         self.runs.start_active(run_id)
         try:
             try:
-                await self._consume_with_budget(
-                    run_id, agent_input, presentation_only=bool(run.findings)
-                )
+                while True:
+                    try:
+                        await self._consume_with_budget(
+                            run_id, agent_input, presentation_only=bool(run.findings)
+                        )
+                        break
+                    except PendingCorrections:
+                        agent_input = {
+                            "messages": [
+                                {
+                                    "role": "user",
+                                    "content": "Reconcile accepted corrections before completing this turn.",
+                                }
+                            ]
+                        }
             except AnalysisBudgetEnded:
                 self.runs.cancel_event(run_id).set()
                 while self.runs.workers_active(run_id):
@@ -302,3 +397,4 @@ class RunManager:
             self.conversations.fail_run(run.thread_id, run_id)
         finally:
             self.tasks.pop(run_id, None)
+            await self._start_follow_up(run_id)

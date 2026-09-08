@@ -1,6 +1,8 @@
 """Direct artifact references and published analytical findings."""
 
 from langchain.tools import tool, ToolRuntime
+from langchain_core.tools import ToolException
+from data_analytics_agent.steering import PendingCorrections
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
 from data_analytics_agent.schemas import FinalAnswer, ResultReference
 from data_analytics_agent.visualization.schemas import ChartSpec
@@ -100,7 +102,10 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
                     ],
                 }
             )
-        runs.publish(context.run_id, answer)
+        try:
+            runs.publish(context.run_id, answer)
+        except PendingCorrections as exc:
+            raise ToolException(str(exc)) from exc
         return {
             "ok": True,
             "message": "Findings are visible. Create their HTML report now.",
@@ -152,4 +157,5 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
         )
         return {"ok": True}
 
+    publish_findings.handle_tool_error = True
     return [publish_findings, save_investigation]
