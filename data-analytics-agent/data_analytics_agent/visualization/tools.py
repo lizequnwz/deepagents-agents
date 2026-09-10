@@ -5,6 +5,7 @@ import json
 import duckdb
 from pydantic_core import to_json
 from langchain.tools import tool, ToolRuntime
+from data_analytics_agent.schemas import ChartDataPreparation
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
 from data_analytics_agent.visualization.schemas import ChartSpec, ChartType
 from data_analytics_agent.visualization.validation import (
@@ -57,6 +58,7 @@ def create_chart_tool(results, runs, *, source_id):
                 raise ValueError("Chart references unknown columns.")
             columns = [name for name in source.columns if name in needed]
             sampled = source.row_count > MAX_CHART_ROWS
+            sampling, order_by, stride, seed = "none", None, None, None
             if sampled and (
                 spec.chart_type
                 not in {ChartType.LINE, ChartType.AREA, ChartType.SCATTER}
@@ -71,6 +73,7 @@ def create_chart_tool(results, runs, *, source_id):
                 )
                 if sampled:
                     if spec.x and spec.chart_type in {ChartType.LINE, ChartType.AREA}:
+                        sampling, order_by = "ordered_stride", spec.x
                         field = '"' + spec.x.replace('"', '""') + '"'
                         relation.order(field).create_view("ordered_data")
                         stride = (source.row_count + 4998) // 4999
@@ -78,6 +81,7 @@ def create_chart_tool(results, runs, *, source_id):
                             f"SELECT * EXCLUDE (row_no) FROM (SELECT *, row_number() OVER () AS row_no FROM ordered_data) WHERE (row_no-1) % {stride}=0 OR row_no={source.row_count}"
                         )
                     else:
+                        sampling, seed = "reservoir", 0
                         relation.create_view("chart_data")
                         relation = db.sql(
                             "SELECT * FROM chart_data USING SAMPLE reservoir(5000 ROWS) REPEATABLE(0)"
@@ -99,6 +103,15 @@ def create_chart_tool(results, runs, *, source_id):
                     kind="presentation",
                     parent_result_ids=[source.result_id],
                     truncated=source.truncated,
+                    chart_preparation=ChartDataPreparation(
+                        selected_columns=columns,
+                        input_row_count=source.row_count,
+                        output_row_count=table.num_rows,
+                        sampling=sampling,
+                        order_by=order_by,
+                        stride=stride,
+                        seed=seed,
+                    ),
                 )
                 spec = spec.model_copy(update={"result_id": presentation.result_id})
             notes = list(spec.notes)

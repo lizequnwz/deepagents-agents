@@ -14,7 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 10
+API_CONTRACT_VERSION = 11
 
 
 class StrictModel(BaseModel):
@@ -151,6 +151,16 @@ class SavedDataAnalysis(StrictModel):
     created_at: datetime
 
 
+class ChartDataPreparation(StrictModel):
+    selected_columns: list[str]
+    input_row_count: int = Field(ge=0)
+    output_row_count: int = Field(ge=0)
+    sampling: Literal["none", "ordered_stride", "reservoir"]
+    order_by: str | None = None
+    stride: int | None = None
+    seed: int | None = None
+
+
 class SavedResult(StrictModel):
     result_id: str
     thread_id: str
@@ -164,6 +174,7 @@ class SavedResult(StrictModel):
     parent_result_ids: list[str] = Field(default_factory=list)
     kind: Literal["source_sql", "saved_sql", "python", "presentation"] = "source_sql"
     execution_id: str | None = None
+    chart_preparation: ChartDataPreparation | None = None
     byte_count: int = 0
     profile: ResultProfile
     row_count: int
@@ -193,6 +204,12 @@ class SavedResult(StrictModel):
 class ResultPage(StrictModel):
     result_id: str
     source_id: str
+    kind: Literal["source_sql", "saved_sql", "python", "presentation"]
+    short_label: str
+    originating_question: str
+    parent_result_ids: list[str]
+    execution_id: str | None
+    chart_preparation: ChartDataPreparation | None = None
     executed_sql: str
     columns: list[str]
     rows: list[dict[str, Any]]
@@ -406,6 +423,8 @@ class CreateRunResponse(StrictModel):
 
 
 class RunResponse(StrictModel):
+    active_model_agent: str | None = None
+    report_ready: bool = False
     corrections: list[Correction] = Field(default_factory=list)
     clarification: ClarificationRequest | None = None
     run_id: str

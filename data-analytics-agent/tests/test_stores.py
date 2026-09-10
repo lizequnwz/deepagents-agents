@@ -191,3 +191,35 @@ def test_agent_result_discovery_exposes_profiles_and_only_head_ten() -> None:
     assert len(inspected["sample_rows"]) == 10
     assert inspected["row_count"] == 25
     assert inspected["truncated"] is True
+
+
+def test_result_page_preserves_python_producer_and_lineage():
+    store = ResultStore()
+    saved = store.save(
+        thread_id="lineage",
+        source_id="source-a",
+        columns=["value"],
+        rows=[{"value": 1}],
+        kind="python",
+        execution_id="exec-1",
+        parent_result_ids=["input-1"],
+        purpose="Forecast",
+        originating_question="Forecast sales",
+    )
+    page = store.page_unscoped(saved.result_id)
+    assert page.kind == "python"
+    assert page.execution_id == "exec-1"
+    assert page.parent_result_ids == ["input-1"]
+    assert page.short_label == "Forecast"
+    assert page.originating_question == "Forecast sales"
+    assert page.executed_sql == ""
+
+
+def test_active_model_agent_tracks_call_lifecycle():
+    store = RunStore()
+    run = store.create("thread", "source", "Question")
+    store.start_active(run)
+    store.start_model_call(run, "model", agent="text-to-sql")
+    assert store.get(run).active_model_agent == "text-to-sql"
+    store.finish_model_call(run, "model", usage=None)
+    assert store.get(run).active_model_agent is None

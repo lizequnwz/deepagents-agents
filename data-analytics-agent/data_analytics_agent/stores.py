@@ -583,6 +583,15 @@ class RunStore:
             item = self._get_mutable(run_id)
             events = [event for event in item.events if event.id > after_event_id]
             return RunResponse(
+                report_ready=item.report_reference is not None,
+                active_model_agent=(
+                    max(
+                        item.pending_model_calls.values(),
+                        key=lambda call: call.started_at,
+                    ).agent
+                    if item.pending_model_calls and item.status == RunStatus.RUNNING
+                    else None
+                ),
                 run_id=item.run_id,
                 thread_id=item.thread_id,
                 source_id=item.source_id,
@@ -771,6 +780,26 @@ class RunStore:
     def get_last_review_type(self, run_id: str) -> str:
         with self._lock:
             return self._get_mutable(run_id).last_review_type
+
+    def dataset_python_source(self, result):
+        """Resolve exact producing code, including datasets reused in later turns."""
+        with self._lock:
+            for run in self._items.values():
+                if (
+                    run.thread_id != result.thread_id
+                    or run.source_id != result.source_id
+                ):
+                    continue
+                for execution in run.python_executions:
+                    if (
+                        execution.execution_id == result.execution_id
+                        and result.result_id in execution.output_datasets.values()
+                    ):
+                        return {
+                            "execution_id": execution.execution_id,
+                            "executed_python": execution.executed_python,
+                        }
+        raise StoreNotFound(result.result_id)
 
     @persist_run
     def add_event(

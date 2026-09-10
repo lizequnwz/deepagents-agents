@@ -293,60 +293,267 @@ def render_debug_states(
                 st.json(snapshot.get("state") or {})
 
 
-def activity_label(event):
+# Running, completed, and failed labels share one vocabulary across live/history views.
+_ACTIVITY_LABELS = {
+    "execute_sql": ("Querying data source", "SQL query finished", "SQL query failed"),
+    "query_saved_results": (
+        "Transforming saved data",
+        "Saved data transformed",
+        "Saved-data query failed",
+    ),
+    "lookup_values": ("Looking up values", "Values loaded", "Value lookup failed"),
+    "get_semantic_context": (
+        "Loading business definitions",
+        "Business definitions loaded",
+        "Definition lookup failed",
+    ),
+    "browse_semantic_model": (
+        "Exploring data catalog",
+        "Data catalog reviewed",
+        "Catalog lookup failed",
+    ),
+    "list_conversation_results": (
+        "Finding saved datasets",
+        "Saved datasets found",
+        "Dataset lookup failed",
+    ),
+    "inspect_conversation_result": (
+        "Reviewing saved dataset",
+        "Saved dataset reviewed",
+        "Dataset review failed",
+    ),
+    "execute_analysis_python": (
+        "Running Python analysis",
+        "Python analysis finished",
+        "Python analysis failed",
+    ),
+    "finish_analysis": (
+        "Saving analysis findings",
+        "Analysis findings saved",
+        "Saving analysis failed",
+    ),
+    "list_conversation_analyses": (
+        "Finding saved analyses",
+        "Saved analyses found",
+        "Analysis lookup failed",
+    ),
+    "inspect_conversation_analysis": (
+        "Reviewing saved analysis",
+        "Saved analysis reviewed",
+        "Analysis review failed",
+    ),
+    "create_chart": ("Creating chart", "Chart saved", "Chart creation failed"),
+    "create_report": ("Preparing report", "Report ready", "Report generation failed"),
+    "publish_findings": ("Saving findings", "Findings saved", "Saving findings failed"),
+    "save_investigation": (
+        "Saving investigation progress",
+        "Investigation progress saved",
+        "Saving progress failed",
+    ),
+    "write_todos": (
+        "Updating investigation plan",
+        "Investigation plan updated",
+        "Plan update failed",
+    ),
+    "request_clarification": (
+        "Requesting clarification",
+        "Clarification received",
+        "Clarification failed",
+    ),
+    "read_file": (
+        "Reading reference material",
+        "Reference material loaded",
+        "Reading reference failed",
+    ),
+    "ls": ("Listing reference files", "Reference files listed", "File listing failed"),
+    "glob": ("Finding reference files", "Reference files found", "File search failed"),
+    "grep": (
+        "Searching reference material",
+        "Reference search finished",
+        "Reference search failed",
+    ),
+    "write_file": (
+        "Saving working notes",
+        "Working notes saved",
+        "Saving notes failed",
+    ),
+    "edit_file": (
+        "Updating working notes",
+        "Working notes updated",
+        "Updating notes failed",
+    ),
+}
+
+
+def _activity_context(value):
+    text = " ".join(str(value or "").split())
+    return text[:177] + "…" if len(text) > 180 else text
+
+
+def activity_label(event, *, source_id=None):
     tool = event.get("tool") or {}
     arguments = tool.get("input") or {}
-    if isinstance(arguments, dict) and arguments.get("purpose"):
-        label = arguments["purpose"]
+    arguments = arguments if isinstance(arguments, dict) else {}
+    name = tool.get("name")
+    stage = {"completed": 1, "failed": 2}.get(event.get("phase"), 0)
+    if name == "task":
+        label = f"{_agent_label(arguments.get('subagent_type'))} · {('Working', 'Finished', 'Assignment failed')[stage]}"
+        detail = arguments.get("description")
     else:
-        labels = {
-            "get_semantic_context": (
-                "Loading semantic definitions",
-                "Semantic definitions loaded",
-            ),
-            "execute_analysis_python": (
-                "Running Python analysis",
-                "Python analysis finished",
-            ),
-            "create_chart": ("Creating chart", "Chart saved"),
-            "create_report": ("Preparing HTML report", "HTML report ready"),
-            "publish_findings": ("Publishing findings", "Findings published"),
-        }
-        pair = labels.get(tool.get("name"))
-        label = (
-            pair[1 if event.get("phase") == "completed" else 0]
-            if pair
-            else event.get("label") or "Working"
-        )
-    return f"Needs repair · {label}" if event.get("phase") == "failed" else label
+        label = _ACTIVITY_LABELS.get(
+            name, ("Working", "Work finished", "Operation failed")
+        )[stage]
+        detail = arguments.get("purpose")
+        if name == "execute_sql" and source_id and stage == 0:
+            label = f"Querying {source_id}"
+        elif name == "lookup_values":
+            detail = arguments.get("field_name")
+        elif name == "create_chart":
+            spec = arguments.get("spec")
+            detail = spec.get("title") if isinstance(spec, dict) else None
+        elif name == "read_file" and "report-design" in str(
+            arguments.get("file_path", "")
+        ):
+            label = (
+                "Loading report design instructions",
+                "Report design instructions loaded",
+                "Loading report instructions failed",
+            )[stage]
+    detail = _activity_context(detail)
+    return f"{label} · {detail}" if detail else label
+
+
+_MODEL_RESPONSE_LABELS = {
+    "execute_sql": "Reviewing SQL results",
+    "query_saved_results": "Reviewing transformed data",
+    "lookup_values": "Reviewing source values",
+    "get_semantic_context": "Reviewing business definitions",
+    "browse_semantic_model": "Reviewing data catalog",
+    "inspect_conversation_result": "Reviewing dataset evidence",
+    "list_conversation_results": "Selecting saved datasets",
+    "execute_analysis_python": "Reviewing Python results",
+    "finish_analysis": "Summarizing analysis findings",
+    "inspect_conversation_analysis": "Reviewing analysis findings",
+    "list_conversation_analyses": "Selecting saved analyses",
+    "task": "Reviewing specialist findings",
+    "create_chart": "Reviewing chart results",
+    "read_file": "Reviewing reference material",
+    "write_todos": "Planning next investigation step",
+    "save_investigation": "Planning next investigation step",
+}
+
+
+def _model_activity(events, consolidated, agent):
+    """Describe observable inputs to the current model call, scoped to its assignment."""
+    assignment = next(
+        (
+            event
+            for event in reversed(consolidated)
+            if event.get("phase") == "started"
+            and (event.get("tool") or {}).get("name") == "task"
+            and isinstance((event.get("tool") or {}).get("input"), dict)
+            and event["tool"]["input"].get("subagent_type") == agent
+        ),
+        None,
+    )
+    brief = assignment["tool"]["input"].get("description") if assignment else None
+    merged = {(event.get("tool") or {}).get("call_id"): event for event in consolidated}
+    recent = None
+    # Raw completion order matters: parallel tools need not finish in start order.
+    for event in reversed(events):
+        call_id = (event.get("tool") or {}).get("call_id")
+        if assignment and call_id == assignment["tool"].get("call_id"):
+            break
+        if event.get("agent") == agent and event.get("phase") in {
+            "completed",
+            "failed",
+        }:
+            recent = merged.get(call_id) if call_id else event
+            break
+    label = {
+        "coordinator": "Preparing response",
+        "text-to-sql": "Planning data retrieval",
+        "data-analysis": "Planning analysis",
+    }.get(agent, "Processing the request")
+    detail = brief
+    if recent:
+        tool = recent.get("tool") or {}
+        arguments = tool.get("input") or {}
+        arguments = arguments if isinstance(arguments, dict) else {}
+        if recent.get("phase") == "failed":
+            label = f"Responding to error · {activity_label(recent)}"
+        else:
+            label = _MODEL_RESPONSE_LABELS.get(
+                tool.get("name"), "Processing tool response"
+            )
+        detail = arguments.get("purpose") or brief
+        if tool.get("name") == "task":
+            detail = arguments.get("description")
+        elif tool.get("name") == "create_chart" and isinstance(
+            arguments.get("spec"), dict
+        ):
+            detail = arguments["spec"].get("title")
+    if detail and not (recent and recent.get("phase") == "failed"):
+        label += f" · {_activity_context(detail)}"
+    return f"{_agent_label(agent)} · {label}" if agent != "unknown" else label
 
 
 def current_activity(
-    events, *, phase="understanding", status="running", findings=False
+    events,
+    *,
+    status="running",
+    findings=False,
+    active_model_agent=None,
+    report_ready=False,
+    approval=None,
+    source_id=None,
 ):
-    if findings:
-        return (
-            "Findings ready · Report needs retry"
-            if status == "failed"
-            else "Findings ready"
+    if status == "approval_required":
+        language = (
+            "Python" if (approval or {}).get("review_type") == "python" else "SQL"
         )
-    if status in {"paused", "stopping", "failed", "clarification_required", "queued"}:
+        return f"Waiting for {language} review"
+    if status in {
+        "paused",
+        "stopping",
+        "failed",
+        "clarification_required",
+        "queued",
+        "completed",
+    }:
         return {
-            "clarification_required": "Input needed",
+            "clarification_required": "Waiting for your clarification",
             "queued": "Waiting to start",
-        }.get(status, status.capitalize())
-    pending = [
-        e for e in consolidate_activity_events(events) if e.get("phase") == "started"
-    ]
+            "paused": "Paused",
+            "stopping": "Stopping work",
+            "failed": (
+                "Report ready · Finalizing answer failed"
+                if report_ready
+                else "Findings saved · Report generation failed"
+                if findings
+                else "Run failed"
+            ),
+            "completed": "Complete",
+        }[status]
+    consolidated = consolidate_activity_events(events)
+    pending = [e for e in consolidated if e.get("phase") == "started"]
     leaves = [e for e in pending if (e.get("tool") or {}).get("name") != "task"]
-    event = (leaves or pending or [None])[-1]
-    if event:
-        return activity_label(event)
-    return {
-        "retrieving_data": "Retrieving data",
-        "analyzing": "Analyzing data",
-        "preparing_report": "Preparing report",
-    }.get(phase, "Understanding the request")
+    if leaves:
+        event = leaves[-1]
+        label = activity_label(event, source_id=source_id)
+        if event.get("agent") not in {None, "unknown", "coordinator"}:
+            label = f"{_agent_label(event['agent'])} · {label}"
+    elif active_model_agent:
+        label = _model_activity(events, consolidated, active_model_agent)
+    elif pending:
+        label = activity_label(pending[-1], source_id=source_id)
+    else:
+        label = "Preparing next step" if events else "Understanding the request"
+    if findings:
+        if not leaves:
+            label = "Finalizing answer" if report_ready else "Preparing report"
+        return f"Findings saved · {label}"
+    return label
 
 
 def render_activity(events, diagnostics, *, key):
@@ -405,12 +612,15 @@ def render_activity_timeline(
         )
         event_key = tool.get("call_id") or event.get("id") or len(tool_seen)
         with st.expander(
-            f"{tool_name}{ordinal}",
+            f"{label if tool_name == 'task' else tool_name}{ordinal}",
             icon=":material/build:",
             expanded=False,
             type="compact",
             key=f"activity_{key_prefix}_{event_key}",
         ):
+            if tool_name == "task" and isinstance(tool_input, dict):
+                st.markdown("**Specialist assignment**")
+                st.text(str(tool_input.get("description") or "No assignment recorded."))
             st.caption("Input · bounded and recognized-secret-key-redacted")
             if tool_input is None:
                 st.caption("This tool call has no input.")
@@ -696,6 +906,175 @@ def clear_artifact_cache() -> None:
     _saved_report.clear()
 
 
+_DATASET_KIND_LABELS = {
+    "source_sql": "Source SQL",
+    "saved_sql": "SQL over saved datasets",
+    "python": "Python-derived dataset",
+    "presentation": "Chart data",
+}
+
+
+def chart_preparation_summary(result):
+    preparation = result.get("chart_preparation")
+    if not preparation:
+        return "Chart preparation details were not recorded for this dataset."
+    before, after = preparation["input_row_count"], preparation["output_row_count"]
+    columns = ", ".join(preparation["selected_columns"])
+    method = preparation["sampling"]
+    if method == "none":
+        operation = f"Kept all {before:,} rows"
+    elif method == "ordered_stride":
+        operation = (
+            f"Kept {after:,} of {before:,} rows, ordered by {preparation['order_by']}, "
+            f"taking every {preparation['stride']} rows and the last row"
+        )
+    else:
+        operation = f"Sampled {after:,} of {before:,} rows using reservoir sampling (seed {preparation['seed']})"
+    return f"{operation}; selected columns: {columns}."
+
+
+def _render_dataset_table(client, result):
+    if result["rows"]:
+        st.dataframe(
+            result["rows"],
+            column_order=result["columns"],
+            width="stretch",
+            hide_index=True,
+        )
+    else:
+        st.info("This saved dataset contains no rows.")
+    st.caption(f"Preview: {len(result['rows'])} of {result['row_count']:,} saved rows.")
+    with st.container(horizontal=True):
+        st.link_button(
+            "Download full CSV", client.dataset_download_url(result["result_id"])
+        )
+        st.link_button(
+            "Download full Parquet",
+            client.dataset_download_url(result["result_id"], "parquet"),
+        )
+
+
+@st.dialog("Dataset inspector", width="large")
+def _dataset_inspector(client, result_id, executions, initial_view="Data"):
+    # Walk immutable same-source parents only when the user opens the inspector.
+    datasets, pending = {}, [result_id]
+    while pending:
+        key = pending.pop(0)
+        if key in datasets:
+            continue
+        try:
+            item = _saved_result(client.base_url, key, 1)
+        except APIError as exc:
+            st.warning(f"An input dataset is unavailable: {exc}")
+            continue
+        datasets[key] = item
+        pending.extend(
+            parent for parent in item["parent_result_ids"] if parent not in datasets
+        )
+    if not datasets:
+        return
+    selected = st.selectbox(
+        "Dataset and its inputs",
+        list(datasets),
+        format_func=lambda key: (
+            f"{datasets[key]['short_label']} · {_DATASET_KIND_LABELS[datasets[key]['kind']]}"
+        ),
+        key=f"inspect_dataset_{result_id}",
+    )
+    view = st.segmented_control(
+        "View",
+        ["Data", "Source"],
+        default=initial_view,
+        selection_mode="single",
+        key=f"inspect_view_{result_id}_{initial_view}",
+    )
+    try:
+        result = _saved_result(client.base_url, selected, 100)
+    except APIError as exc:
+        st.warning(f"Saved data is unavailable: {exc}")
+        return
+    if result["truncated"]:
+        st.warning(
+            "The source extraction is incomplete. This dataset does not represent the full population."
+        )
+    if view == "Data":
+        _render_dataset_table(client, result)
+    else:
+        render_dataset_provenance(
+            result, executions=executions, client=client, navigate=False
+        )
+
+
+def render_dataset_provenance(
+    result, *, executions=None, client=None, widget_key="dataset", navigate=True
+):
+    """Explain the producer and expose named inputs with technical IDs out of the way."""
+    kind = result["kind"]
+    st.markdown(f"**Source · {_DATASET_KIND_LABELS[kind]}**")
+    st.caption(f"Data source · {result['source_id']}")
+    if kind == "presentation":
+        st.caption(chart_preparation_summary(result))
+    elif result.get("originating_question"):
+        st.caption(f"Originating question · {result['originating_question']}")
+    parents = result.get("parent_result_ids") or []
+    if parents:
+        st.markdown("**Based on**")
+        for parent in parents:
+            if client is None:
+                continue
+            try:
+                metadata = _saved_result(client.base_url, parent, 1)
+            except APIError as exc:
+                st.warning(f"Input dataset unavailable: {exc}")
+                continue
+            label = (
+                f"{metadata['short_label']} · {_DATASET_KIND_LABELS[metadata['kind']]}"
+            )
+            if navigate:
+                if st.button(
+                    label, key=f"parent_{widget_key}_{parent}", type="tertiary"
+                ):
+                    _dataset_inspector(client, parent, executions)
+                if st.button(
+                    "View source SQL"
+                    if metadata["kind"] in {"source_sql", "saved_sql"}
+                    else "View source",
+                    key=f"source_{widget_key}_{parent}",
+                ):
+                    _dataset_inspector(client, parent, executions, "Source")
+            else:
+                st.caption(label)
+    if kind in {"source_sql", "saved_sql"}:
+        if result.get("executed_sql"):
+            st.markdown("**Executed SQL**")
+            st.code(result["executed_sql"], language="sql")
+        else:
+            st.caption("Executed SQL was not recorded for this dataset.")
+    elif kind == "python":
+        execution = (executions or {}).get(result.get("execution_id")) or {}
+        if not execution and client:
+            try:
+                execution = client.get_dataset_python_source(result["result_id"])
+            except APIError:
+                st.warning("The recorded Python source could not be loaded.")
+        if execution.get("executed_python"):
+            st.markdown("**Executed Python**")
+            st.code(execution["executed_python"], language="python")
+        else:
+            st.caption(
+                "The Python code for this dataset is not attached to these findings."
+            )
+    with st.expander("Technical details"):
+        st.json(
+            {
+                "dataset_id": result["result_id"],
+                "input_dataset_ids": parents,
+                "execution_id": result.get("execution_id"),
+                "chart_preparation": result.get("chart_preparation"),
+            }
+        )
+
+
 def _render_result(
     client: AgentAPIClient,
     result_id: str,
@@ -703,8 +1082,9 @@ def _render_result(
     widget_key: str,
     source_id: str,
     chart: dict[str, Any] | None = None,
-    reference: dict[str, Any] | None = None,
     expanded: bool = False,
+    executions: dict[str, dict[str, Any]] | None = None,
+    show_evidence: bool = True,
 ) -> None:
     try:
         result = _saved_result(client.base_url, result_id, 5000 if chart else 100)
@@ -742,40 +1122,10 @@ def _render_result(
                 icon=":material/content_cut:",
             )
 
-    def render_table() -> None:
-        if not result["rows"]:
-            st.info(
-                "The query completed successfully but returned no rows.",
-                icon=":material/info:",
-            )
-            return
-        st.dataframe(
-            result["rows"],
-            column_order=result["columns"],
-            width="stretch",
-            hide_index=True,
-        )
-        st.caption(
-            f"Preview: {len(result['rows'])} of {result['row_count']:,} saved rows."
-        )
-        st.link_button("Download full CSV", client.dataset_download_url(result_id))
-        st.link_button(
-            "Download full Parquet", client.dataset_download_url(result_id, "parquet")
-        )
-
-    def render_provenance() -> None:
-        if reference:
-            question = str(reference.get("originating_question") or "")
-            if question:
-                st.caption(f"Originating question · {question}")
-            st.markdown("**Executed SQL**")
-            st.code(
-                str(reference.get("executed_sql") or result["executed_sql"]),
-                language="sql",
-            )
-        else:
-            st.markdown("**Executed SQL**")
-            st.code(result["executed_sql"], language="sql")
+    evidence_label = (
+        f"{result['short_label'] or 'Saved dataset'} · "
+        f"{_DATASET_KIND_LABELS[result['kind']]} · Data and provenance"
+    )
 
     if chart and result["rows"]:
         try:
@@ -809,21 +1159,28 @@ def _render_result(
                 f"The generated chart could not be rendered: {exc}",
                 icon=":material/warning:",
             )
-        with st.expander(
-            "Evidence data and provenance",
-            icon=":material/table_chart:",
-            expanded=expanded,
-        ):
-            render_table()
-            render_provenance()
-    else:
-        with st.expander(
-            "Evidence data and provenance",
-            icon=":material/table_chart:",
-            expanded=expanded,
-        ):
-            render_table()
-            render_provenance()
+    if not show_evidence:
+        if st.button("View chart data", key=f"inspect_{widget_key}_{result_id}"):
+            _dataset_inspector(client, result_id, executions)
+        return
+    panel = st.expander(
+        evidence_label,
+        icon=":material/table_chart:",
+        expanded=expanded,
+        key=f"evidence_{widget_key}_{result_id}",
+        on_change="rerun",
+    )
+    if panel.open:
+        with panel:
+            if st.button(
+                "View chart data" if chart else "Open dataset inspector",
+                key=f"inspect_{widget_key}_{result_id}",
+            ):
+                _dataset_inspector(client, result_id, executions)
+            _render_dataset_table(client, result)
+            render_dataset_provenance(
+                result, executions=executions, client=client, widget_key=widget_key
+            )
 
 
 def _render_report(
@@ -920,6 +1277,11 @@ def render_turn(
 
 def render_answer(client, answer, *, turn_key, source_id):
     st.markdown(answer["answer"])
+    executions = {
+        execution["execution_id"]: execution
+        for analysis in answer.get("analyses") or []
+        for execution in analysis.get("executions") or []
+    }
 
     assumptions = answer.get("assumptions") or []
     interpretation = answer.get("interpretation")
@@ -939,14 +1301,23 @@ def render_answer(client, answer, *, turn_key, source_id):
         st.caption(f"Still to investigate: {question}")
     for index, analysis in enumerate(answer.get("analyses") or []):
         _render_data_analysis(analysis, client=client, widget_key=f"{turn_key}_{index}")
+    shown_result_ids = set()
     for index, chart in enumerate(answer.get("charts") or []):
+        if (
+            chart["result_id"] == answer.get("primary_result_id")
+            and chart["result_id"] not in shown_result_ids
+        ):
+            st.badge("Primary evidence", icon=":material/verified:", color="green")
         _render_result(
             client,
             chart["result_id"],
             widget_key=f"{turn_key}_chart_{index}",
             source_id=source_id,
             chart=chart,
+            executions=executions,
+            show_evidence=chart["result_id"] not in shown_result_ids,
         )
+        shown_result_ids.add(chart["result_id"])
 
     report = answer.get("report")
     if report:
@@ -957,11 +1328,15 @@ def render_answer(client, answer, *, turn_key, source_id):
         )
 
     results = answer.get("results") or []
-    chart = None
+    evidence_index = 0
     for index, reference in enumerate(results):
         result_id = str(reference.get("result_id") or "")
-        label = str(reference.get("short_label") or "SQL evidence")
-        st.markdown(f"**Evidence {index + 1} · {label}**")
+        if result_id in shown_result_ids:
+            continue
+        shown_result_ids.add(result_id)
+        evidence_index += 1
+        label = str(reference.get("short_label") or "Saved dataset")
+        st.markdown(f"**Evidence {evidence_index} · {label}**")
         if result_id == answer.get("primary_result_id"):
             st.badge(
                 "Primary evidence",
@@ -973,9 +1348,8 @@ def render_answer(client, answer, *, turn_key, source_id):
             result_id,
             widget_key=f"{turn_key}_{index}",
             source_id=source_id,
-            chart=(chart if chart and chart.get("result_id") == result_id else None),
-            reference=reference,
-            expanded=index == 0 and chart is None,
+            executions=executions,
+            expanded=evidence_index == 1,
         )
 
 

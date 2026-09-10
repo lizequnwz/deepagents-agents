@@ -190,9 +190,12 @@ def render_active_run(
             elapsed = (run.get("run_diagnostics") or {}).get("elapsed_ms", 0) / 1000
             label = current_activity(
                 run.get("events") or [],
-                phase=run.get("phase"),
                 status=state,
                 findings=bool(run.get("findings")),
+                active_model_agent=run.get("active_model_agent"),
+                report_ready=run.get("report_ready", False),
+                approval=run.get("approval"),
+                source_id=source_id,
             )
             with st.container(horizontal=True, vertical_alignment="center"):
                 st.markdown(f"**{label}** · {elapsed:.0f}s")

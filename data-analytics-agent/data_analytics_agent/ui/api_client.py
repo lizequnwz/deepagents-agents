@@ -144,6 +144,9 @@ class AgentAPIClient:
     def dataset_download_url(self, result_id: str, format: str = "csv") -> str:
         return f"{self.base_url.rstrip('/')}/api/results/{result_id}/download?format={format}"
 
+    def get_dataset_python_source(self, result_id: str):
+        return self.request("GET", f"/api/results/{result_id}/python-source")
+
     def get_report(self, report_id: str) -> dict[str, Any]:
         """Fetch the exact stored HTML and immutable report metadata."""
 

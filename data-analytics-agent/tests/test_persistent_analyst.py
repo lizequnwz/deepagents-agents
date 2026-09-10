@@ -438,3 +438,93 @@ def test_inspection_invalid_column_is_repairable(workspace):
         runtime=workspace.runtime("fixed"),
     )
     assert good["sample_rows"] == [{"revenue": 10}]
+
+
+@pytest.mark.parametrize(
+    "chart_type,count,method",
+    [
+        ("bar", 24, "none"),
+        ("line", 10001, "ordered_stride"),
+        ("scatter", 10001, "reservoir"),
+    ],
+)
+def test_chart_preparation_records_exact_transformation(
+    workspace, chart_type, count, method
+):
+    w = workspace
+    parent = save(
+        w, [{"x": i, "y": float(i), "unused": "detail"} for i in range(count)]
+    )
+    response = create_chart_tool(w.results, w.runs, source_id="test").func(
+        spec=ChartSpec(
+            result_id=parent.result_id,
+            chart_type=chart_type,
+            title="Values",
+            x="x",
+            y=["y"],
+        ),
+        runtime=w.runtime("chart"),
+    )
+    assert response["ok"], response
+    shown = w.results.get_unscoped(response["chart"]["result_id"])
+    preparation = shown.chart_preparation
+    assert preparation.selected_columns == ["x", "y"]
+    assert preparation.input_row_count == count
+    assert preparation.output_row_count == shown.row_count
+    assert preparation.sampling == method
+    if method == "none":
+        assert shown.row_count == count
+    elif method == "reservoir":
+        assert shown.row_count == 5000 and preparation.seed == 0
+    else:
+        assert preparation.order_by == "x" and preparation.stride == 3
+    reopened = ResultStore(LocalStorage(w.storage.root))
+    assert reopened.page_unscoped(shown.result_id).chart_preparation == preparation
+
+
+def test_python_source_api_resolves_reused_dataset_from_saved_run(
+    workspace, test_settings
+):
+    from data_analytics_agent.agents.data_analysis.schemas import PythonExecutionResult
+
+    w = workspace
+    parent = save(w, [{"value": 1}])
+    derived = save(
+        w,
+        [{"value": 2}],
+        kind="python",
+        execution_id="python-1",
+        parent_result_ids=[parent.result_id],
+    )
+    w.runs.record_python_execution(
+        w.run,
+        PythonExecutionResult(
+            execution_id="python-1",
+            inputs={"data": parent.result_id},
+            executed_python="derived = df * 2",
+            attempt=1,
+            output_datasets={"derived": derived.result_id},
+        ),
+    )
+    runs = RunStore(LocalStorage(w.storage.root))
+    app = create_app(
+        services=Services(
+            settings=test_settings,
+            results=w.results,
+            runs=runs,
+            conversations=w.conversations,
+            analyses=w.analyses,
+            reports=w.reports,
+        ),
+    )
+    with TestClient(app) as client:
+        response = client.get(f"/api/results/{derived.result_id}/python-source")
+        assert response.status_code == 200
+        assert response.json() == {
+            "execution_id": "python-1",
+            "executed_python": "derived = df * 2",
+        }
+        assert (
+            client.get(f"/api/results/{parent.result_id}/python-source").status_code
+            == 404
+        )

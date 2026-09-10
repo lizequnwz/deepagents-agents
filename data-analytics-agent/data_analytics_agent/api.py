@@ -578,6 +578,11 @@ def create_app(services: Services | None = None) -> FastAPI:
     ) -> ResultPage:
         return container.results.page_unscoped(result_id, offset=offset, limit=limit)
 
+    @app.get("/api/results/{result_id}/python-source")
+    async def get_dataset_python_source(result_id: str):
+        result = container.results.get_unscoped(result_id)
+        return container.runs.dataset_python_source(result)
+
     def ensure_not_deleting(thread_id):
         if thread_id in container.deleting_conversations:
             raise HTTPException(409, "This conversation is being deleted.")

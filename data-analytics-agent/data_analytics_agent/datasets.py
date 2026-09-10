@@ -17,7 +17,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from data_analytics_agent.persistence import LocalStorage
-from data_analytics_agent.schemas import SavedResult, ResultPage
+from data_analytics_agent.schemas import SavedResult, ResultPage, ChartDataPreparation
 from data_analytics_agent.profiling import profile_result
 
 
@@ -74,6 +74,7 @@ class ResultStore:
         parent_result_ids: list[str] | None = None,
         kind: str = "source_sql",
         execution_id: str | None = None,
+        chart_preparation: ChartDataPreparation | None = None,
         max_rows: int | None = None,
     ) -> SavedResult:
         started = perf_counter()
@@ -191,6 +192,7 @@ class ResultStore:
             parent_result_ids=parent_result_ids or [],
             kind=kind,
             execution_id=execution_id,
+            chart_preparation=chart_preparation,
             byte_count=size,
             profile=profile,
             row_count=count,
@@ -255,6 +257,12 @@ class ResultStore:
         return ResultPage(
             result_id=result.result_id,
             source_id=result.source_id,
+            kind=result.kind,
+            short_label=result.short_label,
+            originating_question=result.originating_question,
+            parent_result_ids=result.parent_result_ids,
+            execution_id=result.execution_id,
+            chart_preparation=result.chart_preparation,
             executed_sql=result.executed_sql,
             columns=result.columns,
             rows=rows,

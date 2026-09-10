@@ -61,7 +61,7 @@ if submitted:
 
 
 def test_api_contract_mismatch_requires_service_restart() -> None:
-    assert api_contract_error({"api_contract_version": 10}) is None
+    assert api_contract_error({"api_contract_version": 11}) is None
     missing = api_contract_error({})
     stale = api_contract_error({"api_contract_version": 2})
 
@@ -228,7 +228,7 @@ render_activity_timeline(
 
     assert not app.exception
     assert any(
-        "Loaded skill · data-analysis · Text-to-SQL" in caption.value
+        "Reference material loaded · Text-to-SQL" in caption.value
         for caption in app.caption
     )
     panels = app.get("status")
@@ -419,10 +419,10 @@ def test_current_activity_prefers_leaf_and_preserves_report_failure():
             },
         },
     ]
-    assert current_activity(events) == "Count artists"
+    assert current_activity(events) == "Querying data source · Count artists"
     assert (
         current_activity(events, status="failed", findings=True)
-        == "Findings ready · Report needs retry"
+        == "Findings saved · Report generation failed"
     )
 
 
@@ -433,3 +433,273 @@ render_activity([], {}, key="stable")
 """).run()
     assert not app.exception
     assert [e.label for e in app.expander] == ["Activity"]
+
+
+def test_subagent_activity_identifies_specialist_and_assignment():
+    from data_analytics_agent.ui.components import activity_label, current_activity
+
+    event = {
+        "phase": "started",
+        "label": "Task",
+        "tool": {
+            "call_id": "assignment",
+            "name": "task",
+            "input": {
+                "subagent_type": "data-analysis",
+                "description": "Forecast monthly sales with uncertainty.",
+            },
+        },
+    }
+    assert current_activity([event]) == (
+        "Data Analysis · Working · Forecast monthly sales with uncertainty."
+    )
+    assert "Finished" in activity_label({**event, "phase": "completed"})
+    assert "Assignment failed" in activity_label({**event, "phase": "failed"})
+
+
+def test_provenance_renders_python_sql_and_presentation_without_empty_code():
+    app = AppTest.from_string("""
+from data_analytics_agent.ui.components import render_dataset_provenance
+base = {"source_id": "sales", "result_id": "derived", "parent_result_ids": ["input-1"]}
+render_dataset_provenance({**base, "kind": "python", "execution_id": "exec-1"},
+    executions={"exec-1": {"executed_python": "output = df.mean()"}})
+render_dataset_provenance({**base, "kind": "saved_sql", "executed_sql": "SELECT SUM(value) FROM input"})
+render_dataset_provenance({**base, "kind": "presentation"})
+render_dataset_provenance({**base, "kind": "python", "execution_id": "unattached"})
+""").run()
+    assert not app.exception
+    assert [code.value for code in app.code] == [
+        "output = df.mean()",
+        "SELECT SUM(value) FROM input",
+    ]
+    assert any("not attached" in item.value for item in app.caption)
+    assert any("Based on" in item.value for item in app.markdown)
+
+
+def test_answer_connects_python_evidence_to_executed_code():
+    app = AppTest.from_string("""
+from unittest.mock import patch
+from data_analytics_agent.ui.components import render_answer
+from data_analytics_agent.ui.api_client import AgentAPIClient
+result = {
+    "result_id": "forecast", "source_id": "sales", "kind": "python",
+    "short_label": "Sales forecast", "originating_question": "Forecast sales",
+    "parent_result_ids": ["monthly-sales"], "execution_id": "exec-1",
+    "executed_sql": "", "rows": [{"forecast": 42}], "columns": ["forecast"],
+    "row_count": 1, "elapsed_ms": 2, "truncated": False,
+}
+with patch("data_analytics_agent.ui.components._saved_result", return_value=result):
+    render_answer(AgentAPIClient("http://localhost:8000"), {
+        "answer": "Forecast ready", "results": [{"result_id": "forecast"}],
+        "analyses": [{"executions": [{"execution_id": "exec-1",
+            "executed_python": "forecast = model.predict()"}]}],
+    }, turn_key="test", source_id="sales")
+""").run()
+    assert not app.exception
+    assert any(
+        "Sales forecast · Python-derived dataset" in panel.label for panel in app.status
+    )
+    assert all(code.value for code in app.code)
+    assert app.code[-1].value == "forecast = model.predict()"
+
+
+def test_status_does_not_reuse_retrieval_phase_and_prioritizes_wait_states():
+    from data_analytics_agent.ui.components import current_activity, activity_label
+
+    event = {
+        "phase": "completed",
+        "agent": "text-to-sql",
+        "tool": {
+            "call_id": "sql",
+            "name": "execute_sql",
+            "input": {"purpose": "Count artists"},
+        },
+    }
+    assert current_activity([event]) == "Preparing next step"
+    assert (
+        current_activity([event], active_model_agent="text-to-sql")
+        == "Text-to-SQL · Reviewing SQL results · Count artists"
+    )
+    for findings in (False, True):
+        assert (
+            current_activity(
+                [event],
+                findings=findings,
+                status="approval_required",
+                approval={"review_type": "python"},
+            )
+            == "Waiting for Python review"
+        )
+        assert current_activity([event], findings=findings, status="paused") == "Paused"
+        assert (
+            current_activity(
+                [event], findings=findings, status="clarification_required"
+            )
+            == "Waiting for your clarification"
+        )
+    assert current_activity([], findings=True) == "Findings saved · Preparing report"
+    assert activity_label(event) == "SQL query finished · Count artists"
+    assert (
+        activity_label({**event, "phase": "failed"})
+        == "SQL query failed · Count artists"
+    )
+    assert (
+        current_activity([{**event, "phase": "started"}], source_id="Chinook")
+        == "Text-to-SQL · Querying Chinook · Count artists"
+    )
+
+
+def test_chart_data_inspector_navigates_to_parent_sql():
+    app = AppTest.from_string("""
+from unittest.mock import patch
+from data_analytics_agent.ui.components import _dataset_inspector
+from data_analytics_agent.ui.api_client import AgentAPIClient
+base = {"source_id": "sales", "rows": [{"value": 42}], "columns": ["value"],
+        "row_count": 1, "truncated": False, "execution_id": None}
+items = {
+    "chart": {**base, "result_id": "chart", "kind": "presentation", "short_label": "Chart data", "parent_result_ids": ["sql"]},
+    "sql": {**base, "result_id": "sql", "kind": "source_sql", "short_label": "Revenue by genre", "parent_result_ids": [], "executed_sql": "SELECT value FROM sales"},
+}
+with patch("data_analytics_agent.ui.components._saved_result", side_effect=lambda url, key, limit: items[key]):
+    _dataset_inspector(AgentAPIClient("http://localhost:8000"), "chart", {})
+""").run()
+    assert not app.exception
+    assert "Revenue by genre · Source SQL" in app.selectbox[0].options
+    app.selectbox[0].set_value("sql").run()
+    assert not app.exception
+    # Streamlit exposes segmented_control through the button_group test element.
+    app.get("button_group")[0].set_value("Source").run()
+    assert not app.exception
+    assert app.code[0].value == "SELECT value FROM sales"
+
+
+def test_shared_chart_dataset_has_one_evidence_panel():
+    app = AppTest.from_string("""
+from unittest.mock import patch
+from data_analytics_agent.ui.components import render_answer
+from data_analytics_agent.ui.api_client import AgentAPIClient
+result = {"result_id": "data", "source_id": "sales", "kind": "source_sql", "short_label": "Revenue",
+    "columns": [], "rows": [], "row_count": 0, "elapsed_ms": 1, "truncated": False,
+    "parent_result_ids": [], "executed_sql": "SELECT revenue FROM sales"}
+with patch("data_analytics_agent.ui.components._saved_result", return_value=result):
+    render_answer(AgentAPIClient("http://localhost:8000"), {
+        "answer": "Ready", "charts": [{"result_id": "data"}, {"result_id": "data"}],
+        "results": [{"result_id": "data"}, {"result_id": "data"}],
+    }, turn_key="shared", source_id="sales")
+""").run()
+    assert not app.exception
+    panels = [panel for panel in app.status if "Data and provenance" in panel.label]
+    assert len(panels) == 1
+
+
+def test_ready_report_does_not_show_generation_in_progress():
+    from data_analytics_agent.ui.components import current_activity
+
+    assert (
+        current_activity([], findings=True, report_ready=True)
+        == "Findings saved · Finalizing answer"
+    )
+    assert (
+        current_activity([], findings=True, report_ready=True, status="failed")
+        == "Report ready · Finalizing answer failed"
+    )
+
+
+def test_model_status_keeps_assignment_and_completed_tool_context():
+    from data_analytics_agent.ui.components import current_activity
+
+    assignment = {
+        "agent": "coordinator",
+        "phase": "started",
+        "tool": {
+            "name": "task",
+            "call_id": "assignment",
+            "input": {
+                "subagent_type": "data-analysis",
+                "description": "Forecast monthly sales",
+            },
+        },
+    }
+    events = [assignment]
+    assert current_activity(events, active_model_agent="data-analysis") == (
+        "Data Analysis · Planning analysis · Forecast monthly sales"
+    )
+    events += [
+        {
+            "agent": "data-analysis",
+            "phase": "started",
+            "tool": {
+                "name": "execute_analysis_python",
+                "call_id": "python",
+                "input": {"purpose": "Evaluate forecast uncertainty"},
+            },
+        },
+        {
+            "agent": "data-analysis",
+            "phase": "completed",
+            "tool": {
+                "name": "execute_analysis_python",
+                "call_id": "python",
+                "output": {"ok": True},
+            },
+        },
+    ]
+    assert current_activity(events, active_model_agent="data-analysis") == (
+        "Data Analysis · Reviewing Python results · Evaluate forecast uncertainty"
+    )
+    events.append(
+        {
+            "agent": "coordinator",
+            "phase": "completed",
+            "tool": {"name": "task", "call_id": "assignment", "output": {"ok": True}},
+        }
+    )
+    assert current_activity(events, active_model_agent="coordinator") == (
+        "Coordinator · Reviewing specialist findings · Forecast monthly sales"
+    )
+    events.append(
+        {
+            **assignment,
+            "tool": {
+                **assignment["tool"],
+                "call_id": "new-assignment",
+                "input": {
+                    "subagent_type": "data-analysis",
+                    "description": "Check regional differences",
+                },
+            },
+        }
+    )
+    assert current_activity(events, active_model_agent="data-analysis") == (
+        "Data Analysis · Planning analysis · Check regional differences"
+    )
+
+
+def test_model_status_uses_completion_order_and_reports_failed_tools():
+    from data_analytics_agent.ui.components import current_activity
+
+    def event(call, phase, purpose=None):
+        return {
+            "agent": "text-to-sql",
+            "phase": phase,
+            "tool": {
+                "name": "execute_sql",
+                "call_id": call,
+                "input": {"purpose": purpose} if purpose else None,
+            },
+        }
+
+    events = [
+        event("first", "started", "Revenue"),
+        event("second", "started", "Units"),
+        event("second", "completed"),
+        event("first", "completed"),
+    ]
+    assert (
+        current_activity(events, active_model_agent="text-to-sql")
+        == "Text-to-SQL · Reviewing SQL results · Revenue"
+    )
+    events[-1] = event("first", "failed")
+    assert "Responding to error · SQL query failed · Revenue" in current_activity(
+        events, active_model_agent="text-to-sql"
+    )

@@ -157,7 +157,7 @@ def test_one_turn_preserves_activity_identity_through_publication(
         services.conversations.fail_run(thread, run)
         app.run(timeout=15)
         assert any(
-            "Findings ready · Report needs retry" in m.value for m in app.markdown
+            "Findings saved · Report generation failed" in m.value for m in app.markdown
         )
         assert any(b.label == "Retry report" for b in app.button)
         services.conversations.begin_run(thread, run)
@@ -174,3 +174,62 @@ def test_one_turn_preserves_activity_identity_through_publication(
         )
         assert sum(m.value == "Synthetic published findings" for m in app.markdown) == 1
         assert sum(e.label == "Activity" for e in app.expander) == 1
+
+
+def test_live_model_status_retains_fast_tool_result_context(test_settings, monkeypatch):
+    from data_analytics_agent.schemas import ActivityTool
+
+    services = Services(settings=test_settings, agent=Graph([]))
+    thread = services.conversations.create("test")
+    run = services.runs.create(thread, "test", "Count artists")
+    services.conversations.begin_run(thread, run)
+    services.runs.start_active(run)
+    services.runs.add_event(
+        run,
+        "tool",
+        "Task",
+        phase="started",
+        agent="coordinator",
+        tool=ActivityTool(
+            call_id="task",
+            name="task",
+            input={"subagent_type": "text-to-sql", "description": "Count artists"},
+        ),
+    )
+    services.runs.add_event(
+        run,
+        "tool",
+        "Execute sql",
+        phase="started",
+        agent="text-to-sql",
+        tool=ActivityTool(
+            call_id="sql", name="execute_sql", input={"purpose": "Count artists"}
+        ),
+    )
+    services.runs.add_event(
+        run,
+        "tool",
+        "Execute sql",
+        phase="completed",
+        agent="text-to-sql",
+        tool=ActivityTool(call_id="sql", name="execute_sql", output={"ok": True}),
+    )
+    services.runs.start_model_call(run, "model", agent="text-to-sql")
+    with TestClient(create_app(services)) as api:
+
+        def request(self, method, path, **kwargs):
+            kwargs.pop("timeout", None)
+            response = api.request(method, path, **kwargs)
+            response.raise_for_status()
+            return response.json()
+
+        monkeypatch.setattr(AgentAPIClient, "request", request)
+        app = AppTest.from_file(str(Path(__file__).parents[1] / "streamlit_app.py"))
+        app.query_params["thread_id"] = thread
+        for _ in range(2):
+            app.run(timeout=15)
+            assert not app.exception
+            assert any(
+                "Text-to-SQL · Reviewing SQL results · Count artists" in item.value
+                for item in app.markdown
+            )
