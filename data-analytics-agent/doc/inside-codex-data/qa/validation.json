@@ -1,0 +1,580 @@
+{
+  "checks": [
+    {
+      "name": "14 teaching scenes",
+      "passed": true
+    },
+    {
+      "name": "viewport containment 2560x1440",
+      "passed": true
+    },
+    {
+      "name": "viewport containment 1440x900",
+      "passed": true
+    },
+    {
+      "name": "viewport containment 1280x800",
+      "passed": true
+    },
+    {
+      "name": "viewport containment 1024x768",
+      "passed": true
+    },
+    {
+      "name": "viewport containment 768x1024",
+      "passed": true
+    },
+    {
+      "name": "viewport containment 390x844",
+      "passed": true
+    },
+    {
+      "name": "viewport containment 375x812",
+      "passed": true
+    },
+    {
+      "name": "viewport containment 320x740",
+      "passed": true
+    },
+    {
+      "name": "viewport containment 844x390",
+      "passed": true
+    },
+    {
+      "name": "mental model expands evidence",
+      "passed": true
+    },
+    {
+      "name": "expanded architecture includes branch caveat",
+      "passed": true
+    },
+    {
+      "name": "walkthrough step 1",
+      "passed": true
+    },
+    {
+      "name": "walkthrough step 2",
+      "passed": true
+    },
+    {
+      "name": "walkthrough step 3",
+      "passed": true
+    },
+    {
+      "name": "walkthrough step 4",
+      "passed": true
+    },
+    {
+      "name": "walkthrough step 5",
+      "passed": true
+    },
+    {
+      "name": "walkthrough step 6",
+      "passed": true
+    },
+    {
+      "name": "walkthrough step 7",
+      "passed": true
+    },
+    {
+      "name": "walkthrough step 8",
+      "passed": true
+    },
+    {
+      "name": "walkthrough step 9",
+      "passed": true
+    },
+    {
+      "name": "walkthrough endpoints disabled",
+      "passed": true
+    },
+    {
+      "name": "skill explorer index",
+      "passed": true
+    },
+    {
+      "name": "skill explorer gather-business-context",
+      "passed": true
+    },
+    {
+      "name": "skill explorer create-data-context",
+      "passed": true
+    },
+    {
+      "name": "skill explorer design-kpis",
+      "passed": true
+    },
+    {
+      "name": "skill explorer kpi-reporting",
+      "passed": true
+    },
+    {
+      "name": "skill explorer metric-diagnostics",
+      "passed": true
+    },
+    {
+      "name": "skill explorer product-business-analysis",
+      "passed": true
+    },
+    {
+      "name": "skill explorer market-sizing",
+      "passed": true
+    },
+    {
+      "name": "skill explorer analyze-data-quality",
+      "passed": true
+    },
+    {
+      "name": "skill explorer validate-data",
+      "passed": true
+    },
+    {
+      "name": "skill explorer build-report",
+      "passed": true
+    },
+    {
+      "name": "skill explorer build-dashboard",
+      "passed": true
+    },
+    {
+      "name": "skill explorer visualize-data",
+      "passed": true
+    },
+    {
+      "name": "skill explorer jupyter-notebooks",
+      "passed": true
+    },
+    {
+      "name": "skill explorer publish-artifact-to-sites",
+      "passed": true
+    },
+    {
+      "name": "skill explorer report-to-pdf",
+      "passed": true
+    },
+    {
+      "name": "skill explorer convert-to-doc",
+      "passed": true
+    },
+    {
+      "name": "skill explorer convert-to-slides",
+      "passed": true
+    },
+    {
+      "name": "skill explorer share-artifact-summary",
+      "passed": true
+    },
+    {
+      "name": "skill explorer schedule-refresh-jobs",
+      "passed": true
+    },
+    {
+      "name": "semantic distinction 1",
+      "passed": true
+    },
+    {
+      "name": "semantic distinction 2",
+      "passed": true
+    },
+    {
+      "name": "semantic distinction 3",
+      "passed": true
+    },
+    {
+      "name": "semantic distinction 4",
+      "passed": true
+    },
+    {
+      "name": "semantic distinction 5",
+      "passed": true
+    },
+    {
+      "name": "evidence trace 1",
+      "passed": true
+    },
+    {
+      "name": "evidence trace 2",
+      "passed": true
+    },
+    {
+      "name": "evidence trace 3",
+      "passed": true
+    },
+    {
+      "name": "evidence field 1",
+      "passed": true
+    },
+    {
+      "name": "evidence field 2",
+      "passed": true
+    },
+    {
+      "name": "evidence field 3",
+      "passed": true
+    },
+    {
+      "name": "evidence field 4",
+      "passed": true
+    },
+    {
+      "name": "evidence field 5",
+      "passed": true
+    },
+    {
+      "name": "evidence field 6",
+      "passed": true
+    },
+    {
+      "name": "refresh keeps stable identities",
+      "passed": true
+    },
+    {
+      "name": "presentation edits preserve evidence",
+      "passed": true
+    },
+    {
+      "name": "refresh exposes stale narrative example",
+      "passed": true
+    },
+    {
+      "name": "reset restores simulation",
+      "passed": true
+    },
+    {
+      "name": "lifecycle stage 1",
+      "passed": true
+    },
+    {
+      "name": "lifecycle stage 2",
+      "passed": true
+    },
+    {
+      "name": "lifecycle stage 3",
+      "passed": true
+    },
+    {
+      "name": "lifecycle stage 4",
+      "passed": true
+    },
+    {
+      "name": "lifecycle stage 5",
+      "passed": true
+    },
+    {
+      "name": "lifecycle stage 6",
+      "passed": true
+    },
+    {
+      "name": "lifecycle stage 7",
+      "passed": true
+    },
+    {
+      "name": "lifecycle stage 8",
+      "passed": true
+    },
+    {
+      "name": "delivery mode local",
+      "passed": true
+    },
+    {
+      "name": "delivery mode offline",
+      "passed": true
+    },
+    {
+      "name": "delivery mode sites",
+      "passed": true
+    },
+    {
+      "name": "host dependency states remain honest",
+      "passed": true
+    },
+    {
+      "name": "borrowing pattern 1",
+      "passed": true
+    },
+    {
+      "name": "borrowing pattern 2",
+      "passed": true
+    },
+    {
+      "name": "borrowing pattern 3",
+      "passed": true
+    },
+    {
+      "name": "borrowing pattern 4",
+      "passed": true
+    },
+    {
+      "name": "borrowing pattern 5",
+      "passed": true
+    },
+    {
+      "name": "borrowing pattern 6",
+      "passed": true
+    },
+    {
+      "name": "borrowing pattern 7",
+      "passed": true
+    },
+    {
+      "name": "borrowing pattern 8",
+      "passed": true
+    },
+    {
+      "name": "borrowing pattern 9",
+      "passed": true
+    },
+    {
+      "name": "trade-off 1",
+      "passed": true
+    },
+    {
+      "name": "trade-off 2",
+      "passed": true
+    },
+    {
+      "name": "trade-off 3",
+      "passed": true
+    },
+    {
+      "name": "trade-off 4",
+      "passed": true
+    },
+    {
+      "name": "trade-off 5",
+      "passed": true
+    },
+    {
+      "name": "trade-off 6",
+      "passed": true
+    },
+    {
+      "name": "source drawer opens",
+      "passed": true
+    },
+    {
+      "name": "exact source path and lines available",
+      "passed": true
+    },
+    {
+      "name": "copy exact source reference",
+      "passed": true
+    },
+    {
+      "name": "Escape closes drawer and restores focus",
+      "passed": true
+    },
+    {
+      "name": "manual-copy fallback opens a usable drawer",
+      "passed": true
+    },
+    {
+      "name": "modal focus containment 1",
+      "passed": true
+    },
+    {
+      "name": "modal focus containment 2",
+      "passed": true
+    },
+    {
+      "name": "modal focus containment 3",
+      "passed": true
+    },
+    {
+      "name": "modal focus containment 4",
+      "passed": true
+    },
+    {
+      "name": "modal focus containment 5",
+      "passed": true
+    },
+    {
+      "name": "modal focus containment 6",
+      "passed": true
+    },
+    {
+      "name": "presentation mode hides optional navigation",
+      "passed": true
+    },
+    {
+      "name": "arrow advances scene",
+      "passed": true
+    },
+    {
+      "name": "space advances scene",
+      "passed": true
+    },
+    {
+      "name": "interactive controls keep Space behavior",
+      "passed": true
+    },
+    {
+      "name": "Escape exits presentation",
+      "passed": true
+    },
+    {
+      "name": "full embedded research loads",
+      "passed": true
+    },
+    {
+      "name": "embedded research retains interactions",
+      "passed": true
+    },
+    {
+      "name": "original review HTML preserved byte-for-byte",
+      "passed": true
+    },
+    {
+      "name": "original review Markdown preserved byte-for-byte",
+      "passed": true
+    },
+    {
+      "name": "offline original-review download",
+      "passed": true
+    },
+    {
+      "name": "source drawer fits phone",
+      "passed": true
+    },
+    {
+      "name": "phone presentation controls fit",
+      "passed": true
+    },
+    {
+      "name": "presentation advances without animation dependency",
+      "passed": true
+    },
+    {
+      "name": "dark body text contrast >= 4.5",
+      "passed": true
+    },
+    {
+      "name": "dark muted text contrast >= 4.5",
+      "passed": true
+    },
+    {
+      "name": "light muted text contrast >= 4.5",
+      "passed": true
+    },
+    {
+      "name": "violet body text contrast >= 4.5",
+      "passed": true
+    },
+    {
+      "name": "agent node text contrast >= 4.5",
+      "passed": true
+    },
+    {
+      "name": "skills node text contrast >= 4.5",
+      "passed": true
+    },
+    {
+      "name": "evidence node text contrast >= 4.5",
+      "passed": true
+    },
+    {
+      "name": "artifact node text contrast >= 4.5",
+      "passed": true
+    },
+    {
+      "name": "no external network requests",
+      "passed": true
+    },
+    {
+      "name": "no runtime or CSP errors",
+      "passed": true
+    }
+  ],
+  "viewports": [
+    {
+      "width": 2560,
+      "height": 1440,
+      "documentWidth": 2560,
+      "clipped": [],
+      "outliers": []
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "documentWidth": 1440,
+      "clipped": [],
+      "outliers": []
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "documentWidth": 1280,
+      "clipped": [],
+      "outliers": []
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "documentWidth": 1024,
+      "clipped": [],
+      "outliers": []
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "documentWidth": 768,
+      "clipped": [],
+      "outliers": []
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "documentWidth": 390,
+      "clipped": [],
+      "outliers": []
+    },
+    {
+      "width": 375,
+      "height": 812,
+      "documentWidth": 375,
+      "clipped": [],
+      "outliers": []
+    },
+    {
+      "width": 320,
+      "height": 740,
+      "documentWidth": 320,
+      "clipped": [],
+      "outliers": []
+    },
+    {
+      "width": 844,
+      "height": 390,
+      "documentWidth": 844,
+      "clipped": [],
+      "outliers": []
+    }
+  ],
+  "errors": [],
+  "externalRequests": [],
+  "limits": [
+    "Chromium only; no Safari, iOS, or screen-reader session.",
+    "Teaching clarity reviewed against the 16 audience questions; no audience study or timed presentation was conducted.",
+    "Copy payload tested using a clipboard stub; manual-copy fallback tested separately.",
+    "Simulations validate this educational artifact, not the Data plugin or a live source/host."
+  ],
+  "browser": "148.0.7778.96",
+  "contrast": {
+    "scope": "Principal explicit text/background tokens; not an exhaustive contrast audit.",
+    "ratios": {
+      "dark body": 15.730015244579452,
+      "dark muted": 9.410090773085809,
+      "light muted": 5.325740597275429,
+      "violet body": 14.176934707275944,
+      "agent node": 8.287852154811901,
+      "skills node": 7.943202625414381,
+      "evidence node": 10.585918584341771,
+      "artifact node": 10.652938683082404
+    }
+  },
+  "htmlSha256": "194bb2d64876a60ca61dbfbe5e4c31a734bda0865ec764b6ee55e54f2e9ad116",
+  "summary": {
+    "passed": 121,
+    "total": 121
+  }
+}

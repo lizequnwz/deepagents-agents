@@ -1,0 +1,150 @@
+{
+  "pages": 24,
+  "geometry": [
+    {
+      "page": 1,
+      "characters": 906,
+      "firstText": "AN ARCHITECTURE LESSON FOR AI ENGINEERS Inside Codex Data How an analytics agent turns a question into evidenc",
+      "outside": []
+    },
+    {
+      "page": 2,
+      "characters": 761,
+      "firstText": "02 / THE MENTAL MODEL Agent → Skills → Evidence → Artifact The agent does the work. Data gives that work respo",
+      "outside": []
+    },
+    {
+      "page": 3,
+      "characters": 659,
+      "firstText": "Verified build + shared runtime Report / dashboard → export / Site Notebook and document workflows branch to t",
+      "outside": []
+    },
+    {
+      "page": 4,
+      "characters": 1074,
+      "firstText": "03 / ONE QUESTION, END TO END Follow one request. “Why did advisor engagement decline last quarter? Build me a",
+      "outside": []
+    },
+    {
+      "page": 5,
+      "characters": 1219,
+      "firstText": "04 / A SEMANTIC DIVISION OF LABOR Skills are responsibilities. Tools are capabilities. “Define success,” “diag",
+      "outside": []
+    },
+    {
+      "page": 6,
+      "characters": 653,
+      "firstText": "Inspect skill source ↗ A distinction worth remembering Create artifact ≠ Publish artifact Create artifact Auth",
+      "outside": []
+    },
+    {
+      "page": 7,
+      "characters": 965,
+      "firstText": "05 / MORE THAN ROWS Preserve the basis of the answer. Raw data tells you what a field contains. Reviewed evide",
+      "outside": []
+    },
+    {
+      "page": 8,
+      "characters": 501,
+      "firstText": "− Under the Hood / implementation + sources ARCHITECTURE DETAIL · INTERPRETATIONS IDENTIFIED IN CONTEXT Real q",
+      "outside": []
+    },
+    {
+      "page": 9,
+      "characters": 509,
+      "firstText": "06 / CONTINUITY ACROSS TIME Give important objects a stable identity. A refresh should update the evidence—not",
+      "outside": []
+    },
+    {
+      "page": 10,
+      "characters": 396,
+      "firstText": "− Under the Hood / implementation + sources ARCHITECTURE DETAIL · INTERPRETATIONS IDENTIFIED IN CONTEXT Prepar",
+      "outside": []
+    },
+    {
+      "page": 11,
+      "characters": 637,
+      "firstText": "07 / A PATTERN WORTH BORROWING Edit the presentation. Preserve the evidence. Rows, sources, and methods live i",
+      "outside": []
+    },
+    {
+      "page": 12,
+      "characters": 489,
+      "firstText": "− Under the Hood / implementation + sources ARCHITECTURE DETAIL · INTERPRETATIONS IDENTIFIED IN CONTEXT Presen",
+      "outside": []
+    },
+    {
+      "page": 13,
+      "characters": 739,
+      "firstText": "08 / FREEDOM WITHIN A CONTRACT Generate the analysis. Reuse the experience. If every answer generates a new Re",
+      "outside": []
+    },
+    {
+      "page": 14,
+      "characters": 571,
+      "firstText": "− Under the Hood / implementation + sources ARCHITECTURE DETAIL · INTERPRETATIONS IDENTIFIED IN CONTEXT The or",
+      "outside": []
+    },
+    {
+      "page": 15,
+      "characters": 857,
+      "firstText": "09 / TWO DIFFERENT READER JOBS One evidence foundation. Two ways to think. Choose the surface from the reader ",
+      "outside": []
+    },
+    {
+      "page": 16,
+      "characters": 488,
+      "firstText": "− Under the Hood / implementation + sources ARCHITECTURE DETAIL · INTERPRETATIONS IDENTIFIED IN CONTEXT Both s",
+      "outside": []
+    },
+    {
+      "page": 17,
+      "characters": 705,
+      "firstText": "10 / A DURABLE OBJECT, NOT A DISPOSABLE REPLY The end of one request is the start of a lifecycle. A saved arti",
+      "outside": []
+    },
+    {
+      "page": 18,
+      "characters": 643,
+      "firstText": "− Under the Hood / implementation + sources ARCHITECTURE DETAIL · INTERPRETATIONS IDENTIFIED IN CONTEXT Split ",
+      "outside": []
+    },
+    {
+      "page": 19,
+      "characters": 1325,
+      "firstText": "11 / WHERE CAPABILITIES COME FROM The plugin defines the job. The host makes it executable. Data can reuse dif",
+      "outside": []
+    },
+    {
+      "page": 20,
+      "characters": 1221,
+      "firstText": "12 / TRANSLATE ARCHITECTURE INTO PRACTICE What should we steal? Borrow the boundaries that make analytical wor",
+      "outside": []
+    },
+    {
+      "page": 21,
+      "characters": 628,
+      "firstText": "13 / CALIBRATE THE INVESTMENT Learn the principle. Question the machinery. A sophisticated artifact system sol",
+      "outside": []
+    },
+    {
+      "page": 22,
+      "characters": 507,
+      "firstText": "− Under the Hood / implementation + sources ARCHITECTURE DETAIL · INTERPRETATIONS IDENTIFIED IN CONTEXT The re",
+      "outside": []
+    },
+    {
+      "page": 23,
+      "characters": 1123,
+      "firstText": "14 / FOUR WORDS, NOW WITH DEPTH Agent → Skills → Evidence → Artifact The model is the same. Now each word carr",
+      "outside": []
+    },
+    {
+      "page": 24,
+      "characters": 733,
+      "firstText": "RESEARCH APPENDIX / OPTIONAL DEPTH Keep learning below the surface. The complete original review is embedded h",
+      "outside": []
+    }
+  ],
+  "allTextWithinPages": true
+}

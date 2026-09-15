@@ -1,0 +1,2291 @@
+✔ inline icon projection changes only the expected canonical glob and fails closed on drift (24.837167ms)
+✔ inline icon inventory checks the actual rendered module assets (1.149584ms)
+✔ shipped inline assets leave capacity for complete 100 and 200 row fragments (1072.236209ms)
+✔ shipped receipt leaves capacity for 2000 preview rows without the chart runtime (125.445042ms)
+✔ fragment assembly enforces the unchanged host limit on the complete UTF-8 payload (7.730708ms)
+✔ app export inventory is captured from the actual frozen browser runtime (110.997875ms)
+✔ shipped Worker accepts hourly schedules without retaining daily restrictions (7.1875ms)
+✔ release app capture includes nonenumerable own exports and rejects a wrong runtime API (4.7265ms)
+✔ release package keeps the canonical app dependency identities and exact small compiler pins (23.575333ms)
+✔ refresh seeds existing canonical packages without mutating either input (18.429042ms)
+✔ upstream license supplements are bound to immutable sources and exact package tarballs (3.988084ms)
+✔ standalone compiler preserves editable TSX, ESM imports, CJS live bindings, and dynamic imports (16.319583ms)
+✔ portable ESM linker preserves live reexports and cycles without a handwritten CommonJS linker (53.530667ms)
+✔ portable ESM linker rejects missing/ambiguous exports and nonclosed imports (8.186ms)
+✔ single-file dynamic import explicitly uses eager bundled-module evaluation (14.494791ms)
+✔ small CSS parser exposes real escaped identifiers and nested custom-property functions (4.710667ms)
+✔ standalone checks reject every external module form (3.3105ms)
+✔ manifest fingerprints all build inputs and rejects stale source or changed assets (267.247042ms)
+✔ source and artifact paths reject traversal and symlinks (4.363125ms)
+✔ third-party notices are sorted, complete, and tied to the installed frozen lock (11.93925ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/basic-controls.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/basic-controls.test.mjs (66.559375ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/src/use-sortable-blocks.js
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/block-layout.test.mjs (68.405333ms)
+✔ authoring status replaces freshness only while unfinished (1.26375ms)
+✔ active work blocks conflicting actions while exploration remains available (0.305125ms)
+✔ paused work permits resumed editing but cannot publish unfinished content (0.150792ms)
+✔ new status is the sole source of truth even with a stale operation field (0.146208ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'html-to-image' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/src/card-image.js
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/card-image.test.mjs (60.299708ms)
+✔ bar arrows end just outside the actual rounded edge facing the label (6.546ms)
+✔ bar curves are deterministic, align the head to the endpoint tangent, and fall back when obstructed (0.986ms)
+✔ short Mesa arrows leave six pixels beside the text and the bar without moving either (0.356667ms)
+✔ plot boundaries constrain the actual curve and arrowhead, with straight then note fallback (1.273917ms)
+✔ missing, ambiguous, zero-size, or mismatched painted bars never receive a guessed connector (0.339542ms)
+✔ a long horizontal bar gets a face-normal arrow rather than a shallow crossing arrowhead (0.213625ms)
+✔ a label overlapping a rounded bar end keeps a perpendicular 6px gap (0.294417ms)
+✔ bar connectors never run through another bar or annotation (0.387417ms)
+✔ bar-point placement reserves enough space for a visible edge arrow without moving the bar (3.121125ms)
+✔ connector clearance applies only to its target, preserving usable space beside other bars (4.870167ms)
+✔ failed buffered-bar searches do not hide later ordinary or different-bar labels (9.967333ms)
+✔ dense bar fallback reuses only full-plot failures across distinct targets (988.889083ms)
+✔ a full three-line bar note stays on its reviewed category before using another row's whitespace (53.717416ms)
+✔ actual SVG float rounding cannot reject clear space beside the reviewed bar (16.271125ms)
+✔ reference connectors stay placeable across the stretched-card height feedback boundary (1.849583ms)
+✔ reference fallback preserves horizontal thresholds, other labels, and genuinely blocked notes (0.304208ms)
+✔ desktop places concise full labels for every annotation kind (5.633625ms)
+✔ horizontal benchmark explanations and unequal text lines align to the plot edge (31.540125ms)
+✔ vertical benchmark lines retain their threshold association rather than forced horizontal edge placement (0.93625ms)
+✔ preferred sides support horizontal and vertical chart orientation (0.543417ms)
+✔ a concise contextual phrase prefers balanced two-line text beside its reference (1.350791ms)
+✔ range text starts 12px inside the band's leading edge near the plot top (3.18925ms)
+✔ horizontal and reversed projected ranges use the physical upper leading edge (4.352584ms)
+✔ a narrow band keeps the text start inside while allowing complete text beyond the band (1.744375ms)
+✔ range text searches upward along its leading edge before accepting a centered label (10.354875ms)
+✔ horizontal range text searches along the upper edge without shifting its band inset (2.609083ms)
+✔ an occluded or right-edge range preference falls back without covering data or leaving the plot (11.3835ms)
+✔ range preferences respect earlier labels and leave point placement unchanged (22.080791ms)
+✔ a one-line-only slot preserves the complete phrase rather than forcing two lines outside (0.687083ms)
+✔ a compact nearby wrap wins over a roomier distant placement (1.157458ms)
+✔ a complete two-line phrase gets an interior search before a three-line nearby wrap (3.942125ms)
+✔ natural two-line text wins over breaking a word beside the anchor (0.717709ms)
+✔ colliding narrow-plot anchors place only full text and leave the rest for figure notes (13.294833ms)
+✔ eight separated desktop anchors retain full labels (2.510833ms)
+✔ wrapping preserves complete words and long tokens within three lines (85.398125ms)
+✔ unplaceable full labels are omitted from SVG, not replaced by badges (620.222375ms)
+✔ failed full-plot searches preserve smaller wraps and reset with painted geometry (36.149ms)
+✔ invalid geometry never leaks nonfinite or out-of-plot positions (0.270542ms)
+✔ varied narrow-plot anchors keep every placed full label finite and separated (500.469042ms)
+✔ custom text measurement and frozen inputs stay pure (8.531ms)
+✔ full labels avoid painted bars and their anchors (1.923083ms)
+✔ reserved chart whitespace preserves a label when data fills the plot (1.817083ms)
+✔ interior search finds an off-grid pocket after the quick candidates miss (5.729583ms)
+✔ exact and tolerance-sized tangent pockets remain legal during the event sweep (13.442459ms)
+✔ full-text wrapping uses a 100px interior pocket rather than a figure note (1.210291ms)
+✔ 5000 painted obstacles do not turn full-text fallback into a quadratic search (512.7885ms)
+✔ filled actual plot uses notes instead of placing text in an imaginary outer band (2.267458ms)
+✔ near labels need no arrow and displaced arrows point from text to the exact anchor (0.789958ms)
+✔ displaced non-bar connectors cannot cross unrelated painted evidence (0.476791ms)
+✔ numeric annotations follow their plotted measure's axis without changing authored evidence (62.52075ms)
+✔ only edge benchmarks reserve bounded value-domain room while preserving zero and reviewed values (0.38325ms)
+✔ bar annotations do not misrepresent sorted periods or grouped mark positions (1.348ms)
+✔ range annotations require a chronological rendered domain without reordering reviewed rows (0.830166ms)
+✔ benchmarks disappear when their intended measure is edited or hidden (0.328958ms)
+✔ authored annotation schema is bounded, scalar-only, exact, and immutable (0.631416ms)
+✔ all four kinds resolve only reviewed coordinates and readable evidence (0.897792ms)
+✔ annotation visibility hides all four kinds without deleting their authored evidence (1.038875ms)
+✔ hidden annotations still validate their authored schema before resolution (0.147625ms)
+✔ benchmarks need a single reviewed numeric value in their current scope (0.34725ms)
+✔ event, range, and point anchors must survive the exact plotted domain (0.742542ms)
+✔ v1 coordinates stay on explicitly supported primary-axis chart types (0.41425ms)
+✔ long-form point evidence maps to the visible reviewed series without trusting pivot collisions (0.36275ms)
+✔ projection keeps annotation evidence and strips unrelated source and spec metadata (1.6375ms)
+✔ chart projection retains hidden annotation references and their reviewed fields (1.451917ms)
+✔ color identities describe exact theme slots and semantic roles without guessing hues (2.17125ms)
+✔ automatic and relative CSS colors cannot impersonate an embedded palette token (1.095959ms)
+✔ palette choices retain their original tokens and select only exact explicit overrides (0.648458ms)
+✔ custom picker resolves the exact CSS expression in its own document and theme scope (0.62825ms)
+✔ editor portals carry only referenced authored color tokens without changing the spec (0.736792ms)
+✔ custom picker HSV coordinates round-trip the selected hex (0.238875ms)
+✔ custom picker field matches white, hue, and black corners (0.107166ms)
+✔ theme palette labels describe the resolved color rather than the chart token position (0.187583ms)
+✔ raw chart bindings reject array measures before projection with a concrete correction (2.291917ms)
+✔ durable wide charts preserve field counts and names beyond inline payload budgets (0.650875ms)
+✔ binding validation rejects malformed provided fields without guessing data semantics (1.93325ms)
+✔ binding validation preserves chart family exceptions and presentation-only snapshots (0.150958ms)
+✔ saved chart edits override authored settings and preserve cleared presentation values (0.945334ms)
+✔ current waterfall inputs stay separate from saved visualization settings (2.092875ms)
+✔ saved snapshots retain omitted settings after JSON reload without restoring authored defaults (0.991208ms)
+✔ chart data inputs preserve explicit unsets and ignore inherited values (0.118458ms)
+✔ line gradients preserve explicit stops and shared currency metadata without extension payloads (0.289667ms)
+✔ calendar categories use weekday and month chronology without rewriting reviewed data (22.628834ms)
+✔ different-scale measures get separate axes but category series and stacks do not (0.293375ms)
+✔ axis titles omit redundant defaults while preserving authored labels and distinct scales (0.141ms)
+✔ crowded additive categories retain reviewed leaders and reconcile the exact Other total (0.699ms)
+✔ Other grouping declines non-additive, ambiguous, and explicitly preserved source data (0.337625ms)
+✔ crowded additive plan histories preserve stable leaders and reconcile Other for every reviewed period (0.579ms)
+✔ grouped totals exclude filtered source categories without changing reviewed leaders (0.298416ms)
+✔ explicitly reviewed additive series group regardless of dimension names (0.156458ms)
+✔ reviewed quarter labels choose current leaders without lexicographic period sorting (0.203333ms)
+✔ stable grouped leaders preserve major historical spikes across the reviewed window (0.146333ms)
+✔ shareable chart specs retain safe grouping and distribution options (0.082458ms)
+✔ shareable chart specs retain axis placement and category-label visibility (0.062541ms)
+✔ chart controls preserve reviewed identities, complete labels, and accessible selections (17.980667ms)
+✔ ordered numeric and temporal buckets inherit distribution spacing without affecting categories (1.473875ms)
+✔ bucket axes retain a constant stride instead of rounding or appending endpoint labels (0.861291ms)
+✔ the reported 28-day axis keeps regular UTC ticks inside its original extent (0.990958ms)
+✔ arbitrary bucket counts retain a strictly regular index cadence (34.18775ms)
+✔ regular time ticks align with observations at wide and thinned densities (0.640667ms)
+✔ irregular time scales label calendar intervals without changing evidence or compressing gaps (0.306292ms)
+✔ date label geometry stays contained and separated across resize, grain, year and font widths (32.616459ms)
+✔ axis layouts rotate only dense named categories and honor explicit presentation choices (0.320667ms)
+✔ Dark Pixel keeps clean semantic chart fills without decorative dithering (2.19575ms)
+✔ chart types remain explicit while the legacy leaderboard name stays compatible (0.209666ms)
+✔ crowded single-measure vertical bars remain vertical when explicitly authored (0.082458ms)
+✔ ranked leaderboards start at five rows and use only genuinely available adjacent height (0.087ms)
+✔ waterfall projection preserves explicit balances and only used total metadata (0.838083ms)
+✔ box plot projection keeps reviewed quartiles or raw observations as appropriate (0.355708ms)
+✔ heatmap projection preserves its inferred dimension and observed intensities (0.844291ms)
+✔ histograms and explicit-stage Sankey charts do not require a nominal x column (0.471709ms)
+✔ histograms use a compact set of evenly spaced nice bins (0.237708ms)
+✔ long-form line barFields name pivoted series; wide-form barFields name raw columns (0.157167ms)
+✔ scatter projection retains the actual tooltip identities without arbitrary extra columns (0.088417ms)
+✔ shareable chart specs retain canonical options and drop extension metadata (0.210125ms)
+✔ funnel stages preserve source order and calculate only valid prior-stage conversion (1.043917ms)
+✔ horizontal funnel geometry preserves proportional values, flat endings, gaps, and increases (0.55775ms)
+✔ funnel shades start at the unchanged core hue, including single-stage funnels (0.111958ms)
+✔ funnel layout follows its own width and stage count at both density boundaries (0.063625ms)
+✔ heatmap hit areas tile without gaps or overlaps at ordinary and dense sizes (0.086125ms)
+✔ cohort heatmaps preserve unknown cells, fixed scales and safe label metadata (0.238ms)
+✔ vertical funnel percentages sit left of right-aligned values (2.006916ms)
+✔ repeated weekday observations keep chronological input order (0.109125ms)
+✔ funnel stages preserve source order and calculate only valid prior-stage conversion (0.139917ms)
+✔ horizontal funnel geometry preserves proportional values, flat endings, gaps, and increases (0.171375ms)
+✔ funnel shades start at the unchanged core hue, including single-stage funnels (0.048292ms)
+✔ funnel layout follows its own width and stage count at both density boundaries (0.040666ms)
+✔ histogram title edits retain all eight raw observations and canonical count bins (2.077208ms)
+✔ the canonical histogram renders editable measurement/count titles and a fixed count axis (10.784875ms)
+✔ histogram tooltips format bucket counts independently of the measured field's ratio units (23.959ms)
+✔ editor equality expands defaults without rewriting authored chart specs (1.318916ms)
+✔ changing a long-form split never leaves pivot labels as raw measure fields (0.225ms)
+✔ wide-form measures survive split changes and the return to no series (0.375167ms)
+✔ split normalization preserves authored raw roles without numeric re-inference (0.109ms)
+✔ partially overlapping pivot labels never become a partial wide measure list (0.122458ms)
+✔ explicit capability roles preserve approved numeric series and all-null measures (0.195209ms)
+✔ a non-stackable authored stacked chart retains only its existing stacked type (0.114125ms)
+✔ editor history isolates drafts, groups continuous text, and restores clean state (1.12475ms)
+✔ reset restores the exact original as a draft and remains undoable (0.340334ms)
+✔ validation candidates cannot mutate an editor history snapshot (0.15525ms)
+✔ rejected validation and save callbacks preserve the original presentation (0.494458ms)
+✔ metadata saves are optional and never change the durable spec-only callback (0.37625ms)
+✔ editor shortcuts respect consumed nested events and platform modifiers (0.096292ms)
+✔ preview state retains cosmetic selections but drops stale mappings (0.157625ms)
+✔ export dimensions are finite and bounded, and presets retain their advertised ratios (1.577875ms)
+✔ destination presets retain useful image sizes without mock contexts (0.208167ms)
+✔ export options preserve the reviewed spec, filters, annotations and values (0.200458ms)
+✔ provenance uses recorded source metadata without SQL, private file paths, or invented dates (5.28ms)
+✔ export appearance is scoped, preserves the current theme, and provides light and dark palettes (0.863792ms)
+✔ source and filters are separate export fields without changing source semantics (24.18525ms)
+✔ export dates use human-readable labels without changing days, ranges or selections (2.801833ms)
+✔ PNG pixels use a consistent 3x density for each destination size (1.337583ms)
+✔ large exports stay within browser canvas limits while preserving their aspect ratio (0.390125ms)
+✔ copied chart notes wrap long unbroken labels without clipping (1.641333ms)
+✔ permalink targets must be connected, rendered, and available for focus (1.162334ms)
+✔ compact component aliases use exactly six independent UUIDv5 bytes and eight URL-safe characters (4.489125ms)
+✔ component permalink UUIDs match independent RFC 4122 UUIDv5 SHA-1 reference vectors (4.882333ms)
+✔ component UUIDv5 SHA-1 remains correct across one- and two-block padding boundaries (0.444625ms)
+✔ component UUID identity uses only canonical HTTP origin and exact authored UTF-8 ID (0.71125ms)
+✔ each authored starter component receives a distinct opaque UUID with legacy route compatibility (1.577375ms)
+✔ component UUID creation rejects invalid authored IDs, malformed Unicode, and non-hosted URLs (1.043834ms)
+✔ the shared permalink-safe component ID validator agrees with chart and widget URLs (0.729ms)
+✔ published component menus offer Copy link only for centrally validated stable IDs (11.484083ms)
+✔ hosted chart links encode stable IDs at the canonical dashboard root (0.641625ms)
+✔ every hosted dashboard component receives a clean, encoded root widget permalink (0.122ms)
+✔ chart links reject unsafe, missing, or excessively long component IDs (0.375916ms)
+✔ chart permalinks decode one safe component segment and recognize detail routes (0.092167ms)
+✔ unified component parser identifies widget links and backward-compatible chart/detail links (0.095167ms)
+✔ malformed chart routes, traversal, separators, NUL, and oversized IDs are rejected (0.234208ms)
+✔ generic widget routes reject detail suffixes, traversal, malformed escapes, and oversized IDs (0.158792ms)
+✔ only valid reserved chart routes resolve to the canonical dashboard pathname (0.052334ms)
+✔ chart permalinks share the sanitized root dashboard identity and ChatGPT link (2.683375ms)
+✔ protected chrome corrects unreadable custom foregrounds, secondary labels, and publishing (2.915791ms)
+✔ protected chrome preserves readable authored brand colors and stable segmented-control ink (0.403ms)
+✔ translucent theme colors are composited before protected chrome contrast is selected (1.4195ms)
+✔ positive chrome preserves readable brand colors and rejects hostile authored tokens (1.971209ms)
+✔ verification badges use green and light gray independently of authored status colors (1.039292ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/chrome-layout.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/chrome-layout.test.mjs (81.961916ms)
+✔ custom chart mark tooltips stay anchored and contained at viewport edges (2.086791ms)
+✔ pointer tooltips start beside the cursor and flip at viewport edges (0.227792ms)
+✔ touch tooltips clear the finger above the point and move below near the top edge (0.248167ms)
+✔ item tooltip position follows every pointer coordinate independently of cell centers (0.257458ms)
+✔ clicking one date freezes its thin cursor and both series dots, never a display-tick band (0.820584ms)
+✔ missing hover cursor uses the actual active point, not the entire line path (0.349334ms)
+✔ keyboard point selection ignores a stale hover at a different date (0.2655ms)
+✔ point selection converts screen bounds to chart-local coordinates under scaling (0.264084ms)
+✔ a chart with no rendered point or cursor cannot invent a selected time range (3.348916ms)
+✔ selected chart card preserves the hover anchor and bounds overflow without moving ordinary cards (5.804125ms)
+✔ shows inline Ask ChatGPT only outside packaged Codex and local previews (0.396417ms)
+✔ formats compact dashboard context before the labeled question (1.500292ms)
+✔ uses the rich Sites project reference without repeating the raw dashboard URL (0.359208ms)
+✔ Sites handoff references preserve punctuation with canonical title escaping (0.143791ms)
+✔ omits unavailable or unsafe optional context (0.110208ms)
+✔ Ask never forwards credentials from an unsafe optional dashboard URL (0.155417ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'playwright-core' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/dashboard-tab-label-browser.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/dashboard-tab-label-browser.test.mjs (73.499416ms)
+✔ multi-select URL, saved tab, drill and clear states preserve validated arrays (24.892666ms)
+✔ dashboard view parameters round-trip known tabs and declared non-default filters (1.654458ms)
+✔ default dashboard tabs and filters retain an explicit complete-view marker and tab (0.175ms)
+✔ dashboard filter serialization remains stable and correctly encodes reviewed Unicode values (0.110667ms)
+✔ unknown, stale, malformed, duplicate, and query-out-of-scope filter values are rejected (0.155083ms)
+✔ legacy links retain shareInUrl opt-outs while new complete links include every declared selection (0.163916ms)
+✔ explicit URL selections override local state while ordinary visits preserve local exploration (0.122708ms)
+✔ explicit all selections round-trip for categorical filters with non-all dashboard defaults (0.150708ms)
+✔ date filters with a required non-all default reject unavailable all selections (0.121209ms)
+✔ invalid or deleted URL selections cannot replace saved viewer-local filter state (0.245ms)
+✔ copied component URLs include only validated view state and strip browser-private context (0.243375ms)
+✔ in-browser URL updates preserve unrelated host query parameters and Codex task fragments (0.162542ms)
+✔ invalid locations and oversized values never create unsafe dashboard view state (0.367042ms)
+✔ declared filter identifiers cannot mutate dashboard URL-state object prototypes (0.095041ms)
+✔ tab scopes restore independent views and drill through only declared destination fields (0.4055ms)
+✔ inclusive date ranges round-trip and invalid boundaries are rejected (1.29075ms)
+✔ sparse-date calendar presets round-trip without snapping to observations (0.514125ms)
+✔ a complete default link resets all recipient filters, including previously local-only choices (0.209291ms)
+✔ complete links preserve explicit all, empty multi-select, and selection equal to an authored default (0.210375ms)
+✔ large reviewed multi-selects and long reviewed values survive the complete round trip (50.020042ms)
+✔ assumptions, sections, charts, scoped tabs, and focus round-trip without carrying reviewed rows (2.445459ms)
+✔ default auxiliary state stays compact, including cleared chart controls (0.1795ms)
+✔ malformed, duplicate, unsupported, and oversized auxiliary context is ignored (18.824459ms)
+✔ unsafe prototype keys cannot enter nested state or the handoff allowlist (0.769708ms)
+✔ handoff allowlist preserves view state while dropping host tokens, credentials, fragments, and unknown state (1.029667ms)
+✔ replacing URL state removes stale auxiliary selections but retains host-only browser parameters (0.480625ms)
+✔ oversized outgoing views fail explicitly instead of producing a partially defaulted link (14.842417ms)
+✔ the selected first tab remains explicit when a recipient has a different tab order (1.085959ms)
+✔ handoffs retain reviewed categorical labels that resemble JSON without interpreting their contents (0.375125ms)
+✔ multi-selects without an authored default distinguish an explicit empty selection from all (0.246917ms)
+✔ URL state imports in metadata hosts without TextEncoder and counts UTF-8 limits correctly (52.620375ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/data-app-action-handoff.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/data-app-action-handoff.test.mjs (69.756791ms)
+✔ file handoffs preserve full current presentation and freshness without mutating the context (41.512417ms)
+✔ explicit empty handoff context preserves saved resets, pending undo, and concurrent edits (9.095166ms)
+✔ automation metadata retains canonical identity across local and published artifacts (1.265916ms)
+✔ automation metadata keeps unusual identifiers unambiguous through desktop and web handoffs (14.545209ms)
+✔ automation metadata preserves missing IDs and sanitized query order without inventing values (0.261708ms)
+✔ URL action handoffs carry exact current views without copying arbitrarily large dashboard context (18.806375ms)
+✔ linked handoffs skip unused presentation data while file handoffs retain web redaction (3.35025ms)
+✔ short action links preserve access, scheduling, export format and edit authorization contracts (0.847292ms)
+✔ deferred context keeps exact totals and loads only the requested query for pagination (4.488875ms)
+✔ deferred row reads reject a view change while loading and propagate failures (0.886334ms)
+✔ context includes exact live presentation and all snapshot metadata without reviewed row values (3.06ms)
+✔ row pagination returns every reviewed row once, exact page totals, and detached values (4.466916ms)
+✔ schemas are enforced even when the host does not validate tool arguments (0.995ms)
+✔ exact query identities are safe even with prototype-like names or punctuation (0.766708ms)
+✔ live context changes invalidate an existing pagination version instead of mixing revisions (39.79525ms)
+✔ large dashboards and reports retain complete metadata and presentation without a URL-sized truncation cap (50.502417ms)
+✔ missing or invalid reviewed state fails explicitly and disposal prevents further reads (0.790458ms)
+✔ registration exposes read-only context tools, reads updated refs, and aborts/unregisters on cleanup (0.8005ms)
+✔ unsupported hosts and registration failures do not break dashboard rendering (3.719333ms)
+✔ rendered text retrieval preserves complete authored prose and reads only the requested current target (2.640667ms)
+✔ text retrieval refuses invalid, ambiguous, unavailable, stale, and disposed reads (1.969417ms)
+✔ chart geometry defaults to the document and accepts an embedding theme root (4.715541ms)
+✔ source copying is an opt-out capability and the canonical inspector is shared (0.478875ms)
+✔ contained source drawers opt into local layout and focus without changing viewport defaults (1.108209ms)
+✔ embeddings import the canonical source inspector, semantic colors, and icon (0.372792ms)
+✔ the top bar opens the dashboard Ask composer and keeps one icon-only overflow menu (12.296958ms)
+✔ header close restores the complete button without a border or icon pop (2.814ms)
+✔ the dashboard Ask composer keeps the approved suggestions and direct actions (6.381959ms)
+✔ selection Ask covers whole chart sections and stays anchored while scrolling (7.471042ms)
+✔ create-report starts a separate private report from authorized reviewed evidence (1.389291ms)
+✔ refresh-document keeps private evidence out of its confirmation-first handoff (0.456083ms)
+✔ alert-changes keeps private evidence out of its confirmation-first automation handoff (0.392792ms)
+✔ discovery and export use exact IDs despite matching titles and selector characters (4.317459ms)
+✔ batch validates all IDs before rendering and preserves requested order (1.263041ms)
+✔ hidden, ambiguous, disconnected and missing IDs never silently select a card (0.58125ms)
+✔ loading and failed cards stay unavailable until their reviewed data is ready (0.826417ms)
+✔ a card entering a loading or error state cannot complete an in-flight batch (0.510459ms)
+✔ tool execution enforces schemas even when a host does not validate them (1.003083ms)
+✔ no stale or partially updated images escape a changing view or replaced card (1.73775ms)
+✔ exports reject overlapping calls and release their guard after failure (0.230209ms)
+✔ disposed tools cannot read or complete an in-flight export (0.189125ms)
+✔ image and aggregate byte limits reject oversized payloads instead of returning partial data (316.528916ms)
+✔ Data app interface icons use bundled OpenAI assets at standard dropdown sizes (30.468083ms)
+✔ direct Ask SVG assets exclude active or external content (2.567ms)
+✔ Export stays inline with a distinct bundled icon for every format (10.159833ms)
+✔ Jupyter Notebook export uses the existing Codex skill without exposing reviewed data (1.531166ms)
+✔ Jupyter Notebook export supports reports through the same Codex request flow (0.226875ms)
+✔ Jupyter Notebook export returns to the originating Codex task (1.765708ms)
+✔ scheduled refresh returns to its originating Codex task without leaking task context (2.622333ms)
+✔ published scheduled refresh opens ChatGPT without leaking Site or task metadata (3.100292ms)
+✔ same-title dashboards retain different exact automation identities (0.676041ms)
+✔ missing cadence delegates schedule selection without inventing a repeat schedule (0.14775ms)
+✔ published dashboard identity strips signed parameters and fragments (0.282ms)
+✔ automation creation blocks missing identity, malformed URLs, and credential-bearing URLs (0.409ms)
+✔ every supported cadence preserves its intended recurrence and local time (1.234ms)
+✔ hourly refresh handoffs discard the previous daily time and selected weekdays (0.635833ms)
+✔ invalid and ambiguous schedules cannot create an automation (0.277792ms)
+✔ reports do not expose dashboard scheduling (0.165834ms)
+✔ schedule handoff retains identity and query IDs without presentation or reviewed data (2.139ms)
+✔ dashboard title control characters cannot create forged context lines (0.226125ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/src/use-data-app.js
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/data-app-template-contract.test.mjs (63.86825ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/src/use-data-app.js
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/data-app-template.test.mjs (66.104292ms)
+✔ synthetic observations reconcile all cuts, percentages, and the volume-adjusted bridge (0.667875ms)
+✔ inconsistent, negative, non-synthetic, and duplicate evidence fails instead of producing a report (11.605667ms)
+✔ timeline annotation adds verified context without attributing an aggregate bar to one warehouse (22.095459ms)
+✔ missing, conflicting, or changed records suppress generated notes including saved defaults (1.005208ms)
+✔ custom annotation edits, explicit removal, and saved chart presentation remain intact (0.523208ms)
+✔ fresh reports get fresh IDs while reproduction preserves title, identity, dates, and publication (1.153042ms)
+✔ the compact reference inherits shared cards, disclosure, task links, and 300px chart content (0.845667ms)
+✔ deployment upload streams both exact assets and serves HTML/permalinks without database work (27.610042ms)
+✔ gzip deployment uploads store and serve the original bytes for owners and deployment tokens (31.68375ms)
+▶ gzip upload corruption, truncation, expansion and checksum failures preserve an existing asset
+  ✔ not gzip (5.028083ms)
+  ✔ corrupt checksum (1.997667ms)
+  ✔ truncated gzip (2.980417ms)
+  ✔ decoded bytes too short (1.825292ms)
+  ✔ decoded bytes too large (1.783042ms)
+  ✔ wrong content with exact byte count (1.922625ms)
+✔ gzip upload corruption, truncation, expansion and checksum failures preserve an existing asset (21.010166ms)
+✔ unsupported compression and malformed gzip lengths are rejected before storage (4.400958ms)
+▶ missing, incorrect, expired and malformed deployment authority is denied before storage
+  ✔ missing token (1.023542ms)
+  ✔ wrong token (1.892ms)
+  ✔ oversized token (0.891708ms)
+  ✔ missing config (0.383167ms)
+  ✔ expired (0.320042ms)
+  ✔ invalid expiry (0.272583ms)
+  ✔ invalid hash (0.254625ms)
+✔ missing, incorrect, expired and malformed deployment authority is denied before storage (5.959875ms)
+✔ upload capability is restricted to known keys, exact size and exact checksum (5.439084ms)
+✔ deployment token cannot mutate queries or presentation (0.741333ms)
+✔ deployment token does not grant viewer edit permission (6.268542ms)
+✔ legitimate owner can upload, edit data and retain presentation across redeployment (11.653959ms)
+✔ missing or mismatched deployment objects fail explicitly before data activation (2.67575ms)
+✔ malformed content-addressed descriptors are rejected before requests (0.4475ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/experimental-bar-chart.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/experimental-bar-chart.test.mjs (71.444708ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/filter-bar-composition.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/filter-bar-composition.test.mjs (64.991334ms)
+✔ opted-in bootstrap checks its immutable head without fetching query rows (27.888458ms)
+✔ ordinary apps and legacy/owner-edited storage retain complete eager data (4.206584ms)
+✔ new client falls back for an older server but never hides a head failure (1.257708ms)
+✔ deployment and query identity mismatches never instantiate mixed metadata (1.071916ms)
+✔ inline source scoping is an explicit opt-in forwarded through the shared sidebar (6.916916ms)
+✔ edited long-form inline charts keep actual dimensions and reviewed metric dependencies (4.956875ms)
+✔ cosmetic edits preserve a summary box plot's conceptual measure definition (1.94225ms)
+✔ edited inline provenance follows canonical special-chart dependencies (3.433667ms)
+✔ isolated line points are exactly the one-point runs between missing observations (1.309541ms)
+✔ isolated indexes follow the displayed post-zoom, post-pivot rows and each series (0.201042ms)
+✔ the canonical line renderer uses filtered native dots without changing hover or sparklines (6.166584ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/metric-card-tabs.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/metric-card-tabs.test.mjs (58.432209ms)
+✔ chart extrema inspect every value without an argument-count limit (59.514584ms)
+✔ axis formatting retains the final observation beyond the JS argument limit (2490.133625ms)
+✔ explicit currency formats axes and hover values without mutating SVG labels (2.913209ms)
+✔ ordinary numeric axes keep grouped integers distinct across compact boundaries (1.019042ms)
+✔ large-value axes retain compact labels unless a narrow range needs exact grouped values (6.97575ms)
+✔ percentage axes increase precision without changing percentage scale or signs (3.225375ms)
+✔ whole percentage axes use distinct whole-number tick positions (0.475375ms)
+✔ unknown or degenerate tick sets use a non-collapsing fallback (1.642458ms)
+✔ axis tick history is monotone within a domain and resets for a different axis or mode (0.359458ms)
+✔ legacy KPI and tooltip formatters are unchanged (0.869042ms)
+✔ chart annotations preserve percentage and money units without converting unknowns to zero (0.880333ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/src/use-data-app.js
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/pr-review-regressions.test.mjs (63.969125ms)
+✔ edit history restores deletion/layout changes, branches after undo and excludes reviewed state (3.063458ms)
+✔ reminder rendering never reads cookies, requests data, or schedules work (20.02325ms)
+✔ verification clicks observe workspace cookie changes without polling or shared writes (11.965125ms)
+✔ blocked cookie writes keep confirmation enabled and can recover without network requests (12.188375ms)
+✔ dashboard appearance validates author defaults and keeps viewer overrides local (1.114041ms)
+✔ semantic chart colors preserve dimension identity across reviewed queries and reordering (0.209291ms)
+✔ presentation rejects removed chart annotations rather than persisting nested reviewed data (0.24125ms)
+✔ presentation preserves bounded authored annotation references without accepting data payloads (0.458125ms)
+✔ annotation visibility is an optional boolean and never bypasses annotation validation (0.434583ms)
+✔ local annotation visibility round trips without changing reviewed data or authored annotations (12.826708ms)
+✔ presentation text edits and component titles accept only bounded authored strings (0.765916ms)
+✔ cleared narrative text survives validation and local storage without allowing empty titles (0.2055ms)
+✔ dashboard verification accepts only a bounded creator email and canonical UTC timestamp (0.683583ms)
+✔ verified dashboard metadata persists and merges as one protected presentation field (0.28325ms)
+✔ debounced hosted saves retain rapid verification changes and unrelated creator edits (15.510708ms)
+✔ debounced verification writes preserve conflict merges and later acknowledged creator edits (18.816083ms)
+✔ verification intents expose only server-acknowledged badge metadata and preserve immediate creator edits (17.5305ms)
+✔ server verification acknowledgements do not save again when the shell reorders presentation fields (16.930083ms)
+✔ overlapping stale autosave acknowledgements cannot roll back a newer conflict-preserving baseline (23.978333ms)
+✔ older successful saves preserve the server baseline without acknowledging a newer failed draft (26.092ms)
+✔ overlapping saves preserve reverted and retained local fields in either response order (68.222084ms)
+✔ pending autosave reversions preserve the existing structural layout merge and remote additions (2.021459ms)
+✔ dashboard descriptions remain optional while previously authored descriptions persist and reload (0.290375ms)
+✔ disabled chart zero baselines persist and reload without becoming enabled (0.290875ms)
+✔ presentation stores only bounded presentation changes and isolates dashboard identities (0.930959ms)
+✔ an explicit legacy title migrates the complete valid presentation without deleting its old record (1.182792ms)
+✔ stable presentation and appearance records win independently, including explicit resets and corrupt records (0.43475ms)
+✔ legacy lookup requires one bounded exact alias and a safe stable ID (0.490667ms)
+✔ legacy migration stays at the same canonical artifact path and never enumerates storage (0.271333ms)
+✔ invalid legacy records are not copied and unavailable storage fails safely (0.535417ms)
+✔ a stable record arriving during legacy lookup is never overwritten (0.165708ms)
+✔ valid widget and chart permalinks share their dashboard presentation without merging unrelated paths (1.341625ms)
+✔ tab order merges as one shared presentation change (0.653292ms)
+✔ creator refresh schedules persist separately from reviewed data and reject invalid settings (0.566833ms)
+✔ concurrent presentation edits merge changed fields without discarding another editor (0.151333ms)
+✔ unrelated hosted owner edits preserve an existing verified refresh schedule (0.52025ms)
+✔ later owner edits remain rebased on an earlier cross-session conflict merge (14.372708ms)
+✔ the hosted Worker adds one trusted Sites project reference to dashboard HTML (28.886083ms)
+✔ the hosted Worker ignores Sites marker text in scripts and comments (0.53425ms)
+✔ the reusable Worker validates and seeds presentation without replacing later D1 edits (0.924834ms)
+✔ hosted edit authorization rejects missing, malformed, and overlong trusted emails (2.613292ms)
+✔ missing or malformed owner environment hashes keep every write read-only despite packaged identity (7.370583ms)
+✔ editor republishing cannot replace the managed owner or overwrite persisted presentation and rows (15.066458ms)
+✔ hosted widget, chart, and detail permalinks serve only safe GET and bodyless HEAD dashboard routes (6.558458ms)
+✔ hosted presentation allows only its environment-configured Site owner and keeps reviewed rows separate (14.124708ms)
+✔ hosted annotation visibility round trips without dropping authored evidence or changing reviewed rows (4.58125ms)
+✔ authorization follows the current request environment without rebuilding (5.458916ms)
+✔ an unconfigured owner stays read-only and preserves D1 until the owner environment is configured (5.395709ms)
+✔ hosted dashboard verification is creator-only, server-stamped, stable, and removable (8.392625ms)
+✔ hosted reviewed data stores each result separately and stays within D1 statement limits (26.473458ms)
+✔ hosted query updates preserve other results until a newly reviewed seed replaces them (2.344459ms)
+✔ a dashboard without owner environment remains read-only for every authenticated viewer (0.706583ms)
+✔ editing sessions defer layout/text/chart persistence and cancel without rolling back personal filters (6.101416ms)
+✔ failed explicit saves keep the baseline and can retry the same edits (4.832666ms)
+✔ invalid authored saves keep the draft editable without discarding or acknowledging text (47.219625ms)
+✔ local caching rejects oversized drafts without throwing or replacing the prior saved value (0.471125ms)
+✔ an older in-flight save cannot acknowledge a newer draft rejected by validation (5.391041ms)
+✔ conflict merges reject combined size and entry limits before a retry can discard text (25.206833ms)
+✔ verification education preference survives reload on non-workspace origins (0.524958ms)
+✔ protected file digests normalize only valid owner email hashes (2.673542ms)
+✔ protected file digests preserve historical owner module bytes for migration (0.251334ms)
+✔ protected file digests normalize only ordinary Sites publication metadata (0.723292ms)
+✔ publication metadata survives repeated publication, owner transfer, and maintainer manifest generation (827.23675ms)
+✔ publication metadata does not block narrowly authorized changes or authorize unrelated hosting edits (934.990625ms)
+✔ publication metadata rejects malformed owners even with a matching authorization scope (492.833625ms)
+✔ protected shell, documentation, actions, entrypoint, and build wiring cannot be modified (3725.476208ms)
+✔ removing protected infrastructure fails before Vite builds an artifact (428.443292ms)
+✔ missing manifests and attempts to remove either required build-verification hook fail closed (1355.632875ms)
+✖ approved content remains editable and compiled HTML records only transient local task metadata (620.714834ms)
+✖ nested authored sections, shared helpers, and custom content assets remain unrestricted (657.591834ms)
+✔ authored styles cannot hide protected chrome or target the entire document (4375.828292ms)
+✔ authored app surfaces cannot overlay or disable protected chrome (1927.89625ms)
+✖ safe relative positioning and scoped content overlays remain available (608.995208ms)
+✖ approved theme tokens can brand protected chrome without confirmation (567.819833ms)
+✖ authored content can style scoped report headers without affecting protected chrome (654.938ms)
+✔ accidental arbitrary content widths and gutters fail protected layout verification (3985.390084ms)
+✖ intentional wide, full-bleed, and user-requested widths require no protected-change confirmation (581.132083ms)
+✖ complete app-wide dark themes remain editable without protected-change confirmation (590.420542ms)
+✔ app-wide theme tokens cannot be stranded inside authored report or dashboard content (1598.298583ms)
+✔ authored components cannot bypass the public API or manipulate protected chrome (3216.822291ms)
+✔ authored content cannot create a second application main landmark (387.500125ms)
+✖ protected changes require explicit user authorization and exactly their authorized scope (1220.900875ms)
+✔ confirmation cannot authorize unrelated protected modifications (362.850375ms)
+✔ regenerating protected runtime hashes requires the explicit maintainer workflow (358.280458ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/publish-review.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/publish-review.test.mjs (52.348709ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/query-data-boundary.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/query-data-boundary.test.mjs (54.735708ms)
+✔ query loading is explicit, deduplicated, identity-preserving, and distinguishes empty results (26.892292ms)
+✔ loadAll limits concurrent transport to two and preserves every row and query key (54.92375ms)
+▶ failed transport, malformed data, and incomplete results stay unavailable until an explicit retry
+  ✔ http (1.279791ms)
+  ✔ truncated (3.35725ms)
+  ✔ shape (1.026041ms)
+  ✔ count (1.19975ms)
+✔ failed transport, malformed data, and incomplete results stay unavailable until an explicit retry (7.797459ms)
+✔ owner replacements win over in-flight or queued loads, including ignored aborts (1.376875ms)
+✔ dispose aborts active loads, rejects queued waiters, and ignores late responses (2.098959ms)
+✔ query isolation rejects undeclared IDs and invalid results without issuing requests (0.972542ms)
+✔ query-parameter routing preserves exact dot-segment IDs (0.395792ms)
+✔ a multi-source refresh commits rows and execution times together and survives reload (29.060875ms)
+✔ a later database failure rolls back every dataset and freshness value (10.188458ms)
+✔ invalid batches and unauthorized callers cannot partially update a dashboard (21.639792ms)
+✔ single-query callers can supply execution time or preserve the existing one (3.804125ms)
+✔ query tools mark source content untrusted and publish a refresh only after commit (7.537125ms)
+✔ deferred queries retain full definitions and committed batch execution times through the query store (9.596291ms)
+✔ refresh education uses the workspace domain, never a website or public-suffix fallback (6.552917ms)
+✔ one cookie suppresses the coachmark across different dashboard origins in the same workspace (1.245625ms)
+✔ workspace and browser boundaries remain explicit (0.723375ms)
+✔ blocked or throwing cookie storage keeps the coachmark hidden (0.644166ms)
+✔ manual refresh setup consumes the workspace-wide tip before it is offered (0.439625ms)
+✔ an in-progress claim suppresses another tab and loses to explicit setup (0.247625ms)
+✔ cancellation and a replaced claim cannot show a stale coachmark (0.169209ms)
+✔ unsupported hosts and unsafe claim tokens never write a cookie (0.113292ms)
+✔ verification reminder dismissal is shared across workspace Sites without renewing on reads (0.775958ms)
+✔ verification reminder cookies stay within their workspace and browser (0.204667ms)
+✔ verification reminder storage has no unsupported-host or malformed-location fallback (0.218375ms)
+✔ verification reminder reads accept only one exact flag and fail closed for malformed cookies (0.229334ms)
+✔ verification reminder writes require readback and leave the reminder enabled when storage fails (0.358917ms)
+✔ verification and refresh cookies coexist without dismissing each other's reminders (0.529541ms)
+✔ coachmark is owner-only, published-only, idle, non-modal, and only points to the refresh menu (16.669792ms)
+✔ the methods example keeps the exact bundled sample and validates its observed grid (2.158625ms)
+✔ weighted rates and both decomposition conventions reproduce the actual generated analysis (0.195667ms)
+✔ report shorthand is stable and promotes rounded values to the next unit (16.189458ms)
+✔ derived evidence remains independently inspectable and component scoped (1.65425ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/report-adoption-retention-example.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/report-adoption-retention-example.test.mjs (65.382916ms)
+✔ three new fictional cases retain exact observations, records, dates, and source hashes (1.917416ms)
+✔ annotations state contextual records absent from the plotted measures (22.836709ms)
+✔ missing, ambiguous, or contradictory context removes the annotation instead of trusting its anchor (0.372583ms)
+✔ exact joins and receipts omit missing or conflicting date matches (3.073709ms)
+✔ generated annotation revisions refresh after repeated context corrections and saved chart edits (2.934833ms)
+✔ custom annotation edits, unknown IDs, and explicit empty lists survive reconciliation (0.687917ms)
+✔ the owned legacy billing event migrates to the bar value without replacing saved edits (0.328083ms)
+✔ interpretations respond to corrected context and observations (0.237792ms)
+✔ actual inline projection retains explicitly approved contextual text and record provenance without extra plotted fields (16.5215ms)
+✔ new artifacts get fresh IDs while reproduction preserves identity, title, dates, and metadata (1.414042ms)
+✔ the generated-project CLI reproduces through a directory alias (83.015083ms)
+✔ the new gallery keeps shared editing, source wrappers, export disclosure, and a 720px column (0.53725ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/report-evidence-accessibility.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/report-evidence-accessibility.test.mjs (64.205ms)
+✔ local reader and editor report links share the originating task without exposing it in their prompts (9.169958ms)
+✔ prepare links and imperative handoffs preserve the same draft intent without host submission (2.217333ms)
+✔ Windows preview investigations and draft links in Codex retain the exact local project (1.0455ms)
+✔ handoff fallbacks keep only safe hosted or local context and prepare web composers (0.907541ms)
+✔ report task links use the shared current and legacy Codex browser detection (0.47775ms)
+✔ reader and editor handoffs preserve permission checks and bypass installed host send APIs (3.23725ms)
+✔ static report exports include reader-visible disclosure contents, not controls or private notes (0.761917ms)
+✔ investigation carries only current claim, stable identity, period, and ordered safe sources (6.4045ms)
+✔ prepare intent keeps a specific output separate from the current recommendation (2.784708ms)
+✔ prepare accepts only a bounded plain deliverable and cannot become an editor mutation (1.236542ms)
+✔ modifying follow-ups require editor permission and an exact existing report (1.4555ms)
+✔ all report follow-ups retain absolute Windows project and HTML paths (1.07ms)
+✔ report identity excludes relative, network, and control-containing local paths (1.381709ms)
+✔ editor-only authored follow-ups reject viewers even for chat-only investigation (0.240917ms)
+✔ follow-ups reject malformed surface, identifiers, text, and source references (0.756625ms)
+✔ published report identity accepts only a clean canonical HTTP(S) artifact URL (0.385959ms)
+✔ report follow-ups preserve a sanitized current view through both chat destinations (3.073375ms)
+✔ saved Markdown omits code and raw data while retaining the current question and values (0.428292ms)
+✔ multiline SQL paragraphs and indented Markdown code do not enter handoffs (0.480792ms)
+✔ authored text cannot escape the JSON data block or carry obvious credentials (0.875917ms)
+✔ query-only evidence and source-free report identity remain usable for chat-only investigation (0.390625ms)
+✔ linked report actions retain selected item and correction intent while reading full context from the view (1.731333ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/report-periods.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/report-periods.test.mjs (52.570083ms)
+✔ reports expose their snapshot date without a refresh action (6.187875ms)
+✔ report cutoff dates are explicit and preparation dates never imply new evidence (1.628167ms)
+✖ dashboard refresh still reruns its existing authorized queries (1.165667ms)
+✔ narrative evidence declares ordered, unique, existing query identities (2.336ms)
+✔ quantitative components retain multiple sources without an implicit data join (0.69725ms)
+✔ scoped evidence accepts actual snapshot rows independent of object key order (0.252083ms)
+✔ scoped evidence follows current reviewed array contents across removals and replacements (0.255375ms)
+✔ scoped evidence rechecks mutable rows and nested copies against current reviewed values (0.327375ms)
+✔ reviewed membership remains query-specific and supports equivalent rows from distinct objects (0.17275ms)
+✔ empty and mixed source scopes preserve full membership validation (0.194208ms)
+✔ scoped JSON membership agrees with canonical value comparison across deterministic mixed fixtures (26.337167ms)
+✔ copy preserves single-source TSV and includes each selected narrative source (0.302667ms)
+✔ each narrative source retains its own SQL, evidence and metric definitions (2.305917ms)
+✔ source selection preserves lazy loading, shared drawer behavior and copy permissions (10.278333ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/report-starter.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/report-starter.test.mjs (67.925583ms)
+✔ shared Lexical narratives expose a protected safe selection-formatting toolbar (8.666ms)
+✔ hosted references and desktop browser context preserve only supported dashboard view state (5.301542ms)
+✔ view query state does not change local HTML identity or native task routing (1.62ms)
+✔ shared handoffs preserve prompts and select the current browser's destination (0.373542ms)
+✔ shared handoffs omit unsafe browser context and reject empty prompts (0.442958ms)
+✔ saved-file and native prompt links use the current tab while hosted web links use a new tab (0.370666ms)
+✔ Codex browser detection accepts current and rollout user agents (0.084042ms)
+✔ explicit destinations override browser detection without changing action identity (1.291291ms)
+✔ explicit destinations preserve local threads and sanitized fallback context (1.57925ms)
+✔ saved-file Ask returns to its originating task in every browser (0.314125ms)
+✔ saved-file Ask without an originating task keeps its new-task project context (0.2545ms)
+✔ hosted Ask destination choices never recover a private originating task (0.245708ms)
+✔ unsupported explicit ChatGPT destinations are rejected (0.494208ms)
+✔ published apps always open a new task without sharing a prior task identifier (0.755625ms)
+✔ saved HTML and development previews recover their task in every browser (1.447458ms)
+✔ file and HTTP preview publication return to the original thread with or without the IAB marker (2.231375ms)
+✔ local handoffs reject missing or invalid task identifiers (0.275416ms)
+✔ development previews retain their project identity without leaking internal URLs (0.193709ms)
+✔ prebuilt development previews use their exact server-supplied local HTML identity (0.75325ms)
+✔ local-preview metadata supports normalized POSIX, drive-letter, and UNC paths (0.53575ms)
+✔ local-preview metadata rejects ambiguous, malformed, or escaping paths (1.603292ms)
+✔ hosted and saved-file views never read local-preview metadata (0.249666ms)
+✔ hosted Sites recover their packaged project identity without trusting URLs or foreign pages (0.478958ms)
+✔ hosted Sites reject missing, duplicate, or malformed packaged project identities (0.193083ms)
+✔ local file URLs retain decoded POSIX and Windows paths in native task links (0.441125ms)
+✔ filesystem-root reports retain absolute working directories in native task links (0.21275ms)
+✔ network and unsafe file URLs cannot become local report identities or task paths (0.512417ms)
+✔ development-preview publication handoffs retain the exact project without leaking internal URLs (0.293416ms)
+✔ published actions bypass host follow-ups and start a private new conversation (1.028209ms)
+✔ linked handoffs use the supplied same-click view and reject inaccessible or unsafe context (0.964ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/src/use-data-app.js
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/section-filter-resolution.test.mjs (61.423959ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/section-filter-view.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/section-filter-view.test.mjs (65.115916ms)
+✔ slider math handles fractional and collapsed bounds (0.713583ms)
+✔ touch slider positions account for the wider thumb and snap to steps (0.150166ms)
+✔ slider math normalizes bounds and clamps values (4.3035ms)
+✔ range values stay ordered and may touch by default (0.630625ms)
+✔ range values respect a clamped minimum distance (0.249167ms)
+✔ range label layout separates touching values on narrow controls (0.310667ms)
+✔ single-slider labels fit inside the track without overlapping visible endpoints (0.450583ms)
+✔ Slider and RangeSlider preserve the shared source contract (9.746166ms)
+✔ client builds bind the exact reviewed snapshot bytes to one SHA-256 HTML marker (4.169125ms)
+✔ snapshot integrity changes when cleaned source no longer matches a stale credential-bearing build (3.721ms)
+✔ gallery builds hash the snapshot loaded by that entry rather than the main sample (483.446542ms)
+✔ bounded reads preserve every value and use byte-bounded pages instead of per-row chunks (231.992083ms)
+✔ wide escaped rows remain complete across byte-limited write batches and read pages (174.785292ms)
+✔ warm responses read wide query definitions individually while preserving captured metadata and revisions (755.070083ms)
+▶ oversized rows and metadata fail without activating a partial generation
+  ✔ row (6.345875ms)
+  ✔ metadata (4.082416ms)
+  ✔ query (4.139291ms)
+✔ oversized rows and metadata fail without activating a partial generation (15.002459ms)
+✔ failed later batches do not replace visible seed data and retry completes (158.158542ms)
+✔ streams capture immutable revisions across an owner query update (115.214625ms)
+✔ a partially staged query replacement leaves its prior complete revision readable (52.831ms)
+▶ same-seed concurrent initialization is idempotent and a different winner cannot be overwritten
+  ✔ same seed (5.9035ms)
+  ✔ different seed (5.852541ms)
+✔ same-seed concurrent initialization is idempotent and a different winner cannot be overwritten (12.169083ms)
+✔ concurrent query replacements publish one revision and reject a stale seed update (11.597125ms)
+✔ populated legacy storage is preserved and missing immutable rows fail explicitly (5.209458ms)
+✔ batch refresh saves rows and source times together while an older stream stays consistent (67.421458ms)
+✔ failure when committing a batch keeps every previous dataset and source time (23.947542ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/source-inspector-availability.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ templates/data-app/base/tests/source-inspector-availability.test.mjs (57.867958ms)
+✔ source provider icons follow validated destinations, never authored labels or lookalike hosts (5.715292ms)
+✔ source previews require exact links and explicitly audience-approved content (0.534708ms)
+✔ source tooltips prefer above, fall below near the top, and stay in the viewport (0.29025ms)
+✔ wrapped source links anchor to the pointed line and default to the first for keyboard (0.241708ms)
+✔ receipt consolidation deduplicates shared facts without merging data or losing conflicting scope (3.706666ms)
+✔ receipt attribution distinguishes separate queries with the same source label (0.302375ms)
+✔ consolidated definition lineage cannot borrow validation from a different source (0.445917ms)
+✔ one source chip preserves distinct recorded roles without borrowing another source's role (2.3245ms)
+✔ receipt sources preserve usage and enrich an exact source with one unambiguous snapshot (1.187166ms)
+✔ receipt sources preserve conflicting usage snapshots and leave ambiguous missing metadata absent (0.406292ms)
+✔ receipt usage remains attached to the exact table and source type (0.327167ms)
+✔ source provenance retains nested reviewed evidence and rejects unsafe links (0.181583ms)
+✔ provider query links preserve recorded editor and execution destinations (2.945708ms)
+✔ explicit query destinations take precedence without inventing links from SQL or metadata (0.20825ms)
+✔ query links exclude home, catalog, and dashboard destinations (0.264ms)
+✔ provider query routing rejects unsafe or unrecognized state instead of stripping it (1.007291ms)
+✔ reviewed metric definitions preserve existing compact entries across supported metadata aliases (0.272042ms)
+✔ reviewed metric definitions retain explicitly reviewed formulas, scope, dependencies, and lineage (0.18325ms)
+✔ missing or malformed metric definitions fail closed without invented labels or formulas (0.108875ms)
+✔ invalid supplied component scopes fail closed while absent legacy scopes remain available (0.4275ms)
+✔ direct component scoping also rejects malformed ownership before any legacy fallback (0.082334ms)
+✔ reviewed source files preserve only explicit labels and safe reviewed links (0.130209ms)
+✔ reviewed query filters remain explicit, deduplicated provenance without invented predicates (0.072958ms)
+✔ component metric definitions use exact reviewed ownership without leaking neighboring metrics (0.087875ms)
+✔ edited chart fields replace stale definitions through exact reviewed series identity (0.376459ms)
+✔ edited chart definitions prefer the component's exact field over another owner's collision (0.076542ms)
+✔ legacy unscoped definitions remain available without leaking explicitly scoped definitions (0.058166ms)
+✔ starter forecast-gap provenance includes both reviewed formula operands and exact identifiers (17.914459ms)
+✔ explicit metric dependencies include shared reviewed variables recursively in stable source order (1.082417ms)
+✔ reviewed numerator and denominator fields include shared variables without inventing a formula (0.184166ms)
+✔ formula dependencies match whole identifiers instead of overlapping metric-token substrings (0.903458ms)
+✔ shared metric variables never bypass another component's explicit ownership (0.141292ms)
+✔ metric lineage renders only exact reviewed source identifiers without invented lookalikes (0.196333ms)
+✔ colliding reviewed table and file names retain distinct minimally qualified lineage (0.105ms)
+✔ source provenance keeps labeled reviewed links and rejects unsafe object URLs (0.128ms)
+✔ warehouse table chips link only when reviewed provenance supplies a safe URL (0.081292ms)
+✔ reviewed source trust preserves explicit provider-neutral table and dashboard evidence (21.773084ms)
+✔ source trust uses actual execution counts and asset-local metadata (4.967875ms)
+✔ table usage retains reviewed zero counts and absolute observation dates without inventing missing values (1.543792ms)
+✔ table usage rejects invalid or ambiguous timestamps and malformed usage notes (1.271083ms)
+✔ source trust rejects invented, malformed, and ambiguous adoption metadata (0.298291ms)
+✔ duplicate reviewed source entries merge safe links and explicitly supplied trust (0.360166ms)
+✔ source provenance upgrades a repeated raw URL to its descriptive reviewed label (0.136875ms)
+✔ SQL formatting preserves quoted literals, identifiers, and comments exactly (0.8225ms)
+✔ date filters match complete field tokens rather than unrelated substrings (0.512166ms)
+✔ reviewed periods use the designated reporting field and omit ambiguous date columns (1.167041ms)
+✔ strict CSS accepts complete stylesheets without imposing an inline-theme resource policy (468.918125ms)
+✔ strict CSS rejects EOF recovery, malformed syntax, Raw nodes, and incomplete comments (3.25375ms)
+✔ strict CSS lets a caller explain rejection but cannot be made permissive by a callback (0.223792ms)
+✔ inline resource policy validates the exact CSS emitted after comment and escape normalization (1.343833ms)
+✖ dashboard skill discovery treats uploaded spreadsheets as sources, not deliverables (2.1755ms)
+✔ dashboard routing locks the requested deliverable before spreadsheet companion selection (0.815125ms)
+✔ ordinary Publish hands the exact app and selected audience to Sites (0.616917ms)
+✔ Data artifact summaries choose connectors first and bound target discovery (2.270709ms)
+✔ inline calculation Workers link local modules and preserve messages, errors and URL cleanup (244.768959ms)
+✔ calculation Worker graphs retain authored ownership and dependency boundaries (101.674208ms)
+✔ the bundled compiler exposes the mature, pure-JavaScript module bundler (0.720833ms)
+✔ requires an exact validated runtime export map before reading authored files (1.5325ms)
+✔ compiles nested JSX/TSX, extensionless/index imports, and one shared React namespace (72.8155ms)
+✔ does not execute authored top-level code while compiling (32.046125ms)
+✔ compiles typed .mts modules rather than turning their source into an asset URL (73.706333ms)
+✔ matches Vite extensionless file and index precedence without loading unused siblings (213.277875ms)
+✔ rejects unsupported CommonJS code suffixes while retaining explicit raw and URL imports (179.100042ms)
+✔ preserves live imported-local and star reexports (42.9785ms)
+✔ keeps ambiguous star exports absent instead of choosing the first module (88.868833ms)
+✔ preserves cyclic function hoisting and reports genuine cyclic TDZ errors (93.797208ms)
+✔ uses reviewed snapshot input and safely represents JSON __proto__ and script-closing strings (43.455709ms)
+✔ rejects exotic __proto__ ESM exports while preserving default JSON access (188.665292ms)
+✔ allows legitimate scope-shadowed CommonJS names and rejects unbound Node bindings (220.109209ms)
+✔ rejects both literal and computed dynamic imports instead of changing lazy side effects (28.419542ms)
+✔ rejects top-level await and import.meta while allowing await inside authored functions (45.975375ms)
+✔ embeds nested CSS imports, escaped URLs, image-set assets, raw text, and inline/URL CSS (56.670708ms)
+✔ treats plain .pcss and .postcss as CSS through side effects, imports, raw, inline, and URL forms (65.157667ms)
+✔ separates conventional styles from component-imported styles without changing the combined field (39.940416ms)
+✔ applies the same network, circular-import, and fragment rejection to all plain CSS suffixes (361.239458ms)
+✔ punctuation-heavy SVG fragments survive the actual CSS generator without URL escapes (57.160792ms)
+✔ rejects remote CSS resources, including escaped functions exposed by generation (24.14025ms)
+✔ accepts already-embedded CSS assets and rejects incomplete CSS without repair (25.976875ms)
+✔ rejects unsupported stylesheet languages and circular CSS imports (184.908458ms)
+✔ does not make invalid late or nested CSS imports take effect (16.100292ms)
+✔ rejects unknown packages, URLs, protected imports, traversal, and missing files (230.551333ms)
+✔ enforces exact filename case and rejects file and directory symlinks (59.1675ms)
+✔ decoded query and fragment characters cannot collide with virtual module IDs (49.056709ms)
+✔ missing direct runtime imports and reexports fail during compilation (40.780875ms)
+✔ verified runtime facades catch missing names through local star/reexport chains (88.875291ms)
+✔ runtime facade default, namespace, star exports, and __esModule interop remain coherent (26.104708ms)
+✔ runtime facade export names are quoted rather than interpreted as source (19.918583ms)
+✔ browser-side runtime export checks remain a defense before authored code executes (19.311208ms)
+✔ compiles the real maintained dashboard/report content without node_modules or author execution (185.447375ms)
+✔ assembler binds the exact reviewed bytes and runtime to one ordered document (6.047458ms)
+✔ hosted bootstrap defers module data capture until the complete snapshot is supplied (3.174167ms)
+✔ explicit source entry loads starter CSS before traversing authored component imports (0.331125ms)
+✔ assembler keeps __proto__, HTML closing tags, and Unicode separators as inert JSON (2.106208ms)
+✔ assembler HTML-escapes titles and supplies the empty-title fallback (0.28375ms)
+✔ assembler accepts a UTF-8 BOM while hashing the original snapshot bytes (1.276417ms)
+✔ assembler rejects invalid snapshot bytes, shapes, integrity markers, and task IDs (1.229708ms)
+✔ assembler preserves script bytes and semantics through HTML-tokenizer hazards (13.483042ms)
+✔ assembler keeps data-URL runtime and authored bootstrap scripts in classic order (1.200125ms)
+✔ assembler embeds CSS end tags, NUL, and CR without rewriting stylesheet bytes (0.671208ms)
+✔ assembler selects a valid session ID before a valid thread ID (0.288958ms)
+✔ local origin recovery ignores ambiguous metadata and marker-like document content (14.505375ms)
+✔ local origin recovery skips large raw-text payloads and still checks the whole head for duplicates (109.64825ms)
+✔ local origin recovery respects quoted tags and fails closed on incomplete raw text or head markup (22.153208ms)
+✔ default build prepare is read-only and cold/warm builds need no npm or node_modules (2717.339875ms)
+✔ stale copied runtime is not a publishing dependency and remains untouched (4235.46425ms)
+✔ publication and rebuilds retain the originating local task across other tasks and ordinary shells (4163.639917ms)
+✔ thin publication origin recovery rejects changed offline or hosted bytes (2437.185333ms)
+✔ publishing an older compiled client preserves its bytes without rebuilding edited source (2371.566625ms)
+✔ publication requires an existing compiled page and never builds a missing one (346.470667ms)
+✔ default build replaces the complete dist tree and removes stale output (1987.433ms)
+✔ default build places conventional CSS before print and component-import CSS after print (1274.855958ms)
+✔ default build preserves the previous dist when authored compilation fails (1490.329083ms)
+✔ default build preserves detached previous output when publish and destination probing fail (1853.48525ms)
+✔ default build rejects a redirected dist directory without touching its target (993.890875ms)
+✔ default build rejects authored symlinks before producing any output (452.625666ms)
+✔ default build never activates local Vite automatically and --source still verifies integrity (1120.698125ms)
+✔ source rebuilds pass the original local task to Vite (559.810708ms)
+✔ default build source escape hatch rejects Vite resolved outside the project (197.712666ms)
+✔ separate-data CLI publishes a complete bundle and exports reviewed bytes after source edits (916.008084ms)
+✔ separate-data writes all files before replacement and preserves the old dist on a candidate failure (1836.402333ms)
+✔ CLI rejects unsupported split/source combinations before invoking any build (339.413ms)
+✔ publication clones build only after exact snapshot hydration (1203.275125ms)
+✔ explicit cohort drill-down preserves observation scope and resets a stale status filter (1.37225ms)
+✔ cohort drill-down focuses its destination and Back restores both scroll axes and the original cell (25.717916ms)
+✔ fixture reproduces an independently covered multi-product contract-day panel (192.759166ms)
+✔ deep-dive economics, concentration, paid retention, and revenue bridge reconcile (225.235042ms)
+✔ activation cohorts isolate unknown evidence and preserve earlier cohorts (2595.255375ms)
+✔ human labels preserve money and explicit percent display units without mutating reviewed ratios (9.654333ms)
+✔ metric comparison source and copy retain scoped contract-days without adding summaries or history (317.601208ms)
+✔ rolling retention evidence preserves all plotted comparison windows without duplicate or out-of-scope facts (272.190458ms)
+✔ cohort evidence uses original contracts and first account payment, not later product starts (0.240375ms)
+✔ scope totals reconcile while multi-product account counts are deduplicated (57.857833ms)
+✔ new, existing growth, contraction and churn reconcile with cohort revenue retention (255.575583ms)
+✔ daily/weekly buckets preserve additive totals and use exact prior intervals (73.885625ms)
+✔ missing an entire expected contract, one day, duplicate rows, and null measures do not become observed zero (208.914667ms)
+✔ closed cohorts preserve maturity gaps and cell populations reconcile exactly (13.300958ms)
+✔ seven-day activation excludes immature cohorts and preserves unknown versus known-positive evidence (259.456333ms)
+✔ overview NRR is the exact trailing-28-day endpoint independent of comparison display (2900.283875ms)
+✔ unknown prior revenue cannot silently remove an account from a retention baseline (1277.368416ms)
+✔ account defaults are meaningful, explicit valid selections persist, and scope changes choose a valid fallback (2289.385ms)
+✔ export rows retain period context, null formatting sorts correctly, and known fixture titles migrate without touching custom titles (1.090834ms)
+✔ metric definitions resolve on edited charts and on the roster-backed cohort table (1.271875ms)
+✔ prior product series expose only prior measures while keeping their true source dates (151.641875ms)
+✔ NRR comparison uses its own prior endpoint and complete 28-day baseline (38.167041ms)
+✔ calendar grains partition actual dates and preserve totals and endpoint retention (5959.41325ms)
+✔ the snapshot engine reuses comparison data and isolates scopes, snapshots and bounded caches (4133.71175ms)
+✔ account and breakdown changes reuse global calculations and match independent scoped results (4011.602583ms)
+✔ unknown current revenue outside the baseline cohort does not invalidate NRR (76.390209ms)
+✔ the off-thread model protocol preserves request identity and reviewed values (857.640959ms)
+✔ the authored default uses recent covered days and local controls keep the global request scope (235.737209ms)
+✔ infrastructure-capacity fixture preserves its base measurement invariants (21.498292ms)
+✔ combined P95 uses placement frequencies instead of an average of subgroup percentiles (27.719917ms)
+✔ incident investigation joins the same observed capacity and queue scope (645.247375ms)
+ℹ Error: A resource generated asynchronous activity after the test ended. This activity created the error "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/src/use-data-app.js" which triggered an uncaughtException event, caught by the test runner.
+✖ tests/data-app-examples.test.mjs (28396.377083ms)
+✔ cold and warm indexed snapshots retain multi-megabyte rows and metadata without whole-object reads (298.712958ms)
+✔ indexed JSON preserves last-key semantics, row order and types across small UTF-8 boundaries (24.620625ms)
+✔ owner replacements preserve other queries, metadata and immutable export bytes, including empty rows (12.449709ms)
+✔ dense numeric normalization scales with indexed spans while preserving replacement semantics (201.447167ms)
+✔ indexed query updates retain owner authorization, known-query checks and the existing row-count boundary (15.165875ms)
+✔ a captured indexed response remains coherent across a concurrent owner replacement (35.867458ms)
+✔ cancelling an indexed response cancels its R2 reader without pulling the whole source (53.985458ms)
+▶ incomplete immutable source and override objects fail instead of producing a valid partial snapshot
+  ✔ short source (4.132084ms)
+  ✔ long source (4.756334ms)
+  ✔ missing override (13.003417ms)
+  ✔ short override (4.754ms)
+  ✔ mismatched override metadata (6.580667ms)
+✔ incomplete immutable source and override objects fail instead of producing a valid partial snapshot (34.745042ms)
+✔ owner replacement accepts all 10000 permitted rows and preserves values larger than a D1 row (44.540042ms)
+▶ failed override uploads and failed activation preserve the complete previous rows
+  ✔ object upload (4.495458ms)
+  ✔ database activation (10.613917ms)
+✔ failed override uploads and failed activation preserve the complete previous rows (15.977542ms)
+✔ concurrent indexed replacements choose one complete revision and report conflicts (6.911583ms)
+✔ formatting-only redeployment preserves owner data and presentation, while reviewed data changes reset only rows (2.697333ms)
+✔ returning to a prior reviewed seed starts clean while captured responses and consecutive edits survive (8.303375ms)
+▶ a staged owner write cannot activate after its reviewed generation changes, including ABA
+  ✔ A → B (2.214625ms)
+  ✔ A → B → A (2.131458ms)
+✔ a staged owner write cannot activate after its reviewed generation changes, including ABA (4.639958ms)
+▶ concurrent generation activation preserves the winner and a losing transition cannot reset overlays
+  ✔ different seed (3.979375ms)
+  ✔ same seed (3.356084ms)
+✔ concurrent generation activation preserves the winner and a losing transition cannot reset overlays (7.634042ms)
+✔ generation reset rolls back completely when its D1 transaction fails (2.630083ms)
+✔ first active-head adoption preserves existing object-storage owner edits (1.338667ms)
+✔ a small published v2 control keeps active owner rows and presentation when indexed publication is enabled (6.182333ms)
+✔ empty v2 tables left by a failed publication do not prevent indexed large-value reads (7.806375ms)
+✔ an old initializer arriving after object edits requires migration without hiding either stored revision (3.251292ms)
+✔ old initialization during an object upload rejects activation and preserves the old complete snapshot (6.300709ms)
+✔ a hosted batch refresh preserves source metadata and captured streams (10.343167ms)
+✔ a failed hosted batch commit leaves all rows and timestamps unchanged (2.476666ms)
+✔ a concurrent hosted edit rejects the entire older batch (4.049625ms)
+✔ head describes an unchanged indexed snapshot without consuming its rows (30.48375ms)
+✔ one query uses its exact byte range and a native stream without reading other rows (17.449042ms)
+✔ missing and empty rows plus special query IDs preserve native JSON semantics (10.12325ms)
+✔ query normalization and duplicate keys match the complete snapshot (2.375625ms)
+✔ query reads retain all rows beyond the owner edit endpoint limit (32.402625ms)
+✔ owner edits disable lazy loading while full reads and write authorization remain intact (23.88075ms)
+✔ lazy head and rows use a fresh generation after A → edit → B → A (2.981625ms)
+▶ lazy head and query reads reject a generation change between initialization and capture
+  ✔ head: A → B (1.431333ms)
+  ✔ head: A → B → A (3.084583ms)
+  ✔ rows: A → B (1.313917ms)
+  ✔ rows: A → B → A (1.159625ms)
+✔ lazy head and query reads reject a generation change between initialization and capture (7.616625ms)
+✔ legacy storage and unindexed snapshots advertise the existing eager path (2.769459ms)
+✔ query reads reject stale identities and arbitrary selectors before bucket access (3.934417ms)
+▶ missing, mismatched and incomplete query objects fail instead of returning empty rows
+  ✔ missing object (1.902125ms)
+  ✔ wrong object size (0.721083ms)
+  ✔ wrong identity (1.854792ms)
+  ✔ short range (1.895208ms)
+  ✔ wrong range (3.020542ms)
+✔ missing, mismatched and incomplete query objects fail instead of returning empty rows (11.889ms)
+✔ a native range stream failure propagates to the client (1.961958ms)
+✔ large script attributes cannot exhaust the parser stack or obscure duplicate snapshot IDs (204.450417ms)
+✔ large deferred publication keeps full offline evidence and emits a descriptor-only Worker (7587.228833ms)
+✔ repackaging a thin page restores its verified full seed rather than publishing empty queries (428.88925ms)
+✔ offline snapshot continuations package complete data and disappear from the hosted bootstrap (412.394833ms)
+✔ snapshot continuation markers reject ambiguous live scripts and ignore inert examples (0.645583ms)
+✔ escaped credentials spanning exported JSON fragments fail before package outputs change (214.434542ms)
+✔ unmarked compiled clients remain complete external assets without interpreting their scripts (102.829959ms)
+✔ invalid upload hash, missing expiry, expired and overlong credentials fail before output changes (479.385167ms)
+✔ readiness fingerprint matches the precise streamed metadata and row ordering (0.796208ms)
+✔ chunked publication assets and both fingerprints preserve canonical JSON bytes across metadata and row boundaries (36.26825ms)
+✔ metadata-only publication reproduces complete canonical assets and legacy fingerprints with effective duplicate members (6.161ms)
+✔ source temporary entries externalize canonical bindings and preserve unrelated custom behavior (0.590709ms)
+✔ rejects common credential literals in HTML, rows, and presentation strings (11.490334ms)
+✔ rejects nonempty credential fields, including nested metadata and rows (1.643083ms)
+✔ rejects generic credential fields in metadata even when nested properties are named rows (0.446125ms)
+✔ a row exemption does not exempt the same object when it is also source metadata (0.151541ms)
+✔ rejects credentials in URL query strings, fragments, paths, and userinfo (9.961208ms)
+✔ preserves ordinary URL paths, filters, anchors, and encoded navigation targets (0.602708ms)
+✔ rejects OAuth callback codes and PKCE verifiers in source URLs and metadata (1.158959ms)
+✔ preserves ordinary code and state filters without interpreting outer filters as nested callback credentials (1.016875ms)
+✔ permits ordinary SQL, analytics identifiers, numeric auth metrics, and useful query parameters (0.80675ms)
+✔ checks canonical base64 and percent-encoded inline scripts without executing them (2.83825ms)
+✔ does not reinterpret plugin references in inline bundles as credential URLs (0.249583ms)
+✔ permits only Plotly's exact public token-documentation anchor while scanning the complete bundle (5.968042ms)
+✔ accepts JavaScript regular expressions and percent-normalized URL paths (0.260625ms)
+✔ never includes secret values, metadata keys, or paths in failures (0.258125ms)
+✔ bounds decoding and structured traversal without recursive execution (5087.679916ms)
+✔ visits more than 500,000 scalar cells without queueing a second object graph (279.036417ms)
+✔ scans more than 64 MiB of HTML, including late literal and URL secrets (16761.696042ms)
+✔ carries literal, URL, base64, UTF-8, and JSON escape state across windows (828.961458ms)
+✔ keeps exact word-boundary behavior and metadata checks for escaped JSON (2.537542ms)
+✔ cancellation and ambiguous active URL limits never return a completed scan (400.576958ms)
+✔ oversized relative paths retain URL recognition until later credential delimiters (1414.495792ms)
+✔ oversized relative URL state carries encoded delimiters and Unicode segments across windows (1227.8205ms)
+✔ oversized non-URL strings and invalidated relative candidates remain allowed (2724.461625ms)
+✔ ordinary snapshots retain their exact response bytes and complete rows (3.397583ms)
+✔ missing rows insert at the effective query close without changing metadata (0.506958ms)
+✔ decoded duplicate keys use their effective ancestor and last member (2.223084ms)
+✔ prototype names, numeric IDs and escaped Unicode retain JSON property behavior (0.363833ms)
+✔ numeric normalization matches the former JSON response including negative underflow (0.386542ms)
+✔ numeric spellings spanning decode windows preserve overflow, negative zero and validation (53.398542ms)
+✔ the index does not impose the edit endpoint row limit on complete source data (155.834875ms)
+✔ deep row nesting is scanned iteratively and large strings are skipped intact (36.379708ms)
+✔ grammar and effective query shapes fail with sanitized errors (1.393916ms)
+✔ representative generated JSON retains native parsed values and nested row types (31.435792ms)
+✔ a leading UTF-8 BOM preserves raw bytes, index offsets and JSON response semantics (20.669458ms)
+✔ only exact snapshot query rows and their descendants permit generic analytical token fields (4.782167ms)
+✔ duplicate ancestor metadata and escaped key/value literals remain inspected (1.039833ms)
+✔ optional snapshot scope and key scanning leave default metadata semantics unchanged (0.297792ms)
+✔ invalid JSON does not acquire decoded metadata interpretation (1.246791ms)
+✔ JSON-escaped inline headers in overwritten values and keys receive one complete decode layer (4.241666ms)
+✔ streamed inline payloads preserve percent UTF-8, base64 quanta, headers and MIME behavior (911.086083ms)
+✔ late malformed inline payloads do not activate a partially decoded credential (1.480542ms)
+✔ inline terminators, malformed headers and empty payloads match existing URL boundaries (1.639208ms)
+✔ arbitrary charset and key lengths remain bounded without dropping a later credential (212.682375ms)
+✔ raw snapshot adapter matches established inline scanning for Unicode headers and malformed payloads (22.336541ms)
+✔ byte snapshot scans carry UTF-8 and escaped duplicate metadata across bounded decode windows (163.715334ms)
+✔ preflight and projection ignore the same inherited Git overrides and preserve configured CA trust (663.7175ms)
+▶ projection preserves global and system config ignore rules and explicit system-config disabling
+  ✔ GIT_CONFIG_GLOBAL (414.110042ms)
+  ✔ GIT_CONFIG_SYSTEM (352.92075ms)
+✔ projection preserves global and system config ignore rules and explicit system-config disabling (767.935459ms)
+▶ default projection preserves per-command Git ignore configuration
+  ✔ count (301.251667ms)
+  ✔ parameters (331.458208ms)
+✔ default projection preserves per-command Git ignore configuration (633.817208ms)
+✔ projection Git timeout is bounded and identifies the failed ignore check without exposing credentials (123.0035ms)
+✔ projection preserves source, capability configuration and complete identities without copying data/history (432.674834ms)
+✔ existing destinations and overlapping roots are rejected without changing either tree (94.884667ms)
+✔ a missing ignore file is generated with its actual filesystem identity (313.661708ms)
+▶ required source hidden by authored ignores fails before returning an incomplete projection
+  ✔ required hosting metadata (172.286333ms)
+  ✔ tracked authored source (238.972833ms)
+✔ required source hidden by authored ignores fails before returning an incomplete projection (433.507666ms)
+✔ stale raw source, mismatched Site and leftover build data fail before creating a projection (280.417708ms)
+✔ asset traversal and source symlinks cannot escape or mutate the authoring tree (79.634208ms)
+✔ local hydration restores exact raw bytes and never replaces different existing data (365.852291ms)
+✔ a checkout containing only Git-tracked files can hydrate without archived dist outputs (551.400709ms)
+✔ remote hydration uses only the trusted exact immutable Site URL and transient authorization (377.014917ms)
+✔ first-publication projections pin a Site ID with no origin and hydrate exact local bytes (684.519292ms)
+✔ an origin-less projection requires trusted caller Site identity before sending remote authorization (430.671042ms)
+✔ failed, truncated, excessive and interrupted hydration streams never install partial data (1431.432ms)
+✔ concurrent local edits win over a completing hydration (326.418208ms)
+✔ hydration rejects changed source files and symlinked destinations (304.241375ms)
+✔ valid deep inline JSON fails closed instead of falling back to unstructured text (18.588125ms)
+✔ seven encoded wrappers preserve callback code scope after path and fragment normalization (4.17925ms)
+✔ valid inline JSON numbers and whitespace preserve escaped metadata-key checks (2.873667ms)
+✔ invalid inline JSON is not partly interpreted as credential metadata (3.170834ms)
+✔ invalid inline JSON still receives literal credential inspection (0.913541ms)
+✔ overwritten ancestor properties cannot hide credentials physically present in inline JSON (1.078916ms)
+✔ serialized palette preserves eager allocation, ambiguous categories and dynamic fallback (28.606333ms)
+✔ complete filter metadata preserves scoped choices, sparse dates and URL validation (2.04425ms)
+✔ opted-in publication contains complete row-free metadata and preserves immutable bytes and seed identity (4.478291ms)
+✔ declared payload strings leave reviewed data, real labels, filters and numeric measures intact (1.498ms)
+✔ payload declarations are query-scoped and global label ambiguity follows the remaining categories (0.224ms)
+✔ query loading fails explicitly for unsupported formats and invalid options (0.6715ms)
+✔ on-demand metadata scans larger-than-heap rows without retaining distinct declared payloads (3005.790041ms)
+✔ filter metadata matches the hosted eager response for overflowing numbers and nested array cells (22.528958ms)
+✔ hosted content waits for complete streaming data and presentation, retaining all reviewed rows (38.4215ms)
+✔ streamed hosted presentation keeps explicit owner editing semantics (6.515458ms)
+✔ invalid and truncated hosted data never instantiate authored modules (6.653084ms)
+✔ HTTP and network failures preserve the hosted loading error and cancel sibling reads (6.4745ms)
+✔ disposing hosted runtime aborts streams and ignores late completions from cancelled effects (2.178917ms)
+✔ local runtime mounts the supplied complete snapshot without hosted reads (0.353333ms)
+✔ portable runtime accepts supported Node releases and removes ambient Node injection (2.570333ms)
+✔ verified manifests anchor source, release inputs, and every artifact and are deeply frozen (881.65375ms)
+✔ app export maps use the exact frozen module contract and detached sorted own-name arrays (0.602083ms)
+▶ missing or malformed app export metadata is rejected by publishing and runtime verification
+  ✔ missing metadata (398.892083ms)
+  ✔ null metadata (224.537334ms)
+  ✔ array metadata (157.95975ms)
+  ✔ extra metadata field (290.764375ms)
+  ✔ missing export map (168.484833ms)
+  ✔ null export map (221.098542ms)
+  ✔ array export map (235.462583ms)
+  ✔ missing module (280.689ms)
+  ✔ extra module (219.941209ms)
+  ✔ non-array exports (321.876041ms)
+  ✔ empty export list (251.994458ms)
+  ✔ missing default (186.494417ms)
+  ✔ missing __esModule (319.948667ms)
+  ✔ duplicate export (324.836667ms)
+  ✔ unsorted exports (326.321833ms)
+  ✔ non-string export (303.193958ms)
+  ✔ empty export name (191.651833ms)
+  ✔ NUL export name (286.9895ms)
+  ✔ newline export name (340.973292ms)
+  ✔ DEL export name (338.293084ms)
+  ✔ oversized export name (207.9645ms)
+  ✔ oversized export list (265.182167ms)
+  ✔ sparse export list (279.421542ms)
+✔ missing or malformed app export metadata is rejected by publishing and runtime verification (6360.537333ms)
+▶ manifest metadata rejects extra artifacts, unsafe paths, invalid hashes, and unbounded sizes
+  ✔ format (2.311209ms)
+  ✔ API (4.442459ms)
+  ✔ missing artifact (2.422625ms)
+  ✔ extra artifact (4.980958ms)
+  ✔ path "../outside.js" (7.583042ms)
+  ✔ path "/absolute.js" (7.143417ms)
+  ✔ path "C:/absolute.js" (14.327458ms)
+  ✔ path "a\\b" (1.748666ms)
+  ✔ path "app.js\u0000" (1.632667ms)
+  ✔ path "./app.js" (1.659667ms)
+  ✔ hash "" (1.784917ms)
+  ✔ hash "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" (4.177125ms)
+  ✔ hash "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg" (1.988208ms)
+  ✔ hash "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" (1.823958ms)
+  ✔ size 0 (2.344875ms)
+  ✔ size -1 (2.021959ms)
+  ✔ size 1.5 (1.785833ms)
+  ✔ size 9007199254740992 (1.975667ms)
+  ✔ size 16777217 (3.988ms)
+  ✔ inline limit (1.9365ms)
+✔ manifest metadata rejects extra artifacts, unsafe paths, invalid hashes, and unbounded sizes (238.615541ms)
+✔ manifest and combined artifact byte limits are checked before reading large content (198.136584ms)
+▶ every missing, truncated, or same-size altered artifact fails closed
+  ✔ app (255.6585ms)
+  ✔ styles (263.015125ms)
+  ✔ print (211.020375ms)
+  ✔ inline (286.504291ms)
+  ✔ inline-trend (315.011542ms)
+  ✔ inline-cartesian (202.770292ms)
+  ✔ inline-categorical (258.908375ms)
+  ✔ inline-flow (207.264666ms)
+  ✔ receipt (169.2ms)
+  ✔ worker (242.00875ms)
+  ✔ compiler (256.670916ms)
+  ✔ notices (241.684417ms)
+✔ every missing, truncated, or same-size altered artifact fails closed (3119.36675ms)
+▶ stale source, protected manifests, and release metadata cannot be relabeled as current assets
+  ✔ source hash (357.278917ms)
+  ✔ protected manifest hash (294.68ms)
+  ✔ build input hash (321.356542ms)
+  ✔ extra build input (240.7115ms)
+✔ stale source, protected manifests, and release metadata cannot be relabeled as current assets (2283.144375ms)
+✔ supplied manifest objects cannot forge artifact identity or cross plugin roots (1228.7035ms)
+✔ trusted manifests still recheck the exact artifact bytes and reject invalid UTF-8 (1165.793167ms)
+▶ manifest and artifact leaves must be ordinary files, never symlinks
+  ✔ manifest.json (299.828458ms)
+  ✔ app.js (176.773042ms)
+  ✔ compiler.cjs (179.164125ms)
+✔ manifest and artifact leaves must be ordinary files, never symlinks (656.889708ms)
+▶ asset directory ancestors cannot escape the verified plugin through symlinks
+  ✔ assets (448.892291ms)
+  ✔ assets/data-app-runtime (556.524958ms)
+✔ asset directory ancestors cannot escape the verified plugin through symlinks (1005.870458ms)
+▶ source input ancestors and leaves cannot be supplied through symlinks
+  ✔ templates/data-app/base/src (236.288459ms)
+  ✔ scripts/prebuilt/compiler-entry.mjs (148.67325ms)
+✔ source input ancestors and leaves cannot be supplied through symlinks (386.323125ms)
+✔ compiler loading uses verified bytes instead of Node's CommonJS cache (952.328708ms)
+✔ compiler evaluation cannot reopen a swapped path after its bytes were verified (525.169958ms)
+▶ standalone compiler cannot fall back to builtins or ambient npm packages
+  ✔ node:fs (501.048166ms)
+  ✔ sucrase (517.779584ms)
+  ✔ ../outside.cjs (538.646125ms)
+✔ standalone compiler cannot fall back to builtins or ambient npm packages (1558.822917ms)
+✔ standalone compiler requires the complete versioned authoring and parser API (1749.084917ms)
+✔ canonical projects remain editable without installing dependencies (566.293917ms)
+✔ source-mode verification retains scoped authorization and requires an installed toolchain (706.005875ms)
+✔ prebuilt verification needs only authored inputs and never executes copied infrastructure (610.472916ms)
+✔ authored-only verification cannot update either project's integrity manifest (348.457458ms)
+✔ a previously trusted manifest cannot authorize a later canonical-source rewrite (481.212833ms)
+✔ cached release metadata cannot authorize changed installed verifier code (365.348042ms)
+✔ source verification permits publication metadata without unlocking protected code (534.007333ms)
+✔ source verification permits owner email changes and rejects malformed seeds (602.409708ms)
+▶ authored paths reject symlinks before the installed verifier reads them
+  ✔ editable symlink (269.408ms)
+  ✔ src (286.82625ms)
+  ✔ src/content (273.565459ms)
+  ✔ src/theme.css (276.077708ms)
+✔ authored paths reject symlinks before the installed verifier reads them (1106.675417ms)
+✔ explicit source builds cannot use Vite from outside the project (195.152791ms)
+✔ Node helper uses the current executable and sanitized environment even without a working PATH (199.29675ms)
+✔ default runtime verification performs no install, network call, or project/plugin writes (413.818709ms)
+✔ shipped release assets match current source and compile a closed graph without packages or native addons (585.549209ms)
+ℹ Released manifest 86d770b86f1b11ed7b3205dd2fdd8cb764b98068fe030d72d599eeb6862b633e; compiler ec65601079c80bef7210f2c9760ff7f2db6adef28516ffff280d4c86f91d4078
+✔ separate local preview waits for complete data before executing authored module capture (71.312125ms)
+✔ missing, failed, or malformed local snapshot never mounts an empty authored app (6.500834ms)
+✔ hosted separate bootstrap delegates complete-data initialization to the hosted runtime (0.898417ms)
+✔ bundle validation binds exact raw bytes, content-addressed paths, HTML metadata, and runtime (6.140875ms)
+✔ bundle validation rejects live marker ambiguity, escapes, and symlinked inputs (2.457458ms)
+✔ malformed manifest and bootstrap errors do not expose input text (1.300792ms)
+✔ offline export streams all rows and escaping across UTF-8 boundaries without fetching or recompiling (328.190916ms)
+✔ encoded streaming bootstraps retain bounded offline data elements (65.034583ms)
+✔ older compiled bootstraps export complete data without requiring a runtime upgrade (39.947042ms)
+✔ post-publication export reads only the hash-bound preserved bundle and refuses stale recovery (16.253958ms)
+✔ offline output cannot overwrite source, build, preserved bundle, or symlink targets (8.446292ms)
+✔ a snapshot changed during streaming leaves the previous offline export intact (96.202ms)
+✔ publication source projection requires exactly the pinned hydrated bytes (2.942375ms)
+✔ a valid separate bundle from another snapshot cannot override a hydrated projection pin (8.235209ms)
+✔ invalid source JSON diagnostics do not retain parser excerpts or causes (0.214542ms)
+✔ actual split assembler output packages full raw bytes with canonical seed identity and no data sidecar in dist (2497.908541ms)
+✔ repeat publication uses the exact compiled split evidence after mutable src data changes (273.127042ms)
+▶ missing, malformed, stale or escaping split manifests never fall back to empty bootstrap data
+  ✔ missing manifest (106.119708ms)
+  ✔ invalid manifest JSON (91.903292ms)
+  ✔ unknown version (96.576583ms)
+  ✔ unknown field (99.705ms)
+  ✔ stale HTML (97.344166ms)
+  ✔ stale snapshot (99.285ms)
+  ✔ missing snapshot (79.2935ms)
+  ✔ escaping snapshot path (90.02775ms)
+  ✔ absolute snapshot path (119.217875ms)
+  ✔ altered layout marker (123.697375ms)
+  ✔ removed layout marker (91.221625ms)
+  ✔ removed layout and local marker (99.953375ms)
+✔ missing, malformed, stale or escaping split manifests never fall back to empty bootstrap data (1196.192917ms)
+▶ split inputs and preserved output paths refuse symlinks without touching their targets
+  ✔ snapshot (91.175083ms)
+  ✔ manifest (96.885209ms)
+  ✔ html (101.905834ms)
+  ✔ preserved-directory (117.791459ms)
+✔ split inputs and preserved output paths refuse symlinks without touching their targets (408.574167ms)
+▶ external raw data is scanned completely for late literals, keys, metadata and encoded inline credentials
+  ✔ late literal (315.212458ms)
+  ✔ literal in a key (110.858416ms)
+  ✔ late sensitive field (354.17225ms)
+  ✔ generic metadata field (115.963167ms)
+  ✔ base64 inline credential (107.193ms)
+  ✔ percent inline JSON credential (121.542375ms)
+  ✔ overwritten duplicate value remains in published raw bytes (116.009667ms)
+  ✔ JSON-escaped overwritten duplicate value remains in published raw bytes (111.8845ms)
+  ✔ JSON-escaped overwritten base64 data URL remains in raw bytes (111.399375ms)
+  ✔ JSON-escaped overwritten percent data URL remains in raw bytes (110.482917ms)
+  ✔ overwritten ancestor metadata remains sensitive beside legitimate analytical token columns (107.520167ms)
+✔ external raw data is scanned completely for late literals, keys, metadata and encoded inline credentials (1684.287292ms)
+✔ ordinary analytical token metrics remain allowed after data separation (130.485583ms)
+▶ JSON escape spelling cannot weaken the standalone credential coverage when data moves outside HTML
+  ✔ escaped data URL prefix (239.139458ms)
+  ✔ escaped credential literal in a key (226.549041ms)
+✔ JSON escape spelling cannot weaken the standalone credential coverage when data moves outside HTML (466.062792ms)
+✔ late package installation failure rolls back existing outputs, split inputs and removals (139.607375ms)
+✔ post-publication export reconstructs complete offline data from preserved inputs without rebuilding (136.445292ms)
+✔ standalone and split packaging preserve parsed data and fingerprint their actual streamed bytes (252.081125ms)
+✔ portable offline exports preserve every row but never enter publication source or its Git index (4138.639666ms)
+✔ explicit on-demand CLI packaging preserves raw snapshots, canonical identity and repeatability (507.043375ms)
+✔ on-demand packaging still scans complete reviewed rows before changing any output (103.761833ms)
+▶ explicit legacy source compatibility
+  ▶ old packaged owner runtimes require a scoped upgrade without changing reviewed files
+    ✔ monolithic ID owner (298.791667ms)
+    ✔ factory email owner (265.026583ms)
+  ✔ old packaged owner runtimes require a scoped upgrade without changing reviewed files (564.833166ms)
+  ✔ legacy hosting migration preserves inert owner source and repairs only hosting (811.095375ms)
+  ▶ hosting migration cannot authorize owner or unrelated runtime changes
+    ✔ src/data-app-owner.js (172.700167ms)
+    ✔ src/worker.js (141.436875ms)
+    ✔ src/data-app-worker.js (173.551542ms)
+  ✔ hosting migration cannot authorize owner or unrelated runtime changes (488.818917ms)
+  ▶ hosting migration requires a stale hash and exact existing project and DB
+    ✔ no stale entries (159.681625ms)
+    ✔ missing project (171.26625ms)
+    ✔ different project (148.408625ms)
+    ✔ different DB (161.333083ms)
+  ✔ hosting migration requires a stale hash and exact existing project and DB (641.472333ms)
+  ✔ failed hosting migration restores the original manifest and deployed artifacts (352.347417ms)
+✔ explicit legacy source compatibility (2859.4335ms)
+✔ POSIX packaging guards allow project descendants and reject other roots (2.849334ms)
+✔ POSIX packaging guards reject symlink-resolved inputs and output ancestors (1.8305ms)
+✔ Windows drive packaging guards allow project descendants and reject other roots (1.242375ms)
+✔ Windows drive packaging guards reject symlink-resolved inputs and output ancestors (5.275834ms)
+✔ Windows UNC packaging guards allow project descendants and reject other roots (0.988375ms)
+✔ Windows UNC packaging guards reject symlink-resolved inputs and output ancestors (5.509708ms)
+✔ explicit source packaging verifies and retains a customized local Worker without installing packages (326.885708ms)
+✔ source packaging attributes reviewed reports and rejects unapproved surfaces before mutation (751.6635ms)
+✔ repeated embedded assets cannot bypass fragment validation or nested privacy checks (608.479417ms)
+✔ source publication rejects an incompatible owner runtime and preserves customized Worker source (293.031167ms)
+▶ source publication rejects copied factories that still authorize a packaged owner or ignore the environment
+  ✔ packaged owner fallback (229.922459ms)
+  ✔ ignored environment (262.607334ms)
+✔ source publication rejects copied factories that still authorize a packaged owner or ignore the environment (493.296125ms)
+▶ source packaging preserves an existing inline factory's HTML and snapshot contract
+  ✔ environment-aware inline factory (413.352666ms)
+  ✔ asset-aware factory still requiring its seed (330.865375ms)
+✔ source packaging preserves an existing inline factory's HTML and snapshot contract (744.973375ms)
+▶ source-mode integrity and local dependency failures leave reviewed files unchanged
+  ✔ modified source Worker (150.157333ms)
+  ✔ missing local Vite (208.503166ms)
+  ✔ failed source verifier (218.21675ms)
+  ✔ missing Worker factory (242.064458ms)
+  ✔ obsolete owner seed remains in the Worker (215.203666ms)
+✔ source-mode integrity and local dependency failures leave reviewed files unchanged (1035.112083ms)
+✔ source-mode Vite must stay inside the reviewed project (227.628ms)
+✔ failed Sites Worker builds restore reviewed HTML and preserve source and hosting (313.685166ms)
+▶ failed Sites publication restores the previously published Worker byte-for-byte
+  ✔ failed SSR build (308.206167ms)
+  ✔ post-build local-task privacy failure (303.2805ms)
+✔ failed Sites publication restores the previously published Worker byte-for-byte (611.904458ms)
+✔ a stale source Worker entry rejects source packaging before source, hosting, or HTML mutation (155.067291ms)
+▶ source integrity and independent publication rollback
+  ✔ a dangling asset symlink cannot create an outside-project target (532.469959ms)
+  ✔ nonregular prior asset outputs are rejected without replacing their contents (563.934167ms)
+  ✔ repackaging does not read prior snapshot assets into memory for rollback (604.88275ms)
+  ▶ requires protected verifier and existing digest-helper entries before executing source tools
+    ✔ omitted regular digest helper (224.726958ms)
+    ✔ omitted symlinked digest helper (260.4605ms)
+    ✔ omitted source verifier (255.604542ms)
+    ✔ omitted source factory (287.056958ms)
+  ✔ requires protected verifier and existing digest-helper entries before executing source tools (1028.761709ms)
+  ▶ temporary legacy manifest repair restores the exact original before a verifier or build failure
+    ✔ verifier failure (494.905708ms)
+    ✔ later source build failure (595.21625ms)
+  ✔ temporary legacy manifest repair restores the exact original before a verifier or build failure (1090.519083ms)
+  ▶ legacy hosting migration rejects owner-file changes before tools run
+    ✔ line separator ends a line comment (429.270958ms)
+    ✔ paragraph separator ends a line comment (671.595583ms)
+    ✔ line-commented fake export (574.822459ms)
+    ✔ block-commented fake export (491.685875ms)
+    ✔ duplicate owner export (472.815541ms)
+  ✔ legacy hosting migration rejects owner-file changes before tools run (2640.989291ms)
+  ▶ a failed final manifest write restores other artifacts even if Worker restoration also fails
+    ✔ complete rollback (619.877958ms)
+    ✔ independent restoration after a second failure (563.785833ms)
+  ✔ a failed final manifest write restores other artifacts even if Worker restoration also fails (1184.051959ms)
+✔ source integrity and independent publication rollback (7646.2145ms)
+✔ retired capture inputs fail before replacing publication outputs (188.272958ms)
+✔ linear document inspection handles large embedded rows and ignores inert marker examples (122.502667ms)
+✔ publishes the exact compiled page and its embedded data without rebuilding or running authoring checks (136.780166ms)
+✔ uses the compiled report surface for deployed attribution without adding it to source hosting (117.151209ms)
+▶ rejects unapproved compiled artifact surfaces before changing publication files
+  ✔ null (101.479959ms)
+  ✔ "customer-authored-value" (105.026042ms)
+  ✔ {"customer_content":"secret"} (89.257166ms)
+✔ rejects unapproved compiled artifact surfaces before changing publication files (296.720917ms)
+✔ legacy HTML falls back to existing source data and never alters the compiled page (100.834208ms)
+✔ legacy source replacement decoding preserves canonical bytes and the original source fingerprint (99.769958ms)
+✔ legacy snapshot markers accept HTML attribute order, whitespace, and case variations (121.933666ms)
+✔ legacy publication rejects missing, mismatched, duplicate, and spoofed snapshot markers before writing (2803.431416ms)
+✔ legacy consistency compares raw source bytes rather than parsed JSON equivalence (208.264833ms)
+✔ embedded snapshots publish without a source snapshot or a matching legacy marker (107.127375ms)
+✔ invalid snapshot metadata fails before replacing existing publication outputs (203.013916ms)
+✔ an explicitly selected compiled HTML file is packaged without replacing the default page (111.079125ms)
+✔ HTML and presentation inputs cannot select unrelated files by absolute or parent-relative paths (726.068167ms)
+✔ publication inputs reject outward symlinks without changing existing output (766.022542ms)
+✔ publication inputs must be regular files (725.365209ms)
+✔ input symlinks contained in the project preserve the selected page and snapshot (108.904291ms)
+✔ the selected project directory may itself be a symlink (94.031792ms)
+✔ detected credentials fail before replacing output and are not copied into the error (495.904209ms)
+▶ inline CSS and SVG preserve clean assets and reject credentials before replacing output
+  ✔ CSS literal (76.985792ms)
+  ✔ CSS URL parameter (103.271417ms)
+  ✔ SVG literal (73.704792ms)
+  ✔ SVG URL parameter (201.329875ms)
+✔ inline CSS and SVG preserve clean assets and reject credentials before replacing output (566.892541ms)
+✔ configuration serialization preserves special property names and script-like strings as data (160.141541ms)
+✔ direct publication needs no copied owner module, protected manifest, verifier, or local dependencies (162.338459ms)
+✔ packaged presentation handoff keeps shared editing, revision conflicts, and viewer isolation (228.758291ms)
+✔ full and compact presentation handoffs produce identical seeds and fresh hosted state (1301.596625ms)
+✔ omitting the presentation file keeps the existing empty seed contract (97.761667ms)
+✔ compact seed restoration preserves malformed explicit values for the editing validator (1438.183416ms)
+✔ the emitted shipped Worker preserves owner editing and saved presentation across republication (222.02675ms)
+✔ collaborator republication preserves the owner's saves before and after reload (197.512667ms)
+✔ publication passes presentation to the editing runtime without duplicating validation or verification authority (207.806209ms)
+✔ Site environment is the sole edit authority without packaging owner identity (163.429ms)
+✔ environment ownership handles normalized email punctuation without embedding identity (122.927917ms)
+✔ retired owner options fail before writes without exposing email (1461.741708ms)
+✔ publication cannot transfer a project to a different Site (193.675458ms)
+✔ a failed package write restores existing publication outputs (190.102042ms)
+✔ output symlinks cannot redirect publication writes outside the project (392.577375ms)
+✔ current immutable snapshot streams exact original bytes for owner or current deployment token (51.792875ms)
+▶ current immutable snapshot rejects absent, foreign, incorrect, expired and malformed authority before storage
+  ✔ anonymous (2.542042ms)
+  ✔ nonowner viewer (2.428875ms)
+  ✔ incorrect token (4.251709ms)
+  ✔ oversized token (0.502083ms)
+  ✔ expired token (0.260291ms)
+  ✔ malformed expiry (0.655458ms)
+  ✔ no token configuration (0.797292ms)
+  ✔ invalid owner configuration (0.552042ms)
+✔ current immutable snapshot rejects absent, foreign, incorrect, expired and malformed authority before storage (14.022125ms)
+✔ historical snapshots are owner-only fixed content-addressed reads independent of the current descriptor (7.135834ms)
+✔ historical query validation rejects unknown, repeated, malformed or escaping selectors before storage (1.380333ms)
+✔ historical selectors cannot write snapshots, including with owner or deployment authority (3.0575ms)
+▶ missing storage, absent assets, invalid sizes and mismatched metadata fail without parsing or database use
+  ✔ current (14.14275ms)
+  ✔ historical (5.092959ms)
+✔ missing storage, absent assets, invalid sizes and mismatched metadata fail without parsing or database use (19.726042ms)
+✔ invalid explicit canonical seed hashes fail before any request and omitted hashes stay compatible (0.5455ms)
+✔ formatting-only raw snapshot changes preserve legacy canonical seed edits and mutable presentation (14.694ms)
+✔ changed canonical seed data activates the new complete source without resetting presentation (4.827542ms)
+✔ streaming parsing matches native JSON at every text split (11.672583ms)
+✔ malformed and truncated JSON is rejected across chunk boundaries (4.169125ms)
+✔ parser lifecycle rejects reuse and wrong chunk types (0.352541ms)
+✔ discard validates full grammar while preserving metadata and native duplicate semantics (0.824416ms)
+✔ onValue observes all duplicates and paths before overwrite, even in discarded rows (0.228334ms)
+✔ byte adapter preserves native Buffer BOM and replacement UTF-8 behavior, with fatal opt-in (1.628625ms)
+✔ response adapter handles UTF-8 boundaries and BOM like Response.json (24.86175ms)
+✔ response adapter propagates failures, cancels, and releases its reader (1.521833ms)
+✔ serializer matches compact native output with bounded escaped-string chunks (16.268333ms)
+✔ serializer supports ordinary JSON.stringify omission, holes, toJSON, sharing and cycles (4.676833ms)
+✔ very deep JSON uses iterative container stacks (71.645333ms)
+✔ retaining small parsed strings does not retain their full decoding windows (2667.180667ms)
+✔ long numeric tokens preserve native rounding, negative zero, and grammar (110.544ms)
+✔ deterministic randomized nested values and numbers match native parsing and serialization (63.993708ms)
+✔ streams exact payloads and verifies complete hosted HTML and snapshot before readiness (57.681917ms)
+✔ accepts only the two exact approved encodings, including a longer legacy encoding (45.914834ms)
+✔ identical approved fingerprints do not claim which storage path served them (10.242041ms)
+✔ invalid or incomplete alternate fingerprints fail before any upload (22.572083ms)
+✔ rejects changed local data, wrong Site identity and escaping files before network writes (22.766958ms)
+✔ refuses a mismatched acknowledgement and omits failed response content (27.930292ms)
+✔ requires an exact HTTPS origin and never follows a failed request (24.014375ms)
+✔ large upload transport uses a private gzip stream while preserving raw identity and readback (36.161042ms)
+✔ gzip candidates that do not shrink use the original plain payload (14.35275ms)
+▶ gzip temporary files are removed after request, acknowledgement and readback failures
+  ✔ request (25.123417ms)
+  ✔ acknowledgement (18.319ms)
+  ✔ readback (33.609708ms)
+✔ gzip temporary files are removed after request, acknowledgement and readback failures (77.97525ms)
+✔ destination choices persist across page instances and dashboard origins without renewing reads (1.9935ms)
+✔ preferences remain within their workspace and browser (0.233625ms)
+✔ clearing removes the shared preference with the same domain and path (0.338209ms)
+✔ the cookie stores a bounded enum with the workspace security attributes (1.7335ms)
+✔ unsupported or malformed locations never access browser storage (0.551458ms)
+✔ reads reject malformed, ambiguous, or non-enum cookies (0.350584ms)
+✔ invalid destinations never read or write browser storage (0.214458ms)
+✔ blocked or throwing storage never reports a changed preference as saved (0.570625ms)
+✔ readback rejects conflicting cookies and does not mistake malformed values for successful deletion (0.317125ms)
+✔ inline input accepts every chart family supported by the canonical Data renderer (7.497625ms)
+✔ inline input projects rows to actual chart fields and explicitly approved preview columns (5.125042ms)
+✔ annotations cannot disclose unapproved row fields or definitions even when no marks resolve (6.059875ms)
+✔ retained annotation text obeys URL disclosure even for off-domain, unsupported, or hidden marks (1.718625ms)
+✔ reviewed annotation text and visibility survive URL checks without widening row projection (21.892333ms)
+✔ explicit preview approval retains event and benchmark evidence while plotted point and range annotations still resolve (1.730542ms)
+✔ long-form point annotations retain the plotted series without disclosing a same-named row field (0.863542ms)
+✔ inline waterfall projection preserves canonical running totals and reviewed total markers (1.860166ms)
+✔ inline precomputed box plots preserve all quartiles without requiring an invented raw y field (0.72625ms)
+✔ inline heatmaps preserve the inferred group dimension and its canonical source order (1.108875ms)
+✔ inline heatmaps preserve explicitly requested tooltip evidence without unrelated columns (0.709583ms)
+✔ inline histograms preserve canonical buckets without requiring an x-axis source column (1.137166ms)
+✔ inline Sankey source and target specs preserve canonical graph edges without an x field (0.825ms)
+✔ inline long-form line/bar combinations treat barFields as pivoted series values (0.388708ms)
+✔ inline scatter plots retain only their canonical reviewed tooltip identity field (0.228833ms)
+✔ inline input permits stage-driven sankey charts without an invented x-axis field (0.186292ms)
+✔ inline input rejects unsupported schemas and missing or invalid chart fields (1.033459ms)
+✔ inline input diagnoses raw array measures and malformed field lists before projection (0.291333ms)
+✔ inline input enforces reviewed-row count and two-megabyte source limits (15.329458ms)
+✔ inline input rejects non-finite, nested, prototype-poisoning, and invalid reviewed rows (1.220042ms)
+✔ inline input validates bounded dimensions, safe identifiers, and reviewed filters (2.760208ms)
+✔ derived inline chart and query identifiers are deterministic and content-based (0.615916ms)
+✔ inline chart specifications discard private metadata and unapproved legend extensions (0.751917ms)
+✔ inline source metadata preserves explicitly reviewed SQL and excludes source URLs by default (1.717ms)
+✔ SQL omission removes query-derived evidence independently of source URL disclosure (2.42125ms)
+✔ SQL omission also removes evidence containing the statement without its surrounding whitespace (0.245125ms)
+✔ SQL disclosure rejects credentials and direct contact/payment literals without exposing them in errors (4.991625ms)
+✔ evidence prose URLs require explicit disclosure across supported text aliases (1.217542ms)
+✔ evidence prose never serializes credential URLs even when source URLs are approved (2.765958ms)
+✔ evidence prose applies canonical unsafe URL filtering after disclosure approval (1.707709ms)
+✔ all projected source prose and inventory identities require URL disclosure (3.408417ms)
+✔ projected source text rejects normalized credential URLs without scanning excluded metadata (2.390208ms)
+✔ inline disclosure options reject truthy strings and require explicit booleans (0.283917ms)
+✔ inline metric definitions project away private extension fields even when links are approved (0.407ms)
+✔ inline definition lineage serializes only the reviewed table and file inventory (0.717084ms)
+✔ inline source inspectors exclude unrelated unscoped executive salary definitions (1.029667ms)
+✔ long-form chart provenance retains visible dimensions, approved previews, and real metric dependencies (1.067625ms)
+✔ evidence links never retain raw trust secrets even after source URLs are approved (0.876834ms)
+✔ explicitly disclosed source URLs still reject embedded credentials and tokens (2.528542ms)
+✔ credential rejection covers canonical source URL aliases only when disclosure is requested (5.026333ms)
+✔ inline source URL disclosure preserves canonical URL filtering and ignores hidden extension URLs (0.533083ms)
+✔ inline timestamps remain recorded values and are never invented (0.511959ms)
+✔ materialized refresh timestamps never masquerade as query execution or generation times (0.274417ms)
+✔ inline JSON escapes HTML, script terminators, replacement dollars, and line separators (0.228083ms)
+✔ legacy whole-fragment replacement safety rejects every destructive dollar sequence (0.3155ms)
+✔ inline cache path boundaries reject installed plugin descendants (0.119375ms)
+✔ canonical plugin aliases reject hidden in-plugin cache and output destinations (28.521875ms)
+✔ the renderer CLI publishes its canonical example and complete shared chart-family list (160.0635ms)
+✔ the renderer CLI requires a SQL choice and preserves inclusion, omission, and unavailable states (1258.78875ms)
+▶ prebuilt React/Recharts integration survives relocation, privacy, escaping, and integrity checks
+  ✔ concurrent preparation reads the same shipped runtime without creating a cache (594.867583ms)
+  ✔ the release-only JavaScript rewrite preserves AST and execution semantics (298.793292ms)
+  ✔ the pure-JavaScript CSS parser accepts local tokens and blocks escaped resources (344.605208ms)
+  ✔ a changed prebuilt artifact is rejected instead of rebuilt or repaired (1404.424708ms)
+  ✔ stale inline and protected source fail closed until the release is rebuilt (2094.147917ms)
+  ✔ canonical legacy cache aliases cannot receive reviewed chart payloads (359.783ms)
+  ✔ custom themes use the shipped CSS parser and reject encoded external resources (1394.229875ms)
+  ✔ rendered fragments are deterministic, private by default, and replacement-safe (693.804167ms)
+  ✔ the real fragment renderer rejects credential URLs in retained annotation text before writing output (777.100208ms)
+  ✔ the final fragment size limit still rejects an oversized reviewed payload (179.643333ms)
+  ✔ cold relocated CLI needs no npm, native compiler, child process, or network (765.51475ms)
+✔ prebuilt React/Recharts integration survives relocation, privacy, escaping, and integrity checks (10168.496ms)
+✔ inline choices use only approved fields and compatible, nonaggregating chart types (5.977042ms)
+✔ applying a compatible edit changes presentation and never the reviewed snapshot (1.447375ms)
+✔ new category or split choices cannot collapse reviewed observations (3.022542ms)
+✔ new split choices cannot overwrite canonical pivot object properties (2.234916ms)
+✔ a grain-safe split change replaces derived series labels with the reviewed measure (0.7225ms)
+✔ a reviewed wide chart keeps every measure through a safe split round-trip (1.998042ms)
+✔ unsupported data, source, schema, and aggregation edits fail closed (2.441792ms)
+✔ original omissions survive copy-only edits and exact reset (0.799667ms)
+✔ all-null original measures remain editable without inventing zeroes (0.333125ms)
+✔ an authored numeric grouping role remains valid for copy edits and reset (1.428542ms)
+✔ legacy numeric-string measures retain their original presentation without new coercion (1.225875ms)
+✔ stacking requires the original reviewed semantics and never introduces percentage normalization (3.041375ms)
+✔ new color tokens are bounded and refer only to the shared palette (0.766834ms)
+✔ specialized and composed charts retain their reviewed type and mapping (1.150083ms)
+✔ axis and annotation controls retain the reviewed data and annotation definitions (2.994458ms)
+✔ specialized bar presentations preserve their reviewed nested mapping (1.412208ms)
+✔ legacy chart aliases use canonical editor choices without mutating authored input (0.292292ms)
+✔ every canonical original chart family can keep its reviewed presentation (5.942458ms)
+✔ inline resources decode losslessly, including Unicode and SVG URLs (39.448917ms)
+✔ corrupt resource data rejects rather than rendering undecoded assets (2.260167ms)
+✔ finding assumptions retain their own scope without inventing defaults (7.530208ms)
+✔ receipts reject confidence fields and unsafe assumptions (15.29825ms)
+✔ receipt source roles resolve only to their own projected source identities (1.682209ms)
+✔ receipt source roles cannot refer to a different query or leak across cards (0.478083ms)
+✔ receipt accepts source-only answers without fabricating rows, SQL, dates or evidence (0.182875ms)
+✔ receipt carries table usage snapshots through disclosure without exposing private notes (0.8625ms)
+✔ receipt retains exact SQL, Python, calculations and safe links automatically (9.714083ms)
+✔ provider query links survive receipt projection and honor chart disclosure options (3.071666ms)
+✔ receipt scopes each card's definitions and projects only approved row fields (1.6665ms)
+✔ one finding retains distinct source summaries, methods, SQL, rows and qualifications (1.46325ms)
+✔ Python floor division is not a source URL and recorded literals retain URL checks (2.245ms)
+✔ receipt timestamps reject impossible calendar dates without normalizing recorded values (3.973208ms)
+✔ receipt distinguishes reporting window, execution, capture, empty results, and partial previews (0.483542ms)
+✔ receipt projects approved labeled columns without changing recorded fields or values (0.887917ms)
+✔ receipt rejects ambiguous IDs, unknown fields, malformed preview claims and oversize evidence (9.135833ms)
+✔ receipt rejects credential-bearing evidence and direct contact/payment preview fields (2.975792ms)
+✔ receipt renderer delivers a bounded, escaped, private fragment without a chart or extra answer (309.460375ms)
+✔ receipt shares the existing plugin/cache/symlink output protection (465.868167ms)
+✔ fresh-process receipt generation needs no npm, dependency cache or network (314.02525ms)
+✔ the Data index owns response selection before its direct inline-delivery handoff (1.214458ms)
+✔ focused skills preserve the selected mode and own only durable visualizations (0.282041ms)
+✔ visualization frontmatter and discovery metadata advertise only durable chart surfaces (0.338875ms)
+✔ the index invokes Visualize directly without loading the durable visualization skill (0.7115ms)
+✔ the desktop index links the executable shared-renderer instructions directly (0.348667ms)
+✔ the inline renderer reference links the real executable, public API, adapter, and assets (0.509958ms)
+✔ the React adapter uses the shared pure renderer and public dashboard controls (0.297875ms)
+✔ the adapter uses shared dashboard styles and theme inside a Shadow DOM host (0.252875ms)
+✔ inline chart editing is a contained presentation-only host for the shared editor (0.6865ms)
+✔ inline editor guidance states the reviewed-data boundary and actual persistence lifetime (0.510209ms)
+✔ the actual shared renderer owns smooth lines, active markers, and missing-value behavior (0.48825ms)
+✔ isolated one-point runs share the canonical transform without dots on connected lines (0.693917ms)
+✔ the executable CLI and self-contained fragment assets are wired to the actual adapter (0.21625ms)
+✔ the renderer documents a concrete approved input, output, and same-response delivery command (0.299417ms)
+✔ explicit multiple-chart requests reuse one runtime and deliver every reviewed chart inline (0.335875ms)
+✔ the renderer documents preparation, offline operation, compatibility options, themes, and inspection flags (0.360166ms)
+✔ the bundled example supplies the reviewed chart contract without inventing real provenance (0.190875ms)
+✔ reviewed inline inputs remain bounded and project rows to approved chart fields (0.403458ms)
+✔ inline source guidance preserves recorded freshness semantics (0.375375ms)
+✔ runtime preparation verifies the prebuilt data-free artifact without a customer toolchain (0.751583ms)
+✔ custom inline themes are inspected with a real escape-aware CSS AST (0.156625ms)
+✔ self-contained renderer output remains safe with current and legacy host replacement behavior (0.212959ms)
+✔ renderer failure guidance never announces an undelivered chart as rendered (0.406166ms)
+✔ an available inline visualization cannot silently become Mermaid, Matplotlib, or an announced handoff (0.0615ms)
+✔ the shared React path changes only selected inline charts and preserves privacy (0.469667ms)
+✔ the early source execution gate retains Data's response, authoritative source, and final answer (0.455417ms)
+✔ source helper preflight is provider-neutral, narrow, and cannot replace the selected Data workflow (0.741791ms)
+✔ governed source reads preserve controlling evidence, approvals, privacy, and no-fallback boundaries (0.839209ms)
+✔ source discovery is bounded and authoritative-first without scanning every unrelated source (0.338125ms)
+✔ inline receipt presents provenance and limitations without a confidence tier (0.192708ms)
+✔ run order preserves Data response ownership before helper preflight, selection, and governed reads (0.575625ms)
+✔ the focused visualization skill remains discoverable only for durable artifacts (0.682625ms)
+✔ stakeholder-facing output preserves master copy restrictions and meaningful caveats (0.783375ms)
+✔ the native reference preserves upstream caveat and methodology guidance verbatim (0.147375ms)
+✔ ordinary requested and lookup tables remain Markdown (0.122917ms)
+✔ interactive tables require an explicit request and meaningful exploration (0.123917ms)
+✔ unavailable Visualize execution preserves native and compact upstream fallbacks (0.119584ms)
+✔ inline Visualize and native Work Mode embed only bounded reviewed evidence (0.171042ms)
+✔ inline handoffs reject secrets, direct identifiers, and unnecessary sensitive fields (0.234542ms)
+✔ source context and material caveats remain in concise surrounding prose (0.148625ms)
+✔ inline Visualize output preserves host theming and both light and dark appearances (0.112458ms)
+✔ Work Mode preserves live native content references before considering fallback (0.173333ms)
+✔ native Work Mode preserves supported JSON charts and custom interactive app blocks (0.201959ms)
+✔ native Work Mode failures preserve a static visual before a compact table (0.210875ms)
+✔ inline routing preserves explicitly selected reports, dashboards, and exports (0.273041ms)
+✔ durable report and dashboard visuals retain the shared React/Recharts Data app (0.263167ms)
+✔ MCP remains a valid reviewed data source without controlling inline rendering (0.136416ms)
+✔ plugin release metadata remains synchronized (0.9315ms)
+✔ the root test environment declares React for nested Data app tests (1.571792ms)
+✔ plugin dependencies preserve optional installation and categorized provider identities (0.440917ms)
+✔ the bundled demo is a well-formed seven-column CSV (0.437458ms)
+✔ dashboard and report surfaces ship the shared Data app runtime (0.632458ms)
+✔ report documents use a neutral fallback preset and preserve supplied templates (0.501125ms)
+✔ document and slide exports reuse local or hosted Data apps and build a requested source when needed (1.209708ms)
+✔ the Data app uses reviewed data for its document title (0.553375ms)
+✔ archive interoperates with system tar, preserves Unicode paths and overlays only deployment metadata (170.772625ms)
+✔ packaging accepts no migration directory and no pre-existing dist sidecars (48.567042ms)
+✔ invalid Site identity, logical bindings, and missing Worker fail before an archive is published (216.213042ms)
+✔ archive output never clobbers a file or appears inside its inputs (61.065625ms)
+✔ symlinks and dangerous archive member names are rejected (50.837792ms)
+✔ changes during compression abort publication and remove partial archives (351.096291ms)
+✔ migrations created during packaging are not silently omitted (360.1805ms)
+✔ first publication pushes exact source bytes/modes without data or deployment output (860.4415ms)
+✔ existing selected remote branch remains the exact parent of the candidate (788.287458ms)
+✔ failed and uncertain pushes reuse one exact commit with fresh credentials (1150.701958ms)
+✔ remote errors are never interpreted as an empty repository and fetch failures can resume (896.932958ms)
+✔ HTTP auth stays only in network environment, with redirect/tracing disabled (572.2235ms)
+✔ network config overrides inherited URL-specific TLS and redirect settings (689.11575ms)
+✔ matching fetch and push URL rewrites cannot redirect the selected source destination (295.376416ms)
+✔ untrusted credential destinations, branches, auth modes and expired tokens fail before network (69.086375ms)
+✔ specific failures expose stable sanitized repair codes (56.880666ms)
+✔ Schannel diagnostics identify the failing operation without assuming a certificate problem (3.079708ms)
+✔ timed-out subprocesses report their own duration and override buffered Schannel diagnostics (32.434542ms)
+✔ safe stderr retains the underlying Git failure and process outcome separately from classification (1.130333ms)
+✔ credential literals, wrapped fragments, encodings and credential URLs never enter diagnostic receipts (10.630667ms)
+✔ credential normalization matches diagnostic normalization, including short Unicode credentials (1.528625ms)
+✔ Windows certificate paths are redacted while their surrounding failure remains readable (1.147917ms)
+✔ diagnostic bounds fail closed before input truncation and validate process status and signal (5.924833ms)
+✔ changed candidate and mismatched receipt are rejected before another push (578.136917ms)
+✔ preflight verifies exact root and full HEAD, configured identity, and executable paths with spaces (469.121083ms)
+✔ explicit initialization preserves parent history and never commits existing Git state (550.00125ms)
+✔ preflight diagnoses an unborn repository without initializing or committing it (121.197667ms)
+✔ session publishes one verified source/archive pair while preserving authoring Git and Unicode paths (1619.08925ms)
+✔ native lifecycle boundary, one in-memory token, compact receipts and idempotent completed stages (4.426583ms)
+✔ credential retry retains exact Git receipt without packaging or creating source again (0.440167ms)
+✔ changed output during a push cannot be paired with the earlier source commit (0.226625ms)
+✔ unexpected failures never echo secrets; retries preserve the live upload token (1.223958ms)
+✔ explicit new-project initialization uses its returned identity, without reading a parent again (0.649959ms)
+✔ preparation safely creates fresh nested output parents and uses canonical paths (21.82075ms)
+✔ an occupied destination fails specifically before creating parents or packaging (7.249083ms)
+✔ aliases into authoring and overlapping destinations are rejected before mutation (14.185291ms)
+✔ invalid parent files, dangling aliases and unsupported artifacts cannot create output parents (15.941167ms)
+✔ failed receipts retain elapsed stage timing and whitelist Git diagnostics (42.754291ms)
+✔ unexpected errors cannot manufacture public codes or messages; archive stage timing stays separate (0.562625ms)
+✔ session emits only trusted Git stderr excerpts and redacts credentials despite hostile error fields (6.82ms)
+✔ JSONL accepts fragmented CRLF, CR, Unicode and EOF; output is ASCII and requests are not echoed (6.577333ms)
+✔ oversized and invalid UTF-8 commands are rejected without retaining or printing input (2.367667ms)
+✔ CLI starts through an aliased directory and remains importable from stdin (232.873667ms)
+✔ suggest-automation launcher stays generic and leaves setup to the click flow (2.65825ms)
+✔ generic primary workflows define completion-gated positive and negative boundaries (0.20475ms)
+✔ refreshable Sites dashboard and report handoffs end with the plain-language cadence question (0.177875ms)
+✔ negative boundaries suppress premature suggestions (0.117166ms)
+ℹ tests 1439
+ℹ suites 2
+ℹ pass 1407
+ℹ fail 32
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33880.636875
+
+✖ failing tests:
+
+test at templates/data-app/base/tests/basic-controls.test.mjs:1:1
+✖ templates/data-app/base/tests/basic-controls.test.mjs (66.559375ms)
+  'test failed'
+
+test at templates/data-app/base/tests/block-layout.test.mjs:1:1
+✖ templates/data-app/base/tests/block-layout.test.mjs (68.405333ms)
+  'test failed'
+
+test at templates/data-app/base/tests/card-image.test.mjs:1:1
+✖ templates/data-app/base/tests/card-image.test.mjs (60.299708ms)
+  'test failed'
+
+test at templates/data-app/base/tests/chrome-layout.test.mjs:1:1
+✖ templates/data-app/base/tests/chrome-layout.test.mjs (81.961916ms)
+  'test failed'
+
+test at templates/data-app/base/tests/dashboard-tab-label-browser.test.mjs:1:1
+✖ templates/data-app/base/tests/dashboard-tab-label-browser.test.mjs (73.499416ms)
+  'test failed'
+
+test at templates/data-app/base/tests/data-app-action-handoff.test.mjs:1:1
+✖ templates/data-app/base/tests/data-app-action-handoff.test.mjs (69.756791ms)
+  'test failed'
+
+test at templates/data-app/base/tests/data-app-template-contract.test.mjs:1:1
+✖ templates/data-app/base/tests/data-app-template-contract.test.mjs (63.86825ms)
+  'test failed'
+
+test at templates/data-app/base/tests/data-app-template.test.mjs:1:1
+✖ templates/data-app/base/tests/data-app-template.test.mjs (66.104292ms)
+  'test failed'
+
+test at templates/data-app/base/tests/experimental-bar-chart.test.mjs:1:1
+✖ templates/data-app/base/tests/experimental-bar-chart.test.mjs (71.444708ms)
+  'test failed'
+
+test at templates/data-app/base/tests/filter-bar-composition.test.mjs:1:1
+✖ templates/data-app/base/tests/filter-bar-composition.test.mjs (64.991334ms)
+  'test failed'
+
+test at templates/data-app/base/tests/metric-card-tabs.test.mjs:1:1
+✖ templates/data-app/base/tests/metric-card-tabs.test.mjs (58.432209ms)
+  'test failed'
+
+test at templates/data-app/base/tests/pr-review-regressions.test.mjs:1:1
+✖ templates/data-app/base/tests/pr-review-regressions.test.mjs (63.969125ms)
+  'test failed'
+
+test at templates/data-app/base/tests/protected-runtime.test.mjs:338:1
+✖ approved content remains editable and compiled HTML records only transient local task metadata (620.714834ms)
+  AssertionError [ERR_ASSERTION]: 
+  > prebuild
+  > node scripts/verify-protected-runtime.mjs
+  
+  Protected Data app runtime verified (234 files).
+  
+  > build
+  > node scripts/verify-protected-runtime.mjs && vite build
+  
+  Protected Data app runtime verified (234 files).
+  
+  sh: vite: command not found
+  
+  
+  127 !== 0
+  
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/protected-runtime.test.mjs:359:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 127,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at templates/data-app/base/tests/protected-runtime.test.mjs:397:1
+✖ nested authored sections, shared helpers, and custom content assets remain unrestricted (657.591834ms)
+  AssertionError [ERR_ASSERTION]: 
+  > prebuild
+  > node scripts/verify-protected-runtime.mjs
+  
+  Protected Data app runtime verified (234 files).
+  
+  > build
+  > node scripts/verify-protected-runtime.mjs && vite build
+  
+  Protected Data app runtime verified (234 files).
+  
+  sh: vite: command not found
+  
+  
+  127 !== 0
+  
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/protected-runtime.test.mjs:424:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 127,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at templates/data-app/base/tests/protected-runtime.test.mjs:481:1
+✖ safe relative positioning and scoped content overlays remain available (608.995208ms)
+  AssertionError [ERR_ASSERTION]: 
+  > prebuild
+  > node scripts/verify-protected-runtime.mjs
+  
+  Protected Data app runtime verified (234 files).
+  
+  > build
+  > node scripts/verify-protected-runtime.mjs && vite build
+  
+  Protected Data app runtime verified (234 files).
+  
+  sh: vite: command not found
+  
+  
+  127 !== 0
+  
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/protected-runtime.test.mjs:493:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 127,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at templates/data-app/base/tests/protected-runtime.test.mjs:499:1
+✖ approved theme tokens can brand protected chrome without confirmation (567.819833ms)
+  AssertionError [ERR_ASSERTION]: 
+  > prebuild
+  > node scripts/verify-protected-runtime.mjs
+  
+  Protected Data app runtime verified (234 files).
+  
+  > build
+  > node scripts/verify-protected-runtime.mjs && vite build
+  
+  Protected Data app runtime verified (234 files).
+  
+  sh: vite: command not found
+  
+  
+  127 !== 0
+  
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/protected-runtime.test.mjs:508:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 127,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at templates/data-app/base/tests/protected-runtime.test.mjs:514:1
+✖ authored content can style scoped report headers without affecting protected chrome (654.938ms)
+  AssertionError [ERR_ASSERTION]: 
+  > prebuild
+  > node scripts/verify-protected-runtime.mjs
+  
+  Protected Data app runtime verified (234 files).
+  
+  > build
+  > node scripts/verify-protected-runtime.mjs && vite build
+  
+  Protected Data app runtime verified (234 files).
+  
+  sh: vite: command not found
+  
+  
+  127 !== 0
+  
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/protected-runtime.test.mjs:520:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 127,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at templates/data-app/base/tests/protected-runtime.test.mjs:552:1
+✖ intentional wide, full-bleed, and user-requested widths require no protected-change confirmation (581.132083ms)
+  AssertionError [ERR_ASSERTION]: .page { --data-app-layout-intent: wide; --data-app-content-width: var(--data-app-dashboard-wide-content-width); }
+  
+  > prebuild
+  > node scripts/verify-protected-runtime.mjs
+  
+  Protected Data app runtime verified (234 files).
+  
+  > build
+  > node scripts/verify-protected-runtime.mjs && vite build
+  
+  Protected Data app runtime verified (234 files).
+  
+  sh: vite: command not found
+  
+  
+  127 !== 0
+  
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/protected-runtime.test.mjs:580:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 127,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at templates/data-app/base/tests/protected-runtime.test.mjs:587:1
+✖ complete app-wide dark themes remain editable without protected-change confirmation (590.420542ms)
+  AssertionError [ERR_ASSERTION]: 
+  > prebuild
+  > node scripts/verify-protected-runtime.mjs
+  
+  Protected Data app runtime verified (234 files).
+  
+  > build
+  > node scripts/verify-protected-runtime.mjs && vite build
+  
+  Protected Data app runtime verified (234 files).
+  
+  sh: vite: command not found
+  
+  
+  127 !== 0
+  
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/protected-runtime.test.mjs:601:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 127,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at templates/data-app/base/tests/protected-runtime.test.mjs:666:1
+✖ protected changes require explicit user authorization and exactly their authorized scope (1220.900875ms)
+  AssertionError [ERR_ASSERTION]: 
+  > prebuild
+  > node scripts/verify-protected-runtime.mjs
+  
+  Protected Data app runtime verified (234 files).
+  
+  > build
+  > node scripts/verify-protected-runtime.mjs && vite build
+  
+  Protected Data app runtime verified (234 files).
+  
+  sh: vite: command not found
+  
+  
+  127 !== 0
+  
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/protected-runtime.test.mjs:715:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 127,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at templates/data-app/base/tests/publish-review.test.mjs:1:1
+✖ templates/data-app/base/tests/publish-review.test.mjs (52.348709ms)
+  'test failed'
+
+test at templates/data-app/base/tests/query-data-boundary.test.mjs:1:1
+✖ templates/data-app/base/tests/query-data-boundary.test.mjs (54.735708ms)
+  'test failed'
+
+test at templates/data-app/base/tests/report-adoption-retention-example.test.mjs:1:1
+✖ templates/data-app/base/tests/report-adoption-retention-example.test.mjs (65.382916ms)
+  'test failed'
+
+test at templates/data-app/base/tests/report-evidence-accessibility.test.mjs:1:1
+✖ templates/data-app/base/tests/report-evidence-accessibility.test.mjs (64.205ms)
+  'test failed'
+
+test at templates/data-app/base/tests/report-periods.test.mjs:1:1
+✖ templates/data-app/base/tests/report-periods.test.mjs (52.570083ms)
+  'test failed'
+
+test at templates/data-app/base/tests/report-refresh.test.mjs:29:1
+✖ dashboard refresh still reruns its existing authorized queries (1.165667ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /Read its saved source requests and calculations/u. Input:
+  
+  "Use [@Data](plugin://data-analytics@openai-curated-remote) and invoke $build-dashboard to refresh this dashboard from its authoritative sources. Read shared/data-app.md from the installed Data plugin and follow its refresh workflow using the saved source requests and calculations. For a local Data app, use file tools to update the reviewed query rows and freshness metadata in the existing project's src/data.json, then rebuild the same project. For a published Data app, use the Sites connector to read its snapshot and presentation, rerun the saved requests, and redeploy the same Site. Update the last-refreshed timestamp and date ranges according to their saved rules. Preserve its layout, theme, current global and scoped filters, chart overrides, hidden components, and narrative. Do not create a new Data app, substitute fixture data, publish a local-only app, or widen access. Validate the refreshed reviewed evidence before delivery.\n" +
+    '\n' +
+    'Dashboard: Usage\n' +
+    'Generated at: unknown'
+  
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/templates/data-app/base/tests/report-refresh.test.mjs:32:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "Use [@Data](plugin://data-analytics@openai-curated-remote) and invoke $build-dashboard to refresh this dashboard from its authoritative sources. Read shared/data-app.md from the installed Data plugin and follow its refresh workflow using the saved source requests and calculations. For a local Data app, use file tools to update the reviewed query rows and freshness metadata in the existing project's src/data.json, then rebuild the same project. For a published Data app, use the Sites connector to read its snapshot and presentation, rerun the saved requests, and redeploy the same Site. Update the last-refreshed timestamp and date ranges according to their saved rules. Preserve its layout, theme, current global and scoped filters, chart overrides, hidden components, and narrative. Do not create a new Data app, substitute fixture data, publish a local-only app, or widen access. Validate the refreshed reviewed evidence before delivery.\n\nDashboard: Usage\nGenerated at: unknown",
+    expected: /Read its saved source requests and calculations/u,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at templates/data-app/base/tests/report-starter.test.mjs:1:1
+✖ templates/data-app/base/tests/report-starter.test.mjs (67.925583ms)
+  'test failed'
+
+test at templates/data-app/base/tests/section-filter-resolution.test.mjs:1:1
+✖ templates/data-app/base/tests/section-filter-resolution.test.mjs (61.423959ms)
+  'test failed'
+
+test at templates/data-app/base/tests/section-filter-view.test.mjs:1:1
+✖ templates/data-app/base/tests/section-filter-view.test.mjs (65.115916ms)
+  'test failed'
+
+test at templates/data-app/base/tests/source-inspector-availability.test.mjs:1:1
+✖ templates/data-app/base/tests/source-inspector-availability.test.mjs (57.867958ms)
+  'test failed'
+
+test at tests/dashboard-delivery-contract.test.mjs:6:1
+✖ dashboard skill discovery treats uploaded spreadsheets as sources, not deliverables (2.1755ms)
+  AssertionError [ERR_ASSERTION]: index must recognize uploaded spreadsheets as dashboard sources
+      at TestContext.<anonymous> (file:///private/tmp/codex-data-standalone-review-20260914/plugin/tests/dashboard-delivery-contract.test.mjs:17:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.start (node:internal/test_runner/test:1242:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '"Use Data for analysis, metric definitions and diagnostics, KPI reporting, data quality checks, market sizing, and evidence-based product or business decisions; creating, updating, validating, exporting, or sharing dashboards, data-driven reports, charts, and analytical notebooks; and managing reusable Data context. Do not use Data for general writing, editing, coding, or explanations that require none of these workflows."',
+    expected: /\buploaded spreadsheets?\b/iu,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/data-app-examples.test.mjs:1:1
+✖ tests/data-app-examples.test.mjs (28396.377083ms)
+  'test failed'

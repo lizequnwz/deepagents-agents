@@ -1,0 +1,246 @@
+{
+  "pages": 40,
+  "geometry": [
+    {
+      "page": 1,
+      "characters": 2648,
+      "firstText": "S TA N DA LO N E R E V I E W · A I E N G I N E E R I N G Codex Data 1.0.8: technical and product review Standa",
+      "outside": []
+    },
+    {
+      "page": 2,
+      "characters": 3680,
+      "firstText": "Observed — Strong foundations. The inspected implementation includes a verified, data-free prebuilt runtime; a",
+      "outside": []
+    },
+    {
+      "page": 3,
+      "characters": 2618,
+      "firstText": "existing Chromium headless shell after the sandbox initially prevented loopback listening/browser startup. Tes",
+      "outside": []
+    },
+    {
+      "page": 4,
+      "characters": 1946,
+      "firstText": "03 System architecture and boundaries 3.1 Layers and responsibility Layer Responsibility and boundary Evidence",
+      "outside": []
+    },
+    {
+      "page": 5,
+      "characters": 1435,
+      "firstText": "FIG-01 Architecture & trust boundaries Observed · Source-derived control and artifact flow. See S03, S05, S08,",
+      "outside": []
+    },
+    {
+      "page": 6,
+      "characters": 2369,
+      "firstText": "3.2 Build/runtime separation Observed. The default customer build uses a shipped IIFE browser runtime and a st",
+      "outside": []
+    },
+    {
+      "page": 7,
+      "characters": 2065,
+      "firstText": "3.3 Artifact lifecycle FIG-02 Artifact lifecycle Observed · The current publication sequence is shown, includi",
+      "outside": []
+    },
+    {
+      "page": 8,
+      "characters": 1007,
+      "firstText": "04 Skill system: routing and instruction design 4.1 Routing contract Observed. The index first resolves host/r",
+      "outside": []
+    },
+    {
+      "page": 9,
+      "characters": 1160,
+      "firstText": "FIG-03 Skill routing Observed · A procedural instruction graph; host capability gates precede source and outpu",
+      "outside": []
+    },
+    {
+      "page": 10,
+      "characters": 3141,
+      "firstText": "4.2 Taxonomy and dependencies Skill family Installed entry points Purpose and handoff Observed: entry and cont",
+      "outside": []
+    },
+    {
+      "page": 11,
+      "characters": 2584,
+      "firstText": "Inference — Maintenance risk. Long procedural gates mix durable policy with tool names, browser variants, time",
+      "outside": []
+    },
+    {
+      "page": 12,
+      "characters": 3474,
+      "firstText": "Object Established contract Consequence Observed: presentation Theme, title, text edits, hidden blocks, chart ",
+      "outside": []
+    },
+    {
+      "page": 13,
+      "characters": 3291,
+      "firstText": "06 Report and dashboard architecture 6.1 Composition and common behavior Observed. Reports and dashboards sele",
+      "outside": []
+    },
+    {
+      "page": 14,
+      "characters": 3023,
+      "firstText": "Observed. serializeDashboardUrlState() deliberately calls filter selection with complete=true ; this includes ",
+      "outside": []
+    },
+    {
+      "page": 15,
+      "characters": 3113,
+      "firstText": "Boundary What the plugin establishes What remains outside that guarantee Observed: Site reads Snapshot and que",
+      "outside": []
+    },
+    {
+      "page": 16,
+      "characters": 2858,
+      "firstText": "7.3 Untrusted content and authorization Observed. Linked-app workflows require reading the actual current view",
+      "outside": []
+    },
+    {
+      "page": 17,
+      "characters": 2310,
+      "firstText": "08 Validation, tests, and reproducibility 8.1 Observed execution ledger Check Result Interpretation Observed: ",
+      "outside": []
+    },
+    {
+      "page": 18,
+      "characters": 3303,
+      "firstText": "8.2 What the tests establish Observed. Shipped tests cover publication paths/assets/secrets, runtime and compi",
+      "outside": []
+    },
+    {
+      "page": 19,
+      "characters": 2282,
+      "firstText": "09 Design and UX analysis Observed — Opening hierarchy. The inspected offline base fixture presents a concise ",
+      "outside": []
+    },
+    {
+      "page": 20,
+      "characters": 2859,
+      "firstText": "accessible-name code demonstrate intent, not compliance of every generated artifact. S16 S20 T03 T04 T06 Recom",
+      "outside": []
+    },
+    {
+      "page": 21,
+      "characters": 2875,
+      "firstText": "overrides. This is a coupling map, not a claim that file length alone is a defect. S08 S13 S14 S16 S24 Inferen",
+      "outside": []
+    },
+    {
+      "page": 22,
+      "characters": 309,
+      "firstText": "Scenario Established fact Reasoned implication Host action button exists in offline HTML Observed: handoff cod",
+      "outside": []
+    },
+    {
+      "page": 23,
+      "characters": 3359,
+      "firstText": "12 Prioritized recommendations Recommendation — Priority definitions. P0 is an immediate containment/release b",
+      "outside": []
+    },
+    {
+      "page": 24,
+      "characters": 3204,
+      "firstText": "R3 · P1: bound and contain query mutations Observed. Owner query JSON parsing can throw; row-count limits occu",
+      "outside": []
+    },
+    {
+      "page": 25,
+      "characters": 3567,
+      "firstText": "Recommendation. Give source classification one policy owner and propagate consequential labels to cards, image",
+      "outside": []
+    },
+    {
+      "page": 26,
+      "characters": 3209,
+      "firstText": "R10 · P2: document storage, loading, and recovery as a capability matrix Observed. Local/default loading is ea",
+      "outside": []
+    },
+    {
+      "page": 27,
+      "characters": 1799,
+      "firstText": "Inference: Is verification intended to attest a historical review or the currently displayed evidence and narr",
+      "outside": []
+    },
+    {
+      "page": 28,
+      "characters": 1341,
+      "firstText": "14 Source references and validation receipts Observed. References S01–S43 point to the inspected installation;",
+      "outside": []
+    },
+    {
+      "page": 29,
+      "characters": 978,
+      "firstText": "S05 data-app.md · 2 passages Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-remote/data",
+      "outside": []
+    },
+    {
+      "page": 30,
+      "characters": 1025,
+      "firstText": "S09 data-app-runtime.mjs · 2 passages Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-re",
+      "outside": []
+    },
+    {
+      "page": 31,
+      "characters": 1311,
+      "firstText": "S12 data-app-worker.js · 2 passages Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-remo",
+      "outside": []
+    },
+    {
+      "page": 32,
+      "characters": 940,
+      "firstText": "S15 source-provenance.js · 2 passages Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-re",
+      "outside": []
+    },
+    {
+      "page": 33,
+      "characters": 974,
+      "firstText": "S18 object-snapshot-storage.js · 4 passages Observed — Source. /Users/charlie/.codex/plugins/cache/openai-cura",
+      "outside": []
+    },
+    {
+      "page": 34,
+      "characters": 1340,
+      "firstText": "S20 package.json · 5 passages Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-remote/dat",
+      "outside": []
+    },
+    {
+      "page": 35,
+      "characters": 1260,
+      "firstText": "S23 analysis-quality.md Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-remote/data-anal",
+      "outside": []
+    },
+    {
+      "page": 36,
+      "characters": 1018,
+      "firstText": "S27 SKILL.md Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8",
+      "outside": []
+    },
+    {
+      "page": 37,
+      "characters": 1033,
+      "firstText": "S32 SKILL.md Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8",
+      "outside": []
+    },
+    {
+      "page": 38,
+      "characters": 1220,
+      "firstText": "S38 SKILL.md Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8",
+      "outside": []
+    },
+    {
+      "page": 39,
+      "characters": 1224,
+      "firstText": "S42 use-data-app.js · 3 passages Observed — Source. /Users/charlie/.codex/plugins/cache/openai-curated-remote/",
+      "outside": []
+    },
+    {
+      "page": 40,
+      "characters": 978,
+      "firstText": "T02 Observed — Review receipt. split-build.log. Observed — Review receipt. rebuild.log. Observed — Review rece",
+      "outside": []
+    }
+  ],
+  "allTextWithinPages": true
+}

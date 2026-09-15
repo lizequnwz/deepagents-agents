@@ -1,0 +1,129 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: chromium dashboard small-phone: information glyph should follow its final word with its intended visual gap and alignment
++ actual - expected
+
++ [
++   {
++     centerOffset: -0.234375,
++     gap: 10,
++     kind: 'chart',
++     title: 'time'
++   },
++   {
++     centerOffset: -0.234375,
++     gap: 10,
++     kind: 'chart',
++     title: 'source'
++   },
++   {
++     centerOffset: -0.234375,
++     gap: 10,
++     kind: 'chart',
++     title: 'journey'
++   },
++   {
++     centerOffset: -0.234375,
++     gap: 10,
++     kind: 'chart',
++     title: 'active'
++   },
++   {
++     centerOffset: -0.234375,
++     gap: 10,
++     kind: 'chart',
++     title: 'engagement'
++   },
++   {
++     centerOffset: -0.234375,
++     gap: 10,
++     kind: 'chart',
++     title: 'accounts'
++   },
++   {
++     centerOffset: -0.234375,
++     gap: 10,
++     kind: 'chart',
++     title: 'accounts'
++   },
++   {
++     centerOffset: -0.234375,
++     gap: 10,
++     kind: 'custom',
++     title: 'region'
++   },
++   {
++     centerOffset: -0.234375,
++     gap: 10,
++     kind: 'table',
++     title: 'channel'
++   }
++ ]
+- []
+
+    at checkTitleInfoSpacing (file:///private/tmp/codex-data-standalone-review-20260914/plugin/tests/mobile-responsive-browser.smoke.mjs:127:10)
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at process.processImmediate (node:internal/timers:502:9)
+    at async checkDashboard (file:///private/tmp/codex-data-standalone-review-20260914/plugin/tests/mobile-responsive-browser.smoke.mjs:165:3)
+    at async file:///private/tmp/codex-data-standalone-review-20260914/plugin/tests/mobile-responsive-browser.smoke.mjs:489:40 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [
+    { kind: 'chart', title: 'time', gap: 10, centerOffset: -0.234375 },
+    {
+      kind: 'chart',
+      title: 'source',
+      gap: 10,
+      centerOffset: -0.234375
+    },
+    {
+      kind: 'chart',
+      title: 'journey',
+      gap: 10,
+      centerOffset: -0.234375
+    },
+    {
+      kind: 'chart',
+      title: 'active',
+      gap: 10,
+      centerOffset: -0.234375
+    },
+    {
+      kind: 'chart',
+      title: 'engagement',
+      gap: 10,
+      centerOffset: -0.234375
+    },
+    {
+      kind: 'chart',
+      title: 'accounts',
+      gap: 10,
+      centerOffset: -0.234375
+    },
+    {
+      kind: 'chart',
+      title: 'accounts',
+      gap: 10,
+      centerOffset: -0.234375
+    },
+    {
+      kind: 'custom',
+      title: 'region',
+      gap: 10,
+      centerOffset: -0.234375
+    },
+    {
+      kind: 'table',
+      title: 'channel',
+      gap: 10,
+      centerOffset: -0.234375
+    }
+  ],
+  expected: [],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.19.0

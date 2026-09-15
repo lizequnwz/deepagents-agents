@@ -1,0 +1,9 @@
+{
+  "malformedOwnerQueryUpdate": {
+    "thrown": "SyntaxError",
+    "message": "Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+  },
+  "completeViewPrivateFilter": "view=1&f.account=PRIVATE-FIXTURE-ACCOUNT",
+  "metadataFreeSnapshotAccepted": true,
+  "unconfiguredOwnerStatus": 403
+}

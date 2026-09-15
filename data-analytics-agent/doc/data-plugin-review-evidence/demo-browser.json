@@ -1,0 +1,26 @@
+{
+  "browser": "148.0.7778.96",
+  "observations": [
+    {
+      "width": 1440,
+      "errors": [],
+      "externalRequests": [],
+      "components": 16,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "errors": [],
+      "externalRequests": [],
+      "components": 16,
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "errors": [],
+      "externalRequests": [],
+      "components": 16,
+      "overflow": false
+    }
+  ]
+}

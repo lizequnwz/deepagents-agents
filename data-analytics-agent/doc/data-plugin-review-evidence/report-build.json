@@ -1,0 +1,8 @@
+{
+  "markdownSha256": "e07dd925e37ef88beb882406679cdd2225795d6019ef128607e451909dcc2723",
+  "htmlSha256": "2fd0797b7279695f99eb2aea58d2eb668709021c7dd03effe377500ca5b9b430",
+  "bytes": 999970,
+  "sections": 14,
+  "diagrams": 3,
+  "renderer": "marked 17.0.5; inline CSS/JS; no runtime dependencies"
+}

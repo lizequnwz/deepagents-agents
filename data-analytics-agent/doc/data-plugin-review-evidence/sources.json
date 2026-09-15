@@ -1,0 +1,546 @@
+{
+  "S01": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/.codex-plugin/plugin.json",
+      "start": 1,
+      "end": 388,
+      "sha256": "992761b0cb5231617a111f58925a77782aba8236f22ef5bd4d4de46004573323"
+    }
+  ],
+  "S02": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/README.md",
+      "start": 1,
+      "end": 93,
+      "sha256": "1b04814ceb1d65c550965c31f6ccd99cba83e15c8064cbb5fb3dd5fc073f2f1c"
+    }
+  ],
+  "S03": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/index/SKILL.md",
+      "start": 10,
+      "end": 99,
+      "sha256": "1581082b293cf3c422b4d2a647f54404fcfa5b882b5191bed5b03e39ceee2112"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/index/SKILL.md",
+      "start": 227,
+      "end": 305,
+      "sha256": "1581082b293cf3c422b4d2a647f54404fcfa5b882b5191bed5b03e39ceee2112"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/index/SKILL.md",
+      "start": 354,
+      "end": 410,
+      "sha256": "1581082b293cf3c422b4d2a647f54404fcfa5b882b5191bed5b03e39ceee2112"
+    }
+  ],
+  "S04": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/build-report/SKILL.md",
+      "start": 30,
+      "end": 114,
+      "sha256": "a464dc6bcda8bf5659ba951a9ccba52020cf9c5d6f5f40e05d0e6a42149b51cf"
+    }
+  ],
+  "S05": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/shared/data-app.md",
+      "start": 21,
+      "end": 98,
+      "sha256": "5b8f136d89662f3e17efeddf484df1b2052f15ead8b48129cbedb3b0861cfa9a"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/shared/data-app.md",
+      "start": 100,
+      "end": 189,
+      "sha256": "5b8f136d89662f3e17efeddf484df1b2052f15ead8b48129cbedb3b0861cfa9a"
+    }
+  ],
+  "S06": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/validate-data/SKILL.md",
+      "start": 25,
+      "end": 59,
+      "sha256": "8f67c4ccd8fe55555a3d0f1d0a1d798279d08ef40473b19c228422123ae587dd"
+    }
+  ],
+  "S07": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/AGENTS.md",
+      "start": 5,
+      "end": 83,
+      "sha256": "215baf947a82508f9aa349acce5fb747e43aaf874ddf7b9b11436b80fab50240"
+    }
+  ],
+  "S08": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/prebuilt/README.md",
+      "start": 1,
+      "end": 42,
+      "sha256": "10e93ad912b62970226fb2f5d20190758e9ffe357b03fc6db450c3cd4ec5b143"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/prebuilt/package.json",
+      "start": 1,
+      "end": 36,
+      "sha256": "645f492a9588b263376c75a6e696036ca00b0a0cfe4667c3cf203da34063e676"
+    }
+  ],
+  "S09": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/data-app-runtime.mjs",
+      "start": 58,
+      "end": 145,
+      "sha256": "7121af09f71ac190f57ded67f0383b402784772dc4e195b25c7cbf44337b9240"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/data-app-runtime.mjs",
+      "start": 149,
+      "end": 251,
+      "sha256": "7121af09f71ac190f57ded67f0383b402784772dc4e195b25c7cbf44337b9240"
+    }
+  ],
+  "S10": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/prebuilt/manifest.mjs",
+      "start": 10,
+      "end": 63,
+      "sha256": "16cc40769260ab58fe5a97e0ebf63404c718d9e9a4dadf2953d1fed7095ad675"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/authored-module-graph.mjs",
+      "start": 164,
+      "end": 299,
+      "sha256": "8122793525bee198992047179ac180e27a531d6a08547b34c03b5d7db3912ae4"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/authored-module-graph.mjs",
+      "start": 643,
+      "end": 749,
+      "sha256": "8122793525bee198992047179ac180e27a531d6a08547b34c03b5d7db3912ae4"
+    }
+  ],
+  "S11": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/prepare-data-app.mjs",
+      "start": 28,
+      "end": 144,
+      "sha256": "70d496a76c1fecc620015c8f2f8242ec25bec0b0823e145640405a4cf45f3e8b"
+    }
+  ],
+  "S12": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/data-app-worker.js",
+      "start": 141,
+      "end": 181,
+      "sha256": "acabf5aaa262e38c4f8157aecb9c40e4a810d6e7433cfadca84676b68afcf38f"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/data-app-worker.js",
+      "start": 263,
+      "end": 438,
+      "sha256": "acabf5aaa262e38c4f8157aecb9c40e4a810d6e7433cfadca84676b68afcf38f"
+    }
+  ],
+  "S13": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/DataAppRuntime.jsx",
+      "start": 21,
+      "end": 109,
+      "sha256": "3008a08c2a79c90a5ea5cb3f91b7f77113dfca1e8c4578bf47c34bd9932bd088"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/query-data-store.js",
+      "start": 1,
+      "end": 145,
+      "sha256": "0dc9edc7302359ee54b8b9c92a8adc7f15694e986461b8046b8b427a9e1ecc65"
+    }
+  ],
+  "S14": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/presentation-state.js",
+      "start": 7,
+      "end": 115,
+      "sha256": "9aafd1df54b454d3b141c46caef320750d2ef733b0570776e3e7676c6581e6f6"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/dashboard-url-state.js",
+      "start": 3,
+      "end": 99,
+      "sha256": "7548d0752f11d003255649bc7bdb57062c97f6b82014a86c349b06e86355e932"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/dashboard-url-state.js",
+      "start": 217,
+      "end": 260,
+      "sha256": "7548d0752f11d003255649bc7bdb57062c97f6b82014a86c349b06e86355e932"
+    }
+  ],
+  "S15": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/source-provenance.js",
+      "start": 130,
+      "end": 220,
+      "sha256": "0cc0f174aa47eecbdb9e15bd473432280c880f547f9756e9bd03153f43b4210b"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/source-provenance.js",
+      "start": 428,
+      "end": 565,
+      "sha256": "0cc0f174aa47eecbdb9e15bd473432280c880f547f9756e9bd03153f43b4210b"
+    }
+  ],
+  "S16": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/components/DataComponent.jsx",
+      "start": 16,
+      "end": 181,
+      "sha256": "8b4c886d78d833ca621e9c2d7eaa14e80df550306aa224f936682713a90a96bf"
+    }
+  ],
+  "S17": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/data-app-build.mjs",
+      "start": 112,
+      "end": 225,
+      "sha256": "5040995d986f8fc42851e506aba91a93c0814058cacc1763907237b125807c6d"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/scripts/data-app-separate.mjs",
+      "start": 1,
+      "end": 100,
+      "sha256": "26863a4e45775820bfedc5c99853dcf3696133a0e881c5398618e74fd902fac5"
+    }
+  ],
+  "S18": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/object-snapshot-storage.js",
+      "start": 261,
+      "end": 342,
+      "sha256": "f4b2838453460b409ea080410d549d6f4fe5896fea94cd6be16ea235470dd734"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/publish-artifact-to-sites/scripts/publication-source.mjs",
+      "start": 9,
+      "end": 92,
+      "sha256": "ef612a47a1b42462339143a40eea84d2696d622a803baa643daa48fb3557e020"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/publish-artifact-to-sites/scripts/publication-secrets.mjs",
+      "start": 1,
+      "end": 43,
+      "sha256": "2b57c81b7ed85c99b8aa2d00c2c175dd405b81c81ab8e767c20838dbb2ba5bd2"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/publish-artifact-to-sites/scripts/publication-secrets.mjs",
+      "start": 81,
+      "end": 112,
+      "sha256": "2b57c81b7ed85c99b8aa2d00c2c175dd405b81c81ab8e767c20838dbb2ba5bd2"
+    }
+  ],
+  "S19": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/publish-artifact-to-sites/SKILL.md",
+      "start": 30,
+      "end": 93,
+      "sha256": "2e40006cc5a697e2546bd2b1a3eeec3e6c38501229999117c92ff4ff94d534b3"
+    }
+  ],
+  "S20": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/package.json",
+      "start": 1,
+      "end": 31,
+      "sha256": "ecd22867be1026879c6788cedb518441d96b0f4adf540b7af32468735d1111a4"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/package.json",
+      "start": 1,
+      "end": 35,
+      "sha256": "6ee23dabbf22d64b8091a07b9dc857ff1ce2770e02886baaf68716595db8f14c"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/tests/browser-helpers.mjs",
+      "start": 13,
+      "end": 75,
+      "sha256": "f6c5aca5132cd3410b8bcb360eeda5033f7b9ea2bc61c0eb9cbe4e8942f30d97"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/tests/dashboard-delivery-contract.test.mjs",
+      "start": 1,
+      "end": 55,
+      "sha256": "01f97d6e28edf3d8cc747f466368964d72b6c2ca41b819af900cebe02efd484b"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/tests/report-refresh.test.mjs",
+      "start": 8,
+      "end": 34,
+      "sha256": "23efbc548bf8f80788b2fd9d38189293214f8e9a0ae18c1ecb762765296c999a"
+    }
+  ],
+  "S21": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/tests/live-evals/README.md",
+      "start": 1,
+      "end": 45,
+      "sha256": "aa693ea7abe531a825e80aeb091a4cc98a87d79519c239a9046eef788d47d22e"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/tests/browser-helpers.mjs",
+      "start": 137,
+      "end": 199,
+      "sha256": "f6c5aca5132cd3410b8bcb360eeda5033f7b9ea2bc61c0eb9cbe4e8942f30d97"
+    }
+  ],
+  "S22": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/scripts/verify-protected-runtime.mjs",
+      "start": 182,
+      "end": 212,
+      "sha256": "47d95847a9135cd125581a4b994208adc3822cbef4a2c8bfaf562f0d2ef3a9af"
+    }
+  ],
+  "S23": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/shared/analysis-quality.md",
+      "start": 1,
+      "end": 57,
+      "sha256": "92b1f86ae30121772e15c376f7ab2d4fc9064286e880452f3cc705ae225d9c4b"
+    }
+  ],
+  "S24": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/data-app-public.jsx",
+      "start": 1,
+      "end": 40,
+      "sha256": "57a22be28ed6172c7f0a1f9f2881d3afa3069cd4da9128fdfada8c803ddbba94"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/components/SourceInspector.jsx",
+      "start": 25,
+      "end": 108,
+      "sha256": "7f29201a5cf83472fb62b99b55a192b3ac723c1a7e230553e4c52331c3c225cb"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/components/Chart.jsx",
+      "start": 1,
+      "end": 12,
+      "sha256": "bb3193138a46e22fa0c3e3bc342fdfa539f03371cf1d628bef624a6a357e7e52"
+    }
+  ],
+  "S25": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/runtime-environment.js",
+      "start": 5,
+      "end": 39,
+      "sha256": "6f568c79bff45a67571681c0d8ed5f2e6f7450e1af6a01f0dfeaa75ef00d3e4d"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/index/SKILL.md",
+      "start": 384,
+      "end": 390,
+      "sha256": "1581082b293cf3c422b4d2a647f54404fcfa5b882b5191bed5b03e39ceee2112"
+    }
+  ],
+  "S26": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/gather-business-context/SKILL.md",
+      "start": 6,
+      "end": 81,
+      "sha256": "c61aaab29796c5c5a101f8d802a9ab0d1c4366e31a5acadddec56ca4849d7237"
+    }
+  ],
+  "S27": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/convert-to-doc/SKILL.md",
+      "start": 21,
+      "end": 52,
+      "sha256": "71a4616d6e111c4e8e570b0c986ad62631fb39aff26ba08837961eedff4fe2a2"
+    }
+  ],
+  "S28": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/convert-to-slides/SKILL.md",
+      "start": 21,
+      "end": 54,
+      "sha256": "5708f54bd5674d3c92ae96c52c85ea3bd0d42b5699eb12df10e5591945f178b7"
+    }
+  ],
+  "S29": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/create-data-context/SKILL.md",
+      "start": 127,
+      "end": 172,
+      "sha256": "dd46e2acf43bf3fd0e7290ddee9ed4f4b97eea23c27a7f031af225a1c71c88e8"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/create-data-context/SKILL.md",
+      "start": 202,
+      "end": 268,
+      "sha256": "dd46e2acf43bf3fd0e7290ddee9ed4f4b97eea23c27a7f031af225a1c71c88e8"
+    }
+  ],
+  "S30": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/design-kpis/SKILL.md",
+      "start": 25,
+      "end": 114,
+      "sha256": "6f3f3841371e4269d8bc6be406537145de3e86d7ca8d34d65af21548dfff2d46"
+    }
+  ],
+  "S31": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/kpi-reporting/SKILL.md",
+      "start": 75,
+      "end": 127,
+      "sha256": "e790badb05ee3d77b68815d57658e350d26737b10e1b9bb8d2d30d1ad335b3e5"
+    }
+  ],
+  "S32": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/metric-diagnostics/SKILL.md",
+      "start": 65,
+      "end": 158,
+      "sha256": "e3a591bf256a84cfdb59efdc4ff5a1e6938d7e2a2a42f43144e5ad204bf054b2"
+    }
+  ],
+  "S33": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/product-business-analysis/SKILL.md",
+      "start": 60,
+      "end": 130,
+      "sha256": "036b89f9cc9c982fad224cd17e3d93339e5eef8080bbe3d8d2b28731a0a62113"
+    }
+  ],
+  "S34": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/market-sizing/SKILL.md",
+      "start": 35,
+      "end": 123,
+      "sha256": "ed8661862b1ed7d0da1dc5d0d418cc8e631df81345af087e40eedcdf4e0b2a9b"
+    }
+  ],
+  "S35": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/analyze-data-quality/SKILL.md",
+      "start": 24,
+      "end": 122,
+      "sha256": "b55f1fea16306899bc28060d2a46c5318e15f85da62f3f533926861458a6dc15"
+    }
+  ],
+  "S36": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/build-dashboard/SKILL.md",
+      "start": 35,
+      "end": 103,
+      "sha256": "d3d3f4a3daf77c5a099e6fc13b7ab6d975688f80a6a927e731dc32e118f705f0"
+    }
+  ],
+  "S37": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/jupyter-notebooks/SKILL.md",
+      "start": 35,
+      "end": 112,
+      "sha256": "91a1a7f03544d4136544a60ef98e750ed694ab85768815861bbc7c4eec08a987"
+    }
+  ],
+  "S38": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/report-to-pdf/SKILL.md",
+      "start": 1,
+      "end": 47,
+      "sha256": "02fa85b9bbd2859203c0e7ad5b952ad3f81ef1a96840a5b897c42bfe81108999"
+    }
+  ],
+  "S39": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/print.css",
+      "start": 1,
+      "end": 160,
+      "sha256": "8a3f83b3d4b453bc660d87027684e70ce053401c0d327e72247fc90f848966ac"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/tests/data-app-print-browser.smoke.mjs",
+      "start": 1,
+      "end": 100,
+      "sha256": "6c28250c05a635ec00dcbfdc5fdf8ef67c2fa14b49d04bf6e2dc122e79ac3850"
+    }
+  ],
+  "S40": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/share-artifact-summary/SKILL.md",
+      "start": 23,
+      "end": 39,
+      "sha256": "793e661b277a0bea0a4c3a6d147b33db3a14a8794f09f9d156d12444a84d5317"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/skills/schedule-refresh-jobs/SKILL.md",
+      "start": 25,
+      "end": 47,
+      "sha256": "6166180cd0fa05f9f761862a15e6ccb12aa8e1edbec3af52c4479123e02cb362"
+    }
+  ],
+  "S41": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/shared/shared-skill-instructions.md",
+      "start": 3,
+      "end": 34,
+      "sha256": "ada5c1ed67f32188b0521c3a354eef35f6d9dcc08310e615092d07c0c99f55c7"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/shared/shared-skill-instructions.md",
+      "start": 78,
+      "end": 104,
+      "sha256": "ada5c1ed67f32188b0521c3a354eef35f6d9dcc08310e615092d07c0c99f55c7"
+    }
+  ],
+  "S42": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/use-data-app.js",
+      "start": 29,
+      "end": 179,
+      "sha256": "699f86eabcd0bb506162862e76b81951e4e0c875a1e78c276d39843bc3bb7702"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/hosted-query-bootstrap.js",
+      "start": 1,
+      "end": 29,
+      "sha256": "ef1c0d0f8cdce0e1efc0892375283d38d505a2b13ed659859c2cd4e2e6fc77b9"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/docs/components/async-data.md",
+      "start": 15,
+      "end": 65,
+      "sha256": "ddd293d4e1200a3c4814e520443dd9e22c1214b102deef877e0eb7da132cfb7d"
+    }
+  ],
+  "S43": [
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/components/DataAppChrome.jsx",
+      "start": 97,
+      "end": 173,
+      "sha256": "6eae567b93a5f5c1ca4eccecfbdf3d85398f181e2e7d2f3e3447b6f5ade50233"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/templates/data-app/base/src/report-date.js",
+      "start": 1,
+      "end": 12,
+      "sha256": "7a29073e2f4498fb81af321c39344952cc08b9c3fe3caee020a908d3914aaed1"
+    },
+    {
+      "path": "/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8/shared/data-app.md",
+      "start": 84,
+      "end": 96,
+      "sha256": "5b8f136d89662f3e17efeddf484df1b2052f15ead8b48129cbedb3b0861cfa9a"
+    }
+  ],
+  "S44": [
+    {
+      "path": "/Users/charlie/.codex/skills/ui-ux-pro-max/SKILL.md",
+      "start": 57,
+      "end": 107,
+      "sha256": "e5baf9400d4347e5ed3eb1f6b99cd0b9ba545b8b0e507aabb2b87397bbf73ea1"
+    }
+  ]
+}
