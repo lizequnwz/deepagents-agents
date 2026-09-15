@@ -6,7 +6,7 @@ Prepared before implementation, after rereading the existing review, inspecting 
 
 Start with the extra responsibilities that appear after an agent gives its first answer. Introduce four memorable objects. Follow one illustrative request. Explain each architectural mechanism only after the request creates a need for it. End by selecting reusable principles and returning to the four objects.
 
-The main audience is AI engineers in a 25-minute internal session. The example is a hypothetical advisor-engagement investigation, not an executed analysis or a claim about any real organization. The interactions are teaching models, not an embedded Data runtime or connector session.
+The main audience is AI engineers. The original plan below is retained as design context; the current selective scene budgets total 27 minutes, while the fuller script needs an estimated 30–35 minutes before questions or live demos. The example is a hypothetical advisor-engagement investigation, not an executed analysis or a claim about any real organization. The interactions are teaching models, not an embedded Data runtime or connector session.
 
 ## Highest-value ideas
 
@@ -45,7 +45,7 @@ The main audience is AI engineers in a 25-minute internal session. The example i
 | 13. Learn the principle, not the machinery | Calibrate adoption | Trade-off selector; small-agent vs durable-product guidance | 1.5 |
 | 14. Four words, now with depth | Retrieval and closure | Same four nodes expand; five takeaway statements; self-check questions | 1.5 |
 
-Total planned core session: 27 minutes. Optional live demonstrations replace discussion time or extend the session.
+Total planned core session: 27 minutes (not a timed rehearsal). Optional live demonstrations replace discussion time or extend the session.
 
 ## Visual and behavioral design
 

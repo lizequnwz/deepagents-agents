@@ -4,11 +4,11 @@ An interactive architecture lesson for AI engineers, organized around **Agent �
 
 ## Open
 
-Open `index.html` directly in a browser. No server, network connection, package installation, external font, analytics, or CDN is required. The file contains all styles, scripts, diagrams, source excerpts, and the complete original review. The research iframe is created only when requested.
+Open `index.html` directly in a browser. No server, network connection, package installation, external font, analytics, or CDN is required. Companion Markdown links require the folder’s Markdown files; share the folder if the presenter needs them. The HTML itself contains all styles, scripts, diagrams, source excerpts, and the complete original review. The research iframe is created only when requested.
 
 Use the scene selector or scroll normally. **Presentation mode** provides Previous/Next controls and keyboard scene navigation. Arrow keys, PageUp/PageDown, and Space navigate when focus is outside an interactive control. Escape closes the source drawer first or exits presentation mode. On a shorter screen, scroll within the current scene before advancing. The presentation does not require browser fullscreen.
 
-See [PRESENTER_GUIDE.md](PRESENTER_GUIDE.md) for a 27-minute run of show, optional live demos, technical guardrails, and audience questions. See [STORYBOARD.md](STORYBOARD.md) for the teaching and interaction plan created before coding.
+See [PRESENTER_GUIDE.md](PRESENTER_GUIDE.md) for a 27-minute selective run of show, optional live demos, technical guardrails, and audience questions. See [PRESENTER_SCRIPT.md](PRESENTER_SCRIPT.md) for a fuller 30–35-minute spoken script, linked scene cues, transitions, and optional answers to likely questions. Timing is an estimate, not a measured rehearsal. See [STORYBOARD.md](STORYBOARD.md) for the teaching and interaction plan created before coding.
 
 ## Interactions
 
@@ -34,6 +34,8 @@ src/app.js            Browser interactions and presentation navigation
 src/styles.css        Responsive, reduced-motion, and print styles
 index.html            Generated standalone deliverable
 PRESENTER_GUIDE.md    Generated scene-by-scene guidance
+PRESENTER_SCRIPT.md   Hand-authored spoken script and exact scene cues
+CLARITY_REVIEW.md     Findings, changes, and remaining validation limits
 qa/                   Build and validation evidence
 ```
 

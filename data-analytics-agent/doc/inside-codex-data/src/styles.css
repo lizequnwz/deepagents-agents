@@ -13,3 +13,5 @@
 /* Focus remains visible on both light scenes and the dark presentation chrome. */
 :focus-visible{outline-color:#9c4700;scroll-margin-top:90px;scroll-margin-bottom:90px}
 .dark :focus-visible,.topbar :focus-visible,.presentation-controls :focus-visible{outline-color:#ffb768}
+.research-actions .button-link{margin-top:0}
+@media print{.preview-canvas{background:#f3f3f3!important}.identity-graph,.compiler-flow,.evidence-object{break-inside:avoid}}

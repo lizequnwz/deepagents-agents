@@ -8,7 +8,7 @@ The opening creates a concrete need: analysis must survive inspection, editing, 
 
 ## Presenter
 
-Fourteen scene anchors support a 27-minute plan. Keyboard navigation, visible scene controls, and optional live prompts support screen sharing. Presentation navigation uses immediate scene movement, so repeated advancement does not depend on scroll-animation timing. Normal scrolling remains available on smaller screens and for longer explorer content. Under the Hood sections are closed on entering presentation mode and restored on exit.
+Fourteen scene anchors support a 27-minute selective plan and a fuller estimated 30–35-minute script. See CLARITY_REVIEW.md for the later consistency review and its corrections. Keyboard navigation, visible scene controls, and optional live prompts support screen sharing. Presentation navigation uses immediate scene movement, so repeated advancement does not depend on scroll-animation timing. Normal scrolling remains available on smaller screens and for longer explorer content. Under the Hood sections are closed on entering presentation mode and restored on exit.
 
 The live prompts occur in narrative order: routing after the mental model, workflow after the request, identity at the contract, and report/dashboard comparison at the surface choice. The skill explorer is intended for selecting two or three examples live, not reading all twenty entries aloud.
 
