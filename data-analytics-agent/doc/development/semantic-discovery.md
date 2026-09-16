@@ -1,4 +1,4 @@
-# Semantic Discovery and Research Capability Plan
+# Semantic discovery and research
 
 ## Status
 

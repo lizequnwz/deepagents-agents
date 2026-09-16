@@ -71,9 +71,9 @@ Run IDs identify checkpoints; conversation IDs scope artifacts. Tool-call commit
 reuse saved output during resumption. An execution interrupted before output
 commit may execute again. Use a single API process for this local deployment.
 
-See [architecture](doc/architecture.md), [operations and tests](doc/operations-and-testing.md),
-[reporting](doc/reporting-capability.md), [user workflow](doc/using-the-agent.md),
-and [deferred work](HANDOFF.md). The [tutorial](agent_internals_tutorial.ipynb)
+See the [documentation index](doc/README.md), [architecture](doc/development/architecture.md),
+[user workflow](doc/user/using-the-agent.md), and [deferred work](HANDOFF.md). The
+[tutorial](agent_internals_tutorial.ipynb)
 walks through the artifact workflow without a model call.
 
 ## Verify

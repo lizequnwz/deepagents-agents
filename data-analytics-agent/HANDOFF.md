@@ -22,7 +22,9 @@ The application now uses durable SQLite metadata/checkpoints and typed Parquet
 artifacts, an iterative `data-analysis` specialist, scoped saved-data SQL,
 shared versioned charts, staged findings and required HTML reports, and saved
 Streamlit conversations with Stop/Resume and report retry. See
-[architecture](doc/architecture.md) and [operations](doc/operations-and-testing.md).
+[architecture](doc/development/architecture.md),
+[backend development](doc/development/backend-development.md), and
+[user workflow](doc/user/using-the-agent.md).
 
 Local verification covers the actual Deep Agents descriptive workflow with a
 scripted model; real Python forecasting and seasonal-baseline evaluation;
@@ -37,9 +39,10 @@ synthetic fixtures and repository instructions. The user authorized live trials
 on September 6, 2026. Descriptive and forecasting trials were run against the
 configured OpenAI `gpt-5.6-luna`, with external tracing disabled. They exposed
 activity attribution/name loss and repairable tool-input errors, now corrected.
-See [live behavior review](doc/live-evaluation-review.md) for individual outcomes,
-methodological limitations, and regression verification. Seasonality, predictive
-modeling, and conversational refinement still need their opt-in live evaluations.
+The current [improvement roadmap](doc/roadmap/roadmap.md)
+records the remaining quality work and its methodological limits. Seasonality,
+predictive modeling, and conversational refinement still need their opt-in live
+evaluations.
 
 Provider cancellation remains cooperative: a blocking warehouse request can keep
 the UI in Stopping until it returns. LangGraph's v3 streaming API currently emits

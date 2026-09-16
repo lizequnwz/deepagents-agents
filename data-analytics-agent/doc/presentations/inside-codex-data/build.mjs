@@ -5,17 +5,18 @@ import {createHash} from 'node:crypto';
 import * as content from './src/content.mjs';
 import {families,skills} from './src/skills.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
-const doc=path.dirname(here);
+const docRoot=path.resolve(here,'../..');
+const reviews=path.join(docRoot,'reviews');
 const plugin='/Users/charlie/.codex/plugins/cache/openai-curated-remote/data-analytics/1.0.8';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const read=name=>fs.readFileSync(path.join(here,name),'utf8');
-const sources=JSON.parse(fs.readFileSync(path.join(doc,'data-plugin-review-evidence/sources.json'),'utf8'));
+const sources=JSON.parse(fs.readFileSync(path.join(reviews,'data-plugin-review-evidence/sources.json'),'utf8'));
 function excerpt(entry){const bytes=fs.readFileSync(entry.path);if(entry.sha256&&hash(bytes)!==entry.sha256)throw new Error('Source changed: '+entry.path);const lines=bytes.toString().split('\n');const end=Math.min(entry.end,entry.start+17);return {...entry,sha256:hash(bytes),excerptEnd:end,excerpt:lines.slice(entry.start-1,end).map((l,i)=>`${entry.start+i}  ${l}`).join('\n')};}
 for(const key of Object.keys(sources))sources[key]=sources[key].map(excerpt);
 for(const skill of skills){const file=path.join(plugin,'skills',skill.name,'SKILL.md');const lines=fs.readFileSync(file,'utf8').split('\n');let start=lines.findIndex(l=>l.includes(' owns '));if(start<0)start=lines.findIndex(l=>l.startsWith('## Workflow'));if(start<0)start=24;sources['K:'+skill.name]=[excerpt({path:file,start:1,end:Math.min(8,lines.length)}),excerpt({path:file,start:start+1,end:Math.min(start+30,lines.length)})];}
-const reviewHtml=fs.readFileSync(path.join(doc,'data-plugin-standalone-review-2026-09-14.html'));
-const reviewMarkdown=fs.readFileSync(path.join(doc,'data-plugin-standalone-review-2026-09-14.md'));
+const reviewHtml=fs.readFileSync(path.join(reviews,'data-plugin-standalone-review-2026-09-14.html'));
+const reviewMarkdown=fs.readFileSync(path.join(reviews,'data-plugin-standalone-review-2026-09-14.md'));
 const css=read('src/styles.css');const js=read('src/app.js');
 const data={...content,scenes:undefined,sceneTitles:content.scenes.map(s=>s.nav),families,skills,sources,reviewHtml:reviewHtml.toString('base64'),reviewMarkdown:reviewMarkdown.toString('base64')};
 const sceneHtml=content.scenes.map((s,i)=>`<section class="scene ${s.tone}" id="${s.id}" aria-labelledby="title-${s.id}"><div class="scene-inner"><header class="scene-header"><span class="kicker">${s.kicker}</span><${i===0?'h1':'h2'} id="title-${s.id}">${s.title}</${i===0?'h1':'h2'}><p class="intro">${s.intro}</p></header>${s.body}<details class="hood"><summary>Under the Hood <span aria-hidden="true">/</span> implementation + sources</summary><div class="hood-body"><span class="eyebrow">Architecture detail · interpretations identified in context</span><p>${s.hood}</p><button class="source-button" data-sources="${s.refs}" data-source-title="${esc(s.nav)} · source evidence">Explore source files + excerpts ↗</button></div></details></div></section>`).join('\n');

@@ -69,7 +69,7 @@ Acceptance examples: revenue remains unchanged when adding a one-to-many dimensi
 
 The deterministic tests are valuable. The live suite is much narrower: five case categories over one small, regular synthetic fixture. Statistical cases largely check for terminology in saved outputs/code and the presence of executions. The descriptive case checks whether the expected number appears somewhere in the evidence, rather than fully verifying the final answer. These checks can pass despite misleading wording or invalid methodology.
 
-Evidence: [live evaluations](/Users/charlie/Repos/deepagents-agents/data-analytics-agent/tests/test_live_evaluations.py:140), [prior evaluation review](/Users/charlie/Repos/deepagents-agents/data-analytics-agent/doc/live-evaluation-review.md).
+Evidence: [live evaluations](/Users/charlie/Repos/deepagents-agents/data-analytics-agent/tests/test_live_evaluations.py:140). The earlier live-trial summary was removed as an obsolete standalone document; the current roadmap records the remaining evaluation limitations.
 
 Build a versioned set of real business question patterns, using authorized or synthetic datasets. Start with roughly 30–50 representative cases and several phrasings, then expand from failures. Separate development examples from held-out evaluation cases. Include:
 

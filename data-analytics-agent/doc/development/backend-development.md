@@ -7,7 +7,7 @@ and keep source-specific configuration in the trusted data-source registry.
 
 ## Contract
 
-See [`backends/base.py`](../data_analytics_agent/backends/base.py):
+See [`backends/base.py`](../../data_analytics_agent/backends/base.py):
 
 - `dialect` is the SQLGlot dialect; `backend_type` identifies the adapter.
 - `execute_batches(query, *, timeout_seconds, cancel=None)` yields typed
@@ -45,8 +45,8 @@ also consumes saved artifacts through its own shared tool.
 
 ## Verification
 
-Follow [`test_backends.py`](../tests/test_backends.py) and
-[`test_persistent_analyst.py`](../tests/test_persistent_analyst.py). Cover exact
+Follow [`test_backends.py`](../../tests/test_backends.py) and
+[`test_persistent_analyst.py`](../../tests/test_persistent_analyst.py). Cover exact
 SQL and reviewed edits, typed values including null-first batches and decimals,
 source provenance, errors, resource cleanup, timeout/cancellation, and writer
 budget exhaustion. A 100,000-row fixture must survive storage, analysis,

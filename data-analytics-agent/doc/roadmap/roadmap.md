@@ -4,7 +4,7 @@ Reviewed 15 September 2026 against the current working tree. Subject: this repos
 
 ## Executive assessment
 
-**Observed:** This is already a persistent analytical application: a coordinator assigns retrieval and descriptive work to SQL and statistical work to Python. Saved Parquet datasets, exact execution records, parent lineage, chart/report revisions, clarification, stop/resume, staged findings, and report retry are implemented. Numeric report cards read saved values. These are substantial foundations, not missing features. See [coordinator.py](../data_analytics_agent/coordinator.py:125), [SavedResult](../data_analytics_agent/schemas.py:164), [report generation](../data_analytics_agent/reporting/tools.py:22), and [metric rendering](../data_analytics_agent/reporting/renderer.py:185).
+**Observed:** This is already a persistent analytical application: a coordinator assigns retrieval and descriptive work to SQL and statistical work to Python. Saved Parquet datasets, exact execution records, parent lineage, chart/report revisions, clarification, stop/resume, staged findings, and report retry are implemented. Numeric report cards read saved values. These are substantial foundations, not missing features. See [coordinator.py](../../data_analytics_agent/coordinator.py:125), [SavedResult](../../data_analytics_agent/schemas.py:164), [report generation](../../data_analytics_agent/reporting/tools.py:22), and [metric rendering](../../data_analytics_agent/reporting/renderer.py:185).
 
 **Inference:** The next product step is to make a supported answer become a reusable analytical asset: people should understand its definition, inspect its basis, explore its scope, refresh it, and know what changed. New model algorithms or a larger roster of agents would not address those needs on their own.
 
@@ -29,7 +29,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 1. Make metric meaning and evidence inspectable from every important number
 
-**Observed:** The semantic catalog already has metric expressions, descriptions, instructions, and a content hash. Saved results already record SQL, timestamps, lineage, and profiles. Report metrics bind to a result column and row, but there is no corresponding typed metric-definition reference in `ReportMetric`. SemanticMetric has no dedicated numerator, denominator, unit, fiscal-calendar, or validity fields. Some meaning can already live in descriptions/instructions; the gap is consistent structured binding and reader access. [SemanticMetric](../data_analytics_agent/semantic.py:58), [SavedResult](../data_analytics_agent/schemas.py:164), [ReportMetric](../data_analytics_agent/reporting/schemas.py:105).
+**Observed:** The semantic catalog already has metric expressions, descriptions, instructions, and a content hash. Saved results already record SQL, timestamps, lineage, and profiles. Report metrics bind to a result column and row, but there is no corresponding typed metric-definition reference in `ReportMetric`. SemanticMetric has no dedicated numerator, denominator, unit, fiscal-calendar, or validity fields. Some meaning can already live in descriptions/instructions; the gap is consistent structured binding and reader access. [SemanticMetric](../../data_analytics_agent/semantic.py:58), [SavedResult](../../data_analytics_agent/schemas.py:164), [ReportMetric](../../data_analytics_agent/reporting/schemas.py:105).
 
 **Recommendation:** Add a compact metric/evidence contract: definition ID and version, semantic catalog hash, unit, population, grain, numerator/denominator when applicable, effective date window, filters, source-read time, and known limitations. Preserve truthful unknowns. Add “How was this calculated?” to metric cards and charts, opening the definition, relevant rows, transformations, and exact source query.
 
@@ -43,7 +43,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 2. Add a validation record for the evidence and claims being published
 
-**Observed:** Read-only SQL validation checks structure and forbidden operations. Python refuses truncated inputs and display-only datasets. Reports resolve references and bind metric values. However, narrative bodies and metric change labels are strings, and `publish_findings` does not require a recorded semantic or claim-validation result. [SQL validation](../data_analytics_agent/backends/validation.py:45), [Python input checks](../data_analytics_agent/agents/data_analysis/tools.py:40), [report fields](../data_analytics_agent/reporting/schemas.py:105), [publication](../data_analytics_agent/presentation.py:73).
+**Observed:** Read-only SQL validation checks structure and forbidden operations. Python refuses truncated inputs and display-only datasets. Reports resolve references and bind metric values. However, narrative bodies and metric change labels are strings, and `publish_findings` does not require a recorded semantic or claim-validation result. [SQL validation](../../data_analytics_agent/backends/validation.py:45), [Python input checks](../../data_analytics_agent/agents/data_analysis/tools.py:40), [report fields](../../data_analytics_agent/reporting/schemas.py:105), [publication](../../data_analytics_agent/presentation.py:73).
 
 **Recommendation:** Record scoped checks before publishing: expected grain, key uniqueness, join multiplication, denominator reconciliation, comparable date windows, completeness, and claim support. Bind computable changes to baseline/current evidence instead of accepting a free-text percentage. Mark checks as pass, fail, or unknown with evidence references; a single generic confidence score would hide too much.
 
@@ -57,7 +57,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 3. Give “why did this metric change?” a structured investigation workflow
 
-**Observed:** The Python skill already asks for competing hypotheses, seasonal/segment comparisons, uncertainty, and caution about causation. The saved investigation is a compact list of findings and artifacts, rather than a typed driver analysis. [Analysis guidance](../skills/analysis/data-analysis/SKILL.md:23), [investigation record](../data_analytics_agent/presentation.py:114).
+**Observed:** The Python skill already asks for competing hypotheses, seasonal/segment comparisons, uncertainty, and caution about causation. The saved investigation is a compact list of findings and artifacts, rather than a typed driver analysis. [Analysis guidance](../../skills/analysis/data-analysis/SKILL.md:23), [investigation record](../../data_analytics_agent/presentation.py:114).
 
 **Recommendation:** Add a focused metric-diagnostics workflow inside the existing agents: establish the movement, check quality, separate changes within groups from changes in group mix, test volume/rate effects, compare plausible explanations, and preserve an unexplained remainder where appropriate. Store each hypothesis with its test, evidence, status, and limitations. Add a reusable driver-summary report composition.
 
@@ -71,7 +71,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 4. Turn report revisions into reusable reports with deliberate refresh
 
-**Observed:** Report revisions already have a predecessor and version. Each saved revision gets a new report ID, and `ReportSpec` has no stable block IDs or refresh recipe. Fresh data can be requested conversationally, but this is different from refreshing a named report while preserving its identity and presentation. [ReportStore](../data_analytics_agent/stores.py:137), [ReportSpec](../data_analytics_agent/reporting/schemas.py:190), [saved-query execution](../data_analytics_agent/agents/text_to_sql/tools.py:125).
+**Observed:** Report revisions already have a predecessor and version. Each saved revision gets a new report ID, and `ReportSpec` has no stable block IDs or refresh recipe. Fresh data can be requested conversationally, but this is different from refreshing a named report while preserving its identity and presentation. [ReportStore](../../data_analytics_agent/stores.py:137), [ReportSpec](../../data_analytics_agent/reporting/schemas.py:190), [saved-query execution](../../data_analytics_agent/agents/text_to_sql/tools.py:125).
 
 **Recommendation:** Add a stable report-series identity and stable block identities, while retaining immutable revision IDs. Store a refresh recipe covering source queries, parameters, fixed versus rolling dates, derived transformations, and metric versions. Build a candidate revision, validate it, show the changes, then advance the current-report pointer. Preserve titles and layout where still applicable; flag narrative that needs reevaluation.
 
@@ -85,7 +85,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 5. Add interactive dashboards with shared filters and saved views
 
-**Observed:** There are nine declared chart types and interactive Plotly figures. The report contract contains narrative, metrics, tables, charts, analysis, callout, and infographic blocks, but no shared dashboard-filter or saved-view model. Existing chart interactivity should not be described as missing. [ChartSpec](../data_analytics_agent/visualization/schemas.py:21), [ReportBlock](../data_analytics_agent/reporting/schemas.py:178), [renderer](../data_analytics_agent/reporting/renderer.py:527).
+**Observed:** There are nine declared chart types and interactive Plotly figures. The report contract contains narrative, metrics, tables, charts, analysis, callout, and infographic blocks, but no shared dashboard-filter or saved-view model. Existing chart interactivity should not be described as missing. [ChartSpec](../../data_analytics_agent/visualization/schemas.py:21), [ReportBlock](../../data_analytics_agent/reporting/schemas.py:178), [renderer](../../data_analytics_agent/reporting/renderer.py:527).
 
 **Recommendation:** Add a dashboard presentation mode over saved evidence: shared date/segment filters, comparison period, drill-down tables, and a saved view. Keep presentation state separate from underlying results. Controls must clearly indicate whether they filter a complete saved dataset or require a new source request.
 
@@ -99,7 +99,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 6. Make model evaluation a first-class analytical result
 
-**Observed:** Forecasting and predictive analysis already exist, with good instructions about baselines, temporal holdouts, leakage, and intervals. `DataAnalysisResult` records method, assumptions, warnings, and executions, but not a dedicated evaluation contract. The opt-in test rubric largely checks method words in output rather than proving held-out performance or calibrated intervals. [Analysis skill](../skills/analysis/data-analysis/SKILL.md:28), [analysis schema](../data_analytics_agent/agents/data_analysis/schemas.py:70), [evaluation rubric](../tests/test_live_evaluations.py:164).
+**Observed:** Forecasting and predictive analysis already exist, with good instructions about baselines, temporal holdouts, leakage, and intervals. `DataAnalysisResult` records method, assumptions, warnings, and executions, but not a dedicated evaluation contract. The opt-in test rubric largely checks method words in output rather than proving held-out performance or calibrated intervals. [Analysis skill](../../skills/analysis/data-analysis/SKILL.md:28), [analysis schema](../../data_analytics_agent/agents/data_analysis/schemas.py:70), [evaluation rubric](../../tests/test_live_evaluations.py:164).
 
 **Recommendation:** Store task type, target, feature availability time, split boundaries, train/test sizes, baseline/model scores, forecast horizon, interval method, and empirical coverage when measurable. Render a model-comparison card. Add synthetic tests with leakage traps, changing trends, and insufficient seasonal history.
 
@@ -113,7 +113,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 7. Support user-uploaded datasets and controlled source enrichment
 
-**Observed:** Sources are configured through a backend, semantic model, dialect, and target. Results and tools are scoped to one conversation/source, and uploads/mixed-source work are explicitly deferred. [SourceDefinition](../data_analytics_agent/data_sources.py:34), [saved-data binding](../data_analytics_agent/agents/text_to_sql/tools.py:154), [deferred work](../HANDOFF.md:1).
+**Observed:** Sources are configured through a backend, semantic model, dialect, and target. Results and tools are scoped to one conversation/source, and uploads/mixed-source work are explicitly deferred. [SourceDefinition](../../data_analytics_agent/data_sources.py:34), [saved-data binding](../../data_analytics_agent/agents/text_to_sql/tools.py:154), [deferred work](../../HANDOFF.md:1).
 
 **Recommendation:** Start with CSV/Parquet upload as a complete, conversation-scoped dataset. Show inferred types, grain, missing values, file hash, and sheet/range when spreadsheet support is added. Then allow explicitly selected enrichment of a warehouse snapshot with an uploaded mapping or target file, preserving both origins and checking join cardinality.
 
@@ -127,7 +127,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 8. Save approved business context and reporting preferences
 
-**Observed:** Business meaning exists in curated semantic YAML and repository instructions, while conversation investigations preserve assumptions for that conversation. The reviewed tools do not expose an approved reusable context workflow for the end user. [SemanticCatalog](../data_analytics_agent/semantic.py:89), [investigation persistence](../data_analytics_agent/presentation.py:114), [coordinator tools](../data_analytics_agent/coordinator.py:125).
+**Observed:** Business meaning exists in curated semantic YAML and repository instructions, while conversation investigations preserve assumptions for that conversation. The reviewed tools do not expose an approved reusable context workflow for the end user. [SemanticCatalog](../../data_analytics_agent/semantic.py:89), [investigation persistence](../../data_analytics_agent/presentation.py:114), [coordinator tools](../../data_analytics_agent/coordinator.py:125).
 
 **Recommendation:** Let a user explicitly save a fiscal calendar, metric convention, standard exclusion, preferred audience, or reporting style. Show scope, version, and origin. Define precedence: the current explicit request and governed source definitions should resolve conflicts visibly, not through hidden learned behavior.
 
@@ -141,7 +141,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 9. Build scheduled KPI monitoring on top of validated refresh
 
-**Observed:** Scheduling and proactive monitoring are deferred. The application exposes manual run, stop, resume, and retry-report operations and is documented as a local single-user, single-API-process deployment. [Deferred work](../HANDOFF.md:1), [run endpoints](../data_analytics_agent/api.py:623), [README](../README.md:43).
+**Observed:** Scheduling and proactive monitoring are deferred. The application exposes manual run, stop, resume, and retry-report operations and is documented as a local single-user, single-API-process deployment. [Deferred work](../../HANDOFF.md:1), [run endpoints](../../data_analytics_agent/api.py:623), [README](../../README.md:43).
 
 **Recommendation:** After manual refresh works, add a saved monitor with report identity, metric version, cadence, timezone, comparison baseline, freshness requirement, and alert policy. Begin with an in-app status/history view. External notification destinations and message scope require explicit user configuration.
 
@@ -155,7 +155,7 @@ The ranking assumes the near-term customer is an individual analyst or a small i
 
 ### 10. Deliver faithful exports with explicit sharing scope
 
-**Observed:** Dataset CSV/Parquet and HTML report downloads are implemented. The report includes exact source SQL; it is not just a screenshot of the visible answer. The reviewed API has no report PDF/PPTX/DOCX export or hosted sharing workflow. [Downloads](../data_analytics_agent/api.py:662), [report download](../data_analytics_agent/api.py:724), [SQL appendix](../data_analytics_agent/reporting/renderer.py:483).
+**Observed:** Dataset CSV/Parquet and HTML report downloads are implemented. The report includes exact source SQL; it is not just a screenshot of the visible answer. The reviewed API has no report PDF/PPTX/DOCX export or hosted sharing workflow. [Downloads](../../data_analytics_agent/api.py:662), [report download](../../data_analytics_agent/api.py:724), [SQL appendix](../../data_analytics_agent/reporting/renderer.py:483).
 
 **Recommendation:** Start with reliable PDF export of the selected report revision and view. Then add a concise executive summary and presentation export if users need them. Offer an explicit audience-ready export versus a full audit package, showing what data and code each contains. Derive both from the same approved evidence. Hosted collaboration requires a separate authentication/authorization design before exposing this local API.
 

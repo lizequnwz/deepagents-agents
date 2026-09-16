@@ -11,14 +11,14 @@ source = OSI model + backend profile + target + dialect + limits + UI metadata
 Adding another source on an existing backend should require no agent, API, or
 Streamlit code changes.
 
-![Data-source onboarding workflow](diagrams/data-source-onboarding.svg)
+![Data-source onboarding workflow](../diagrams/data-source-onboarding.svg)
 
-[Open the interactive diagram](diagrams/data-source-onboarding.html) ·
-[Edit the Archify source](diagrams/data-source-onboarding.workflow.json)
+[Open the interactive diagram](../diagrams/data-source-onboarding.html) ·
+[Edit the Archify source](../diagrams/data-source-onboarding.workflow.json)
 
 ## Current registry contract
 
-The strict schema in [`data_sources.py`](../data_analytics_agent/data_sources.py)
+The strict schema in [`data_sources.py`](../../data_analytics_agent/data_sources.py)
 accepts:
 
 ```yaml
@@ -197,7 +197,7 @@ other cloud adapters may define different trusted target fields.
 
 Do not add a cloud source entry until its backend adapter exists. An unsupported
 backend is intentionally unavailable. See the
-[Snowflake backend guide](snowflake-blueprint.md).
+[Snowflake backend guide](snowflake-backend.md).
 
 ## Invariants
 

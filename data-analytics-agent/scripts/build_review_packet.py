@@ -14,17 +14,17 @@ REPORTS = (
     (
         "architecture-review",
         "Architecture & product review",
-        ROOT / "doc/design-review-2026-09-10.md",
+        ROOT / "doc/reviews/design-review-2026-09-10.md",
         "The baseline assessment of the current agent's architecture and product direction.",
     ),
     (
         "data-plugin-review",
         "Data plugin comparative review",
-        ROOT / "doc/data-plugin-comparative-review-2026-09-14.md",
+        ROOT / "doc/reviews/data-plugin-comparative-review-2026-09-14.md",
         "A detailed comparison with the official Data plugin and a practical adoption path.",
     ),
 )
-OUTPUT = ROOT / "doc/review-packet.html"
+OUTPUT = ROOT / "doc/reviews/review-packet.html"
 
 FENCE = re.compile(r"^```(?P<language>[\w-]*)\s*$")
 HEADING = re.compile(r"^(?P<level>#{1,6})\s+(?P<text>.+?)\s*$")

@@ -42,9 +42,9 @@ qa/                   Build and validation evidence
 Rebuild with Node:
 
 ```sh
-node doc/inside-codex-data/build.mjs
+node doc/presentations/inside-codex-data/build.mjs
 ```
 
-The build reads the original review and evidence ledger from the parent `doc/` directory, plus the installed plugin at the absolute path declared near the top of `build.mjs`. It verifies the source hashes from the original ledger and stops if cited files have changed. This local-source requirement applies to rebuilding, not opening the generated file. The original review files are not modified.
+The build reads the original review and evidence ledger from `doc/reviews/`, plus the installed plugin at the absolute path declared near the top of `build.mjs`. It verifies the source hashes from the original ledger and stops if cited files have changed. This local-source requirement applies to rebuilding, not opening the generated file. The original review files are not modified.
 
 No framework or runtime package is required. Validation uses the already available local Playwright/Chromium tooling; see `qa/validation.json` for the checks and their limits. Print styles support the visible learning state and implementation notes. Use the embedded original review’s print controls for its complete technical-review PDF; the learning layer does not pretend that every unselected interactive state is included in a browser printout.

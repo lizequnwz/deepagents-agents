@@ -16,8 +16,8 @@ ambiguity and drift, not substitutes for curation.
 
 Authoritative examples:
 
-- [`chinook.osi.yaml`](../semantic/chinook.osi.yaml)
-- [`financial.osi.yaml`](../semantic/financial.osi.yaml)
+- [`chinook.osi.yaml`](../../semantic/chinook.osi.yaml)
+- [`financial.osi.yaml`](../../semantic/financial.osi.yaml)
 
 ## Required structure
 
@@ -213,7 +213,7 @@ The dictionary is evidence, not executable runtime configuration.
 
 ## Validation behavior
 
-[`semantic.py`](../data_analytics_agent/semantic.py) checks:
+[`semantic.py`](../../data_analytics_agent/semantic.py) checks:
 
 - file existence and YAML mapping;
 - version `0.1.1`;
