@@ -326,6 +326,7 @@ class ActivityTool(StrictModel):
     """User-presentable details for one streamed tool lifecycle."""
 
     call_id: str | None = None
+    invocation_id: str | None = None
     name: str
     input: Any | None = None
     output: Any | None = None
@@ -335,7 +336,9 @@ class ActivityEvent(StrictModel):
     id: int
     kind: str
     label: str
-    phase: Literal["info", "started", "completed", "failed"] = "info"
+    phase: Literal["info", "started", "completed", "failed", "waiting", "cancelled"] = (
+        "info"
+    )
     agent: str | None = None
     tool: ActivityTool | None = None
     duration_ms: int | None = Field(default=None, ge=0)

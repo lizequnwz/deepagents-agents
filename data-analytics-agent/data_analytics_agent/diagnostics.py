@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from langgraph.errors import GraphInterrupt
+
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 import json
@@ -135,17 +138,6 @@ def _tool_output_is_error(value: Any) -> bool:
     return False
 
 
-def _tool_output_is_approval_interrupt(value: Any) -> bool:
-    """Recognize the expected task interruption used for human review."""
-
-    if not isinstance(value, Mapping):
-        return False
-    error = value.get("error")
-    if not isinstance(error, str):
-        return False
-    return "Interrupt(value=" in error and "action_requests" in error
-
-
 def _agent_name(graph_name: str) -> str | None:
     normalized = graph_name.casefold()
     if "text-to-sql" in normalized:
@@ -197,7 +189,7 @@ class RunDiagnosticsCallback(BaseCallbackHandler):
         name = (serialized or {}).get("name") or kwargs.get("name") or "tool"
         agent = _agent_for_model_metadata(metadata)
         self._tools[str(run_id)] = (call_id, name, agent)
-        self.runs.start_tool_call(self.run_id, call_id, agent=agent)
+        self.runs.start_tool_call(self.run_id, str(run_id), agent=agent)
         self.runs.add_event(
             self.run_id,
             "tool",
@@ -206,28 +198,32 @@ class RunDiagnosticsCallback(BaseCallbackHandler):
             agent=agent,
             tool=ActivityTool(
                 call_id=call_id,
+                invocation_id=str(run_id),
                 name=name,
                 input=_bounded_tool_value(inputs if inputs is not None else input_str),
             ),
         )
 
-    def _finish_tool(self, run_id, output, *, failed):
+    def _finish_tool(self, run_id, output, *, failed, phase=None):
         identity = self._tools.pop(str(run_id), None)
         if identity is None:
             return
         call_id, name, agent = identity
         duration = self.runs.finish_tool_call(
-            self.run_id, call_id, agent=agent, failed=failed
+            self.run_id, str(run_id), agent=agent, failed=failed
         )
         self.runs.add_event(
             self.run_id,
             "tool",
             name.replace("_", " ").capitalize(),
-            phase="failed" if failed else "completed",
+            phase=phase or ("failed" if failed else "completed"),
             agent=agent,
             duration_ms=duration,
             tool=ActivityTool(
-                call_id=call_id, name=name, output=_bounded_tool_value(output)
+                call_id=call_id,
+                invocation_id=str(run_id),
+                name=name,
+                output=_bounded_tool_value(output),
             ),
         )
 
@@ -235,7 +231,16 @@ class RunDiagnosticsCallback(BaseCallbackHandler):
         self._finish_tool(run_id, output, failed=_tool_output_is_error(output))
 
     def on_tool_error(self, error, *, run_id, **kwargs):
-        self._finish_tool(run_id, {"error": str(error)}, failed=True)
+        phase = (
+            "waiting"
+            if isinstance(error, GraphInterrupt)
+            else "cancelled"
+            if isinstance(error, (asyncio.CancelledError, InterruptedError))
+            else "failed"
+        )
+        self._finish_tool(
+            run_id, {"error": str(error)}, failed=phase == "failed", phase=phase
+        )
 
     def on_chat_model_start(
         self,

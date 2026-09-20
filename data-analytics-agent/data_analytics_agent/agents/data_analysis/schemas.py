@@ -44,6 +44,7 @@ class AnalysisOutput(StrictModel):
 
 
 class PythonExecutionResult(StrictModel):
+    assignment_id: str | None = None
     execution_id: str
     inputs: dict[str, str]
     executed_python: str

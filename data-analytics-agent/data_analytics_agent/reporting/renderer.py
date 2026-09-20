@@ -37,7 +37,7 @@ from data_analytics_agent.schemas import SavedResult
 
 _SCRIPT_PATTERN = re.compile(r"<script(?:\s[^>]*)?>(.*?)</script>", re.DOTALL)
 _INLINE_PATTERN = re.compile(r"\*\*(.+?)\*\*|`([^`]+)`")
-REPORT_RENDERER_VERSION = "1.5"
+REPORT_RENDERER_VERSION = "1.6"
 
 # Report-owned semantic chart tokens. Every categorical color maintains at
 # least 3:1 contrast against both the light and dark report surfaces.
@@ -270,12 +270,17 @@ def _statistical(
                         for column in columns
                     )
                     + "</tr>"
-                    for row in rows
+                    for row in rows[:10]
                 )
                 outputs.append(
                     f'<h3>{name}</h3><div class="table-scroll"><table>'
                     f"<thead><tr>{header}</tr></thead><tbody>{body}</tbody>"
                     "</table></div>"
+                    + (
+                        f"<p>Preview: 10 of {len(rows)} saved rows. Full evidence remains available in the app.</p>"
+                        if len(rows) > 10
+                        else ""
+                    )
                 )
             elif kind == "scalar":
                 outputs.append(
@@ -303,21 +308,27 @@ def _statistical(
         details.append(f"<h3>Interpretation</h3>{_rich_text(interpretation)}")
     warning_items = list(dict.fromkeys(analysis.warnings))
     warnings = (
-        '<details class="analysis-warnings"><summary>'
+        '<aside class="analysis-warnings"><h3>'
         f"Analysis notes and limitations ({len(warning_items)})"
-        "</summary><ul>"
+        "</h3><ul>"
         + "".join(
             f'<li class="analysis-warning">{escape(item)}</li>'
             for item in warning_items
         )
-        + "</ul></details>"
+        + "</ul></aside>"
         if warning_items
         else ""
     )
     return (
         '<section class="report-block statistical-block">'
         f"<h2>{escape(block.title)}</h2>{_rich_text(block.summary)}"
-        f"{''.join(outputs)}{warnings}"
+        f"{warnings}"
+        + (
+            '<details class="analysis-outputs"><summary>Analysis outputs and diagnostics</summary>'
+            f"{''.join(outputs)}</details>"
+            if outputs
+            else ""
+        )
         + (
             '<details class="method-details"><summary>Method and assumptions</summary>'
             f"{''.join(details)}</details>"

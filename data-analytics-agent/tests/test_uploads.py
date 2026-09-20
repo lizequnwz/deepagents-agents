@@ -510,7 +510,8 @@ def test_upload_ui_review_and_reopen_without_configured_sources(
         app = AppTest.from_file(str(Path(__file__).parents[1] / "streamlit_app.py"))
         app.run(timeout=15)
         assert not app.exception
-        assert not app.chat_input
+        assert len(app.chat_input) == 1
+        assert app.chat_input[0].proto.accept_file
         app.query_params["thread_id"] = upload.thread_id
         app.run(timeout=15)
         assert not app.exception
@@ -604,6 +605,7 @@ def test_python_reuses_uploaded_evidence_and_preserves_lineage(test_settings):
             "run_id": run,
             "source_id": upload.source_id,
             "question": "Analyze amounts",
+            "analysis_assignment_id": "upload-analysis",
         },
         tool_call_id="python-upload",
     )

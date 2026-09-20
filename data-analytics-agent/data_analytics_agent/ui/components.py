@@ -47,7 +47,13 @@ _PHASE_ICONS = {
     "started": ":material/pending:",
     "completed": ":material/check_circle:",
     "failed": ":material/error:",
+    "waiting": ":material/pause_circle:",
+    "cancelled": ":material/stop_circle:",
 }
+
+
+def _tool_identity(tool):
+    return tool.get("invocation_id") or tool.get("call_id")
 
 
 def consolidate_activity_events(
@@ -60,7 +66,7 @@ def consolidate_activity_events(
     for source in events:
         event = dict(source)
         tool = event.get("tool")
-        call_id = tool.get("call_id") if isinstance(tool, dict) else None
+        call_id = _tool_identity(tool) if isinstance(tool, dict) else None
         if not call_id:
             consolidated.append(event)
             continue
@@ -405,7 +411,12 @@ def activity_label(event, *, source_id=None):
     stage = {"completed": 1, "failed": 2}.get(event.get("phase"), 0)
     if name == "task":
         label = f"{_agent_label(arguments.get('subagent_type'))} · {('Working', 'Finished', 'Assignment failed')[stage]}"
-        detail = arguments.get("description")
+        detail = re.sub(
+            r"\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b",
+            "saved evidence",
+            str(arguments.get("description") or ""),
+        )
+        detail = re.split(r"(?<=[.!?])\s", detail, maxsplit=1)[0]
     else:
         label = _ACTIVITY_LABELS.get(
             name, ("Working", "Work finished", "Operation failed")
@@ -426,6 +437,10 @@ def activity_label(event, *, source_id=None):
                 "Report design instructions loaded",
                 "Loading report instructions failed",
             )[stage]
+    if event.get("phase") == "waiting":
+        label = "Waiting for your input"
+    elif event.get("phase") == "cancelled":
+        label = "Stopped"
     detail = _activity_context(detail)
     return f"{label} · {detail}" if detail else label
 
@@ -464,12 +479,12 @@ def _model_activity(events, consolidated, agent):
         None,
     )
     brief = assignment["tool"]["input"].get("description") if assignment else None
-    merged = {(event.get("tool") or {}).get("call_id"): event for event in consolidated}
+    merged = {_tool_identity(event.get("tool") or {}): event for event in consolidated}
     recent = None
     # Raw completion order matters: parallel tools need not finish in start order.
     for event in reversed(events):
-        call_id = (event.get("tool") or {}).get("call_id")
-        if assignment and call_id == assignment["tool"].get("call_id"):
+        call_id = _tool_identity(event.get("tool") or {})
+        if assignment and call_id == _tool_identity(assignment["tool"]):
             break
         if event.get("agent") == agent and event.get("phase") in {
             "completed",
@@ -495,7 +510,11 @@ def _model_activity(events, consolidated, agent):
             )
         detail = arguments.get("purpose") or brief
         if tool.get("name") == "task":
-            detail = arguments.get("description")
+            detail = re.sub(
+                r"\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b",
+                "saved evidence",
+                str(arguments.get("description") or ""),
+            )
         elif tool.get("name") == "create_chart" and isinstance(
             arguments.get("spec"), dict
         ):
@@ -563,7 +582,59 @@ def current_activity(
     return label
 
 
+def render_work_summary(events):
+    """Show recorded public plans and actual work, never private model reasoning."""
+    steps = consolidate_activity_events(events)
+    plans = [
+        e
+        for e in steps
+        if (e.get("tool") or {}).get("name") == "write_todos"
+        and e.get("agent") == "coordinator"
+        and e.get("phase") == "completed"
+    ]
+    if plans:
+        plan_input = plans[-1]["tool"].get("input") or {}
+        todo_list = plan_input.get("todos", []) if isinstance(plan_input, dict) else []
+        if todo_list:
+            st.markdown("**Analysis plan**")
+            icons = {
+                "completed": ":material/check_circle:",
+                "in_progress": ":material/pending:",
+                "pending": ":material/radio_button_unchecked:",
+            }
+            for todo in todo_list:
+                if isinstance(todo, dict) and todo.get("content"):
+                    state = todo.get("status", "pending")
+                    st.markdown(
+                        prose_markdown(
+                            f"{icons.get(state, icons['pending'])} {todo['content']} · {state.replace('_', ' ')}"
+                        )
+                    )
+    # Assignment briefs explain parallel work; SQL/Python and publication/report
+    # events make progress visible even for simple requests without a formal plan.
+    meaningful = {
+        "task",
+        "execute_sql",
+        "query_saved_results",
+        "execute_analysis_python",
+        "publish_findings",
+        "create_chart",
+        "create_report",
+    }
+    visible = [e for e in steps if (e.get("tool") or {}).get("name") in meaningful]
+    if visible:
+        st.markdown("**Work progress**")
+        pending = [e for e in visible if e.get("phase") == "started"]
+        recent = [e for e in visible if e.get("phase") != "started"][-4:]
+        for event in [*pending, *recent]:
+            phase = event.get("phase", "info")
+            st.caption(
+                f"{_PHASE_ICONS.get(phase, ':material/info:')} {activity_label(event)}"
+            )
+
+
 def render_activity(events, diagnostics, *, key):
+    render_work_summary(events)
     panel = st.expander("Activity", key=f"activity_turn_{key}", on_change="rerun")
     if panel.open:
         with panel:
@@ -617,7 +688,7 @@ def render_activity_timeline(
             if tool_totals.get(tool_name, 0) > 1
             else ""
         )
-        event_key = tool.get("call_id") or event.get("id") or len(tool_seen)
+        event_key = _tool_identity(tool) or event.get("id") or len(tool_seen)
         with st.expander(
             f"{label if tool_name == 'task' else tool_name}{ordinal}",
             icon=":material/build:",
@@ -1269,7 +1340,7 @@ def _render_report(
         preview = st.expander(
             "Report preview",
             icon=":material/preview:",
-            expanded=False,
+            expanded=True,
             key=f"report_preview_{report_id}_{widget_key}",
             on_change="rerun",
         )
@@ -1315,7 +1386,7 @@ def render_answer(client, answer, *, turn_key, source_id):
     assumptions = answer.get("assumptions") or []
     interpretation = answer.get("interpretation")
     if assumptions or interpretation:
-        with st.container(border=True):
+        with st.expander("Assumptions and interpretation", expanded=False):
             if assumptions:
                 st.markdown("**Assumptions**")
                 for assumption in assumptions:
@@ -1328,6 +1399,12 @@ def render_answer(client, answer, *, turn_key, source_id):
         st.warning("Partial findings — the investigation is unfinished.")
     for question in answer.get("unresolved_questions") or []:
         st.caption(f"Still to investigate: {question}")
+    for warning in dict.fromkeys(
+        note
+        for analysis in answer.get("analyses") or []
+        for note in analysis.get("warnings") or []
+    ):
+        st.warning(prose_markdown(warning))
     for index, analysis in enumerate(answer.get("analyses") or []):
         _render_data_analysis(analysis, client=client, widget_key=f"{turn_key}_{index}")
     shown_result_ids = set()

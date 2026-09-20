@@ -2,6 +2,9 @@
 
 Reviewed 19 September 2026. Companion to the [product roadmap](roadmap.md).
 These are proposed changes, not measured improvements or implemented removals.
+The recommendations below describe the review-time baseline. See
+[implementation progress](implementation-progress.md) for subsequent deliveries
+and remaining acceptance gates.
 
 ## Direction
 

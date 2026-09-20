@@ -1,6 +1,7 @@
 """Generic iterative analysis specialist, distinct from descriptive SQL."""
 
 from langchain.agents.middleware import HumanInTheLoopMiddleware
+from data_analytics_agent.delegation import AnalysisAssignmentMiddleware
 from data_analytics_agent.agents.data_analysis.tools import create_analysis_tools
 from data_analytics_agent.agents.text_to_sql.tools import (
     create_inspect_conversation_result_tool,
@@ -53,7 +54,7 @@ def build_data_analysis_subagent(
         "tools": tools,
         "skills": ["/project/skills/analysis/"],
         "permissions": permissions,
-        "middleware": [*review, *(middleware or [])],
+        "middleware": [AnalysisAssignmentMiddleware(), *review, *(middleware or [])],
         "system_prompt": f"""You are the data-analysis specialist for {source.name}.
 Load the data-analysis skill. Inspect the assigned datasets, execute Python,
 examine the results, and revise as needed. Each call starts a fresh process

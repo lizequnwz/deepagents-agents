@@ -174,6 +174,9 @@ class Settings:
     upload_max_bytes: int = field(
         default_factory=lambda: _env_positive_int("UPLOAD_MAX_BYTES", 33_554_432)
     )
+    analysis_parallel_workers: int = field(
+        default_factory=lambda: _env_positive_int("ANALYSIS_PARALLEL_WORKERS", 2)
+    )
     analysis_budget_seconds: float = field(
         default_factory=lambda: _env_positive_float("ANALYSIS_BUDGET_SECONDS", 900)
     )

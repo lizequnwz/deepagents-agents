@@ -22,6 +22,8 @@ to connect your own data.
 
 Provider alternatives, execution limits, review settings, tracing, and development
 reload are documented in [configuration](doc/development/configuration.md).
+Try the [deep-dive test questions](doc/user/deep-dive-examples.md) for investigations,
+saved-data follow-ups, a sample upload, and run-control checks.
 
 ## Workflow
 

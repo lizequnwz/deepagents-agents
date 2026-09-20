@@ -270,3 +270,53 @@ def test_report_rejects_conflicting_metric_labels_for_one_saved_cell(workspace):
     assert "Overall sales" not in html and "Total sales were 100." in html
     assert "East sales" in html and "40.00" in html and "60.00" in html
     assert len(w.results.list_for_conversation(w.thread, source_id="test")) == 1
+
+
+def test_report_analysis_details_are_collapsed_and_table_previews_are_bounded():
+    from bs4 import BeautifulSoup
+    from data_analytics_agent.reporting.schemas import ResolvedDataAnalysis
+
+    analysis = ResolvedDataAnalysis(
+        reference_id="analysis",
+        input_result_ids=[],
+        answer="Trend found",
+        method="Robust fit",
+        warnings=["Serial dependence remains unknown"],
+        outputs=[
+            {
+                "kind": "table",
+                "name": "Residuals",
+                "columns": ["month"],
+                "rows": [{"month": i} for i in range(1, 25)],
+            }
+        ],
+    )
+    spec = ReportSpec(
+        title="Trend",
+        blocks=[
+            {
+                "type": "data_analysis",
+                "title": "Trend evidence",
+                "analysis_id": "analysis",
+                "summary": "The index increases over time.",
+            }
+        ],
+    )
+    html = render_report(
+        spec,
+        results={},
+        analyses={"analysis": analysis},
+        generated_at=datetime.now(timezone.utc),
+    )
+    page = BeautifulSoup(html, "html.parser")
+    outputs = page.select_one("details.analysis-outputs")
+    assert outputs is not None and not outputs.has_attr("open")
+    assert len(outputs.select("tbody tr")) == 10
+    assert "10 of 24 saved rows" in outputs.get_text()
+    warning = page.find(string="Serial dependence remains unknown")
+    assert warning and warning.find_parent("details") is None
+    assert (
+        page.find(string="The index increases over time.").find_parent("details")
+        is None
+    )
+    assert len(analysis.outputs[0]["rows"]) == 24

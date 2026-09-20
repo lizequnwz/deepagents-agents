@@ -82,7 +82,7 @@ categories remain. Scope/label correspondence outside the conflicting-binding
 check still depends on analytical review; this pass does not implement the full
 checked-KPI contract.
 
-## Product recommendations awaiting review
+## Product recommendations from the first pass
 
 - Keep native UI upload, but make its entry more prominent. The current sidebar
   section is collapsed; Upload is enabled, while Review file requires a selection.
@@ -94,4 +94,54 @@ checked-KPI contract.
   uncertainty and partial-result warnings beside the answer. Do not remove the
   evidence needed to interpret a result.
 
-These layout and orchestration changes were not implemented in this repair pass.
+These changes were subsequently approved and implemented in the follow-up below.
+
+
+## Approved follow-up: composer, parallel analysis and public plans
+
+The native chat composer now accepts a CSV/Parquet attachment with an optional
+question. Browser testing confirmed that schema review blocks analysis and that
+confirmation sends the pending question once. An additional text-only follow-up
+worked in the same composer. Assumptions start collapsed, while material warnings
+remain visible.
+
+The installed Deep Agents base harness did not expose `write_todos`, despite the
+application policy referring to it. Explicit `TodoListMiddleware` now provides
+that tool. A live 24-month synthetic example visibly progressed through two
+independent analysis steps and report synthesis, then marked all three completed.
+Both native subagent task starts preceded either completion (about 32.5 and 36.5
+seconds per assignment). No tool failed in this run. The resulting report included
+both analyses and a chart. Independent SciPy calculations matched Spearman
+rho=0.9610617665, p=8.976399e-14, Theil–Sen slope=3, intercept=101.5, and month 20
+as the largest positive residual. The report stated the zero-MAD limitation and
+distinguished anomaly candidates from confirmed errors.
+
+The subsequent report-title revision reused the same chart and produced version
+2 with no SQL/Python execution. Both versions and their chart editors displayed
+without duplicate-form exceptions. Calling retry on an already completed run
+correctly returned 409 instead of creating another version. Failed-run recovery
+is covered by the earlier live trials and the deterministic regression suite.
+
+HTML inspection found intermediate analytical outputs crowding the report body.
+Renderer 1.6 moves those into a collapsed inspection section, caps table previews
+at ten rows without changing saved evidence, and keeps warnings visible.
+
+Local references (while history is retained):
+- Conversation: `7854760a-8d71-40e1-9454-d4081c551dfe`.
+- Parallel example: run `25ac5be0-994c-4e64-8528-4cd0e110b8e7`;
+  report `127135e9-23a0-45c6-a8ae-e9541df39932`.
+- Report-only revision: run `9c688043-c626-4c79-a13e-9fb8112222de`;
+  report `fdde1d77-7e94-4acb-a38f-14955adadbf4`.
+
+Deterministic coverage now includes worker limits of one and two, colliding model
+call IDs, isolated outputs, approval edits affecting only the selected worker,
+Stop cancelling active/queued assignments, native attachment handoff, public plan
+rendering, and compact report inspection details. These trials remain smoke checks,
+not a benchmark of model accuracy or the roadmap's instruction ablation.
+
+The final browser-verified renderer revision is report
+`47aab772-1a52-4b36-8f09-319f09207970` (version 3), run
+`e208a662-5716-4a1a-907f-b7765a8c6df5`. Both analysis-output sections and method
+sections start collapsed; warnings are visible. This revision performed no SQL
+or Python execution. The final deterministic suite passed **243 tests, 6 live
+cases deselected**; Ruff F checks and whitespace checks passed.

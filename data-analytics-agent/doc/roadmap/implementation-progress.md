@@ -43,11 +43,22 @@ isolated tabular uploads.
    additional settings retain their runtime defaults. A dollar/token budget is not yet
    implemented.
 
+7. **Chat attachments, parallel analysis and visible work.** Native composer
+   attachments replace the sidebar upload. A file and optional question go through
+   explicit schema review before execution. Independent saved-data analyses use
+   bounded native subagent calls (default two workers; one for sequential mode),
+   private checkpointed execution ownership, separate approvals and cancellation.
+   Source assignments remain sequential. The coordinator explicitly installs the
+   framework planning tool; public plan updates and current work appear above the
+   collapsed Activity panel. Assumptions start collapsed; analytical warnings stay
+   visible. Report analysis outputs are collapsed inspection details with ten-row
+   table previews; main conclusions and warnings stay visible.
+
 ## Verification and limits
 
 The original deterministic baseline passed 188 tests. Setup/presentation and
 upload increments increased coverage to 217 cases. The latest test/fix pass covers
-234 deterministic cases (six separately marked live cases are excluded). Ruff's
+243 deterministic cases (six separately marked live cases are excluded). Ruff's
 F checks and `git diff --check` pass. Existing upstream deprecation/beta warnings
 remain.
 
@@ -60,8 +71,8 @@ presentation attempts, and overlapping workers.
 
 Configured-provider trials covered rankings, monthly trends, Python analysis,
 uploaded-file analysis, and report recovery. See the
-[live smoke record](../development/live-smoke-2026-09-20.md) for exact checks,
-observed failures, repairs, and recommendations awaiting review. These examples
+[live smoke record](../reviews/live-smoke-2026-09-20.md) for exact checks,
+observed failures, repairs, and implemented recommendations. These examples
 are not a model-quality benchmark or evidence for instruction ablation.
 
 ## Next steps and acceptance gates

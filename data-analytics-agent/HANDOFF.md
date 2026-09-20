@@ -1,18 +1,19 @@
 # Deferred next steps
 
-The current release focuses on iterative analysis over one configured SQL source
-per conversation. The [19 September roadmap](doc/roadmap/roadmap.md) is the
-authoritative priority order for subsequent work.
+The current release supports iterative analysis over one configured SQL source
+or one reviewed CSV/Parquet file per conversation. Read the
+[implementation log](doc/roadmap/implementation-progress.md) for delivered work
+and remaining gates, then the [19 September roadmap](doc/roadmap/roadmap.md)
+for the priority order of subsequent work.
 
 Start with an inspectable metric definition, a checked comparison, outcome-based
-evaluations, and compact result controls. Direct chart-title/style edits belong
-in this next increment; they should reuse saved evidence without model or source
-execution. Forecast interval labeling is a separate near-term correction.
+evaluations, and scope-aware result controls. Direct chart-title/style edits
+and explicit forecast interval labeling have already been delivered.
 
 Then add selected-scope follow-ups, shared filters, and manual report refresh.
 Reviewed context improvements and metric-driver investigations build on those
-contracts. File uploads, web/document evidence, exports, and integrations remain
-demand-led expansions. Scheduling depends on validated refresh; mixed-source
+contracts. Web/document evidence, additional export formats, and integrations
+remain demand-led expansions. Scheduling depends on validated refresh; mixed-source
 analysis requires an explicit change to the source-isolation policy. Notebook
 editing remains deferred.
 
@@ -26,9 +27,11 @@ should run independently of that external evaluation.
 
 The initial roadmap increments now include minimal onboarding, direct chart
 presentation edits with matching immutable report revisions and failure/retry,
-collapsed report previews, and explicit interval/range labels and methods.
+collapsed report previews, explicit interval/range labels and methods, and
+isolated CSV/Parquet uploads with mandatory schema review. Subsequent work added
+chat attachments, bounded independent analysis assignments, and visible plans.
 See the [implementation log](doc/roadmap/implementation-progress.md) for verification
-and the remaining gates. Checked KPI comparisons, uploads, and prompt ablations
+and the remaining gates. Checked KPI comparisons and prompt ablations
 remain open; direct presentation editing does not replace agent report composition.
 
 The application now uses durable SQLite metadata/checkpoints and typed Parquet
@@ -52,13 +55,15 @@ synthetic fixtures and repository instructions. The user authorized live trials
 on September 6, 2026. Descriptive and forecasting trials were run against the
 configured OpenAI `gpt-5.6-luna`, with external tracing disabled. They exposed
 activity attribution/name loss and repairable tool-input errors, now corrected.
-The current [improvement roadmap](doc/roadmap/roadmap.md)
-records the remaining quality work and its methodological limits. Seasonality,
-predictive modeling, and conversational refinement still need their opt-in live
-evaluations.
+Later configured-provider trials are recorded in the
+[20 September smoke-test record](doc/reviews/live-smoke-2026-09-20.md), including
+trend analysis, uploads, parallel analysis, and report-only revisions. These smoke
+checks do not establish predictive accuracy or replace held-out evaluations.
+The [improvement roadmap](doc/roadmap/roadmap.md) records the remaining quality
+work and its methodological limits.
 
 Provider cancellation remains cooperative: a blocking warehouse request can keep
 the UI in Stopping until it returns. LangGraph's v3 streaming API currently emits
 an upstream beta warning; deterministic harness and checkpoint tests cover the
-installed integration. The older standalone diagram exports are explicitly marked
-historical; the current architecture document is authoritative.
+installed integration. The current architecture document is authoritative;
+the [diagram index](doc/diagrams/README.md) identifies the retained visual sources.

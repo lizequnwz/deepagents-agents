@@ -31,7 +31,8 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
         named sales, source, data, or df: use datasets['sales'] explicitly.
         """
         context = _runtime_context(runtime)
-        call_id = runtime.tool_call_id
+        assignment_id = runtime.state["analysis_assignment_id"]
+        call_id = f"{assignment_id}:{runtime.tool_call_id}"
         if committed := runs.storage.committed(context.run_id, call_id):
             return json.loads(committed)
         if reason := runs.analysis_stop_reason(context.run_id):
@@ -82,6 +83,7 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
                     context.run_id,
                     PythonExecutionResult(
                         execution_id=str(uuid4()),
+                        assignment_id=assignment_id,
                         inputs=inputs,
                         executed_python=code,
                         attempt=attempt,
@@ -100,6 +102,7 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
                     stderr=exc.stderr,
                     warnings=[exc.traceback] if exc.traceback else [],
                 )
+        execution = execution.model_copy(update={"assignment_id": assignment_id})
         runs.record_python_execution(context.run_id, execution)
         response = execution.model_facing()
         runs.storage.commit(context.run_id, call_id, json.dumps(response))
@@ -125,7 +128,9 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
         output payloads: the application attaches the saved executions.
         """
         context = _runtime_context(runtime)
-        if committed := runs.storage.committed(context.run_id, runtime.tool_call_id):
+        assignment_id = runtime.state["analysis_assignment_id"]
+        call_id = f"{assignment_id}:{runtime.tool_call_id}"
+        if committed := runs.storage.committed(context.run_id, call_id):
             return json.loads(committed)
         try:
             for key in input_result_ids:
@@ -146,6 +151,7 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
             {
                 item.execution_id: item
                 for item in runs.get_python_execution(context.run_id)
+                if item.assignment_id == assignment_id
             }
         )
         missing = [key for key in execution_ids if key not in available]
@@ -186,7 +192,7 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
             thread_id=context.thread_id, source_id=source_id, analysis=result
         )
         response = saved.analysis.model_facing()
-        runs.storage.commit(context.run_id, runtime.tool_call_id, json.dumps(response))
+        runs.storage.commit(context.run_id, call_id, json.dumps(response))
         return response
 
     return [execute_analysis_python, finish_analysis]

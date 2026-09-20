@@ -5,27 +5,24 @@ from data_analytics_agent.ui.api_client import APIError
 from data_analytics_agent.uploads import TYPE_LABELS
 
 
-def render_upload_entry(client, max_bytes):
-    with st.expander("Upload a file", icon=":material/upload_file:"):
-        st.caption(
-            "One CSV or Parquet file starts a separate conversation. Review it before asking questions."
-        )
-        uploaded = st.file_uploader(
-            "CSV or Parquet file",
-            type=["csv", "parquet"],
-            key="new_upload",
-            max_upload_size=max(1, (max_bytes + 1_048_575) // 1_048_576),
-        )
-        if st.button("Review file", disabled=uploaded is None, key="stage_upload"):
-            if uploaded.size > max_bytes:
-                st.error(f"File exceeds the {max_bytes:,}-byte upload limit.")
-            else:
-                try:
-                    with st.spinner("Reading file and checking limits…"):
-                        return client.upload_file(uploaded.name, uploaded.getvalue())
-                except APIError as exc:
-                    st.error(str(exc))
-    return None
+def chat_submission(placeholder, *, key, max_bytes):
+    """Native single-file attachment and text composer."""
+    return st.chat_input(
+        placeholder,
+        key=key,
+        accept_file=True,
+        file_type=["csv", "parquet"],
+        max_upload_size=max(1, (max_bytes + 1_048_575) // 1_048_576),
+        submit_mode="disable",
+    )
+
+
+def stage_attachment(client, submission, max_bytes):
+    """Stage only the attached file; its question waits for schema confirmation."""
+    uploaded = submission.files[0]
+    if uploaded.size > max_bytes:
+        raise APIError(f"File exceeds the {max_bytes:,}-byte upload limit.")
+    return client.upload_file(uploaded.name, uploaded.getvalue())
 
 
 def render_upload_review(client, upload):

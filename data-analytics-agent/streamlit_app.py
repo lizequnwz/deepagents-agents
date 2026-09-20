@@ -26,7 +26,11 @@ from data_analytics_agent.ui.components import (
     render_turn,
 )
 
-from data_analytics_agent.ui.uploads import render_upload_entry, render_upload_review
+from data_analytics_agent.ui.uploads import (
+    chat_submission,
+    stage_attachment,
+    render_upload_review,
+)
 
 load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -68,6 +72,20 @@ def clear_conversation_state() -> None:
             del st.session_state[key]
     st.session_state["active_run_id"] = None
     st.session_state["review_notice"] = None
+
+
+def open_attachment(submission):
+    try:
+        uploaded = stage_attachment(client, submission, upload_max_bytes)
+    except APIError as exc:
+        st.error(str(exc))
+        return
+    clear_conversation_state()
+    new_thread = uploaded["thread_id"]
+    st.session_state.setdefault("upload_questions", {})[new_thread] = submission.text
+    st.query_params["thread_id"] = new_thread
+    st.session_state["current_thread_id"] = None
+    st.rerun()
 
 
 def create_conversation(
@@ -296,27 +314,7 @@ except APIError as exc:
     )
     st.stop()
 
-with st.sidebar:
-    uploaded = render_upload_entry(
-        client, (health or {}).get("upload_max_bytes", 33_554_432)
-    )
-    if uploaded:
-        clear_conversation_state()
-        st.query_params["thread_id"] = uploaded["thread_id"]
-        st.session_state["current_thread_id"] = None
-        st.rerun()
-    with st.expander("Saved conversations", expanded=True):
-        for saved in reversed(client.list_conversations()):
-            if st.button(
-                saved["title"],
-                key=f"saved_{saved['thread_id']}",
-                disabled=saved["thread_id"] == st.query_params.get("thread_id"),
-            ):
-                clear_conversation_state()
-                st.query_params["thread_id"] = saved["thread_id"]
-                st.session_state["current_thread_id"] = None
-                st.rerun()
-
+upload_max_bytes = (health or {}).get("upload_max_bytes", 33_554_432)
 
 sources_by_id = {source["source_id"]: source for source in data_sources["sources"]}
 ready_source_ids = {
@@ -347,6 +345,16 @@ if conversation is None:
     for configured in data_sources["sources"]:
         for error in configured.get("errors", []):
             st.caption(f"{configured['name']}: {error}")
+    submission = chat_submission(
+        "Ask a question and attach a CSV or Parquet file",
+        key="chat_input_upload",
+        max_bytes=upload_max_bytes,
+    )
+    if submission:
+        if submission.files:
+            open_attachment(submission)
+        else:
+            st.info("Attach a CSV or Parquet file to start this conversation.")
     st.stop()
 
 if conversation["source_id"] not in sources_by_id:
@@ -382,6 +390,18 @@ if new_conversation:
         st.sidebar.error(str(exc), icon=":material/error:")
 
 with st.sidebar:
+    with st.expander("Saved conversations", expanded=False):
+        for saved in reversed(client.list_conversations()):
+            if st.button(
+                saved["title"],
+                key=f"saved_{saved['thread_id']}",
+                disabled=saved["thread_id"] == st.query_params.get("thread_id"),
+            ):
+                clear_conversation_state()
+                st.query_params["thread_id"] = saved["thread_id"]
+                st.session_state["current_thread_id"] = None
+                st.rerun()
+
     with st.expander("Manage history", expanded=False):
         st.button(
             "Delete history",
@@ -429,8 +449,21 @@ render_page_header(source)
 if source["backend_type"] == "upload":
     uploaded_file = client.get_upload(thread_id)
     if not uploaded_file["confirmed"]:
+        pending_question = st.session_state.get("upload_questions", {}).get(thread_id)
+        if pending_question:
+            st.info("After confirming the schema, I’ll answer: " + pending_question)
         render_upload_review(client, uploaded_file)
         st.stop()
+    pending_question = st.session_state.get("upload_questions", {}).pop(thread_id, None)
+    if pending_question:
+        try:
+            client.send_message(thread_id, pending_question)
+            conversation = client.get_conversation(thread_id)
+            active_run_id = conversation.get("active_run_id")
+            st.session_state["active_run_id"] = active_run_id
+        except APIError as exc:
+            st.session_state[f"chat_input_{thread_id}"] = pending_question
+            st.error(str(exc))
     with st.expander("Uploaded file and reviewed schema", expanded=False):
         st.caption(
             f"{uploaded_file['filename']} · {uploaded_file['row_count']:,} rows · source freshness unknown"
@@ -482,14 +515,17 @@ if not conversation["turns"] and not conversation.get("run_ids"):
         chat_input_key=chat_input_key,
     )
 
-typed_question = st.chat_input(
+submission = chat_submission(
     "Add context or correct the current request"
     if active_run_id
     else f"Ask a business question about {source['name']}",
     key=chat_input_key,
-    submit_mode="disable",
+    max_bytes=upload_max_bytes,
 )
-if typed_question:
+if submission and submission.files:
+    open_attachment(submission)
+if submission and not submission.files and submission.text.strip():
+    typed_question = submission.text
     try:
         if active_run_id:
             if client.get_run(active_run_id)["status"] == "clarification_required":

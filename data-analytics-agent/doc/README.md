@@ -1,16 +1,47 @@
 # Documentation
 
-This folder is organized by how the material is used. Start with the user guide
-for the product workflow, then use the development guides for implementation
-work. Dated reviews and generated presentation assets are kept separate from
-the current guidance.
+Start with the task you want to complete. Current guides, delivery status,
+proposals, and dated evidence serve different purposes.
 
-## User guide
+## Start here
+
+| I want to… | Read |
+|---|---|
+| Install and run the app | [Quick start](../README.md#run), then [configuration](development/configuration.md) |
+| Use the analyst or upload a file | [User guide](user/using-the-agent.md) |
+| Try realistic questions | [Deep-dive examples](user/deep-dive-examples.md) and the [sample CSV](user/examples/monthly-index.csv) |
+| Understand how the system works | [Architecture](development/architecture.md) |
+| Connect a data source | [Source onboarding](development/adding-data-sources.md), then [semantic modeling](development/semantic-model-best-practices.md) |
+| See what is delivered and what is next | [Implementation progress](roadmap/implementation-progress.md), then the [roadmap](roadmap/roadmap.md) |
+| Inspect test outcomes or earlier assessments | [Reviews and evidence](reviews/README.md) |
+| Open a diagram or presentation | [Diagrams](diagrams/README.md) or [Inside Codex Data](presentations/inside-codex-data/README.md) |
+
+## How to read the collection
+
+- **Current behavior:** `user/` and `development/`. Architecture defines system
+  boundaries; configuration defines operating controls. Capability design records
+  explicitly identify their deferred options.
+- **Delivery status:** [implementation progress](roadmap/implementation-progress.md)
+  records delivered work and remaining acceptance gates. Check it before treating
+  a roadmap recommendation as unfinished.
+- **Proposals:** the roadmap and simplification plan preserve their dated
+  recommendations. [Deferred next steps](../HANDOFF.md) is a short handoff.
+- **Historical evidence:** `reviews/` holds dated reviews, test records, and
+  supporting artifacts. Their findings describe the version reviewed.
+- **Visual material:** `diagrams/` and `presentations/` keep editable sources,
+  generated views, and validation evidence together. The current architecture
+  guide takes precedence when a visual reflects an earlier implementation.
+
+## Full guide index
+
+### User guides
 
 - [Using the agent](user/using-the-agent.md) — the supported analyst workflow,
   controls, and report behavior.
+- [Deep-dive test questions](user/deep-dive-examples.md) — copy-ready investigations,
+  a synthetic upload, expected behavior, and report/run-control checks.
 
-## Development
+### Development
 
 - [Configuration](development/configuration.md) — minimal first-run setup,
   provider alternatives, advanced overrides, and development reload.
@@ -29,7 +60,7 @@ the current guidance.
 - [Safety and human approval](development/safety-and-hitl.md) — safety,
   approval, and execution constraints.
 
-## Roadmap and deferred work
+### Roadmap and deferred work
 
 - [Implementation progress](roadmap/implementation-progress.md) — delivered
   increments, verification, and the next acceptance gates.
@@ -41,9 +72,10 @@ the current guidance.
 - [Simplification and ablation plan](roadmap/simplification-and-ablation.md) —
   reduce setup and routine model work while testing capability preservation.
 
-## Reviews and historical records
+### Reviews and historical records
 
 - [Reviews and evidence index](reviews/README.md)
+- [Live smoke tests and retry repairs — 20 September 2026](reviews/live-smoke-2026-09-20.md)
 - [Design review — 10 September 2026](reviews/design-review-2026-09-10.md)
 - [Data plugin comparative review — 14 September 2026](reviews/data-plugin-comparative-review-2026-09-14.md)
 - [Standalone data plugin review — 14 September 2026](reviews/data-plugin-standalone-review-2026-09-14.md)
@@ -54,12 +86,12 @@ the current guidance.
 These dated documents preserve context and evidence. They are not substitutes
 for the current architecture, user, or development guides.
 
-## Diagrams
+### Diagrams
 
 See the [diagram index](diagrams/README.md). Editable workflow sources and
 their generated HTML/SVG views live together there.
 
-## Presentations
+### Presentations
 
 - [Inside Codex Data](presentations/inside-codex-data/README.md) — the
   explorable presentation, presenter guide, and generated QA receipt.
@@ -67,3 +99,11 @@ their generated HTML/SVG views live together there.
 Generated HTML, presentation, and QA files are intentionally retained beside
 their source material so they can be opened offline and reviewed as delivered
 artifacts. Rebuild instructions are documented in each source directory.
+
+## Keeping documentation organized
+
+Update the relevant current guide when behavior changes, and record delivery
+and verification in the implementation log. Put dated assessments and test
+receipts in `reviews/`; put proposed work in `roadmap/`. Keep example data beside
+its user guide and generated assets beside their editable sources. Add new
+reading material to this index, and update links whenever a file moves.

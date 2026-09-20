@@ -56,6 +56,7 @@ def workspace(tmp_path):
                 "run_id": run,
                 "source_id": "test",
                 "question": "Analyze sales",
+                "analysis_assignment_id": "test-assignment",
             },
             tool_call_id=call,
         )

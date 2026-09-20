@@ -40,6 +40,7 @@ REQUIRE_PYTHON_APPROVAL=false
 ENABLE_DATA_VISUALIZATION=true
 ENABLE_DATA_ANALYSIS=true
 
+ANALYSIS_PARALLEL_WORKERS=2
 ANALYSIS_BUDGET_SECONDS=900
 ANALYSIS_PYTHON_TIMEOUT_SECONDS=120
 PRESENTATION_BUDGET_SECONDS=120
@@ -96,6 +97,7 @@ remain enforced. Defaults still apply; put overrides in `.env` and restart both 
 | Stop / Resume | Stop requests cancellation and waits for active execution to exit. Saved evidence and checkpoints remain. Resume continues from saved state; an uncommitted interrupted step may execute again. |
 | Corrections and clarification | The composer accepts corrections during work. They take effect at the next safe model/tool boundary; already executing work may finish. Business clarification pauses for an answer. |
 | SQL / Python review | `REQUIRE_SQL_APPROVAL=true` and `REQUIRE_PYTHON_APPROVAL=true` independently pause before proposed execution. Approve, edit or reject; saved-data SQL is covered too. |
+| Parallel saved-data analysis | `ANALYSIS_PARALLEL_WORKERS=2` bounds simultaneous analysis assignments per source graph. Set `1` for sequential execution. Source retrieval remains sequential. Workers share the run’s active-time budget and cancellation; each keeps separate execution evidence and approvals. |
 | Active analysis budget | `ANALYSIS_BUDGET_SECONDS=900` counts active analysis, not user wait time. Exhaustion ends computation and attempts a supported partial answer/report with unresolved questions. Resume does not reset accumulated analysis time. |
 | Execution timeouts | `SQL_TIMEOUT_SECONDS=10` is the source-query default (sources can override it); `ANALYSIS_PYTHON_TIMEOUT_SECONDS=120` bounds each Python step. Saved-data SQL has its own 120-second timeout. |
 | Presentation budget | `PRESENTATION_BUDGET_SECONDS=120` bounds report completion separately. Saved findings can be used by Retry report without repeating analysis. |

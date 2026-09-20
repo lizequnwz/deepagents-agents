@@ -755,3 +755,43 @@ for run, report in [("first", "report-1"), ("second", "report-1"), ("second", "r
     run_id, payload = app.session_state.saved
     assert run_id == "second" and payload["report_id"] == "report-2"
     assert payload["title"] == "Revised revenue" and payload["chart_id"] == "shared"
+
+
+def test_assumptions_collapse_but_partial_and_analysis_warnings_stay_visible():
+    app = AppTest.from_string("""
+from data_analytics_agent.ui.components import render_answer
+render_answer(None, {"answer":"Estimate", "assumptions":["Stable demand"],
+    "interpretation":"Uncertain", "partial":True,
+    "unresolved_questions":["Validate forecast"],
+    "analyses":[{"warnings":["Only six observations"], "executions":[]}]},
+    turn_key="test", source_id="test")
+""").run()
+    assert not app.exception
+    assert (
+        next(
+            e for e in app.expander if e.label == "Assumptions and interpretation"
+        ).proto.expanded
+        is False
+    )
+    assert any("Partial findings" in w.value for w in app.warning)
+    assert any("Only six observations" in w.value for w in app.warning)
+
+
+def test_plan_and_parallel_work_are_visible_without_opening_activity():
+    app = AppTest.from_string("""
+from data_analytics_agent.ui.components import render_activity
+steps=[{"agent":"coordinator", "phase":"completed", "tool":{"name":"write_todos","call_id":"plan","input":{"todos":[
+    {"content":"Retrieve monthly data","status":"completed"},
+    {"content":"Compare trend and seasonality","status":"in_progress"},
+    {"content":"Prepare report","status":"pending"}]}}},
+    {"agent":"coordinator","phase":"started","tool":{"name":"task","call_id":"same","invocation_id":"a","input":{"subagent_type":"data-analysis","description":"Investigate trend. Business brief: use 12345678-1234-1234-1234-123456789abc"}}},
+    {"agent":"coordinator","phase":"started","tool":{"name":"task","call_id":"same","invocation_id":"b","input":{"subagent_type":"data-analysis","description":"Investigate seasonality"}}}]
+render_activity(steps,{},key="work")
+""").run()
+    assert not app.exception
+    assert any("Analysis plan" in m.value for m in app.markdown)
+    assert any("Retrieve monthly data" in m.value for m in app.markdown)
+    assert any("Investigate trend" in c.value for c in app.caption)
+    assert any("Investigate seasonality" in c.value for c in app.caption)
+    assert app.expander[0].proto.expanded is False
+    assert not any("Business brief" in c.value for c in app.caption)

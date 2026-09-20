@@ -12,6 +12,7 @@ from deepagents import (
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
 from deepagents.profiles import register_harness_profile
+from langchain.agents.middleware import TodoListMiddleware
 from langchain.agents.structured_output import ToolStrategy
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import InMemorySaver
@@ -42,6 +43,7 @@ from data_analytics_agent.stores import (
     ReportStore,
     ConversationStore,
 )
+from data_analytics_agent.delegation import DelegationMiddleware
 from data_analytics_agent.execution_budget import execution_budget_middleware
 from data_analytics_agent.steering import SteeringMiddleware, request_clarification
 
@@ -241,6 +243,10 @@ Delegate exploration, inference, prediction, trend/seasonality investigation,
 forecasting and model evaluation to data-analysis. Choose by required work,
 not keywords alone. SQL requests must be sequential and complete. Multiple
 SQL and Python assignments are allowed; revise the plan after observing results.
+For complex or multipart work, use write_todos before delegating and update it as
+steps complete. Start each task description with a short plain-language objective,
+then supply the complete business brief and saved input IDs. Independent saved-data
+analyses can run in parallel; dependent work and source retrieval stay sequential.
 Keep a compact investigation record with save_investigation for complex work.
 
 Match effort to the work: simple totals/rankings need one complete SQL assignment,
@@ -281,6 +287,8 @@ application owns exact SQL, Python, outputs, charts and report references.
         backend=_project_backend(settings.project_root),
         permissions=permissions,
         middleware=[
+            TodoListMiddleware(),
+            DelegationMiddleware(runs, settings.analysis_parallel_workers),
             SteeringMiddleware(runs, "coordinator"),
             *execution_budget_middleware(
                 model_calls=settings.coordinator_model_call_limit,

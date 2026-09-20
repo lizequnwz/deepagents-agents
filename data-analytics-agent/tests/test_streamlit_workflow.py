@@ -233,3 +233,65 @@ def test_live_model_status_retains_fast_tool_result_context(test_settings, monke
                 "Text-to-SQL · Reviewing SQL results · Count artists" in item.value
                 for item in app.markdown
             )
+
+
+def test_chat_attachment_preserves_question_until_review(test_settings, monkeypatch):
+    from types import SimpleNamespace
+    from data_analytics_agent.ui import uploads
+
+    services = Services(
+        settings=test_settings,
+        agent=Graph([Stream(CoordinatorResponse(answer="Ready to help."))]),
+    )
+    with TestClient(create_app(services)) as api:
+
+        def request(self, method, path, **kwargs):
+            kwargs.pop("timeout", None)
+            response = api.request(method, path, **kwargs)
+            if response.status_code >= 400:
+                raise APIError(
+                    str(response.json().get("detail")), status_code=response.status_code
+                )
+            return response.json()
+
+        monkeypatch.setattr(AgentAPIClient, "request", request)
+        native = uploads.chat_submission
+        submitted = [
+            SimpleNamespace(
+                text="What can you analyze?",
+                files=[
+                    SimpleNamespace(
+                        name="sales.csv", size=11, getvalue=lambda: b"amount\n1\n2\n"
+                    )
+                ],
+            )
+        ]
+
+        def composer(*args, **kwargs):
+            native(*args, **kwargs)
+            return submitted.pop() if submitted else None
+
+        monkeypatch.setattr(uploads, "chat_submission", composer)
+        app = AppTest.from_file(
+            str(Path(__file__).parents[1] / "streamlit_app.py")
+        ).run(timeout=15)
+        assert not app.exception
+        thread = app.query_params["thread_id"][0]
+        assert services.conversations.get(thread).source_id.startswith("upload:")
+        assert not services.conversations.get(thread).run_ids
+        assert any("What can you analyze?" in i.value for i in app.info)
+        next(
+            b for b in app.button if b.label == "Confirm schema and start conversation"
+        ).click().run(timeout=15)
+        assert not app.exception
+        conversation = services.conversations.get(thread)
+        assert len(conversation.turns) == 1
+        assert conversation.turns[0].user_message == "What can you analyze?"
+        reopened = AppTest.from_file(
+            str(Path(__file__).parents[1] / "streamlit_app.py")
+        )
+        reopened.query_params["thread_id"] = thread
+        reopened.run(timeout=15)
+        assert not reopened.exception
+        assert len(services.conversations.get(thread).turns) == 1
+        assert reopened.chat_input[0].proto.accept_file

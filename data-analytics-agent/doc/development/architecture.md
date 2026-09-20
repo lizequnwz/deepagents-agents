@@ -27,6 +27,8 @@ flowchart TD
     C --> Checkpoints[AsyncSqliteSaver / run-scoped checkpoints]
 ```
 
+## Responsibilities and persistence
+
 The coordinator routes by required work, not surface keywords. It handles
 metadata-only discussion directly. SQL owns warehouse access and descriptive
 transformations; Python owns analysis over explicit saved artifacts. Python can
@@ -47,6 +49,8 @@ reviewable. Each tool registers artifacts directly and journals its committed
 output under run/tool-call identity. Final assembly resolves explicit references;
 it does not scan backward through messages or guess embedded JSON schemas.
 
+## Findings, reports, and recovery
+
 `presentation.py` resolves all material evidence and transitive dataset lineage.
 Chart versions are immutable. Chat and report consume the same chart spec and
 presentation dataset. Report metric values reference exact stored rows/columns.
@@ -57,6 +61,8 @@ attached artifact, renders the saved specification, or requests presentation-onl
 repair using published findings. Computation tools reject execution after publication.
 Resume selects this same recovery path after publication; active workers prevent
 overlapping attempts.
+
+## Direct presentation edits
 
 `presentation_edits.py` handles `POST /api/runs/{run_id}/presentation` without
 constructing agents or opening sources. Its typed allowlist admits title, labels,
@@ -74,11 +80,15 @@ history supplied to later analytical turns. Rendering failure leaves the previou
 view intact; resubmitting the explicit edit retries it. History deletion includes
 these records and their report files. No new graph run or provider call is needed.
 
+## Chart intervals
+
 Chart bounds require `interval` metadata: kind, method, optional label, and
 optional nominal coverage. Scenario/sensitivity ranges cannot declare coverage.
 The shared renderer displays the same label/method in chat and HTML; declaring
 nominal coverage does not certify empirical calibration. This strict contract
 does not migrate old bound specifications that omitted interval meaning.
+
+## UI lifecycle and deployment constraints
 
 Streamlit refreshes active content using a timed fragment, preserving stable
 widget keys. Immutable previews/reports are cached by ID with bounded caches.
@@ -90,11 +100,15 @@ source queries. No persistent arbitrary Python object state, cross-conversation
 learning, or obsolete in-memory-state migration.
 
 
+## Semantic context
+
 `semantic_context.py` builds one coherent metadata package for prompts and the
 context tool. SQL owns physical definitions; the coordinator sees the business
 projection. Whole oversized packages request refinement. Caches contain metadata,
 never source observations. SQL/chart operational guidance lives in owner prompts;
 analysis and report methodology remain on-demand skills.
+
+## Corrections and clarification
 
 `steering.py` uses supported before-model and after-model middleware plus tool
 wrappers. Agent-private checkpoint state tracks correction IDs independently in
@@ -138,3 +152,30 @@ source. Upload sources never appear in the reusable source listing. Imports and
 confirmation run off the event loop; history deletion refuses active imports or
 reviews. Restart reopens staged or confirmed files. Source-configuration errors
 are separate from model readiness so files work without a warehouse registry.
+
+
+## Plans and concurrent analysis assignments
+
+The coordinator explicitly installs LangChain's `TodoListMiddleware`; the current
+Deep Agents base harness does not automatically expose `write_todos`. Complex
+requests record public work steps before delegation. Parallel task batches without
+a plan receive a tool correction. The UI renders the latest successful coordinator
+plan and meaningful work events above the collapsed diagnostic Activity panel.
+Plans are public task lists, not private model reasoning. Callback invocation IDs
+separate concurrent operations even when model-supplied tool-call IDs repeat.
+Human-review interrupts and cancellation have waiting/stopped activity states.
+
+`DelegationMiddleware` wraps native task calls with bounded analysis slots and one
+source slot. It preserves native checkpoint and interrupt handling. Async slot
+acquisition is cancellation-safe; queued work checks Stop before starting. The
+coordinator owns its context fields, so subagents cannot write conflicting copies
+back when they finish together. `AnalysisAssignmentMiddleware` creates a private,
+checkpointed assignment ID in each analysis branch. Tool commit keys include it;
+finalization can select only that assignment's current raw executions or explicitly
+saved prior analyses. Separate branches therefore cannot consume each other's
+unfinished work or collide on replay. Pending approval interrupts remain separate.
+
+The composer uses native `st.chat_input` attachments. An attachment creates a new
+isolated file conversation; an optional question waits in UI session state until
+schema confirmation, then is consumed once. Reloading the confirmed conversation
+does not replay the question. The sidebar upload entry was removed.
