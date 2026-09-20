@@ -205,3 +205,68 @@ def test_report_dark_theme_uses_fidelity_dark_tokens() -> None:
     assert "--surface: #292928" in html
     assert "--background: #141414" in html
     assert "--primary: #65C754" in html
+
+
+def test_report_rejects_conflicting_metric_labels_for_one_saved_cell(workspace):
+    from data_analytics_agent.presentation import resolve_answer
+    from data_analytics_agent.schemas import CoordinatorResponse
+    from tests.test_persistent_analyst import save
+
+    w = workspace
+    result = save(
+        w, [{"region": "East", "amount": 40}, {"region": "West", "amount": 60}]
+    )
+    w.runs.publish(
+        w.run,
+        resolve_answer(
+            CoordinatorResponse(
+                answer="Total 100: East 40, West 60.",
+                primary_result_id=result.result_id,
+            ),
+            thread_id=w.thread,
+            source_id="test",
+            results=w.results,
+            analyses=w.analyses,
+            runs=w.runs,
+        ),
+    )
+    tool = create_create_report_tool(
+        w.results, w.analyses, w.runs, w.reports, source_id="test"
+    )
+
+    def metric(label, row_index):
+        return {
+            "label": label,
+            "result_id": result.result_id,
+            "column": "amount",
+            "row_index": row_index,
+        }
+
+    # Conflicting bindings are rejected across report sections as well as within one block.
+    spec = ReportSpec(
+        title="Sales",
+        blocks=[
+            {"type": "metrics", "metrics": [metric("Overall sales", 0)]},
+            {
+                "type": "metrics",
+                "metrics": [metric("East sales", 0), metric("West sales", 1)],
+            },
+        ],
+    )
+    failed = tool.func(report_json=spec.model_dump_json(), runtime=w.runtime("report"))
+    assert not failed["ok"] and failed["retryable"]
+    assert "group row is not an overall total" in failed["error"]
+    assert not w.runs.report_reference(w.run)
+    assert not w.storage.load("reports", dict)
+    # Correct the presentation without changing findings or querying data again.
+    repaired_spec = spec.model_dump()
+    repaired_spec["blocks"][0] = {"type": "narrative", "body": "Total sales were 100."}
+    spec = ReportSpec.model_validate(repaired_spec)
+    repaired = tool.func(
+        report_json=spec.model_dump_json(), runtime=w.runtime("report")
+    )
+    assert repaired["ok"], repaired
+    html = w.reports.get_unscoped(repaired["report"]["report_id"]).html
+    assert "Overall sales" not in html and "Total sales were 100." in html
+    assert "East sales" in html and "40.00" in html and "60.00" in html
+    assert len(w.results.list_for_conversation(w.thread, source_id="test")) == 1

@@ -8,7 +8,7 @@ API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8000}"
 STREAMLIT_HOST="${STREAMLIT_HOST:-127.0.0.1}"
 STREAMLIT_PORT="${STREAMLIT_PORT:-8501}"
-API_AUTO_RELOAD="${API_AUTO_RELOAD:-true}"
+API_AUTO_RELOAD="${API_AUTO_RELOAD:-false}"
 API_PID=""
 STREAMLIT_PID=""
 
@@ -80,7 +80,7 @@ echo "Preparing the locked Python environment…"
 uv sync --locked
 
 if ! uv run python -c \
-  'from data_analytics_agent.api import Services; services = Services(); errors = services.settings.readiness_errors(); summaries = services.source_summaries() if not errors else []; errors += ([] if any(item.ready for item in summaries) else ["No configured data source is ready."]); print("\n".join(f"  - {error}" for error in errors)); raise SystemExit(1 if errors else 0)'
+  'from data_analytics_agent.config import Settings; errors = Settings().readiness_errors(include_sources=False); print("\n".join(f"  - {error}" for error in errors)); raise SystemExit(1 if errors else 0)'
 then
   echo "Startup checks failed. Resolve the items above and try again." >&2
   exit 1
@@ -95,15 +95,15 @@ if port_is_open "${STREAMLIT_HOST}" "${STREAMLIT_PORT}"; then
   exit 1
 fi
 
+API_SERVER_ARGS=(--host "${API_HOST}" --port "${API_PORT}" --no-access-log)
 case "${API_AUTO_RELOAD}" in
   true|1|yes|on)
-    API_RELOAD_ARGS=(
+    API_SERVER_ARGS+=(
       --reload
       --reload-dir "${PROJECT_ROOT}/data_analytics_agent"
     )
     ;;
   false|0|no|off)
-    API_RELOAD_ARGS=()
     ;;
   *)
     echo "API_AUTO_RELOAD must be true or false." >&2
@@ -117,10 +117,7 @@ export PYTHONUNBUFFERED=1
 
 echo "Starting FastAPI at ${API_BASE_URL}…"
 uv run uvicorn data_analytics_agent.api:app \
-  --host "${API_HOST}" \
-  --port "${API_PORT}" \
-  --no-access-log \
-  "${API_RELOAD_ARGS[@]}" &
+  "${API_SERVER_ARGS[@]}" &
 API_PID="$!"
 wait_for_service "FastAPI" "${API_BASE_URL}/health" "${API_PID}"
 
@@ -128,7 +125,7 @@ echo "Starting Streamlit at ${APP_BASE_URL}…"
 uv run streamlit run streamlit_app.py \
   --server.address="${STREAMLIT_HOST}" \
   --server.port="${STREAMLIT_PORT}" \
-  --server.runOnSave=true &
+  --server.runOnSave=false &
 STREAMLIT_PID="$!"
 wait_for_service \
   "Streamlit" \

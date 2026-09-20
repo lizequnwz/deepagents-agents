@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from streamlit.testing.v1 import AppTest
+from data_analytics_agent.schemas import API_CONTRACT_VERSION
 
 from data_analytics_agent.ui.components import (
     consolidate_activity_events,
@@ -61,7 +62,7 @@ if submitted:
 
 
 def test_api_contract_mismatch_requires_service_restart() -> None:
-    assert api_contract_error({"api_contract_version": 11}) is None
+    assert api_contract_error({"api_contract_version": API_CONTRACT_VERSION}) is None
     missing = api_contract_error({})
     stale = api_contract_error({"api_contract_version": 2})
 
@@ -703,3 +704,54 @@ def test_model_status_uses_completion_order_and_reports_failed_tools():
     assert "Responding to error · SQL query failed · Revenue" in current_activity(
         events, active_model_agent="text-to-sql"
     )
+
+
+def test_answer_currency_is_literal_markdown_in_all_prose_fields():
+    app = AppTest.from_string(r"""
+from data_analytics_agent.ui.components import render_answer
+render_answer(None, {
+    "answer": "**Revenue** was $138.60 versus $105.93; already escaped \\$81.59.",
+    "assumptions": ["Use $10 and $20 as thresholds."],
+    "interpretation": "The gap is $32.67, above $30.",
+}, turn_key="currency", source_id="test")
+""").run()
+    assert not app.exception
+    text = "\n".join(item.value for item in app.markdown)
+    assert r"**Revenue** was \$138.60 versus \$105.93; already escaped \$81.59." in text
+    assert r"Use \$10 and \$20 as thresholds." in text
+    assert r"The gap is \$32.67, above \$30." in text
+
+
+def test_main_evidence_preview_is_ten_rows_without_changing_saved_data():
+    app = AppTest.from_string("""
+from data_analytics_agent.ui.components import _render_dataset_table
+from data_analytics_agent.ui.api_client import AgentAPIClient
+result = {"result_id": "sample", "rows": [{"value": n} for n in range(60)],
+          "columns": ["value"], "row_count": 60}
+_render_dataset_table(AgentAPIClient("http://localhost:8000"), result)
+assert len(result["rows"]) == 60
+""").run()
+    assert not app.exception
+    assert len(app.dataframe[0].value) == 10
+    assert any(item.value == "Preview: 10 of 60 saved rows." for item in app.caption)
+
+
+def test_reused_chart_forms_are_scoped_to_turn_and_report():
+    app = AppTest.from_string("""
+import streamlit as st
+from data_analytics_agent.ui.components import _render_chart_editor
+class Client:
+    def edit_chart(self, run_id, payload):
+        st.session_state.saved = (run_id, payload)
+chart = {"chart_id": "shared", "title": "Revenue", "chart_type": "line"}
+for run, report in [("first", "report-1"), ("second", "report-1"), ("second", "report-2")]:
+    _render_chart_editor(Client(), run, {"report_id": report}, chart)
+""").run()
+    assert not app.exception
+    assert len(app.button) == 3
+    app.text_input[6].set_value("Revised revenue")
+    app.button[2].click().run()
+    assert not app.exception
+    run_id, payload = app.session_state.saved
+    assert run_id == "second" and payload["report_id"] == "report-2"
+    assert payload["title"] == "Revised revenue" and payload["chart_id"] == "shared"

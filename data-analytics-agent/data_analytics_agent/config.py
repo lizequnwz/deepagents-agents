@@ -69,12 +69,7 @@ class Settings:
     model_provider: str = field(
         default_factory=lambda: os.getenv("MODEL_PROVIDER", "openai")
     )
-    model: str = field(
-        default_factory=lambda: os.getenv(
-            "MODEL_ID",
-            os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
-        )
-    )
+    model: str = field(default_factory=lambda: os.getenv("MODEL_ID", "gpt-5.6-luna"))
     data_sources_config_path: Path = field(default_factory=_data_sources_config_path)
     api_base_url: str = field(
         default_factory=lambda: os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
@@ -176,6 +171,9 @@ class Settings:
     max_dataset_bytes: int = field(
         default_factory=lambda: _env_positive_int("MAX_DATASET_BYTES", 268_435_456)
     )
+    upload_max_bytes: int = field(
+        default_factory=lambda: _env_positive_int("UPLOAD_MAX_BYTES", 33_554_432)
+    )
     analysis_budget_seconds: float = field(
         default_factory=lambda: _env_positive_float("ANALYSIS_BUDGET_SECONDS", 900)
     )
@@ -209,7 +207,7 @@ class Settings:
             max_figure_height=self.analysis_max_figure_height,
         )
 
-    def readiness_errors(self) -> list[str]:
+    def readiness_errors(self, *, include_sources: bool = True) -> list[str]:
         errors: list[str] = []
         if self.model_provider not in {"openai", "bedrock_converse"}:
             errors.append("MODEL_PROVIDER must be openai or bedrock_converse.")
@@ -231,8 +229,9 @@ class Settings:
                 "ANALYSIS_MAX_TOTAL_FIGURE_BYTES must be greater than or "
                 "equal to ANALYSIS_MAX_FIGURE_BYTES."
             )
-        try:
-            self.load_catalog()
-        except Exception as exc:
-            errors.append(str(exc))
+        if include_sources:
+            try:
+                self.load_catalog()
+            except Exception as exc:
+                errors.append(str(exc))
         return errors

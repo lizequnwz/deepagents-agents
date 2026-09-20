@@ -25,6 +25,13 @@ Blocks use `type`:
 - callout: title, body, variant insight/note/warning/action.
 - infographic: title and items with label/description for qualitative concepts.
 
+Metric bindings select one exact saved cell; they never aggregate rows. Match each
+card's label to that row's population (for example, East sales cannot represent
+all-region sales). Use one label per binding. An overall total requires its own
+saved total cell. If the needed total was not saved before publication, omit the
+card and use the supported narrative and table; do not substitute the first group
+row or rerun analysis. Check each resolved card against the published answer.
+
 Reports accept title, subtitle, audience, blocks, footer, theme and
 previous_report_id. Omit theme for the default styling. A custom theme is an
 object (for example {"font_style":"editorial","density":"balanced"}), never

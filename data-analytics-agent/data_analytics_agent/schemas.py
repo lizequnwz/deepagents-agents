@@ -14,7 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 11
+API_CONTRACT_VERSION = 13
 
 
 class StrictModel(BaseModel):
@@ -161,6 +161,16 @@ class ChartDataPreparation(StrictModel):
     seed: int | None = None
 
 
+class UploadProvenance(StrictModel):
+    filename: str
+    sha256: str
+    file_bytes: int
+    schema_reviewed: bool = False
+    types: dict[str, str] = Field(default_factory=dict)
+    grain: str = ""
+    key_columns: list[str] = Field(default_factory=list)
+
+
 class SavedResult(StrictModel):
     result_id: str
     thread_id: str
@@ -172,7 +182,10 @@ class SavedResult(StrictModel):
     parquet_path: str
     preview: list[dict[str, Any]] = Field(default_factory=list)
     parent_result_ids: list[str] = Field(default_factory=list)
-    kind: Literal["source_sql", "saved_sql", "python", "presentation"] = "source_sql"
+    kind: Literal["source_sql", "saved_sql", "python", "presentation", "upload"] = (
+        "source_sql"
+    )
+    upload_provenance: UploadProvenance | None = None
     execution_id: str | None = None
     chart_preparation: ChartDataPreparation | None = None
     byte_count: int = 0
@@ -204,7 +217,8 @@ class SavedResult(StrictModel):
 class ResultPage(StrictModel):
     result_id: str
     source_id: str
-    kind: Literal["source_sql", "saved_sql", "python", "presentation"]
+    kind: Literal["source_sql", "saved_sql", "python", "presentation", "upload"]
+    upload_provenance: UploadProvenance | None = None
     short_label: str
     originating_question: str
     parent_result_ids: list[str]
@@ -461,6 +475,8 @@ class HealthResponse(StrictModel):
     api_contract_version: int = API_CONTRACT_VERSION
     default_source_id: str | None = None
     ready_source_count: int = 0
+    upload_max_bytes: int = 33_554_432
+    source_errors: list[str] = Field(default_factory=list)
     sql_approval_required: bool = False
     python_approval_required: bool = False
     visualization_enabled: bool = False
@@ -494,5 +510,6 @@ class DataSourceSummary(StrictModel):
 
 
 class DataSourcesResponse(StrictModel):
-    default_source_id: str
+    default_source_id: str | None
     sources: list[DataSourceSummary]
+    errors: list[str] = Field(default_factory=list)

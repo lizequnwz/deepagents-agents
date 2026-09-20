@@ -29,6 +29,7 @@ from data_analytics_agent.visualization.validation import (
 class RenderedChart:
     figure: go.Figure
     warnings: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -606,7 +607,7 @@ def build_chart(
                 line=dict(width=0),
                 fill="tonexty",
                 fillcolor="rgba(54,135,39,.15)",
-                name="Uncertainty interval",
+                name=spec.interval.display_label,
                 hoverinfo="skip",
             )
         )
@@ -622,4 +623,5 @@ def build_chart(
     return RenderedChart(
         figure=_style_figure(figure, spec, style),
         warnings=tuple(dict.fromkeys(warnings)),
+        notes=(spec.interval.description,) if spec.interval else (),
     )

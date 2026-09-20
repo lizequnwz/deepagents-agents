@@ -26,6 +26,8 @@ from data_analytics_agent.ui.components import (
     render_turn,
 )
 
+from data_analytics_agent.ui.uploads import render_upload_entry, render_upload_review
+
 load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://127.0.0.1:8501").rstrip("/")
@@ -86,9 +88,9 @@ def create_conversation(
 def get_or_create_conversation(
     client: AgentAPIClient,
     *,
-    default_source_id: str,
+    default_source_id: str | None,
     ready_source_ids: set[str],
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str | None, dict[str, Any] | None]:
     thread_id = st.query_params.get("thread_id")
     if thread_id:
         try:
@@ -126,6 +128,8 @@ def get_or_create_conversation(
     selected_source = st.session_state.get("source_selector")
     if selected_source not in ready_source_ids:
         selected_source = default_source_id
+    if selected_source is None:
+        return None, None
     thread_id = create_conversation(client, selected_source)
     return thread_id, client.get_conversation(thread_id)
 
@@ -292,24 +296,35 @@ except APIError as exc:
     )
     st.stop()
 
+with st.sidebar:
+    uploaded = render_upload_entry(
+        client, (health or {}).get("upload_max_bytes", 33_554_432)
+    )
+    if uploaded:
+        clear_conversation_state()
+        st.query_params["thread_id"] = uploaded["thread_id"]
+        st.session_state["current_thread_id"] = None
+        st.rerun()
+    with st.expander("Saved conversations", expanded=True):
+        for saved in reversed(client.list_conversations()):
+            if st.button(
+                saved["title"],
+                key=f"saved_{saved['thread_id']}",
+                disabled=saved["thread_id"] == st.query_params.get("thread_id"),
+            ):
+                clear_conversation_state()
+                st.query_params["thread_id"] = saved["thread_id"]
+                st.session_state["current_thread_id"] = None
+                st.rerun()
+
+
 sources_by_id = {source["source_id"]: source for source in data_sources["sources"]}
 ready_source_ids = {
     source_id for source_id, source in sources_by_id.items() if source["ready"]
 }
-if not ready_source_ids:
-    render_page_header()
-    st.error(
-        "No configured data source is ready.",
-        icon=":material/database_off:",
-    )
-    for source in data_sources["sources"]:
-        for error in source.get("errors", []):
-            st.caption(f"{source['name']}: {error}")
-    st.stop()
-
 default_source_id = data_sources["default_source_id"]
 if default_source_id not in ready_source_ids:
-    default_source_id = next(iter(ready_source_ids))
+    default_source_id = next(iter(ready_source_ids), None)
 
 try:
     thread_id, conversation = get_or_create_conversation(
@@ -321,6 +336,23 @@ except APIError as exc:
     render_page_header()
     st.error(str(exc), icon=":material/cloud_off:")
     st.stop()
+
+if conversation is None:
+    render_page_header()
+    st.info(
+        "Upload a CSV or Parquet file to start. A warehouse connection is optional."
+    )
+    for error in data_sources.get("errors", []):
+        st.caption(f"Source configuration: {error}")
+    for configured in data_sources["sources"]:
+        for error in configured.get("errors", []):
+            st.caption(f"{configured['name']}: {error}")
+    st.stop()
+
+if conversation["source_id"] not in sources_by_id:
+    saved_source = client.get_conversation_source(thread_id)
+    sources_by_id[saved_source["source_id"]] = saved_source
+    data_sources["sources"].append(saved_source)
 
 source = sources_by_id[conversation["source_id"]]
 active_run_id = conversation.get("active_run_id") or st.session_state.get(
@@ -350,18 +382,6 @@ if new_conversation:
         st.sidebar.error(str(exc), icon=":material/error:")
 
 with st.sidebar:
-    with st.expander("Saved conversations", expanded=True):
-        for saved in reversed(client.list_conversations()):
-            if st.button(
-                saved["title"],
-                key=f"saved_{saved['thread_id']}",
-                disabled=saved["thread_id"] == thread_id,
-            ):
-                clear_conversation_state()
-                st.query_params["thread_id"] = saved["thread_id"]
-                st.session_state["current_thread_id"] = None
-                st.rerun()
-
     with st.expander("Manage history", expanded=False):
         st.button(
             "Delete history",
@@ -405,6 +425,28 @@ with st.sidebar:
             )
 
 render_page_header(source)
+
+if source["backend_type"] == "upload":
+    uploaded_file = client.get_upload(thread_id)
+    if not uploaded_file["confirmed"]:
+        render_upload_review(client, uploaded_file)
+        st.stop()
+    with st.expander("Uploaded file and reviewed schema", expanded=False):
+        st.caption(
+            f"{uploaded_file['filename']} · {uploaded_file['row_count']:,} rows · source freshness unknown"
+        )
+        st.json(
+            {
+                "sha256": uploaded_file["sha256"],
+                "review": uploaded_file["review"],
+                "imported_at": uploaded_file["imported_at"],
+            }
+        )
+        st.link_button(
+            "Download reviewed data",
+            client.dataset_download_url(uploaded_file["result_id"]),
+        )
+
 
 if st.session_state.get("conversation_notice"):
     st.toast(

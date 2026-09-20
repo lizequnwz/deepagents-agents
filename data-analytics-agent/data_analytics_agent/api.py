@@ -7,13 +7,16 @@ import logging
 from threading import RLock
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, status
+from starlette.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response, FileResponse, StreamingResponse
 from contextlib import asynccontextmanager
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from data_analytics_agent.persistence import LocalStorage
 import csv
 import io
+import json
+from pydantic_core import to_json
 from pathlib import Path
 import pyarrow.parquet as pq
 
@@ -25,6 +28,21 @@ from data_analytics_agent.logging_config import configure_api_logging
 from data_analytics_agent.run_manager import RunManager
 from data_analytics_agent.approvals import decisions_to_command
 from data_analytics_agent.reporting.schemas import ReportResponse
+from data_analytics_agent.uploads import (
+    UploadReview,
+    UploadSource,
+    get_upload,
+    upload_for_thread,
+    upload_source,
+    stage_upload,
+    confirm_upload,
+)
+from data_analytics_agent.presentation_edits import (
+    ChartPresentationEdit,
+    PresentationConflict,
+    PresentationRenderError,
+    edit_chart_presentation,
+)
 from data_analytics_agent.schemas import (
     API_CONTRACT_VERSION,
     ConversationResponse,
@@ -36,6 +54,7 @@ from data_analytics_agent.schemas import (
     DecisionRequest,
     ExampleQuestionResponse,
     ExecutionLimitsResponse,
+    FinalAnswer,
     HealthResponse,
     MessageRequest,
     SteeringResponse,
@@ -89,6 +108,7 @@ class Services:
     storage: LocalStorage | None = None
     checkpointer: Any | None = None
     deleting_conversations: set[str] = field(default_factory=set)
+    uploading_conversations: set[str] = field(default_factory=set)
 
     def __post_init__(self):
         self.storage = self.storage or LocalStorage(self.settings.storage_dir)
@@ -118,13 +138,19 @@ class Services:
                 self.catalog = self.settings.load_catalog()
             return self.catalog
 
-    def source(self, source_id: str) -> DataSource:
+    def source(self, source_id: str) -> DataSource | UploadSource:
+        if upload := get_upload(self.storage, source_id):
+            return upload_source(upload, self.settings)
         try:
             return self.source_catalog().get(source_id)
         except KeyError as exc:
             raise StoreNotFound(source_id) from exc
 
     def backend_for_source(self, source_id: str) -> SQLBackend:
+        if get_upload(self.storage, source_id):
+            raise ValueError(
+                "Uploaded files have no warehouse backend. Query their saved datasets."
+            )
         with self._lock:
             backend = self._backends.get(source_id)
             if backend is None:
@@ -186,6 +212,24 @@ class Services:
             return list(self._source_summaries.values())
 
     def source_summary(self, source_id: str) -> DataSourceSummary:
+        if upload := get_upload(self.storage, source_id):
+            source = upload_source(upload, self.settings)
+            return DataSourceSummary(
+                source_id=source_id,
+                name=source.name,
+                description=source.description,
+                backend_type="upload",
+                dialect="duckdb",
+                ready=upload.confirmed,
+                errors=[]
+                if upload.confirmed
+                else ["Review the file schema before analysis."],
+                limits=ExecutionLimitsResponse(
+                    timeout_seconds=source.limits.timeout_seconds,
+                    max_result_rows=source.limits.max_result_rows,
+                    model_sample_rows=source.limits.model_sample_rows,
+                ),
+            )
         for summary in self.source_summaries():
             if summary.source_id == source_id:
                 return summary
@@ -201,6 +245,8 @@ class Services:
         return self.source(source_id)
 
     def semantic_catalog_for_source(self, source_id: str) -> SemanticCatalog:
+        if get_upload(self.storage, source_id):
+            raise ValueError("An uploaded schema is not a curated semantic catalog.")
         self.require_ready_source(source_id)
         try:
             return self._semantic_catalogs[source_id]
@@ -213,8 +259,10 @@ class Services:
         if self.agent is not None:
             return self.agent
         with self._lock:
-            catalog = self.semantic_catalog_for_source(source_id)
-            key = (source_id, catalog.content_hash, self.source(source_id).dialect)
+            source = self.require_ready_source(source_id)
+            is_upload = isinstance(source, UploadSource)
+            catalog = None if is_upload else self.semantic_catalog_for_source(source_id)
+            key = (source_id, self.source_version(source_id), source.dialect)
             graph = self._agents.get(key)
             if graph is None:
                 source = self.require_ready_source(source_id)
@@ -227,11 +275,18 @@ class Services:
                     conversation_store=self.conversations,
                     checkpointer=self.checkpointer,
                     source=source,
-                    semantic_catalog=self.semantic_catalog_for_source(source_id),
-                    backend=self.backend_for_source(source_id),
+                    semantic_catalog=catalog,
+                    backend=None if is_upload else self.backend_for_source(source_id),
                 )
                 self._agents[key] = graph
             return graph
+
+    def source_version(self, source_id):
+        if upload := get_upload(self.storage, source_id):
+            import hashlib
+
+            return hashlib.sha256(upload.model_dump_json().encode()).hexdigest()
+        return self.semantic_catalog_for_source(source_id).content_hash
 
     def manager(self) -> RunManager:
         with self._lock:
@@ -239,9 +294,7 @@ class Services:
                 self._manager = RunManager(
                     agent_resolver=self.agent_for_source,
                     source_resolver=self.source,
-                    catalog_version_resolver=lambda source_id: (
-                        self.semantic_catalog_for_source(source_id).content_hash
-                    ),
+                    catalog_version_resolver=self.source_version,
                     conversations=self.conversations,
                     runs=self.runs,
                     results=self.results,
@@ -296,7 +349,8 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     @app.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
-        errors = container.settings.readiness_errors()
+        errors = container.settings.readiness_errors(include_sources=False)
+        source_errors = []
         default_source_id: str | None = None
         ready_count = 0
         try:
@@ -304,11 +358,12 @@ def create_app(services: Services | None = None) -> FastAPI:
             default_source_id = catalog.default_source_id
             ready_count = sum(summary.ready for summary in container.source_summaries())
             if ready_count == 0:
-                errors.append("No configured data source is ready.")
+                source_errors.append(
+                    "No configured warehouse source is ready. You can upload a file."
+                )
         except Exception as exc:
             message = str(exc)
-            if message not in errors:
-                errors.append(message)
+            source_errors.append(message)
         if container.agent is not None:
             errors = [
                 error
@@ -321,6 +376,8 @@ def create_app(services: Services | None = None) -> FastAPI:
             api_contract_version=API_CONTRACT_VERSION,
             default_source_id=default_source_id,
             ready_source_count=ready_count,
+            upload_max_bytes=container.settings.upload_max_bytes,
+            source_errors=source_errors,
             sql_approval_required=(container.settings.require_sql_approval),
             python_approval_required=(container.settings.require_python_approval),
             visualization_enabled=(container.settings.enable_data_visualization),
@@ -335,14 +392,74 @@ def create_app(services: Services | None = None) -> FastAPI:
             catalog = container.source_catalog()
             summaries = container.source_summaries()
         except Exception as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=str(exc),
-            ) from exc
+            return DataSourcesResponse(
+                default_source_id=None, sources=[], errors=[str(exc)]
+            )
         return DataSourcesResponse(
             default_source_id=catalog.default_source_id,
             sources=summaries,
         )
+
+    def upload_response(upload):
+        result = container.results.get(
+            upload.result_id, upload.thread_id, source_id=upload.source_id
+        )
+        return {
+            **upload.model_dump(mode="json", exclude={"original_path"}),
+            "sample_rows": json.loads(
+                to_json(result.preview[:10], inf_nan_mode="null")
+            ),
+            "imported_at": container.results.get(
+                upload.original_result_id, upload.thread_id, source_id=upload.source_id
+            ).created_at,
+            "source_freshness": None,
+        }
+
+    @app.post("/api/uploads", status_code=201)
+    async def upload_file(
+        request: Request, filename: str = Query(min_length=1, max_length=255)
+    ):
+        content = bytearray()
+        async for chunk in request.stream():
+            if len(content) + len(chunk) > container.settings.upload_max_bytes:
+                raise HTTPException(413, "File exceeds UPLOAD_MAX_BYTES.")
+            content.extend(chunk)
+        try:
+            upload = await run_in_threadpool(
+                stage_upload, container, bytes(content), filename
+            )
+            return upload_response(upload)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/conversations/{thread_id}/source", response_model=DataSourceSummary)
+    async def conversation_source(thread_id: str):
+        return container.source_summary(
+            container.conversations.get(thread_id).source_id
+        )
+
+    @app.get("/api/conversations/{thread_id}/upload")
+    async def uploaded_file(thread_id: str):
+        return upload_response(upload_for_thread(container, thread_id))
+
+    @app.post("/api/conversations/{thread_id}/upload/confirm")
+    async def review_upload(thread_id: str, review: UploadReview):
+        with container._lock:
+            ensure_not_deleting(thread_id)
+            if thread_id in container.uploading_conversations:
+                raise HTTPException(
+                    409, "File import or schema review is already in progress."
+                )
+            container.uploading_conversations.add(thread_id)
+        try:
+            return upload_response(
+                await run_in_threadpool(confirm_upload, container, thread_id, review)
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            with container._lock:
+                container.uploading_conversations.discard(thread_id)
 
     @app.post(
         "/api/conversations",
@@ -352,6 +469,11 @@ def create_app(services: Services | None = None) -> FastAPI:
     async def create_conversation(
         request: CreateConversationRequest | None = None,
     ) -> CreateConversationResponse:
+        if request and request.source_id and request.source_id.startswith("upload:"):
+            raise HTTPException(
+                422,
+                "Each upload belongs to its original conversation. Upload a file to start another.",
+            )
         try:
             catalog = container.source_catalog()
             source_id = (
@@ -399,7 +521,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         request: MessageRequest,
         background_tasks: BackgroundTasks,
     ) -> CreateRunResponse:
-        readiness_errors = container.settings.readiness_errors()
+        readiness_errors = container.settings.readiness_errors(include_sources=False)
         if readiness_errors and container.agent is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -612,6 +734,8 @@ def create_app(services: Services | None = None) -> FastAPI:
                     if item.turns
                     else container.runs.get(item.run_ids[0]).question
                     if item.run_ids
+                    else upload.filename
+                    if (upload := get_upload(container.storage, item.source_id))
                     else "New conversation"
                 )[:100],
                 "active_run_id": item.active_run_id,
@@ -638,6 +762,11 @@ def create_app(services: Services | None = None) -> FastAPI:
         ensure_not_deleting(run.thread_id)
         if run.status not in {RunStatus.PAUSED, RunStatus.FAILED}:
             raise HTTPException(409, "Run is not resumable.")
+        task = container.manager().tasks.get(run_id)
+        if container.runs.workers_active(run_id) or (task and not task.done()):
+            raise HTTPException(
+                409, "The previous attempt is still stopping. Retry after it finishes."
+            )
         try:
             container.conversations.begin_run(run.thread_id, run_id)
         except RuntimeError as exc:
@@ -647,8 +776,11 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     @app.post("/api/runs/{run_id}/resume", status_code=202)
     async def resume_run(run_id: str, background_tasks: BackgroundTasks):
-        claim_saved_run(run_id)
-        background_tasks.add_task(container.manager().resume, run_id)
+        run = claim_saved_run(run_id)
+        manager = container.manager()
+        background_tasks.add_task(
+            manager.retry_report if run.findings else manager.resume, run_id
+        )
         return {"run_id": run_id, "status": "queued"}
 
     @app.post("/api/runs/{run_id}/retry-report", status_code=202)
@@ -705,6 +837,22 @@ def create_app(services: Services | None = None) -> FastAPI:
     @app.get("/api/reports/{report_id}", response_model=ReportResponse)
     async def get_report(report_id: str) -> ReportResponse:
         return container.reports.response_unscoped(report_id)
+
+    @app.post("/api/runs/{run_id}/presentation", response_model=FinalAnswer)
+    async def edit_presentation(
+        run_id: str, request: ChartPresentationEdit
+    ) -> FinalAnswer:
+        run = container.runs.get(run_id)
+        ensure_not_deleting(run.thread_id)
+        try:
+            with container._lock:
+                return edit_chart_presentation(container, run_id, request)
+        except PresentationConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except PresentationRenderError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     @app.get("/api/reports/{report_id}/view")
     async def view_report(report_id: str) -> Response:

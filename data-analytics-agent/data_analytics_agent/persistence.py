@@ -54,6 +54,13 @@ class LocalStorage:
                 "INSERT OR REPLACE INTO metadata VALUES (?,?,?)", (kind, key, payload)
             )
 
+    def get(self, kind: str, key: str, model: Any):
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM metadata WHERE kind=? AND id=?", (kind, key)
+            ).fetchone()
+        return TypeAdapter(model).validate_json(row[0]) if row else None
+
     def committed(self, run_id: str, call_id: str) -> str | None:
         with self.connect() as connection:
             row = connection.execute(

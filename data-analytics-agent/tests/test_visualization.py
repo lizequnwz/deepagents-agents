@@ -430,3 +430,79 @@ def test_state_choropleth_normalizes_names_and_warns_on_invalid_state() -> None:
 
     assert list(rendered.figure.data[0].locations) == ["NY"]
     assert any("unrecognized map" in warning for warning in rendered.warnings)
+
+
+@pytest.mark.parametrize(
+    "kind,expected",
+    [
+        ("prediction", "Prediction interval"),
+        ("confidence", "Confidence interval"),
+        ("scenario", "Scenario range"),
+        ("sensitivity", "Sensitivity range"),
+    ],
+)
+def test_interval_kind_and_method_are_shared_by_chart_and_report(kind, expected):
+    from datetime import datetime, timezone
+    from data_analytics_agent.reporting.schemas import ReportSpec
+    from data_analytics_agent.reporting.renderer import render_report
+
+    result = _saved_result(
+        rows=[
+            {"month": "2026-01", "forecast": 10, "lo": 8, "hi": 12},
+            {"month": "2026-02", "forecast": 11, "lo": 9, "hi": 13},
+        ]
+    )
+    chart = ChartSpec(
+        result_id=result.result_id,
+        chart_id="forecast-chart",
+        chart_type="line",
+        title="Forecast",
+        x="month",
+        y=["forecast"],
+        lower_bound="lo",
+        upper_bound="hi",
+        interval={"kind": kind, "method": "Synthetic bounded fixture <method>"},
+    )
+    rendered = build_chart(chart, result.rows)
+    assert rendered.figure.data[-1].name == expected
+    assert "Synthetic bounded fixture <method>" in rendered.notes[0]
+    spec = ReportSpec(
+        title="Forecast report",
+        blocks=[
+            {"type": "chart", "chart_id": chart.chart_id, "summary": "Saved forecast"},
+        ],
+    )
+    html = render_report(
+        spec,
+        results={result.result_id: result},
+        analyses={},
+        charts={chart.chart_id: chart},
+        generated_at=datetime.now(timezone.utc),
+    )
+    assert expected in html
+    assert "Synthetic bounded fixture &lt;method&gt;" in html
+    assert "Uncertainty interval" not in html
+
+
+def test_interval_contract_rejects_untyped_bounds_and_false_range_coverage():
+    from data_analytics_agent.visualization.schemas import ChartInterval
+
+    values = dict(
+        result_id="r", chart_type="line", title="Forecast", x="month", y=["forecast"]
+    )
+    with pytest.raises(ValueError, match="Bounds require"):
+        ChartSpec(**values, lower_bound="lo", upper_bound="hi")
+    with pytest.raises(ValueError, match="metadata requires bounds"):
+        ChartSpec(
+            **values, interval={"kind": "scenario", "method": "Planning assumptions"}
+        )
+    for kind in ["scenario", "sensitivity"]:
+        with pytest.raises(ValueError, match="cannot claim nominal"):
+            ChartInterval(
+                kind=kind, method="Planning assumptions", nominal_coverage=0.95
+            )
+    nominal = ChartInterval(
+        kind="prediction", method="Model quantiles", nominal_coverage=0.95
+    )
+    assert nominal.display_label == "95.0% nominal prediction interval"
+    assert "not an empirical coverage measurement" in nominal.description

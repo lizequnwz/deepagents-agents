@@ -37,7 +37,7 @@ from data_analytics_agent.schemas import SavedResult
 
 _SCRIPT_PATTERN = re.compile(r"<script(?:\s[^>]*)?>(.*?)</script>", re.DOTALL)
 _INLINE_PATTERN = re.compile(r"\*\*(.+?)\*\*|`([^`]+)`")
-REPORT_RENDERER_VERSION = "1.3"
+REPORT_RENDERER_VERSION = "1.5"
 
 # Report-owned semantic chart tokens. Every categorical color maintains at
 # least 3:1 contrast against both the light and dark report surfaces.
@@ -362,6 +362,9 @@ def _chart(
     warnings = "".join(
         f'<p class="chart-warning">{escape(item)}</p>' for item in rendered.warnings
     )
+    notes = "".join(
+        f'<p class="chart-summary">{escape(item)}</p>' for item in rendered.notes
+    )
     data_table = ""
     if block.show_data_table:
         data_table = (
@@ -383,7 +386,7 @@ def _chart(
         f"<h2>{escape(chart.title)}</h2>"
         f'<p class="chart-summary">{escape(block.summary)}</p>'
         f'<figure aria-label="{escape(block.summary)}">{chart_html}{caption}</figure>'
-        f"{warnings}{data_table}</section>"
+        f"{notes}{warnings}{data_table}</section>"
     )
 
 
@@ -509,6 +512,50 @@ def _sql_queries(results: Mapping[str, SavedResult]) -> str:
     )
 
 
+def _upload_sources(results: Mapping[str, SavedResult]) -> str:
+    """Carry file identity and explicit schema decisions into exported reports."""
+    sources = {}
+    for result in results.values():
+        provenance = result.upload_provenance
+        if provenance and (
+            result.source_id not in sources or provenance.schema_reviewed
+        ):
+            sources[result.source_id] = result
+    if not sources:
+        return ""
+    items = []
+    for result in sources.values():
+        provenance = result.upload_provenance
+        original = next(
+            (
+                r
+                for r in results.values()
+                if r.source_id == result.source_id
+                and r.upload_provenance
+                and not r.upload_provenance.schema_reviewed
+            ),
+            result,
+        )
+        types = ", ".join(
+            f"{column}: {kind}" for column, kind in provenance.types.items()
+        )
+        items.append(
+            f"<article><h3>{escape(provenance.filename)}</h3>"
+            f"<p>File SHA-256: <code>{escape(provenance.sha256)}</code></p>"
+            f"<p>Imported {escape(original.created_at.isoformat())}; {result.row_count:,} rows. "
+            "Source freshness is unknown.</p>"
+            f"<p>Declared grain: {escape(provenance.grain or 'Unspecified')}. "
+            f"Row keys: {escape(', '.join(provenance.key_columns) or 'Unspecified')}.</p>"
+            f"<p>Reviewed types: {escape(types or 'Unreviewed')}. "
+            "Structural schema review does not establish business meaning.</p></article>"
+        )
+    return (
+        '<section class="report-block"><h2>Uploaded evidence</h2>'
+        + "".join(items)
+        + "</section>"
+    )
+
+
 def _script_csp(document_body: str) -> str:
     hashes: list[str] = []
     for script in _SCRIPT_PATTERN.findall(document_body):
@@ -533,6 +580,21 @@ def render_report(
     charts: Mapping[str, ChartSpec] | None = None,
 ) -> str:
     """Render a validated specification to one offline-capable HTML file."""
+
+    metric_labels = {}
+    for block in spec.blocks:
+        if not isinstance(block, ReportMetricsBlock):
+            continue
+        for metric in block.metrics:
+            binding = (metric.result_id, metric.column, metric.row_index)
+            previous_label = metric_labels.setdefault(binding, metric.label)
+            if previous_label.strip().casefold() != metric.label.strip().casefold():
+                raise ValueError(
+                    f"Metric cards {previous_label!r} and {metric.label!r} reference the same "
+                    f"saved cell ({metric.column}, row {metric.row_index}). Use one label per "
+                    "binding. A group row is not an overall total. Bind a separately saved "
+                    "total or omit that card and use the supported narrative/table."
+                )
 
     charts = charts or {}
     block_html: list[str] = []
@@ -670,7 +732,7 @@ def render_report(
         "</header>"
         '<div id="report-content" class="report-content">'
         f"{''.join(block_html)}</div>"
-        f"{_sql_queries(results)}{footer}</main>"
+        f"{_sql_queries(results)}{_upload_sources(results)}{footer}</main>"
         f"<script>{interaction_script}</script></body>"
     )
     csp = _script_csp(content)

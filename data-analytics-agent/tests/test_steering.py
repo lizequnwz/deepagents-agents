@@ -85,7 +85,14 @@ class ClarifyingModel(AnalystModel):
         else:
             assert "Net" in str(answers[-1].content)
             message = AIMessage(
-                content=json.dumps({"answer": "I will use net revenue."})
+                content="",
+                tool_calls=[
+                    {
+                        "name": "CoordinatorResponse",
+                        "args": {"answer": "I will use net revenue."},
+                        "id": "clarified-answer",
+                    }
+                ],
             )
         return ChatResult(generations=[ChatGeneration(message=message)])
 

@@ -25,6 +25,8 @@ def create_chart_tool(results, runs, *, source_id):
         Use saved source or Python-derived datasets. Revise by previous_chart_id.
         Scalar/empty results do not need charts. If grain is wrong, ask SQL to
         reshape saved data. Never substitute an explicitly requested chart type.
+        Bounds require interval kind and method. Declare nominal coverage only
+        for prediction/confidence intervals, never for scenario/sensitivity ranges.
         """
         context = _runtime_context(runtime)
         if committed := runs.storage.committed(context.run_id, runtime.tool_call_id):

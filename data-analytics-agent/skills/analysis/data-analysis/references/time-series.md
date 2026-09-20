@@ -8,6 +8,9 @@ exogenous fields needed by the question.
 
 - Parse and sort time explicitly. Resolve duplicate periods and identify
   missing periods, irregular spacing, and incomplete current periods.
+- An observed last transaction before period-end is not proof of an incomplete
+  period. Use an explicit extraction cutoff or source completeness statement;
+  otherwise mark completeness unknown and retain the requested periods.
 - Distinguish an aggregate time series from repeated entity observations; do
   not infer entity-level behavior from aggregate movement.
 - Require enough history for the requested seasonal period. Do not claim

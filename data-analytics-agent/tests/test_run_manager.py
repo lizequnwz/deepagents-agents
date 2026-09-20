@@ -179,3 +179,135 @@ async def test_queued_follow_up_runs_after_report_failure_and_preserves_parent(
     assert w.conversations.get(w.thread).turns[0].run_id == follow_up
     assert len(w.results.list_for_conversation(w.thread, source_id="test")) == 1
     assert any("Seven" in message["content"] for message in graph.inputs[1]["messages"])
+
+
+def publish_test_findings(w):
+    result = save(w, [{"value": 7}])
+    response = CoordinatorResponse(answer="Seven", primary_result_id=result.result_id)
+    w.runs.publish(
+        w.run,
+        resolve_answer(
+            response,
+            thread_id=w.thread,
+            source_id="test",
+            results=w.results,
+            analyses=w.analyses,
+            runs=w.runs,
+        ),
+    )
+    return response, ReportSpec(
+        title="Seven",
+        blocks=[{"type": "table", "title": "Evidence", "result_id": result.result_id}],
+    )
+
+
+async def test_report_retry_reuses_valid_artifact_after_final_response_failure(
+    workspace,
+):
+    from data_analytics_agent.reporting.tools import generate_report
+
+    w = workspace
+    _, spec = publish_test_findings(w)
+    artifact = generate_report(
+        spec,
+        thread_id=w.thread,
+        source_id="test",
+        result_store=w.results,
+        analysis_store=w.analyses,
+        run_store=w.runs,
+        report_store=w.reports,
+        findings=w.runs.get(w.run).findings,
+    )
+    w.runs.attach_report(w.run, artifact.reference())
+    w.runs.fail(w.run, "Invalid final response")
+    graph = Graph([])
+    await manager(w, graph).retry_report(w.run)
+    state = w.runs.get(w.run)
+    assert state.status == RunStatus.COMPLETED and state.error is None
+    assert state.answer.report.report_id == artifact.report_id
+    assert not graph.inputs
+    assert len(w.storage.load("reports", dict)) == 1
+    assert len(w.conversations.get(w.thread).turns) == 1
+
+
+import pytest
+
+
+@pytest.mark.parametrize("invalid_spec", [False, True])
+async def test_report_retry_repairs_missing_or_invalid_spec_without_analysis(
+    workspace, monkeypatch, invalid_spec
+):
+    from data_analytics_agent.reporting.tools import generate_report
+
+    w = workspace
+    response, good_spec = publish_test_findings(w)
+    if invalid_spec:
+        w.runs.save_report_spec(
+            w.run,
+            {
+                "title": "Invalid",
+                "blocks": [
+                    {"type": "table", "title": "Missing", "result_id": "wrong-id"}
+                ],
+            },
+        )
+    w.runs.fail(w.run, "Report interrupted")
+    w.runs.cancel_event(w.run).set()
+    graph = Graph([Stream(response)])
+    original = graph.astream_events
+
+    async def repair(input, **kwargs):
+        assert not w.runs.cancel_event(w.run).is_set()
+        assert "Do not rerun SQL or Python" in input["messages"][0]["content"]
+        assert response.primary_result_id in input["messages"][0]["content"]
+        if invalid_spec:
+            assert "wrong-id" in input["messages"][0]["content"]
+        artifact = generate_report(
+            good_spec,
+            thread_id=w.thread,
+            source_id="test",
+            result_store=w.results,
+            analysis_store=w.analyses,
+            run_store=w.runs,
+            report_store=w.reports,
+            findings=w.runs.get(w.run).findings,
+        )
+        w.runs.attach_report(w.run, artifact.reference())
+        return await original(input, **kwargs)
+
+    monkeypatch.setattr(graph, "astream_events", repair)
+    await manager(w, graph).retry_report(w.run)
+    assert w.runs.get(w.run).status == RunStatus.COMPLETED
+    assert w.runs.get(w.run).error is None
+    assert len(graph.inputs) == 1
+    assert len(w.results.list_for_conversation(w.thread, source_id="test")) == 1
+    assert not w.runs.get_python_execution(w.run)
+
+
+async def test_report_retry_recreates_missing_html(workspace):
+    from pathlib import Path
+    from data_analytics_agent.reporting.tools import generate_report
+
+    w = workspace
+    _, spec = publish_test_findings(w)
+    w.runs.save_report_spec(w.run, spec.model_dump(mode="json"))
+    artifact = generate_report(
+        spec,
+        thread_id=w.thread,
+        source_id="test",
+        result_store=w.results,
+        analysis_store=w.analyses,
+        run_store=w.runs,
+        report_store=w.reports,
+        findings=w.runs.get(w.run).findings,
+    )
+    w.runs.attach_report(w.run, artifact.reference())
+    Path(artifact.html_path).unlink()
+    w.runs.fail(w.run, "Report file missing")
+    graph = Graph([])
+    await manager(w, graph).retry_report(w.run)
+    state = w.runs.get(w.run)
+    assert state.status == RunStatus.COMPLETED
+    assert state.answer.report.report_id != artifact.report_id
+    assert w.reports.get_unscoped(state.answer.report.report_id).html
+    assert not graph.inputs

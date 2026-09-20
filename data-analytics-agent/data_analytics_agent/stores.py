@@ -254,6 +254,8 @@ class ConversationStore:
             return thread_id in self._items
 
     def get(self, thread_id: str) -> ConversationResponse:
+        from data_analytics_agent.presentation_edits import current_presentation
+
         with self._lock:
             item = self._items.get(thread_id)
             if item is None:
@@ -261,7 +263,16 @@ class ConversationStore:
             return ConversationResponse(
                 thread_id=item.thread_id,
                 source_id=item.source_id,
-                turns=list(item.turns),
+                turns=[
+                    turn.model_copy(
+                        update={
+                            "answer": current_presentation(
+                                self.storage, turn.run_id, turn.answer
+                            )
+                        }
+                    )
+                    for turn in item.turns
+                ],
                 run_ids=list(item.run_ids),
                 active_run_id=item.active_run_id,
             )
@@ -579,6 +590,8 @@ class RunStore:
         )
 
     def get(self, run_id: str, *, after_event_id: int = 0) -> RunResponse:
+        from data_analytics_agent.presentation_edits import current_presentation
+
         with self._lock:
             item = self._get_mutable(run_id)
             events = [event for event in item.events if event.id > after_event_id]
@@ -605,7 +618,7 @@ class RunStore:
                 next_event_id=len(item.events),
                 debug_states=list(item.debug_states.values()),
                 approval=item.approval,
-                answer=item.answer,
+                answer=current_presentation(self.storage, run_id, item.answer),
                 error=item.error,
                 diagnostics=item.diagnostics,
                 run_diagnostics=self._run_diagnostics(item, self._clock()),
@@ -655,6 +668,8 @@ class RunStore:
                 item.active_started_at = self._clock()
             item.status = RunStatus.RUNNING
             item.terminal_at = None
+            item.error = None
+            item.diagnostics = None
 
     @persist_run
     def set_status(self, run_id: str, status: RunStatus) -> None:
@@ -897,6 +912,8 @@ class RunStore:
             self._stop_active(item, now)
             item.status = RunStatus.COMPLETED
             item.terminal_at = now
+            item.error = None
+            item.diagnostics = None
             item.answer = answer
             item.approval = None
 

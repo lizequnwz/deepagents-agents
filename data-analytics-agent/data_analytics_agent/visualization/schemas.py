@@ -40,6 +40,50 @@ class Palette(StrEnum):
     RED_BLUE = "red_blue"
 
 
+class ChartInterval(VisualizationModel):
+    """Declared meaning of saved bounds; nominal coverage is not measured coverage."""
+
+    kind: Literal["prediction", "confidence", "scenario", "sensitivity"]
+    method: str = Field(min_length=1, max_length=500)
+    label: str | None = Field(default=None, min_length=1, max_length=100)
+    nominal_coverage: float | None = Field(default=None, gt=0, lt=1)
+
+    @model_validator(mode="after")
+    def validate_coverage(self):
+        if not self.method.strip() or (
+            self.label is not None and not self.label.strip()
+        ):
+            raise ValueError("Interval method and label must not be blank.")
+        if (
+            self.kind in {"scenario", "sensitivity"}
+            and self.nominal_coverage is not None
+        ):
+            raise ValueError(
+                "Scenario and sensitivity ranges cannot claim nominal coverage."
+            )
+        return self
+
+    @property
+    def display_label(self) -> str:
+        kind = {
+            "prediction": "Prediction interval",
+            "confidence": "Confidence interval",
+            "scenario": "Scenario range",
+            "sensitivity": "Sensitivity range",
+        }[self.kind]
+        if self.nominal_coverage is not None:
+            kind = f"{self.nominal_coverage:.1%} nominal {kind.lower()}"
+        return f"{self.label} · {kind}" if self.label else kind
+
+    @property
+    def description(self) -> str:
+        return f"{self.display_label}. Method: {self.method}" + (
+            ". Nominal coverage is not an empirical coverage measurement."
+            if self.nominal_coverage is not None
+            else ""
+        )
+
+
 class ChartSpec(VisualizationModel):
     """One reviewed, declarative chart over one saved result."""
 
@@ -51,6 +95,7 @@ class ChartSpec(VisualizationModel):
     notes: list[str] = Field(default_factory=list)
     lower_bound: str | None = None
     upper_bound: str | None = None
+    interval: ChartInterval | None = None
     error_y: str | None = None
     chart_type: ChartType
     title: str
@@ -259,6 +304,10 @@ class ChartSpec(VisualizationModel):
         if bool(self.lower_bound) != bool(self.upper_bound):
             raise ValueError(
                 "Uncertainty bands require both lower_bound and upper_bound."
+            )
+        if bool(self.lower_bound) != bool(self.interval):
+            raise ValueError(
+                "Bounds require interval kind and method; interval metadata requires bounds."
             )
         if self.lower_bound and (
             chart_type is not ChartType.LINE or self.color or len(self.y) != 1

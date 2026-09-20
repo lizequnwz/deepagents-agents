@@ -223,3 +223,25 @@ def test_active_model_agent_tracks_call_lifecycle():
     assert store.get(run).active_model_agent == "text-to-sql"
     store.finish_model_call(run, "model", usage=None)
     assert store.get(run).active_model_agent is None
+
+
+def test_retry_clears_previous_error_without_resetting_work_or_usage():
+    clock = FakeClock()
+    store = RunStore(clock=clock)
+    run = store.create("thread", "source", "Recover")
+    store.start_active(run)
+    store.start_tool_call(run, "bad-id", agent="coordinator")
+    clock.advance(2)
+    store.finish_tool_call(run, "bad-id", agent="coordinator", failed=True)
+    store.fail(run, "Unknown saved result")
+    assert store.get(run).error
+    store.start_active(run)
+    assert store.get(run).error is None
+    assert store.diagnostics(run).active_ms == 2000
+    assert store.diagnostics(run).tool_call_errors == 1
+    store.complete(run, FinalAnswer(answer="Recovered"))
+    assert store.get(run).error is None
+    assert store.get(run).status == "completed"
+    reopened = RunStore(store.storage)
+    assert reopened.get(run).error is None
+    assert reopened.diagnostics(run).tool_call_errors == 1

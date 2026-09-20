@@ -267,6 +267,10 @@ def test_shared_chart_versions_uncertainty_and_report_metric_binding(workspace):
         y=["estimate"],
         lower_bound="lower",
         upper_bound="upper",
+        interval={
+            "kind": "scenario",
+            "method": "Synthetic estimate plus or minus 0.2.",
+        },
     )
     created = chart.func(spec=spec, runtime=w.runtime("chart"))
     assert created["ok"], created
@@ -528,3 +532,39 @@ def test_python_source_api_resolves_reused_dataset_from_saved_run(
             client.get(f"/api/results/{parent.result_id}/python-source").status_code
             == 404
         )
+
+
+@pytest.mark.parametrize("reference_kind", ["missing", "foreign", "chart"])
+def test_publication_reference_errors_are_recoverable_and_do_not_publish(
+    workspace, reference_kind
+):
+    from langchain_core.tools import ToolException
+
+    w = workspace
+    valid = save(w, [{"total": 12}])
+    missing = "unknown-id"
+    if reference_kind == "foreign":
+        other = w.conversations.create("test")
+        missing = w.results.save(
+            thread_id=other, source_id="test", columns=["total"], rows=[{"total": 999}]
+        ).result_id
+    publish, _ = create_presentation_tools(
+        w.results, w.analyses, w.runs, w.conversations, source_id="test"
+    )
+    findings = CoordinatorResponse(
+        answer="12",
+        primary_result_id=valid.result_id if reference_kind == "chart" else missing,
+        chart_ids=[missing] if reference_kind == "chart" else [],
+    )
+    with pytest.raises(ToolException, match="list_conversation_results"):
+        publish.func(findings=findings, runtime=w.runtime("invalid-publication"))
+    assert w.runs.get(w.run).findings is None
+    assert publish.handle_tool_error is True
+    response = publish.func(
+        findings=CoordinatorResponse(answer="12", primary_result_id=valid.result_id),
+        runtime=w.runtime("fixed-publication"),
+    )
+    assert (
+        response["ok"]
+        and w.runs.get(w.run).findings.primary_result_id == valid.result_id
+    )

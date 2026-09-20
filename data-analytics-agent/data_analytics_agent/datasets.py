@@ -17,7 +17,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from data_analytics_agent.persistence import LocalStorage
-from data_analytics_agent.schemas import SavedResult, ResultPage, ChartDataPreparation
+from data_analytics_agent.schemas import (
+    SavedResult,
+    ResultPage,
+    ChartDataPreparation,
+    UploadProvenance,
+)
 from data_analytics_agent.profiling import profile_result
 
 
@@ -75,6 +80,7 @@ class ResultStore:
         kind: str = "source_sql",
         execution_id: str | None = None,
         chart_preparation: ChartDataPreparation | None = None,
+        upload_provenance: UploadProvenance | None = None,
         max_rows: int | None = None,
     ) -> SavedResult:
         started = perf_counter()
@@ -136,9 +142,18 @@ class ResultStore:
             summaries = []
             for column in profile.columns:
                 name = '"' + column.name.replace('"', '""') + '"'
-                values = relation.aggregate(
-                    f"count({name}), count(distinct {name}), min({name}), max({name})"
-                ).fetchone()
+                summary = (
+                    relation.aggregate(
+                        f"count({name}) AS nonnull, count(distinct {name}) AS distinct_values, "
+                        f"min({name}) AS minimum, max({name}) AS maximum"
+                    )
+                    .to_arrow_table()
+                    .to_pylist()[0]
+                )
+                values = [
+                    summary[key]
+                    for key in ("nonnull", "distinct_values", "minimum", "maximum")
+                ]
                 nonnull_values = (
                     relation.filter(f"{name} IS NOT NULL")
                     .project(name)
@@ -193,6 +208,7 @@ class ResultStore:
             kind=kind,
             execution_id=execution_id,
             chart_preparation=chart_preparation,
+            upload_provenance=upload_provenance,
             byte_count=size,
             profile=profile,
             row_count=count,
@@ -263,6 +279,7 @@ class ResultStore:
             parent_result_ids=result.parent_result_ids,
             execution_id=result.execution_id,
             chart_preparation=result.chart_preparation,
+            upload_provenance=result.upload_provenance,
             executed_sql=result.executed_sql,
             columns=result.columns,
             rows=rows,

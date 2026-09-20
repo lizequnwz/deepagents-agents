@@ -144,6 +144,8 @@ def load_data_source_catalog(
 
     resolved_sources: dict[str, DataSource] = {}
     for source_id, definition in document.sources.items():
+        if source_id.startswith("upload:"):
+            raise ValueError("The upload: source prefix is reserved for isolated file conversations.")
         if not source_id.strip():
             raise ValueError("Data-source IDs cannot be empty.")
         try:

@@ -8,23 +8,30 @@ from data_analytics_agent.schemas import RunStatus
 
 
 async def delete_history(services, thread_ids: set[str]) -> dict:
-    conversations = [services.conversations.get(key) for key in thread_ids]
-    if thread_ids & services.deleting_conversations:
-        raise HTTPException(409, "History deletion is already in progress.")
-    run_ids = {key for conversation in conversations for key in conversation.run_ids}
-    for key in run_ids:
-        run = services.runs.get(key)
-        task = services._manager.tasks.get(key) if services._manager else None
-        if (
-            run.status in {RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.STOPPING}
-            or services.runs.workers_active(key)
-            or (task and not task.done())
-        ):
+    with services._lock:
+        if thread_ids & services.uploading_conversations:
             raise HTTPException(
-                409,
-                "Stop active work and wait for it to pause before deleting history.",
+                409, "Wait for file import or schema review before deleting history."
             )
-    services.deleting_conversations.update(thread_ids)
+        conversations = [services.conversations.get(key) for key in thread_ids]
+        if thread_ids & services.deleting_conversations:
+            raise HTTPException(409, "History deletion is already in progress.")
+        run_ids = {
+            key for conversation in conversations for key in conversation.run_ids
+        }
+        for key in run_ids:
+            run = services.runs.get(key)
+            task = services._manager.tasks.get(key) if services._manager else None
+            if (
+                run.status in {RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.STOPPING}
+                or services.runs.workers_active(key)
+                or (task and not task.done())
+            ):
+                raise HTTPException(
+                    409,
+                    "Stop active work and wait for it to pause before deleting history.",
+                )
+        services.deleting_conversations.update(thread_ids)
     try:
         storage = services.storage
         records = []
@@ -36,6 +43,8 @@ async def delete_history(services, thread_ids: set[str]) -> dict:
                 candidates.append(value.get("parquet_path"))
             elif kind == "reports":
                 candidates.append(value.get("html_path"))
+            elif kind == "uploads":
+                candidates.append(value.get("original_path"))
             executions = (
                 value.get("python_executions", [])
                 if kind == "runs"

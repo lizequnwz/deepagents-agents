@@ -1,14 +1,20 @@
 # Deferred next steps
 
 The current release focuses on iterative analysis over one configured SQL source
-per conversation. Prioritize these separately after this workflow is verified:
+per conversation. The [19 September roadmap](doc/roadmap/roadmap.md) is the
+authoritative priority order for subsequent work.
 
-1. File uploads and mixed-source analysis, with explicit dataset lineage.
-2. Web/document research with source citations connected to analytical evidence.
-3. Scheduling and proactive monitoring of saved investigations.
-4. Semantic SQL checks for joins, denominators and time logic.
-5. Notebook editing and manual chart-editing controls only if conversational
-   refinement proves insufficient.
+Start with an inspectable metric definition, a checked comparison, outcome-based
+evaluations, and compact result controls. Direct chart-title/style edits belong
+in this next increment; they should reuse saved evidence without model or source
+execution. Forecast interval labeling is a separate near-term correction.
+
+Then add selected-scope follow-ups, shared filters, and manual report refresh.
+Reviewed context improvements and metric-driver investigations build on those
+contracts. File uploads, web/document evidence, exports, and integrations remain
+demand-led expansions. Scheduling depends on validated refresh; mixed-source
+analysis requires an explicit change to the source-isolation policy. Notebook
+editing remains deferred.
 
 Cross-conversation automatic learning and persistent live Python kernels are
 outside this version. No migration is required from obsolete in-memory state.
@@ -17,6 +23,13 @@ the configured provider. Deterministic tests and local browser verification
 should run independently of that external evaluation.
 
 ## Implemented and locally verified
+
+The initial roadmap increments now include minimal onboarding, direct chart
+presentation edits with matching immutable report revisions and failure/retry,
+collapsed report previews, and explicit interval/range labels and methods.
+See the [implementation log](doc/roadmap/implementation-progress.md) for verification
+and the remaining gates. Checked KPI comparisons, uploads, and prompt ablations
+remain open; direct presentation editing does not replace agent report composition.
 
 The application now uses durable SQLite metadata/checkpoints and typed Parquet
 artifacts, an iterative `data-analysis` specialist, scoped saved-data SQL,

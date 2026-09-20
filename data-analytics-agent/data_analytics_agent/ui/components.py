@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -34,6 +35,12 @@ FALLBACK_EXAMPLES = [
 ]
 
 REPORT_PREVIEW_HEIGHT = 900
+
+
+def prose_markdown(text: str) -> str:
+    """Keep dollar signs literal in business prose instead of enabling LaTeX."""
+    return re.sub(r"(?<!\\)\$", r"\\$", text)
+
 
 _PHASE_ICONS = {
     "info": ":material/info:",
@@ -703,8 +710,8 @@ def render_page_header(source: dict[str, Any] | None = None) -> None:
         anchor=source_anchor,
     )
     st.caption(
-        "Semantic-grounded analytics. SQL and analytical Python are reviewed "
-        "when enabled; saved evidence supports iterative analysis."
+        "Saved evidence supports iterative analysis. SQL and analytical Python are reviewed "
+        "when review is enabled."
     )
 
 
@@ -728,7 +735,13 @@ def render_sidebar(
             "conversation state."
         )
         ready_sources = [
-            source for source in data_sources["sources"] if source["ready"]
+            source
+            for source in data_sources["sources"]
+            if source["ready"]
+            or (
+                source["backend_type"] == "upload"
+                and source["source_id"] == st.session_state.get("source_selector")
+            )
         ]
         ready_by_id = {source["source_id"]: source for source in ready_sources}
         st.selectbox(
@@ -759,6 +772,10 @@ def render_sidebar(
             icon=":material/add_comment:",
             type="primary",
             width="stretch",
+            disabled=selected_source["backend_type"] == "upload",
+            help="Use Upload a file to start a separate file conversation."
+            if selected_source["backend_type"] == "upload"
+            else None,
         )
 
         if health_error:
@@ -907,6 +924,7 @@ def clear_artifact_cache() -> None:
 
 
 _DATASET_KIND_LABELS = {
+    "upload": "Uploaded file",
     "source_sql": "Source SQL",
     "saved_sql": "SQL over saved datasets",
     "python": "Python-derived dataset",
@@ -933,17 +951,18 @@ def chart_preparation_summary(result):
     return f"{operation}; selected columns: {columns}."
 
 
-def _render_dataset_table(client, result):
-    if result["rows"]:
+def _render_dataset_table(client, result, *, preview_rows=10):
+    rows = result["rows"][:preview_rows]
+    if rows:
         st.dataframe(
-            result["rows"],
+            rows,
             column_order=result["columns"],
             width="stretch",
             hide_index=True,
         )
     else:
         st.info("This saved dataset contains no rows.")
-    st.caption(f"Preview: {len(result['rows'])} of {result['row_count']:,} saved rows.")
+    st.caption(f"Preview: {len(rows)} of {result['row_count']:,} saved rows.")
     with st.container(horizontal=True):
         st.link_button(
             "Download full CSV", client.dataset_download_url(result["result_id"])
@@ -998,7 +1017,7 @@ def _dataset_inspector(client, result_id, executions, initial_view="Data"):
             "The source extraction is incomplete. This dataset does not represent the full population."
         )
     if view == "Data":
-        _render_dataset_table(client, result)
+        _render_dataset_table(client, result, preview_rows=100)
     else:
         render_dataset_provenance(
             result, executions=executions, client=client, navigate=False
@@ -1012,6 +1031,11 @@ def render_dataset_provenance(
     kind = result["kind"]
     st.markdown(f"**Source · {_DATASET_KIND_LABELS[kind]}**")
     st.caption(f"Data source · {result['source_id']}")
+    if provenance := result.get("upload_provenance"):
+        st.caption(
+            "Source freshness is unknown. The file hash identifies the uploaded bytes."
+        )
+        st.json(provenance)
     if kind == "presentation":
         st.caption(chart_preparation_summary(result))
     elif result.get("originating_question"):
@@ -1087,7 +1111,7 @@ def _render_result(
     show_evidence: bool = True,
 ) -> None:
     try:
-        result = _saved_result(client.base_url, result_id, 5000 if chart else 100)
+        result = _saved_result(client.base_url, result_id, 5000 if chart else 10)
     except APIError as exc:
         st.warning(
             f"Saved result is unavailable: {exc}",
@@ -1154,6 +1178,8 @@ def _render_result(
             )
             for warning in rendered.warnings:
                 st.warning(warning, icon=":material/warning:")
+            for note in rendered.notes:
+                st.caption(note)
         except Exception as exc:
             st.warning(
                 f"The generated chart could not be rendered: {exc}",
@@ -1240,18 +1266,21 @@ def _render_report(
                 width="content",
                 key=f"download_report_{report_id}_{widget_key}",
             )
-        with st.expander(
+        preview = st.expander(
             "Report preview",
             icon=":material/preview:",
-            expanded=True,
+            expanded=False,
             key=f"report_preview_{report_id}_{widget_key}",
-        ):
-            st.iframe(
-                html,
-                width="stretch",
-                height=REPORT_PREVIEW_HEIGHT,
-                tab_index=0,
-            )
+            on_change="rerun",
+        )
+        if preview.open:
+            with preview:
+                st.iframe(
+                    html,
+                    width="stretch",
+                    height=REPORT_PREVIEW_HEIGHT,
+                    tab_index=0,
+                )
 
 
 def render_turn(
@@ -1262,11 +1291,11 @@ def render_turn(
     source_id: str,
 ) -> None:
     with st.chat_message("user"):
-        st.markdown(turn["user_message"])
+        st.markdown(prose_markdown(turn["user_message"]))
 
     for correction in turn.get("corrections") or []:
         with st.chat_message("user"):
-            st.markdown(correction["message"])
+            st.markdown(prose_markdown(correction["message"]))
     turn_key = turn.get("run_id") or turn_key
     with st.chat_message("assistant", avatar=":material/query_stats:"):
         render_activity(
@@ -1276,7 +1305,7 @@ def render_turn(
 
 
 def render_answer(client, answer, *, turn_key, source_id):
-    st.markdown(answer["answer"])
+    st.markdown(prose_markdown(answer["answer"]))
     executions = {
         execution["execution_id"]: execution
         for analysis in answer.get("analyses") or []
@@ -1290,10 +1319,10 @@ def render_answer(client, answer, *, turn_key, source_id):
             if assumptions:
                 st.markdown("**Assumptions**")
                 for assumption in assumptions:
-                    st.markdown(f"- {assumption}")
+                    st.markdown(prose_markdown(f"- {assumption}"))
             if interpretation:
                 st.markdown("**Interpretation**")
-                st.markdown(interpretation)
+                st.markdown(prose_markdown(interpretation))
 
     if answer.get("partial"):
         st.warning("Partial findings — the investigation is unfinished.")
@@ -1307,7 +1336,7 @@ def render_answer(client, answer, *, turn_key, source_id):
             chart["result_id"] == answer.get("primary_result_id")
             and chart["result_id"] not in shown_result_ids
         ):
-            st.badge("Primary evidence", icon=":material/verified:", color="green")
+            st.badge("Primary evidence", icon=":material/bookmark:", color="blue")
         _render_result(
             client,
             chart["result_id"],
@@ -1318,6 +1347,13 @@ def render_answer(client, answer, *, turn_key, source_id):
             show_evidence=chart["result_id"] not in shown_result_ids,
         )
         shown_result_ids.add(chart["result_id"])
+        if answer.get("report"):
+            with st.popover(
+                "Edit chart",
+                icon=":material/edit:",
+                key=f"edit_chart_{turn_key}_{chart['chart_id']}",
+            ):
+                _render_chart_editor(client, turn_key, answer["report"], chart)
 
     report = answer.get("report")
     if report:
@@ -1340,8 +1376,8 @@ def render_answer(client, answer, *, turn_key, source_id):
         if result_id == answer.get("primary_result_id"):
             st.badge(
                 "Primary evidence",
-                icon=":material/verified:",
-                color="green",
+                icon=":material/bookmark:",
+                color="blue",
             )
         _render_result(
             client,
@@ -1353,6 +1389,54 @@ def render_answer(client, answer, *, turn_key, source_id):
         )
 
 
+def _render_chart_editor(client, run_id, report, chart):
+    from data_analytics_agent.visualization.schemas import ChartType, Palette
+
+    st.caption("Save a new chart and report version using the existing data.")
+    with st.form(f"chart_edit_{run_id}_{report['report_id']}_{chart['chart_id']}"):
+        title = st.text_input("Chart title", value=chart["title"], max_chars=160)
+        x_label = st.text_input(
+            "X-axis label", value=chart.get("x_label") or "", max_chars=80
+        )
+        y_label = st.text_input(
+            "Y-axis label", value=chart.get("y_label") or "", max_chars=80
+        )
+        types = [item.value for item in ChartType]
+        chart_type = st.selectbox(
+            "Chart type", types, index=types.index(chart["chart_type"])
+        )
+        palettes = [item.value for item in Palette]
+        palette = st.selectbox(
+            "Colors", palettes, index=palettes.index(chart.get("palette", "default"))
+        )
+        st.caption(
+            "Chart types must fit the saved columns and data. Unsupported changes keep the current version."
+        )
+        save = st.form_submit_button("Save chart and report", type="primary")
+    if save:
+        if not title.strip():
+            st.error("Enter a chart title.")
+            return
+        try:
+            with st.spinner("Updating chart and report…"):
+                client.edit_chart(
+                    run_id,
+                    {
+                        "report_id": report["report_id"],
+                        "chart_id": chart["chart_id"],
+                        "title": title,
+                        "x_label": x_label or None,
+                        "y_label": y_label or None,
+                        "chart_type": chart_type,
+                        "palette": palette,
+                    },
+                )
+        except APIError as exc:
+            st.error(str(exc))
+            return
+        st.rerun()
+
+
 def _render_data_analysis(
     analysis: dict[str, Any], *, client: AgentAPIClient, widget_key: str
 ) -> None:
@@ -1361,7 +1445,7 @@ def _render_data_analysis(
         icon=":material/functions:",
     )
     with st.expander("Analysis methods, outputs, and executed Python", expanded=False):
-        st.markdown(analysis.get("method") or "")
+        st.markdown(prose_markdown(analysis.get("method") or ""))
         for note in (analysis.get("assumptions") or []) + (
             analysis.get("warnings") or []
         ):
@@ -1399,7 +1483,7 @@ def _render_data_analysis(
 
 def render_pending_user_message(question: str) -> None:
     with st.chat_message("user"):
-        st.markdown(question)
+        st.markdown(prose_markdown(question))
 
 
 def render_approval(

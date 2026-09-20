@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 import asyncio
+import hashlib
 import json
 import time
+from data_analytics_agent.datasets import StoreNotFound
 from data_analytics_agent.approvals import _extract_approval
 from data_analytics_agent.steering import PendingCorrections
 from data_analytics_agent.diagnostics import RunDiagnosticsCallback
@@ -192,24 +194,11 @@ class RunManager:
         spec = self.runs.report_spec(run_id)
         if not run.findings:
             raise ValueError("No saved findings to report.")
-        if not spec:
-            self.runs.set_phase(run_id, "preparing_report")
-            await self._drive(
-                run_id,
-                {
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": "The findings are already published. Load report-design and create their required report now. Do not rerun analysis.",
-                        }
-                    ]
-                },
-            )
-            return
         self.tasks[run_id] = asyncio.current_task()
         self.runs.cancel_event(run_id).clear()
         self.runs.start_active(run_id)
         self.runs.set_phase(run_id, "preparing_report")
+        repair_reason = None
 
         def render():
             with self.runs.worker(run_id):
@@ -225,16 +214,39 @@ class RunManager:
                 )
 
         try:
-            async with asyncio.timeout(self.presentation_budget_seconds):
-                artifact = await asyncio.to_thread(render)
-            self.runs.attach_report(run_id, artifact.reference())
-            self._finish(run_id, run.findings)
+            # Final-response validation can fail after a valid report is saved.
+            # Finish that stage without another model call or report version.
+            artifact = None
+            reference = self.runs.report_reference(run_id)
+            if reference:
+                try:
+                    saved = self.reports.get(
+                        reference["report_id"], run.thread_id, source_id=run.source_id
+                    )
+                    if (
+                        hashlib.sha256(saved.html.encode("utf-8")).hexdigest()
+                        == saved.html_sha256
+                        == reference["html_sha256"]
+                    ):
+                        artifact = saved
+                except (StoreNotFound, FileNotFoundError):
+                    pass
+            if artifact is None and spec:
+                async with asyncio.timeout(self.presentation_budget_seconds):
+                    artifact = await asyncio.to_thread(render)
+            if artifact is not None:
+                self.runs.attach_report(run_id, artifact.reference())
+                self._finish(run_id, run.findings)
+            else:
+                repair_reason = "The required report has not been created."
         except (asyncio.CancelledError, InterruptedError):
             self.runs.cancel_event(run_id).set()
             while self.runs.workers_active(run_id):
                 await asyncio.sleep(0.05)
             self.runs.pause(run_id)
             self.conversations.fail_run(run.thread_id, run_id)
+        except (ValueError, KeyError, IndexError) as exc:
+            repair_reason = f"The saved report specification could not render: {exc}"
         except Exception as exc:
             self.runs.fail(
                 run_id,
@@ -243,6 +255,25 @@ class RunManager:
             self.conversations.fail_run(run.thread_id, run_id)
         finally:
             self.tasks.pop(run_id, None)
+        if repair_reason:
+            await self._drive(
+                run_id,
+                {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": repair_reason
+                            + " Load report-design and correct/create the report using the published findings and saved evidence. Do not rerun SQL or Python. Finish with the published CoordinatorResponse; report references are attached by the application. Saved findings: "
+                            + run.findings.model_dump_json(),
+                        }
+                    ],
+                    "thread_id": run.thread_id,
+                    "run_id": run_id,
+                    "source_id": run.source_id,
+                    "question": run.question,
+                },
+            )
+        else:
             await self._start_follow_up(run_id)
 
     async def _start_follow_up(self, run_id):

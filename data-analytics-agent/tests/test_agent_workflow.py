@@ -2,6 +2,7 @@
 
 import json
 import re
+import pytest
 from dataclasses import replace
 from pathlib import Path
 from langchain_core.language_models import BaseChatModel
@@ -11,6 +12,8 @@ from data_analytics_agent.api import Services
 
 
 class AnalystModel(BaseChatModel):
+    invalid_final_once: bool = False
+
     @property
     def _llm_type(self):
         return "local-analyst-workflow-test"
@@ -104,19 +107,28 @@ class AnalystModel(BaseChatModel):
                 else:
                     report = next(m for m in tools if m.name == "create_report")
                     assert json.loads(report.content)["ok"], report.content
-                    message = AIMessage(content=json.dumps(findings))
+                    if self.invalid_final_once and not any(
+                        m.name == "CoordinatorResponse" for m in tools
+                    ):
+                        findings["report_id"] = json.loads(report.content)["report"][
+                            "report_id"
+                        ]
+                    message = call("CoordinatorResponse", findings, "final-answer")
         return ChatResult(generations=[ChatGeneration(message=message)])
 
 
+@pytest.mark.parametrize("invalid_final_once", [False, True])
 async def test_descriptive_question_through_real_harness_produces_report(
-    test_settings, monkeypatch
+    test_settings, monkeypatch, invalid_final_once
 ):
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
     from data_analytics_agent import coordinator
 
     monkeypatch.setattr(
-        coordinator, "_build_chat_model", lambda *args, **kwargs: AnalystModel()
+        coordinator,
+        "_build_chat_model",
+        lambda *args, **kwargs: AnalystModel(invalid_final_once=invalid_final_once),
     )
     # Keep the isolated source configuration and use the real project instructions/skills.
     import shutil
@@ -136,6 +148,8 @@ async def test_descriptive_question_through_real_harness_produces_report(
     state = services.runs.get(run)
     assert state.status == "completed", state.error
     assert state.answer.report and state.findings
+    assert len(services.storage.load("reports", dict)) == 1
+    assert len(services.results.list_for_conversation(thread, source_id="test")) == 1
     assert not state.answer.analyses and not services.runs.get_python_execution(run)
     assert services.results.get_unscoped(state.answer.primary_result_id).rows == [
         {"artists": 0}

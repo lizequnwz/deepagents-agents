@@ -6,6 +6,7 @@ from data_analytics_agent.steering import PendingCorrections
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
 from data_analytics_agent.schemas import FinalAnswer, ResultReference
 from data_analytics_agent.visualization.schemas import ChartSpec
+from data_analytics_agent.datasets import StoreNotFound
 
 
 def resolve_answer(response, *, thread_id, source_id, results, analyses, runs):
@@ -81,14 +82,23 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
         and explicit partial/unresolved_questions if analysis is incomplete.
         """
         context = _runtime_context(runtime)
-        answer = resolve_answer(
-            findings,
-            thread_id=context.thread_id,
-            source_id=source_id,
-            results=results,
-            analyses=analyses,
-            runs=runs,
-        )
+        try:
+            answer = resolve_answer(
+                findings,
+                thread_id=context.thread_id,
+                source_id=source_id,
+                results=results,
+                analyses=analyses,
+                runs=runs,
+            )
+        except (StoreNotFound, ValueError) as exc:
+            raise ToolException(
+                "Findings were not published: a referenced artifact is unknown, "
+                "invalid, or outside this conversation. Use list_conversation_results "
+                "or list_conversation_analyses, and copy exact chart IDs from create_chart "
+                "responses. Correct the references and retry; reuse saved evidence "
+                "without repeating successful analysis."
+            ) from exc
         if (
             runs.diagnostics(context.run_id).active_ms
             >= getattr(runs, "analysis_budget_seconds", 900) * 1000

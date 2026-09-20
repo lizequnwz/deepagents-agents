@@ -73,6 +73,19 @@ class AgentAPIClient:
     def get_data_sources(self) -> dict[str, Any]:
         return self.request("GET", "/api/data-sources", timeout=5)
 
+    def upload_file(self, filename: str, content: bytes):
+        return self.request("POST", "/api/uploads", params={"filename": filename},
+                            content=content, headers={"Content-Type": "application/octet-stream"}, timeout=120)
+
+    def get_upload(self, thread_id: str):
+        return self.request("GET", f"/api/conversations/{thread_id}/upload")
+
+    def confirm_upload(self, thread_id: str, review: dict[str, Any]):
+        return self.request("POST", f"/api/conversations/{thread_id}/upload/confirm", json=review, timeout=120)
+
+    def get_conversation_source(self, thread_id: str):
+        return self.request("GET", f"/api/conversations/{thread_id}/source")
+
     def create_conversation(self, source_id: str) -> str:
         response = self.request(
             "POST",
@@ -132,6 +145,14 @@ class AgentAPIClient:
 
     def retry_report(self, run_id: str):
         return self.request("POST", f"/api/runs/{run_id}/retry-report")
+
+    def edit_chart(self, run_id: str, changes: dict[str, Any]):
+        return self.request(
+            "POST",
+            f"/api/runs/{run_id}/presentation",
+            json=changes,
+            timeout=120,
+        )
 
     def get_result(self, result_id: str, *, offset: int = 0, limit: int = 100):
         """Retrieve one explicit preview page, never a disguised full export."""

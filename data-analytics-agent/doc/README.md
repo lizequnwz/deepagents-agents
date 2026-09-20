@@ -12,6 +12,8 @@ the current guidance.
 
 ## Development
 
+- [Configuration](development/configuration.md) — minimal first-run setup,
+  provider alternatives, advanced overrides, and development reload.
 - [Architecture](development/architecture.md) — the authoritative system
   boundaries and request lifecycle.
 - [Backend development](development/backend-development.md) — backend
@@ -29,10 +31,15 @@ the current guidance.
 
 ## Roadmap and deferred work
 
-- [Improvement roadmap](roadmap/roadmap.md) — the current prioritized product
-  opportunities.
+- [Implementation progress](roadmap/implementation-progress.md) — delivered
+  increments, verification, and the next acceptance gates.
+- [Improvement roadmap](roadmap/roadmap.md) — recommendations refreshed on
+  19 September 2026, with current product research, an actionable next-release
+  scope, and acceptance criteria for agent quality and result interactions.
 - [Deferred next steps](../HANDOFF.md) — work explicitly outside the current
   release.
+- [Simplification and ablation plan](roadmap/simplification-and-ablation.md) —
+  reduce setup and routine model work while testing capability preservation.
 
 ## Reviews and historical records
 
