@@ -420,7 +420,7 @@ def test_current_activity_prefers_leaf_and_preserves_report_failure():
             },
         },
     ]
-    assert current_activity(events) == "Querying data source · Count artists"
+    assert current_activity(events) == "Retrieving data · Count artists"
     assert (
         current_activity(events, status="failed", findings=True)
         == "Findings saved · Report generation failed"
@@ -452,7 +452,7 @@ def test_subagent_activity_identifies_specialist_and_assignment():
         },
     }
     assert current_activity([event]) == (
-        "Data Analysis · Working · Forecast monthly sales with uncertainty."
+        "Analyzing data · Forecast monthly sales with uncertainty."
     )
     assert "Finished" in activity_label({**event, "phase": "completed"})
     assert "Assignment failed" in activity_label({**event, "phase": "failed"})
@@ -519,7 +519,7 @@ def test_status_does_not_reuse_retrieval_phase_and_prioritizes_wait_states():
     assert current_activity([event]) == "Preparing next step"
     assert (
         current_activity([event], active_model_agent="text-to-sql")
-        == "Text-to-SQL · Reviewing SQL results · Count artists"
+        == "Reviewing retrieved data · Count artists"
     )
     for findings in (False, True):
         assert (
@@ -546,7 +546,7 @@ def test_status_does_not_reuse_retrieval_phase_and_prioritizes_wait_states():
     )
     assert (
         current_activity([{**event, "phase": "started"}], source_id="Chinook")
-        == "Text-to-SQL · Querying Chinook · Count artists"
+        == "Retrieving data from Chinook · Count artists"
     )
 
 
@@ -623,7 +623,7 @@ def test_model_status_keeps_assignment_and_completed_tool_context():
     }
     events = [assignment]
     assert current_activity(events, active_model_agent="data-analysis") == (
-        "Data Analysis · Planning analysis · Forecast monthly sales"
+        "Planning analysis · Forecast monthly sales"
     )
     events += [
         {
@@ -646,7 +646,7 @@ def test_model_status_keeps_assignment_and_completed_tool_context():
         },
     ]
     assert current_activity(events, active_model_agent="data-analysis") == (
-        "Data Analysis · Reviewing Python results · Evaluate forecast uncertainty"
+        "Reviewing analysis results · Evaluate forecast uncertainty"
     )
     events.append(
         {
@@ -656,7 +656,7 @@ def test_model_status_keeps_assignment_and_completed_tool_context():
         }
     )
     assert current_activity(events, active_model_agent="coordinator") == (
-        "Coordinator · Reviewing specialist findings · Forecast monthly sales"
+        "Reviewing findings · Forecast monthly sales"
     )
     events.append(
         {
@@ -672,7 +672,7 @@ def test_model_status_keeps_assignment_and_completed_tool_context():
         }
     )
     assert current_activity(events, active_model_agent="data-analysis") == (
-        "Data Analysis · Planning analysis · Check regional differences"
+        "Planning analysis · Check regional differences"
     )
 
 
@@ -698,7 +698,7 @@ def test_model_status_uses_completion_order_and_reports_failed_tools():
     ]
     assert (
         current_activity(events, active_model_agent="text-to-sql")
-        == "Text-to-SQL · Reviewing SQL results · Revenue"
+        == "Reviewing retrieved data · Revenue"
     )
     events[-1] = event("first", "failed")
     assert "Responding to error · SQL query failed · Revenue" in current_activity(
@@ -777,21 +777,74 @@ render_answer(None, {"answer":"Estimate", "assumptions":["Stable demand"],
     assert any("Only six observations" in w.value for w in app.warning)
 
 
-def test_plan_and_parallel_work_are_visible_without_opening_activity():
+def test_plan_and_parallel_status_without_duplicate_work_progress():
     app = AppTest.from_string("""
-from data_analytics_agent.ui.components import render_activity
+import streamlit as st
+from data_analytics_agent.ui.components import render_activity, current_activity
 steps=[{"agent":"coordinator", "phase":"completed", "tool":{"name":"write_todos","call_id":"plan","input":{"todos":[
     {"content":"Retrieve monthly data","status":"completed"},
     {"content":"Compare trend and seasonality","status":"in_progress"},
     {"content":"Prepare report","status":"pending"}]}}},
     {"agent":"coordinator","phase":"started","tool":{"name":"task","call_id":"same","invocation_id":"a","input":{"subagent_type":"data-analysis","description":"Investigate trend. Business brief: use 12345678-1234-1234-1234-123456789abc"}}},
     {"agent":"coordinator","phase":"started","tool":{"name":"task","call_id":"same","invocation_id":"b","input":{"subagent_type":"data-analysis","description":"Investigate seasonality"}}}]
+st.markdown(current_activity(steps))
 render_activity(steps,{},key="work")
 """).run()
     assert not app.exception
     assert any("Analysis plan" in m.value for m in app.markdown)
     assert any("Retrieve monthly data" in m.value for m in app.markdown)
-    assert any("Investigate trend" in c.value for c in app.caption)
-    assert any("Investigate seasonality" in c.value for c in app.caption)
+    assert any("2 analyses running" in m.value for m in app.markdown)
+    assert not any("Work progress" in m.value for m in app.markdown)
+    assert not app.caption
     assert app.expander[0].proto.expanded is False
     assert not any("Business brief" in c.value for c in app.caption)
+
+
+def test_completed_plan_collapses_and_preserves_steps_and_activity_state():
+    app = AppTest.from_string("""
+import streamlit as st
+from data_analytics_agent.ui.components import render_activity
+st.session_state.setdefault("finished", False)
+st.session_state.setdefault("partial", False)
+st.session_state.setdefault("step_status", "in_progress")
+steps = [{"agent": "coordinator", "phase": "completed", "tool": {
+    "name": "write_todos", "call_id": "plan", "input": {"todos": [
+        {"content": "Compare regional sales", "status": st.session_state.step_status}
+    ]}}}]
+render_activity(steps, {}, key="test", completed=st.session_state.finished,
+                partial=st.session_state.partial)
+if st.session_state.finished:
+    st.markdown("The answer stays visible.")
+""").run()
+    assert not app.exception
+    assert any("**Compare regional sales**" in m.value for m in app.markdown)
+    activity_id = app.expander[0].proto.id
+    app.session_state["activity_turn_test"] = True
+    app.session_state["finished"] = True
+    app.session_state["step_status"] = "completed"
+    app.run()
+    assert not app.exception
+    plan = next(e for e in app.expander if e.label == "Analysis complete · View steps")
+    assert plan.proto.expanded is False
+    assert not any("Compare regional sales" in m.value for m in app.markdown)
+    assert any("The answer stays visible." in m.value for m in app.markdown)
+    activity = next(e for e in app.expander if e.label == "Activity")
+    assert activity.proto.id == activity_id and activity.proto.expanded
+    app.session_state["completed_plan_test"] = True
+    app.run()
+    assert not app.exception
+    assert any("Compare regional sales · completed" in m.value for m in app.markdown)
+    # Published partial answers and unfinished plans must never claim completion.
+    for partial, step_status in [(True, "completed"), (False, "pending")]:
+        app.session_state["partial"] = partial
+        app.session_state["step_status"] = step_status
+        app.run()
+        assert not app.exception
+        assert any(e.label == "Analysis plan · View steps" for e in app.expander)
+        assert not any(e.label.startswith("Analysis complete") for e in app.expander)
+        app.session_state["completed_plan_test"] = True
+        app.run()
+        assert not app.exception
+        assert any(
+            f"Compare regional sales · {step_status}" in m.value for m in app.markdown
+        )

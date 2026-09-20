@@ -21,8 +21,8 @@ usually take more work than descriptive questions.
 | 7. Cash-flow investigation | Financial services | Signed flows, SQL → Python, anomalies |
 | 8. Loan portfolio composition | Financial services | Status meaning, distinct counts, scope discipline |
 
-For complex work, watch **Analysis plan** and **Work progress** without opening
-Activity. Open **Activity** to inspect actual tool calls and SQL/Python. A plan
+For complex work, watch the live status and **Analysis plan** without opening
+Activity. Completed plans collapse behind **View steps**. Open **Activity** to inspect actual tool calls and SQL/Python. A plan
 should advance as work finishes; a completed data-backed answer should have an
 HTML report. Partial findings must identify unfinished work. Numerical results,
 charts, scope and units should agree across the answer, saved evidence and report.

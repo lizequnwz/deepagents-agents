@@ -65,9 +65,11 @@ steps and ask SQL for more data. The investigation record and artifacts preserve
 continuity. No notebook kernel needs to stay alive.
 
 The question appears before one assistant activity view. Complex requests show an
-**Analysis plan** with pending, in-progress and completed steps. **Work progress**
-shows active assignments and recent SQL, Python, chart and report work without
-opening a panel. Independent saved-data analyses can run together; source retrieval
+**Analysis plan** with pending, in-progress and completed steps. One live status
+above the plan describes the current work, elapsed time and simultaneous analyses.
+Clarification, review and recovery controls appear directly below that status.
+Completed turns collapse their plan behind **View steps**, keeping the answer
+prominent; unfinished steps keep their recorded states. Independent saved-data analyses can run together; source retrieval
 and dependent analyses remain sequential. The default allows two analysis workers;
 set `ANALYSIS_PARALLEL_WORKERS=1` for sequential execution.
 

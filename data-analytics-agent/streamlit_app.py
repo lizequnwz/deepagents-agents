@@ -16,6 +16,7 @@ from data_analytics_agent.ui.api_client import (
 from data_analytics_agent.ui.components import (
     clear_artifact_cache,
     current_activity,
+    prose_markdown,
     render_activity,
     render_answer,
     render_approval,
@@ -220,7 +221,7 @@ def render_active_run(
                 source_id=source_id,
             )
             with st.container(horizontal=True, vertical_alignment="center"):
-                st.markdown(f"**{label}** · {elapsed:.0f}s")
+                st.markdown(prose_markdown(f"**{label}** · {elapsed:.0f}s"))
                 if state in {
                     "running",
                     "queued",
@@ -230,23 +231,6 @@ def render_active_run(
                     if st.button("Stop", key=f"stop_{run_id}"):
                         client.stop_run(run_id)
                         st.rerun()
-            render_activity(
-                run.get("events") or [], run.get("run_diagnostics") or {}, key=run_id
-            )
-            if run.get("findings"):
-                render_answer(
-                    client, run["findings"], turn_key=run_id, source_id=source_id
-                )
-                st.caption(
-                    "Report: retry available"
-                    if state == "failed"
-                    else "Report: preparing"
-                )
-            for correction in run.get("corrections") or []:
-                applied = "coordinator" in correction.get("delivered_to", [])
-                st.caption(
-                    f"{'Applied' if applied else 'Received; applying after the current step'} · {correction['message']}"
-                )
             if state == "clarification_required":
                 clarification = run["clarification"]
                 st.markdown(clarification["question"])
@@ -284,6 +268,23 @@ def render_active_run(
                     client.retry_report(run_id)
                     st.session_state["active_run_id"] = run_id
                     st.rerun()
+            render_activity(
+                run.get("events") or [], run.get("run_diagnostics") or {}, key=run_id
+            )
+            if run.get("findings"):
+                render_answer(
+                    client, run["findings"], turn_key=run_id, source_id=source_id
+                )
+                st.caption(
+                    "Report: retry available"
+                    if state == "failed"
+                    else "Report: preparing"
+                )
+            for correction in run.get("corrections") or []:
+                applied = "coordinator" in correction.get("delivered_to", [])
+                st.caption(
+                    f"{'Applied' if applied else 'Received; applying after the current step'} · {correction['message']}"
+                )
     except APIError as exc:
         st.error(str(exc))
 

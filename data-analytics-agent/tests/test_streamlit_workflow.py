@@ -230,7 +230,7 @@ def test_live_model_status_retains_fast_tool_result_context(test_settings, monke
             app.run(timeout=15)
             assert not app.exception
             assert any(
-                "Text-to-SQL · Reviewing SQL results · Count artists" in item.value
+                "Reviewing retrieved data · Count artists" in item.value
                 for item in app.markdown
             )
 

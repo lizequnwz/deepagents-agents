@@ -308,7 +308,7 @@ def render_debug_states(
 
 # Running, completed, and failed labels share one vocabulary across live/history views.
 _ACTIVITY_LABELS = {
-    "execute_sql": ("Querying data source", "SQL query finished", "SQL query failed"),
+    "execute_sql": ("Retrieving data", "SQL query finished", "SQL query failed"),
     "query_saved_results": (
         "Transforming saved data",
         "Saved data transformed",
@@ -336,7 +336,7 @@ _ACTIVITY_LABELS = {
         "Dataset review failed",
     ),
     "execute_analysis_python": (
-        "Running Python analysis",
+        "Analyzing data",
         "Python analysis finished",
         "Python analysis failed",
     ),
@@ -410,7 +410,12 @@ def activity_label(event, *, source_id=None):
     name = tool.get("name")
     stage = {"completed": 1, "failed": 2}.get(event.get("phase"), 0)
     if name == "task":
-        label = f"{_agent_label(arguments.get('subagent_type'))} · {('Working', 'Finished', 'Assignment failed')[stage]}"
+        working = (
+            "Retrieving data"
+            if arguments.get("subagent_type") == "text-to-sql"
+            else "Analyzing data"
+        )
+        label = (working, "Finished", "Assignment failed")[stage]
         detail = re.sub(
             r"\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b",
             "saved evidence",
@@ -423,7 +428,7 @@ def activity_label(event, *, source_id=None):
         )[stage]
         detail = arguments.get("purpose")
         if name == "execute_sql" and source_id and stage == 0:
-            label = f"Querying {source_id}"
+            label = f"Retrieving data from {source_id}"
         elif name == "lookup_values":
             detail = arguments.get("field_name")
         elif name == "create_chart":
@@ -446,18 +451,18 @@ def activity_label(event, *, source_id=None):
 
 
 _MODEL_RESPONSE_LABELS = {
-    "execute_sql": "Reviewing SQL results",
+    "execute_sql": "Reviewing retrieved data",
     "query_saved_results": "Reviewing transformed data",
     "lookup_values": "Reviewing source values",
     "get_semantic_context": "Reviewing business definitions",
     "browse_semantic_model": "Reviewing data catalog",
     "inspect_conversation_result": "Reviewing dataset evidence",
     "list_conversation_results": "Selecting saved datasets",
-    "execute_analysis_python": "Reviewing Python results",
+    "execute_analysis_python": "Reviewing analysis results",
     "finish_analysis": "Summarizing analysis findings",
     "inspect_conversation_analysis": "Reviewing analysis findings",
     "list_conversation_analyses": "Selecting saved analyses",
-    "task": "Reviewing specialist findings",
+    "task": "Reviewing findings",
     "create_chart": "Reviewing chart results",
     "read_file": "Reviewing reference material",
     "write_todos": "Planning next investigation step",
@@ -521,7 +526,7 @@ def _model_activity(events, consolidated, agent):
             detail = arguments["spec"].get("title")
     if detail and not (recent and recent.get("phase") == "failed"):
         label += f" · {_activity_context(detail)}"
-    return f"{_agent_label(agent)} · {label}" if agent != "unknown" else label
+    return label
 
 
 def current_activity(
@@ -563,12 +568,20 @@ def current_activity(
         }[status]
     consolidated = consolidate_activity_events(events)
     pending = [e for e in consolidated if e.get("phase") == "started"]
+    analyses = [
+        e
+        for e in pending
+        if (e.get("tool") or {}).get("name") == "task"
+        and isinstance((e.get("tool") or {}).get("input"), dict)
+        and ((e.get("tool") or {}).get("input") or {}).get("subagent_type")
+        == "data-analysis"
+    ]
     leaves = [e for e in pending if (e.get("tool") or {}).get("name") != "task"]
-    if leaves:
+    if len(analyses) > 1:
+        label = f"Analyzing data · {len(analyses)} analyses running"
+    elif leaves:
         event = leaves[-1]
         label = activity_label(event, source_id=source_id)
-        if event.get("agent") not in {None, "unknown", "coordinator"}:
-            label = f"{_agent_label(event['agent'])} · {label}"
     elif active_model_agent:
         label = _model_activity(events, consolidated, active_model_agent)
     elif pending:
@@ -582,8 +595,8 @@ def current_activity(
     return label
 
 
-def render_work_summary(events):
-    """Show recorded public plans and actual work, never private model reasoning."""
+def render_analysis_plan(events, *, key, completed=False, partial=False):
+    """Keep active plans visible and completed-turn plans available on demand."""
     steps = consolidate_activity_events(events)
     plans = [
         e
@@ -592,49 +605,50 @@ def render_work_summary(events):
         and e.get("agent") == "coordinator"
         and e.get("phase") == "completed"
     ]
-    if plans:
-        plan_input = plans[-1]["tool"].get("input") or {}
-        todo_list = plan_input.get("todos", []) if isinstance(plan_input, dict) else []
-        if todo_list:
+    if not plans:
+        return
+    plan_input = plans[-1]["tool"].get("input") or {}
+    todos = plan_input.get("todos", []) if isinstance(plan_input, dict) else []
+    todos = [todo for todo in todos if isinstance(todo, dict) and todo.get("content")]
+    if not todos:
+        return
+    if completed:
+        label = (
+            "Analysis complete · View steps"
+            if not partial and all(todo.get("status") == "completed" for todo in todos)
+            else "Analysis plan · View steps"
+        )
+        panel = st.expander(
+            label,
+            expanded=False,
+            type="compact",
+            key=f"completed_plan_{key}",
+            on_change="rerun",
+        )
+        if not panel.open:
+            return
+    else:
+        panel = st.container()
+    with panel:
+        if not completed:
             st.markdown("**Analysis plan**")
-            icons = {
-                "completed": ":material/check_circle:",
-                "in_progress": ":material/pending:",
-                "pending": ":material/radio_button_unchecked:",
-            }
-            for todo in todo_list:
-                if isinstance(todo, dict) and todo.get("content"):
-                    state = todo.get("status", "pending")
-                    st.markdown(
-                        prose_markdown(
-                            f"{icons.get(state, icons['pending'])} {todo['content']} · {state.replace('_', ' ')}"
-                        )
-                    )
-    # Assignment briefs explain parallel work; SQL/Python and publication/report
-    # events make progress visible even for simple requests without a formal plan.
-    meaningful = {
-        "task",
-        "execute_sql",
-        "query_saved_results",
-        "execute_analysis_python",
-        "publish_findings",
-        "create_chart",
-        "create_report",
-    }
-    visible = [e for e in steps if (e.get("tool") or {}).get("name") in meaningful]
-    if visible:
-        st.markdown("**Work progress**")
-        pending = [e for e in visible if e.get("phase") == "started"]
-        recent = [e for e in visible if e.get("phase") != "started"][-4:]
-        for event in [*pending, *recent]:
-            phase = event.get("phase", "info")
-            st.caption(
-                f"{_PHASE_ICONS.get(phase, ':material/info:')} {activity_label(event)}"
+        icons = {
+            "completed": ":material/check_circle:",
+            "in_progress": ":material/pending:",
+            "pending": ":material/radio_button_unchecked:",
+        }
+        for todo in todos:
+            state = todo.get("status", "pending")
+            content = prose_markdown(todo["content"])
+            if state == "in_progress" and not completed:
+                content = f"**{content}**"
+            st.markdown(
+                f"{icons.get(state, icons['pending'])} {content} · {state.replace('_', ' ')}"
             )
 
 
-def render_activity(events, diagnostics, *, key):
-    render_work_summary(events)
+def render_activity(events, diagnostics, *, key, completed=False, partial=False):
+    render_analysis_plan(events, key=key, completed=completed, partial=partial)
     panel = st.expander("Activity", key=f"activity_turn_{key}", on_change="rerun")
     if panel.open:
         with panel:
@@ -1370,7 +1384,11 @@ def render_turn(
     turn_key = turn.get("run_id") or turn_key
     with st.chat_message("assistant", avatar=":material/query_stats:"):
         render_activity(
-            turn.get("activities") or [], turn.get("diagnostics") or {}, key=turn_key
+            turn.get("activities") or [],
+            turn.get("diagnostics") or {},
+            key=turn_key,
+            completed=True,
+            partial=bool(turn["answer"].get("partial")),
         )
         render_answer(client, turn["answer"], turn_key=turn_key, source_id=source_id)
 
