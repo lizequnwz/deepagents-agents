@@ -14,6 +14,9 @@ Use a clear title and lead narrative answering the business question, then
 purposeful charts/tables, interpretation, assumptions and limitations. Ordinary
 questions need compact reports; match audience and visual direction for explicit
 briefings. Keep evidence and claims consistent with published findings.
+Published charts and analyses are attached automatically. Add explicit blocks only
+to control placement or presentation; all references must belong to the published
+selection. A successful create_report completes the turn without another answer.
 
 Blocks use `type`:
 - narrative: body, optional title/emphasis.

@@ -194,7 +194,7 @@ def test_api_edits_need_no_source_or_model_and_reject_data_changes(
         assert api.get(f"/api/runs/{w.run}").json()["answer"] == response.json()
 
 
-def test_chart_controls_save_matching_report_and_collapse_preview(
+def test_chart_controls_save_matching_report_and_show_preview(
     presented, test_settings, monkeypatch
 ):
     w = presented
@@ -228,7 +228,7 @@ def test_chart_controls_save_matching_report_and_collapse_preview(
         assert not app.exception
         assert not app.warning, [w.value for w in app.warning]
         assert not app.error, [e.value for e in app.error]
-        assert not next(
+        assert next(
             e for e in [*app.expander, *app.status] if e.label == "Report preview"
         ).proto.expanded
         next(t for t in app.text_input if t.label == "Chart title").set_value(

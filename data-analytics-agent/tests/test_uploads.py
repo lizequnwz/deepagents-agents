@@ -229,8 +229,10 @@ def test_saved_data_queries_cannot_cross_upload_or_warehouse_scope(test_settings
         runtime=runtime,
     )
     assert s.results.get(result["result_id"], one.thread_id).rows == [{"total": 12}]
+    from langchain_core.tools import ToolException
+
     runtime.tool_call_id = "foreign"
-    with pytest.raises(KeyError):
+    with pytest.raises(ToolException, match="out-of-scope"):
         tool.func(
             query="SELECT SUM(amount) AS total FROM uploaded",
             bindings={"uploaded": two.result_id},
@@ -271,10 +273,9 @@ class UploadAnalyst(AnalystModel):
                     "sum-upload",
                 )
             else:
-                payload = json.loads(found.content)
                 message = call(
                     "SQLAnalysisResponse",
-                    {"answer": "The total is 12.", "result_id": payload["result_id"]},
+                    {"answer": "The total is 12."},
                     "sql-answer",
                 )
         else:
@@ -605,7 +606,7 @@ def test_python_reuses_uploaded_evidence_and_preserves_lineage(test_settings):
             "run_id": run,
             "source_id": upload.source_id,
             "question": "Analyze amounts",
-            "analysis_assignment_id": "upload-analysis",
+            "assignment_id": "upload-analysis",
         },
         tool_call_id="python-upload",
     )

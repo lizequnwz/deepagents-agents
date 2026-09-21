@@ -54,10 +54,8 @@ class ParallelAnalyst(AnalystModel):
             executions = [m for m in tools if m.name == "execute_analysis_python"]
             finished = [m for m in tools if m.name == "finish_analysis"]
             if finished:
-                payload = json.loads(finished[-1].content)
-                assert payload.get("analysis_id"), payload
-                message = AIMessage(
-                    content=json.dumps({"analysis_id": payload["analysis_id"]})
+                raise AssertionError(
+                    "Saved analyses must return directly without another model call"
                 )
             elif executions:
                 payload = json.loads(executions[-1].content)
@@ -67,8 +65,6 @@ class ParallelAnalyst(AnalystModel):
                     {
                         "outcome": "analysis_completed",
                         "answer": f"Branch {branch}",
-                        "input_result_ids": [self.dataset],
-                        "execution_ids": [payload["execution_id"]],
                         "method": "Synthetic isolated calculation",
                     },
                     "same-finish-id",
@@ -222,6 +218,12 @@ async def test_parallel_analysis_owns_outputs_and_obeys_concurrency(
     assert sorted(e.outputs[0].value for e in executions) == [30, 60, 90]
     assert len(state.answer.analyses) == 3 and state.answer.report
     assert all(len(a.executions) == 1 for a in state.answer.analyses)
+    receipts = s.runs.continuation(run)["assignments"]
+    assert len(receipts) == 3
+    assert {r["result"]["analysis_id"] for r in receipts} == {
+        a.analysis_id for a in state.answer.analyses
+    }
+    assert all("executed_python" not in str(r) for r in receipts)
     python_events = [
         e
         for e in state.events

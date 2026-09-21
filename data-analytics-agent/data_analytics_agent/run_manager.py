@@ -69,6 +69,16 @@ class RunManager:
             if turn is None:
                 prior = self.runs.get(prior_id)
                 if prior.findings is None:
+                    messages.extend(
+                        [
+                            {"role": "user", "content": prior.question},
+                            {
+                                "role": "assistant",
+                                "content": "Saved unfinished work (reuse evidence; conclusions are not yet published): "
+                                + json.dumps(self.runs.continuation(prior_id)),
+                            },
+                        ]
+                    )
                     continue
                 turn = ChatTurn(
                     run_id=prior_id,
@@ -263,7 +273,7 @@ class RunManager:
                         {
                             "role": "user",
                             "content": repair_reason
-                            + " Load report-design and correct/create the report using the published findings and saved evidence. Do not rerun SQL or Python. Finish with the published CoordinatorResponse; report references are attached by the application. Saved findings: "
+                            + " Load report-design and correct/create the report using the published findings and saved evidence. Do not rerun SQL or Python. Successful reporting completes the turn automatically from published findings. Saved findings: "
                             + run.findings.model_dump_json(),
                         }
                     ],
@@ -334,18 +344,19 @@ class RunManager:
             self.runs.require_approval(run_id, approval)
             return
         output = await stream.output()
-        response = output.get("structured_response") if output else None
-        if response is None:
-            raise ValueError("Agent finished without a structured response.")
-        response = CoordinatorResponse.model_validate(response)
-        answer = self.runs.get(run_id).findings or resolve_answer(
-            response,
-            thread_id=run.thread_id,
-            source_id=run.source_id,
-            results=self.results,
-            analyses=self.analyses,
-            runs=self.runs,
-        )
+        answer = self.runs.get(run_id).findings
+        if answer is None:
+            response = output.get("structured_response") if output else None
+            if response is None:
+                raise ValueError("Agent finished without a structured response.")
+            answer = resolve_answer(
+                CoordinatorResponse.model_validate(response),
+                thread_id=run.thread_id,
+                source_id=run.source_id,
+                results=self.results,
+                analyses=self.analyses,
+                runs=self.runs,
+            )
         self._finish(run_id, answer)
 
     async def _consume_with_budget(

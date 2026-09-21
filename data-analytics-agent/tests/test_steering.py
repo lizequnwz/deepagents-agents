@@ -203,8 +203,6 @@ class CorrectableSQLModel(AnalystModel):
                 "SQLAnalysisResponse",
                 {
                     "answer": "There are no artists in the selected population.",
-                    "sql": evidence["executed_sql"],
-                    "result_id": evidence["result_id"],
                 },
                 "sql-answer",
             )

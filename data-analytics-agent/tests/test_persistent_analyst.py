@@ -48,6 +48,7 @@ def workspace(tmp_path):
     thread = conversations.create("test")
     run = runs.create(thread, "test", "Analyze sales")
     conversations.begin_run(thread, run)
+    runs.begin_assignment(run, "test-assignment", "data-analysis", "Analyze sales")
 
     def runtime(call):
         return SimpleNamespace(
@@ -56,7 +57,7 @@ def workspace(tmp_path):
                 "run_id": run,
                 "source_id": "test",
                 "question": "Analyze sales",
-                "analysis_assignment_id": "test-assignment",
+                "assignment_id": "test-assignment",
             },
             tool_call_id=call,
         )
@@ -178,23 +179,12 @@ def test_iterative_python_repairs_reuses_multiple_inputs_and_saves_all_steps(wor
         runtime=w.runtime("b"),
     )
     assert b["ok"] and b["outputs"][0]["value"] == 80
-    rejected = finish.func(
-        outcome="analysis_completed",
-        answer="Ready",
-        input_result_ids=[r.result_id],
-        execution_ids=["mistyped-execution-id"],
-        runtime=w.runtime("typo"),
-    )
-    assert not rejected["ok"]
-    assert a["execution_id"] in [
-        e["execution_id"] for e in rejected["available_executions"]
-    ]
-    assert not finish.return_direct  # Errors must return to the specialist for repair.
+    assert "execution_ids" not in finish.args
+    assert "input_result_ids" not in finish.args
+    assert not finish.return_direct  # Invalid completion still returns for repair.
     completed = finish.func(
         outcome="analysis_completed",
         answer="The mean is 12.35.",
-        input_result_ids=[r.result_id],
-        execution_ids=[a["execution_id"], bad["execution_id"], b["execution_id"]],
         method="Exploration",
         runtime=w.runtime("finish"),
     )

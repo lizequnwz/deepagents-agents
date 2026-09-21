@@ -1,7 +1,7 @@
 """Generic iterative analysis specialist, distinct from descriptive SQL."""
 
 from langchain.agents.middleware import HumanInTheLoopMiddleware
-from data_analytics_agent.delegation import AnalysisAssignmentMiddleware
+from data_analytics_agent.handoff import AssignmentMiddleware
 from data_analytics_agent.agents.data_analysis.tools import create_analysis_tools
 from data_analytics_agent.agents.text_to_sql.tools import (
     create_inspect_conversation_result_tool,
@@ -30,7 +30,10 @@ def build_data_analysis_subagent(
     )
     tools += [
         create_inspect_conversation_result_tool(
-            result_store, source_id=source.source_id, model_sample_rows=10
+            result_store,
+            source_id=source.source_id,
+            model_sample_rows=10,
+            run_store=run_store,
         ),
         create_list_conversation_results_tool(result_store, source_id=source.source_id),
     ]
@@ -54,7 +57,11 @@ def build_data_analysis_subagent(
         "tools": tools,
         "skills": ["/project/skills/analysis/"],
         "permissions": permissions,
-        "middleware": [AnalysisAssignmentMiddleware(), *review, *(middleware or [])],
+        "middleware": [
+            AssignmentMiddleware(run_store, "data-analysis"),
+            *review,
+            *(middleware or []),
+        ],
         "system_prompt": f"""You are the data-analysis specialist for {source.name}.
 Load the data-analysis skill. Inspect the assigned datasets, execute Python,
 examine the results, and revise as needed. Each call starts a fresh process
@@ -71,9 +78,9 @@ If source data is missing, finish with needs_sql_reshape and a complete business
 request specifying population, grain, dates, fields and intended analysis.
 Do not query source databases yourself. The coordinator will retrieve data and
 may assign you again with the saved findings and execution IDs.
-Finish using finish_analysis, preserving all material execution IDs. The
+Finish using finish_analysis; application code attaches this assignment’s executions and inputs. The
 coordinator owns the user-facing answer, shared charts, and HTML report.
 If finish_analysis returns ok=false, correct its exact references and retry.
-After it saves successfully, return its analysis ID and a concise summary; stop calling tools.
+A successful finish saves and returns the authoritative result to the coordinator automatically.
 """,
     }

@@ -77,8 +77,17 @@ class DataAnalysisResult(StrictModel):
     requested_data: str = ""
 
     def model_facing(self):
-        result = self.model_dump(mode="json", exclude_none=True)
+        """Compact synthesis view; exact code and logs remain in saved executions."""
+        result = self.model_dump(mode="json", exclude={"executions"}, exclude_none=True)
         result["executions"] = [
-            execution.model_facing() for execution in self.executions
+            {
+                "execution_id": execution.execution_id,
+                "inputs": execution.inputs,
+                "output_datasets": execution.output_datasets,
+                "error": execution.error,
+                "warnings": execution.warnings,
+                "outputs": [output.model_facing() for output in execution.outputs],
+            }
+            for execution in self.executions
         ]
         return result

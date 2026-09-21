@@ -10,10 +10,10 @@ from data_analytics_agent.agents.data_analysis.tools import create_analysis_tool
 from data_analytics_agent.agents.data_analysis.runner import PythonExecutionLimits
 from data_analytics_agent.stores import RunStore, ResultStore, DataAnalysisStore
 from data_analytics_agent.persistence import LocalStorage
-from data_analytics_agent.delegation import AnalysisAssignmentState
+from data_analytics_agent.handoff import AssignmentState
 
 
-class CheckpointAnalysisState(AnalyticsAgentState, AnalysisAssignmentState):
+class CheckpointAnalysisState(AnalyticsAgentState, AssignmentState):
     pass
 
 
@@ -74,7 +74,7 @@ async def test_checkpoint_restart_reuses_committed_step_and_executes_exact_edite
                 "run_id": w.run,
                 "source_id": "test",
                 "question": "Sum values",
-                "analysis_assignment_id": "checkpoint-assignment",
+                "assignment_id": "checkpoint-assignment",
                 "messages": [],
             },
             config=config,

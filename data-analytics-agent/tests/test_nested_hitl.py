@@ -127,7 +127,6 @@ class ScriptedChatModel(BaseChatModel):
             return self._execute_call(REVISED_SQL, "revised-sql")
 
         if latest.name == "execute_sql":
-            executed_sql = self.script_state.executed[-1]
             return AIMessage(
                 content="",
                 tool_calls=[
@@ -135,8 +134,6 @@ class ScriptedChatModel(BaseChatModel):
                         "name": "SQLAnalysisResponse",
                         "args": {
                             "answer": "The reviewed query executed.",
-                            "sql": executed_sql,
-                            "result_id": "result-1",
                             "assumptions": [],
                             "interpretation": "One result was returned.",
                         },

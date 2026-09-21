@@ -35,7 +35,11 @@ from data_analytics_agent.reporting.tools import (
     create_list_conversation_analyses_tool,
     create_inspect_conversation_analysis_tool,
 )
-from data_analytics_agent.presentation import create_presentation_tools
+from data_analytics_agent.presentation import (
+    create_presentation_tools,
+    create_list_conversation_charts_tool,
+)
+from data_analytics_agent.handoff import ReportCompletionMiddleware
 from data_analytics_agent.visualization.tools import create_chart_tool
 from data_analytics_agent.stores import (
     RunStore,
@@ -138,6 +142,7 @@ def build_agent(
     ]
     tools = [
         request_clarification,
+        create_list_conversation_charts_tool(runs, source_id=source.source_id),
         create_list_conversation_results_tool(result_store, source_id=source.source_id),
         create_inspect_conversation_result_tool(
             result_store, source_id=source.source_id
@@ -233,48 +238,21 @@ chart_id with the report. Shape constraints are in ChartSpec and tool feedback.
 {source.description}
 {source_context}
 Examples: {[example.question for example in source.examples]}
-Follow AGENTS.md. Use request_clarification for necessary business input, including
-needs_clarification from data-analysis. Apply corrections before publishing; preserve
-older artifacts with their original scope. Resume with the answer and saved evidence. Handle greetings, help, and metadata research directly. Never
-claim observed database values without saved evidence. Metadata-only questions
-need neither execution nor an empty report.
-Delegate retrieval/descriptive questions and dataset shaping to text-to-sql.
-Delegate exploration, inference, prediction, trend/seasonality investigation,
-forecasting and model evaluation to data-analysis. Choose by required work,
-not keywords alone. SQL requests must be sequential and complete. Multiple
-SQL and Python assignments are allowed; revise the plan after observing results.
-For complex or multipart work, use write_todos before delegating and update it as
-steps complete. Start each task description with a short plain-language objective,
-then supply the complete business brief and saved input IDs. Independent saved-data
-analyses can run in parallel; dependent work and source retrieval stay sequential.
-Keep a compact investigation record with save_investigation for complex work.
-
-Match effort to the work: simple totals/rankings need one complete SQL assignment,
-without todos, investigation records, Python, or forced charts. Descriptive monthly
-series also belongs in SQL; chart when useful or requested. Forecasts, uncertain
-estimates and competing explanations can need plans and SQL/Python iteration.
-A simple task may grow after unexpected findings; stop investigations when evidence
-is sufficient. Chart title/type refinements reuse suitable saved evidence and the
-existing chart ID. Inspect returned evidence only as needed for synthesis, avoiding
-repeated lookups. Every data-backed answer, including a scalar, needs a compact report.
-
-Use saved-result and analysis discovery to resolve follow-ups. Reuse suitable
-snapshots; fresh/current requests need new source SQL. Saved IDs are opaque
-artifacts, never warehouse tables. Python can consume multiple same-source
-saved inputs and save derived datasets. Supply IDs rather than copying rows.
+Follow AGENTS.md for routing, analytical standards, planning and publication.
+Start each task description with a plain-language objective and complete business
+brief, including saved input IDs. Specialist receipts contain application-owned
+saved references; use their outcomes to decide whether to clarify, retrieve more
+data, continue analysis, or synthesize. Discover saved datasets, analyses and
+charts when selecting earlier evidence. Investigation notes contain narrative
+context only; application code retains assignment evidence automatically.
 {chart_guidance}
-After selecting final evidence, call publish_findings with the answer and all
-material result, analysis and chart IDs. Then load report-design and create the
-required HTML report using those same artifacts. Use saved chart_id references,
-not copied chart specifications. Reports may include several analyses.
-For uncertainty, preserve the method, sample/population, assumptions, validation
-and limitations. Explain association as association, not causation. If analysis
-is incomplete, publish partial=true with unresolved_questions and report the
-supported findings. When tools report budget exhaustion, stop analysis and
-proceed to publication and reporting. A report failure must not trigger data
-re-execution: correct the reported problem and retry the report.
-Finish with the same CoordinatorResponse used to publish the findings. The
-application owns exact SQL, Python, outputs, charts and report references.
+Publish the selected answer and evidence once, then load report-design and create
+its HTML report. Published analyses/charts are attached to the report automatically;
+use explicit report blocks only to control their placement. Correct a rejected
+report without recomputing evidence. Successful reporting completes the turn
+from saved findings automatically. For metadata-only questions, return a direct
+CoordinatorResponse without publication or reporting.
+
 """
     return create_deep_agent(
         name="data-analytics-agent",
@@ -290,6 +268,7 @@ application owns exact SQL, Python, outputs, charts and report references.
             TodoListMiddleware(),
             DelegationMiddleware(runs, settings.analysis_parallel_workers),
             SteeringMiddleware(runs, "coordinator"),
+            ReportCompletionMiddleware(runs),
             *execution_budget_middleware(
                 model_calls=settings.coordinator_model_call_limit,
                 tool_calls=settings.coordinator_tool_call_limit,

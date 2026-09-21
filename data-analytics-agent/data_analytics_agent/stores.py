@@ -21,6 +21,7 @@ from data_analytics_agent.reporting.schemas import (
 )
 from data_analytics_agent.reporting.renderer import REPORT_RENDERER_VERSION
 from data_analytics_agent.schemas import (
+    DatasetReceipt,
     ActivityEvent,
     ActivityTool,
     AgentDiagnostics,
@@ -385,6 +386,15 @@ class _PendingCall:
 
 
 @dataclass
+class AssignmentRecord:
+    specialist: str
+    brief: str
+    datasets: dict[str, DatasetReceipt] = field(default_factory=dict)
+    completion: dict | None = None
+    correction_ids: list[str] = field(default_factory=list)
+
+
+@dataclass
 class _Run:
     run_id: str
     thread_id: str
@@ -413,6 +423,7 @@ class _Run:
     report_completed_at: float | None = None
     report_spec: dict | None = None
     chart_specs: list[dict] = field(default_factory=list)
+    assignments: dict[str, AssignmentRecord] = field(default_factory=dict)
     report_reference: dict | None = None
     last_review_type: str = "sql"
     terminal_at: float | None = None
@@ -791,6 +802,70 @@ class RunStore:
     ) -> list[PythonExecutionResult]:
         with self._lock:
             return list(self._get_mutable(run_id).python_executions)
+
+    @persist_run
+    def begin_assignment(self, run_id, assignment_id, specialist, brief):
+        self._get_mutable(run_id).assignments.setdefault(
+            assignment_id, AssignmentRecord(specialist=specialist, brief=brief)
+        )
+
+    @persist_run
+    def record_assignment_dataset(self, run_id, assignment_id, dataset):
+        record = self._get_mutable(run_id).assignments[assignment_id]
+        reference = DatasetReceipt.model_validate(dataset)
+        record.datasets[reference.result_id] = reference
+
+    @persist_run
+    def finish_assignment(self, run_id, assignment_id, receipt, correction_ids=()):
+        record = self._get_mutable(run_id).assignments[assignment_id]
+        record.completion = receipt
+        record.correction_ids = list(correction_ids)
+
+    def assignment(self, run_id, assignment_id):
+        from copy import deepcopy
+
+        with self._lock:
+            return deepcopy(self._get_mutable(run_id).assignments[assignment_id])
+
+    def continuation(self, run_id):
+        with self._lock:
+            run = self._get_mutable(run_id)
+            return {
+                "question": run.question,
+                "status": run.status.value,
+                "error": run.error,
+                "assignments": [
+                    {
+                        "specialist": a.specialist,
+                        "brief": a.brief,
+                        "result": a.completion
+                        or {
+                            "outcome": "partial",
+                            "datasets": [
+                                d.model_dump(mode="json") for d in a.datasets.values()
+                            ],
+                        },
+                    }
+                    for a in run.assignments.values()
+                ],
+                "charts": [
+                    {
+                        k: chart.get(k)
+                        for k in ("chart_id", "title", "result_id", "version")
+                    }
+                    for chart in run.chart_specs
+                ],
+                "executions": [
+                    {
+                        "execution_id": e.execution_id,
+                        "assignment_id": e.assignment_id,
+                        "inputs": e.inputs,
+                        "output_datasets": e.output_datasets,
+                        "error": e.error,
+                    }
+                    for e in run.python_executions
+                ],
+            }
 
     def get_last_review_type(self, run_id: str) -> str:
         with self._lock:

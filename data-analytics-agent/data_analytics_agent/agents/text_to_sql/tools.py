@@ -13,6 +13,7 @@ from data_analytics_agent.backends import SQLValidationError, SQLExecutionError
 from data_analytics_agent.backends.validation import validate_readonly_sql
 from data_analytics_agent.schemas import QueryResult
 from data_analytics_agent.execution import cancellable_query
+from data_analytics_agent.handoff import record_dataset, assignment_call_id
 
 
 @dataclass(frozen=True)
@@ -88,7 +89,9 @@ def create_execute_sql_tool(source, backend, result_store, run_store):
         context = _runtime_context(runtime)
         if context.source_id != source.source_id:
             raise ValueError("Source mismatch")
-        if saved := run_store.storage.committed(context.run_id, runtime.tool_call_id):
+        if saved := run_store.storage.committed(
+            context.run_id, assignment_call_id(runtime)
+        ):
             return json.loads(saved)
         if reason := run_store.analysis_stop_reason(context.run_id):
             return {"ok": False, "error": reason}
@@ -113,8 +116,9 @@ def create_execute_sql_tool(source, backend, result_store, run_store):
             ) as exc:
                 raise ToolException(str(exc)) from exc
         payload = result.model_dump(mode="json")
+        record_dataset(run_store, runtime, payload, purpose)
         run_store.storage.commit(
-            context.run_id, runtime.tool_call_id, json.dumps(payload)
+            context.run_id, assignment_call_id(runtime), json.dumps(payload)
         )
         return payload
 
@@ -133,7 +137,7 @@ def create_query_saved_results_tool(results, runs, *, source_id):
         queries the saved snapshot; ask execute_sql for fresh source values.
         """
         context = _runtime_context(runtime)
-        if saved := runs.storage.committed(context.run_id, runtime.tool_call_id):
+        if saved := runs.storage.committed(context.run_id, assignment_call_id(runtime)):
             return json.loads(saved)
         if reason := runs.analysis_stop_reason(context.run_id):
             return {"ok": False, "error": reason}
@@ -151,10 +155,15 @@ def create_query_saved_results_tool(results, runs, *, source_id):
             raise ToolException(
                 "Query only the explicitly bound saved datasets and your CTEs."
             )
-        selected = {
-            name: results.get(key, context.thread_id, source_id=source_id)
-            for name, key in bindings.items()
-        }
+        try:
+            selected = {
+                name: results.get(key, context.thread_id, source_id=source_id)
+                for name, key in bindings.items()
+            }
+        except KeyError as exc:
+            raise ToolException(
+                f"Unknown or out-of-scope dataset {exc}. Use list_conversation_results and retry with a valid reference."
+            ) from exc
         if any(item.kind == "presentation" for item in selected.values()):
             raise ToolException(
                 "Bind the complete parent dataset instead of a chart presentation artifact."
@@ -186,7 +195,10 @@ def create_query_saved_results_tool(results, runs, *, source_id):
                 raise InterruptedError("Saved-data query stopped.") from exc
             raise ToolException(str(exc)) from exc
         payload = result_payload(output)
-        runs.storage.commit(context.run_id, runtime.tool_call_id, json.dumps(payload))
+        record_dataset(runs, runtime, payload, purpose)
+        runs.storage.commit(
+            context.run_id, assignment_call_id(runtime), json.dumps(payload)
+        )
         return payload
 
     query_saved_results.handle_tool_error = True
@@ -225,7 +237,7 @@ def create_list_conversation_results_tool(result_store, *, source_id):
 
 
 def create_inspect_conversation_result_tool(
-    result_store, *, source_id, model_sample_rows=10
+    result_store, *, source_id, model_sample_rows=10, run_store=None
 ):
     @tool
     def inspect_conversation_result(
@@ -248,6 +260,10 @@ def create_inspect_conversation_result_tool(
                 "ok": False,
                 "error": "Unknown saved result. Use list_conversation_results to recover the exact result ID.",
             }
+        if run_store is not None:
+            record_dataset(
+                run_store, runtime, result_payload(result), result.short_label
+            )
         columns = columns or result.columns
         if not set(columns) <= set(result.columns) or not set(filters or {}) <= set(
             result.columns

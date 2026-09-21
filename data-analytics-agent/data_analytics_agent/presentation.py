@@ -5,47 +5,25 @@ from langchain_core.tools import ToolException
 from data_analytics_agent.steering import PendingCorrections
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
 from data_analytics_agent.schemas import FinalAnswer, ResultReference
-from data_analytics_agent.visualization.schemas import ChartSpec
+from data_analytics_agent.evidence import EvidenceResolver
 from data_analytics_agent.datasets import StoreNotFound
 
 
 def resolve_answer(response, *, thread_id, source_id, results, analyses, runs):
-    selected = {}
-
-    def include(key):
-        if key in selected:
-            return
-        result = results.get(key, thread_id, source_id=source_id)
-        selected[key] = result
-        for parent in result.parent_result_ids:
-            include(parent)
-
+    evidence = EvidenceResolver(
+        thread_id=thread_id,
+        source_id=source_id,
+        results=results,
+        analyses=analyses,
+        runs=runs,
+    )
     for key in response.supporting_result_ids:
-        include(key)
+        evidence.result(key)
     if response.primary_result_id:
-        include(response.primary_result_id)
-    analytical = [
-        analyses.get(key, thread_id, source_id=source_id).analysis
-        for key in response.analysis_ids
-    ]
-    for analysis in analytical:
-        for key in analysis.input_result_ids:
-            include(key)
-        for execution in analysis.executions:
-            for key in [
-                *execution.inputs.values(),
-                *execution.output_datasets.values(),
-            ]:
-                include(key)
-    charts = []
-    available = runs.storage.load("charts", dict)
-    for key in response.chart_ids:
-        item = available.get(key)
-        if not item or item["thread_id"] != thread_id or item["source_id"] != source_id:
-            raise ValueError("Chart is outside this conversation.")
-        chart = ChartSpec.model_validate(item["spec"])
-        charts.append(chart)
-        include(chart.result_id)
+        evidence.result(response.primary_result_id)
+    analytical = [evidence.analysis(key) for key in response.analysis_ids]
+    charts = [evidence.chart(key) for key in response.chart_ids]
+    selected = evidence.results
     primary = response.primary_result_id or next(iter(selected), None)
     ordered = ([primary] if primary else []) + [
         key for key in selected if key != primary
@@ -94,9 +72,9 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
         except (StoreNotFound, ValueError) as exc:
             raise ToolException(
                 "Findings were not published: a referenced artifact is unknown, "
-                "invalid, or outside this conversation. Use list_conversation_results "
-                "or list_conversation_analyses, and copy exact chart IDs from create_chart "
-                "responses. Correct the references and retry; reuse saved evidence "
+                f"invalid, or outside this conversation ({exc}). Use list_conversation_results "
+                "or list_conversation_analyses or list_conversation_charts. "
+                "Correct the references and retry; reuse saved evidence "
                 "without repeating successful analysis."
             ) from exc
         if (
@@ -126,41 +104,18 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
         objective: str,
         completed_steps: list[str],
         findings: list[str],
-        artifact_ids: list[str],
         unresolved_questions: list[str],
         runtime: ToolRuntime,
         assumptions: list[str] | None = None,
     ) -> dict:
         """Save a compact investigation record for continuation and future turns."""
         context = _runtime_context(runtime)
-        known = {
-            item.result_id
-            for item in results.list_for_conversation(
-                context.thread_id, source_id=source_id
-            )
-        }
-        known.update(
-            item.analysis_id
-            for item in analyses.list_for_conversation(
-                context.thread_id, source_id=source_id
-            )
-        )
-        known.update(
-            key
-            for key, item in runs.storage.load("charts", dict).items()
-            if item["thread_id"] == context.thread_id and item["source_id"] == source_id
-        )
-        if not set(artifact_ids) <= known:
-            raise ValueError(
-                "Investigation references unknown or out-of-scope artifacts."
-            )
         conversations.save_investigation(
             context.thread_id,
             dict(
                 objective=objective,
                 completed_steps=completed_steps,
                 findings=findings,
-                artifact_ids=artifact_ids,
                 unresolved_questions=unresolved_questions,
                 assumptions=assumptions or [],
             ),
@@ -169,3 +124,33 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
 
     publish_findings.handle_tool_error = True
     return [publish_findings, save_investigation]
+
+
+def create_list_conversation_charts_tool(runs, *, source_id):
+    @tool
+    def list_conversation_charts(
+        runtime: ToolRuntime, offset: int = 0, limit: int = 20
+    ) -> dict:
+        """Discover exact saved chart references and versions for this conversation."""
+        context = _runtime_context(runtime)
+        charts = [
+            {
+                key: entry["spec"].get(key)
+                for key in (
+                    "chart_id",
+                    "title",
+                    "chart_type",
+                    "result_id",
+                    "source_result_id",
+                    "version",
+                    "previous_chart_id",
+                )
+            }
+            for entry in runs.storage.load("charts", dict).values()
+            if entry["thread_id"] == context.thread_id
+            and entry["source_id"] == source_id
+        ]
+        offset, limit = max(0, offset), max(1, min(limit, 50))
+        return {"total": len(charts), "charts": charts[offset : offset + limit]}
+
+    return list_conversation_charts

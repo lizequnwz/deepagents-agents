@@ -15,6 +15,7 @@ from data_analytics_agent.semantic_tools import (
 )
 from data_analytics_agent.semantic_context import render_sql_context
 from data_analytics_agent.schemas import SQLAnalysisResponse
+from data_analytics_agent.handoff import AssignmentMiddleware
 
 
 def build_text_to_sql_subagent(
@@ -58,7 +59,7 @@ def build_text_to_sql_subagent(
             result_store, run_store, source_id=source.source_id
         ),
         create_inspect_conversation_result_tool(
-            result_store, source_id=source.source_id
+            result_store, source_id=source.source_id, run_store=run_store
         ),
     ]
     review = (
@@ -103,7 +104,11 @@ Reuse suitable snapshots; fresh/current requests require source execution.
         "model": model,
         "tools": tools,
         "permissions": permissions,
-        "middleware": [*review, *(middleware or [])],
+        "middleware": [
+            AssignmentMiddleware(run_store, "text-to-sql"),
+            *review,
+            *(middleware or []),
+        ],
         "system_prompt": f"""You are the text-to-SQL specialist for {source.name}, dialect {source.dialect}.
 {grounding}
 Execute one read-only SELECT/CTE/set query per call: no SELECT *, DML, DDL,
@@ -118,8 +123,8 @@ investigation record. Repair or refine when necessary; do not impose a query-cou
 ceiling. Give executions distinct purposes. Repair expected failures using tool feedback,
 preserving successful evidence. Reviewed edits are authoritative: describe the
 exact SQL that executed. On budget exhaustion return saved evidence and explain
-unfinished work. Return result IDs, business interpretation and material
-assumptions with the existing compact SQLAnalysisResponse. Do not create charts,
+unfinished work. Return business interpretation and material assumptions with
+SQLAnalysisResponse. Application code attaches all saved dataset references; do not copy IDs or SQL into the response. Do not create charts,
 reports, or perform predictive/inferential analysis; data-analysis owns that work.
 """,
         "response_format": ToolStrategy(SQLAnalysisResponse),

@@ -11,8 +11,9 @@ stopping point. Use execute_analysis_python with named input artifact bindings.
 Each fresh process exposes pandas DataFrames in `datasets`. Explicitly load
 previous derived datasets; no kernel state survives. Set `analysis_outputs`
 (a mapping of names to compact text, scalars, tables or figures) and
-`output_datasets` (a mapping of names to reusable DataFrames). Preserve each
-material execution ID in finish_analysis. Never copy full datasets into messages.
+`output_datasets` (a mapping of names to reusable DataFrames). Keep useful
+intermediate datasets; finish_analysis attaches this assignment’s inputs and
+executions automatically. Never copy full datasets into messages.
 
 Begin with grain, population, coverage, missingness, duplicates and plausible
 ranges. Convert Decimal measures explicitly with pandas.to_numeric for modeling;

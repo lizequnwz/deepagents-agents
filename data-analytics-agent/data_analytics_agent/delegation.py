@@ -3,29 +3,10 @@
 import asyncio
 from dataclasses import replace
 from threading import BoundedSemaphore
-from typing import Annotated
-from uuid import uuid4
 
-from langchain.agents.middleware import AgentMiddleware, AgentState
-from langchain.agents.middleware.types import PrivateStateAttr
+from langchain.agents.middleware import AgentMiddleware
 from langgraph.types import Command
 from langchain_core.messages import AIMessage, ToolMessage
-from typing_extensions import NotRequired
-
-
-class AnalysisAssignmentState(AgentState):
-    analysis_assignment_id: NotRequired[Annotated[str, PrivateStateAttr]]
-
-
-class AnalysisAssignmentMiddleware(AgentMiddleware):
-    state_schema = AnalysisAssignmentState
-
-    def before_agent(self, state, runtime):
-        if not state.get("analysis_assignment_id"):
-            return {"analysis_assignment_id": str(uuid4())}
-
-    async def abefore_agent(self, state, runtime):
-        return self.before_agent(state, runtime)
 
 
 class DelegationMiddleware(AgentMiddleware):

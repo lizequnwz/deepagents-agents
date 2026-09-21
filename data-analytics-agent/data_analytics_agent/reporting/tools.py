@@ -16,7 +16,7 @@ from data_analytics_agent.reporting.schemas import (
     ResolvedDataAnalysis,
 )
 from data_analytics_agent.reporting.renderer import render_report
-from data_analytics_agent.visualization.schemas import ChartSpec
+from data_analytics_agent.evidence import EvidenceResolver
 
 
 def generate_report(
@@ -31,6 +31,26 @@ def generate_report(
     findings=None,
 ):
     if findings:
+        selected_results = {r.result_id for r in findings.results}
+        selected_analyses = {a.analysis_id for a in findings.analyses}
+        selected_charts = {c.chart_id for c in findings.charts}
+        for block in spec.blocks:
+            references, allowed = [], set()
+            if isinstance(block, ReportTableBlock):
+                references, allowed = [block.result_id], selected_results
+            elif isinstance(block, ReportMetricsBlock):
+                references, allowed = (
+                    [m.result_id for m in block.metrics],
+                    selected_results,
+                )
+            elif isinstance(block, ReportChartBlock):
+                references, allowed = [block.chart_id], selected_charts
+            elif isinstance(block, ReportAnalysisBlock):
+                references, allowed = [block.analysis_id], selected_analyses
+            if unknown := set(references) - allowed:
+                raise ValueError(
+                    f"Report references were not selected in published findings: {sorted(unknown)}. Use the published evidence."
+                )
         blocks = list(spec.blocks)
         chart_ids = {b.chart_id for b in blocks if isinstance(b, ReportChartBlock)}
         analysis_ids = {
@@ -49,17 +69,16 @@ def generate_report(
             if a.analysis_id and a.analysis_id not in analysis_ids
         )
         spec = spec.model_copy(update={"blocks": blocks})
-    results, analyses, charts = {}, {}, {}
-
-    def include(key):
-        if key in results:
-            return
-        item = result_store.get(key, thread_id, source_id=source_id)
-        results[key] = item
-        for parent in item.parent_result_ids:
-            include(parent)
-
-    stored_charts = run_store.storage.load("charts", dict)
+    evidence = EvidenceResolver(
+        thread_id=thread_id,
+        source_id=source_id,
+        results=result_store,
+        analyses=analysis_store,
+        runs=run_store,
+    )
+    results, charts = evidence.results, evidence.charts
+    analyses = {}
+    include = evidence.result
     for block in spec.blocks:
         if isinstance(block, ReportTableBlock):
             include(block.result_id)
@@ -67,20 +86,9 @@ def generate_report(
             for metric in block.metrics:
                 include(metric.result_id)
         elif isinstance(block, ReportChartBlock):
-            entry = stored_charts.get(block.chart_id)
-            if (
-                not entry
-                or entry["thread_id"] != thread_id
-                or entry["source_id"] != source_id
-            ):
-                raise ValueError("Chart is outside this conversation.")
-            chart = ChartSpec.model_validate(entry["spec"])
-            charts[chart.chart_id] = chart
-            include(chart.result_id)
+            evidence.chart(block.chart_id)
         elif isinstance(block, ReportAnalysisBlock):
-            saved = analysis_store.get(
-                block.analysis_id, thread_id, source_id=source_id
-            ).analysis
+            saved = evidence.analysis(block.analysis_id)
             outputs = []
             for execution in saved.executions:
                 if execution.error:
@@ -92,14 +100,6 @@ def generate_report(
                             Path(output.image_path).read_bytes()
                         ).decode()
                     outputs.append(value)
-            for key in saved.input_result_ids:
-                include(key)
-            for execution in saved.executions:
-                for key in [
-                    *execution.inputs.values(),
-                    *execution.output_datasets.values(),
-                ]:
-                    include(key)
             analyses[block.analysis_id] = ResolvedDataAnalysis(
                 reference_id=block.analysis_id,
                 input_result_ids=saved.input_result_ids,
@@ -229,8 +229,14 @@ def create_inspect_conversation_analysis_tool(analysis_store, *, source_id):
     def inspect_conversation_analysis(analysis_id: str, runtime: ToolRuntime) -> dict:
         """Inspect an analysis without returning binary figures or complete datasets."""
         context = _runtime_context(runtime)
-        return analysis_store.get(
-            analysis_id, context.thread_id, source_id=source_id
-        ).analysis.model_facing()
+        try:
+            return analysis_store.get(
+                analysis_id, context.thread_id, source_id=source_id
+            ).analysis.model_facing()
+        except KeyError:
+            return {
+                "ok": False,
+                "error": f"Unknown or out-of-scope analysis {analysis_id}. Use list_conversation_analyses and retry with a valid reference.",
+            }
 
     return inspect_conversation_analysis

@@ -287,7 +287,10 @@ def test_sql_agent_checks_budgets_before_requesting_review(
         middleware=budget_middleware,
     )
 
-    middleware = spec["middleware"]
+    from data_analytics_agent.handoff import AssignmentMiddleware
+
+    assert isinstance(spec["middleware"][0], AssignmentMiddleware)
+    middleware = spec["middleware"][1:]
     assert isinstance(middleware[0], HumanInTheLoopMiddleware)
     assert isinstance(middleware[1], ModelCallLimitMiddleware)
     assert isinstance(middleware[2], ToolCallLimitMiddleware)

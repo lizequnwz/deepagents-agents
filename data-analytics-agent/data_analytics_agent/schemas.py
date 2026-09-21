@@ -93,16 +93,18 @@ class QueryResult(StrictModel):
     elapsed_ms: float = Field(ge=0)
 
 
-class SQLAnalysisResponse(StrictModel):
-    """Provider-facing narrative for a validated SQL result.
+class DatasetReceipt(StrictModel):
+    result_id: str
+    label: str
+    columns: list[str]
+    row_count: int
+    truncated: bool
 
-    Exact rows, columns, profiles, counts, and truncation state remain in
-    ``ResultStore`` and are resolved from ``result_id`` by trusted code.
-    """
+
+class SQLAnalysisResponse(StrictModel):
+    """SQL interpretation only; application code attaches saved dataset references."""
 
     answer: str
-    sql: str = ""
-    result_id: str | None = None
     assumptions: list[str] = Field(default_factory=list)
     interpretation: str = ""
 

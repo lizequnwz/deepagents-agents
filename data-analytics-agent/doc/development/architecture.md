@@ -46,17 +46,22 @@ The graph is constructed per configured source and uses one run ID as its
 checkpoint identity. FastAPI opens/closes the maintained SQLite checkpoint saver.
 On startup, unfinished computations become paused and pending reviews remain
 reviewable. Each tool registers artifacts directly and journals its committed
-output under run/tool-call identity. Final assembly resolves explicit references;
+output under run/assignment/tool-call identity for specialist work. Final assembly resolves explicit references;
 it does not scan backward through messages or guess embedded JSON schemas.
 
 ## Findings, reports, and recovery
 
-`presentation.py` resolves all material evidence and transitive dataset lineage.
+`evidence.py` provides the shared scoped resolver for publication and reports,
+including transitive dataset lineage.
 Chart versions are immutable. Chat and report consume the same chart spec and
 presentation dataset. Report metric values reference exact stored rows/columns.
 A published answer remains visible if rendering fails; successful completion
-requires its report. Final structured answers use LangChain ToolStrategy so schema
-validation errors return to the model for correction. Retry report reuses a valid
+requires its report. The coordinator selects and publishes findings once.
+`ReportCompletionMiddleware` ends the graph after successful report attachment;
+the run manager finishes from stored findings without requesting a duplicate
+model-authored final answer. Metadata-only responses still use ToolStrategy.
+Report blocks may arrange only published evidence, and omitted published charts
+and analyses are attached automatically. Retry report reuses a valid
 attached artifact, renders the saved specification, or requests presentation-only
 repair using published findings. Computation tools reject execution after publication.
 Resume selects this same recovery path after publication; active workers prevent
@@ -169,11 +174,25 @@ Human-review interrupts and cancellation have waiting/stopped activity states.
 source slot. It preserves native checkpoint and interrupt handling. Async slot
 acquisition is cancellation-safe; queued work checks Stop before starting. The
 coordinator owns its context fields, so subagents cannot write conflicting copies
-back when they finish together. `AnalysisAssignmentMiddleware` creates a private,
-checkpointed assignment ID in each analysis branch. Tool commit keys include it;
-finalization can select only that assignment's current raw executions or explicitly
-saved prior analyses. Separate branches therefore cannot consume each other's
-unfinished work or collide on replay. Pending approval interrupts remain separate.
+back when they finish together. `AssignmentMiddleware` creates a private,
+checkpointed assignment ID in each SQL or Python branch. Tool commit keys include
+it. Each branch persists its own application-owned receipt in the existing run
+record. SQL's structured response contains interpretation only; code attaches the
+saved datasets, including inspected/reused snapshots and multiple query results.
+Python's finish tool automatically attaches its own executions and inputs, saves
+a compact receipt, and returns that receipt through graph state without a final
+model-written copy. A validation failure stays in the specialist repair loop.
+Separate branches cannot consume each other's unfinished executions or collide on
+replay. New corrections invalidate a completed assignment receipt until reconciled.
+Pending approval interrupts remain separate.
+
+Investigation notes contain analytical context, not repeated artifact inventories.
+A new turn includes unfinished prior-run objectives and committed receipts, chart
+references, and execution summaries even if publication never happened. Exact
+code and logs remain in stored evidence/inspection panels. Dataset, analysis and
+chart discovery tools recover valid scoped references; invalid model selections
+produce correction feedback rather than aborting the run. Scope validation remains
+mandatory. Available artifacts are not automatically selected for publication.
 
 The composer uses native `st.chat_input` attachments. An attachment creates a new
 isolated file conversation; an optional question waits in UI session state until

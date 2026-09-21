@@ -31,7 +31,7 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
         named sales, source, data, or df: use datasets['sales'] explicitly.
         """
         context = _runtime_context(runtime)
-        assignment_id = runtime.state["analysis_assignment_id"]
+        assignment_id = runtime.state["assignment_id"]
         call_id = f"{assignment_id}:{runtime.tool_call_id}"
         if committed := runs.storage.committed(context.run_id, call_id):
             return json.loads(committed)
@@ -112,8 +112,6 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
     def finish_analysis(
         outcome: DataAnalysisOutcome,
         answer: str,
-        input_result_ids: list[str],
-        execution_ids: list[str],
         runtime: ToolRuntime,
         method: str = "",
         assumptions: list[str] | None = None,
@@ -123,53 +121,25 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
     ) -> dict:
         """Finish this analytical assignment, or request more SQL data with a complete brief.
 
-        Preserve execution IDs from every material step. You may be assigned
-        again after the coordinator retrieves more data. Do not repeat code or
-        output payloads: the application attaches the saved executions.
+        All executions and inputs from this assignment are attached automatically.
+        You may be assigned again after the coordinator retrieves more data.
+        Supply interpretation, not artifact IDs or copied code.
         """
         context = _runtime_context(runtime)
-        assignment_id = runtime.state["analysis_assignment_id"]
+        assignment_id = runtime.state["assignment_id"]
         call_id = f"{assignment_id}:{runtime.tool_call_id}"
         if committed := runs.storage.committed(context.run_id, call_id):
             return json.loads(committed)
-        try:
-            for key in input_result_ids:
-                results.get(key, context.thread_id, source_id=source_id)
-        except KeyError as exc:
-            return {
-                "ok": False,
-                "error": f"Unknown input dataset {exc}. Correct the reference and retry finish_analysis.",
-            }
-        available = {
-            item.execution_id: item
-            for saved in analyses.list_for_conversation(
-                context.thread_id, source_id=source_id
+        executions = [
+            item
+            for item in runs.get_python_execution(context.run_id)
+            if item.assignment_id == assignment_id
+        ]
+        input_result_ids = list(
+            dict.fromkeys(
+                key for execution in executions for key in execution.inputs.values()
             )
-            for item in saved.analysis.executions
-        }
-        available.update(
-            {
-                item.execution_id: item
-                for item in runs.get_python_execution(context.run_id)
-                if item.assignment_id == assignment_id
-            }
         )
-        missing = [key for key in execution_ids if key not in available]
-        if missing:
-            return {
-                "ok": False,
-                "error": "Unknown execution IDs; copy exact IDs and retry finish_analysis.",
-                "unknown_execution_ids": missing,
-                "available_executions": [
-                    {
-                        "execution_id": item.execution_id,
-                        "error": item.error,
-                        "output_datasets": item.output_datasets,
-                    }
-                    for item in available.values()
-                ],
-            }
-        executions = [available[key] for key in execution_ids]
         if outcome == DataAnalysisOutcome.ANALYSIS_COMPLETED and not any(
             item.error is None for item in executions
         ):
@@ -192,6 +162,12 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
             thread_id=context.thread_id, source_id=source_id, analysis=result
         )
         response = saved.analysis.model_facing()
+        runs.finish_assignment(
+            context.run_id,
+            assignment_id,
+            response,
+            runtime.state.get("correction_ids", []),
+        )
         runs.storage.commit(context.run_id, call_id, json.dumps(response))
         return response
 
