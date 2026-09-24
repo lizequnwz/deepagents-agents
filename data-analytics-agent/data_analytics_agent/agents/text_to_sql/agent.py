@@ -2,20 +2,21 @@
 
 from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain.agents.structured_output import ToolStrategy
+
 from data_analytics_agent.agents.text_to_sql.tools import (
     create_execute_sql_tool,
-    create_query_saved_results_tool,
     create_inspect_conversation_result_tool,
     create_list_conversation_results_tool,
+    create_query_saved_results_tool,
 )
+from data_analytics_agent.handoff import AssignmentMiddleware
+from data_analytics_agent.schemas import SQLAnalysisResponse
+from data_analytics_agent.semantic_context import render_sql_context
 from data_analytics_agent.semantic_tools import (
-    create_semantic_context_tool,
     create_browse_semantic_tool,
     create_lookup_values_tool,
+    create_semantic_context_tool,
 )
-from data_analytics_agent.semantic_context import render_sql_context
-from data_analytics_agent.schemas import SQLAnalysisResponse
-from data_analytics_agent.handoff import AssignmentMiddleware
 
 
 def build_text_to_sql_subagent(
@@ -47,7 +48,9 @@ def build_text_to_sql_subagent(
                 run_store,
                 require_approval=require_approval,
             ),
-            create_execute_sql_tool(source, backend, result_store, run_store),
+            create_execute_sql_tool(
+                source, backend, result_store, run_store, catalog=semantic_catalog
+            ),
         ]
         if semantic_catalog is not None
         else []
@@ -82,8 +85,18 @@ def build_text_to_sql_subagent(
         + """
 Own semantic grounding, retrieval, descriptive calculations, category lookup,
 and saved-data shaping. Use supplied exact definitions when sufficient; otherwise
-use get_semantic_context for relevant definitions and declared relationships. Browse when vocabulary
-is unknown; lookup_values discovers actual category spellings. Never guess a
+use get_semantic_context for candidates, then select exact definitions. Question-only
+responses are candidates, never complete SQL context. Search each measure, grouping,
+filter and time concept separately with browse_semantic_model; use entity_kind=metric
+for measures and entity_kind=field with time_only=true for dates. Select field_names
+explicitly: datasets include only requested fields, primary keys and dependencies.
+Check definitions_complete and blocking_issues, and verify coverage of every requested
+business role yourself. Select relationship_names to resolve alternate paths and self
+join roles. Disconnected datasets may support independent scalar queries, never guessed
+joins. Return material business ambiguity to the coordinator for clarification.
+Pass canonical metric_names and selected relationship_names to execute_sql; preserve
+metric expressions and declared grain. Use semantic validation feedback to repair SQL.
+Browse when vocabulary is unknown; lookup_values discovers actual category spellings. Never guess a
 physical source, field, metric meaning, or join, or probe undeclared objects.
 Use the source dialect for execute_sql and DuckDB for query_saved_results with
 explicit alias-to-artifact bindings. Saved IDs are evidence handles, not tables.

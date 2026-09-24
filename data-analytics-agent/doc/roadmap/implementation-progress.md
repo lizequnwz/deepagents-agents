@@ -1,6 +1,6 @@
 # Roadmap implementation progress
 
-Updated 20 September 2026. This is the implementation record; the roadmap and ablation
+Updated 21 September 2026. This is a dated implementation record; the roadmap and ablation
 documents retain their review-time recommendations. Delivery follows the
 simplification plan's initial setup and presentation increments, with the
 independent forecast-label correction from the product roadmap, followed by
@@ -19,8 +19,9 @@ isolated tabular uploads.
    revisions become visible together, survive restart, reject stale submissions,
    and retain the previous view after rendering failure. Saving again retries.
    A no-op creates no revision; downsampled charts cannot change type.
-3. **Less intrusive report display.** The mandatory report remains downloadable;
-   its preview opens on demand. Primary evidence uses a neutral selection badge.
+3. **Report display.** The mandatory report remains downloadable; its preview
+   opens expanded and can be collapsed. Primary evidence uses a neutral
+   selection badge.
 4. **Typed forecast-bound meaning.** Bounds declare prediction/confidence
    intervals or scenario/sensitivity ranges and their method. Optional nominal
    coverage is explicitly nominal, and is rejected for scenario/sensitivity
@@ -53,14 +54,22 @@ isolated tabular uploads.
    collapsed Activity panel. Assumptions start collapsed; analytical warnings stay
    visible. Report analysis outputs are collapsed inspection details with ten-row
    table previews; main conclusions and warnings stay visible.
+8. **Application-owned artifact handoff.** Specialist receipts now come from
+   saved run and assignment state. Investigation notes no longer repeat artifact
+   ID lists; invalid selections return repair feedback. Published findings are
+   the authoritative answer, and successful report attachment completes the run
+   without another model-written answer. Failed runs expose committed work for
+   continuation. The [artifact handoff review](../reviews/artifact-handoff-review-2026-09-20.md)
+   records the failure, implementation, and verification.
 
 ## Verification and limits
 
 The original deterministic baseline passed 188 tests. Setup/presentation and
-upload increments increased coverage to 217 cases. The latest test/fix pass covers
-243 deterministic cases (six separately marked live cases are excluded). Ruff's
-F checks and `git diff --check` pass. Existing upstream deprecation/beta warnings
-remain.
+upload increments increased coverage to 217 cases. The 20 September test/fix
+pass covered 243 deterministic cases. The 21 September artifact-handoff pass
+recorded 255 offline passes, with six live tests deselected. Ruff F checks and
+whitespace checks passed for that change. These are dated verification records,
+not a claim about subsequent unverified edits.
 
 Regressions exercise API and Streamlit controls, immutable revisions, source/file
 isolation, schema and key review, SQL approval, evidence reuse, rendering,

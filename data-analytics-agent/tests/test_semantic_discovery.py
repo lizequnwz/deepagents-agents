@@ -14,7 +14,6 @@ from data_analytics_agent.semantic import (
 )
 from data_analytics_agent.semantic_tools import create_semantic_context_tool
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CHINOOK_PATH = PROJECT_ROOT / "semantic" / "chinook.osi.yaml"
 
@@ -104,7 +103,7 @@ semantic_model:
     assert "expression:" not in overview
     disconnected = context(catalog, dataset_names=["dataset_000", "dataset_199"])
     assert disconnected["disconnected"] == [["dataset_000", "dataset_199"]]
-    assert not disconnected["unresolved_references"]
+    assert not disconnected["blocking_issues"]
 
 
 def test_search_is_deterministic_bounded_and_filterable() -> None:
@@ -130,7 +129,7 @@ def test_context_includes_metric_dependencies_and_role_projection():
     catalog = _chinook_catalog()
     business = context(catalog, metric_names=["total_revenue"])
     sql = context(catalog, physical=True, metric_names=["total_revenue"])
-    assert sql["complete"]
+    assert sql["definitions_complete"]
     assert sql["datasets"][0]["name"] == "invoices"
     assert sql["datasets"][0]["source"] == "Invoice"
     assert sql["metrics"][0]["expression"] == "SUM(invoices.Total)"
@@ -143,7 +142,7 @@ def test_context_includes_bridge_definitions_and_keys():
     result = context(
         _chinook_catalog(), physical=True, dataset_names=["artists", "invoices"]
     )
-    assert result["complete"]
+    assert result["definitions_complete"]
     assert {d["name"] for d in result["datasets"]} == {
         "artists",
         "invoices",
@@ -157,20 +156,21 @@ def test_context_includes_bridge_definitions_and_keys():
 
 def test_context_invalid_names_are_repairable():
     result = context(_chinook_catalog(), dataset_names=["Invoice"])
-    assert not result["complete"]
-    assert "invoices" in result["alternatives"]["datasets"]
+    assert not result["definitions_complete"]
+    assert "Unknown exact logical names" in result["blocking_issues"][0]
     result = context(
         _chinook_catalog(),
         dataset_names=["invoices"],
         field_names={"invoices": ["InvoiceId"]},
     )
-    assert not result["complete"]
-    assert "logical names" in result["unresolved_references"][0]
+    assert not result["definitions_complete"]
+    assert "logical names" in result["blocking_issues"][0]
 
 
 def test_context_budget_never_splits_required_definitions():
-    from data_analytics_agent.semantic_context import build_semantic_context
     import json
+
+    from data_analytics_agent.semantic_context import build_semantic_context
 
     result = build_semantic_context(
         _chinook_catalog(),
@@ -181,12 +181,13 @@ def test_context_budget_never_splits_required_definitions():
         budget=1000,
     )
     assert len(json.dumps(result)) <= 1000
-    assert not result["complete"] and result["omissions"]
+    assert not result["definitions_complete"] and result["omissions"]
     assert result["datasets"] == []
 
 
 def test_context_cache_is_version_source_dialect_and_projection_bound():
     from dataclasses import replace
+
     from data_analytics_agent.semantic_context import build_semantic_context
 
     catalog = _chinook_catalog()
@@ -255,11 +256,12 @@ def test_services_cache_catalogs_built_during_readiness(
 
 def test_browse_and_reviewed_value_lookup_do_not_bypass_sql_review(test_settings):
     from types import SimpleNamespace
+
+    from data_analytics_agent.semantic import load_semantic_catalog
     from data_analytics_agent.semantic_tools import (
         create_browse_semantic_tool,
         create_lookup_values_tool,
     )
-    from data_analytics_agent.semantic import load_semantic_catalog
     from data_analytics_agent.stores import ResultStore, RunStore
 
     source = test_settings.load_catalog().get("test")
@@ -267,7 +269,7 @@ def test_browse_and_reviewed_value_lookup_do_not_bypass_sql_review(test_settings
         source.semantic_model_path, dialect="sqlite"
     ).catalog
     page = create_browse_semantic_tool(catalog).func(
-        dataset_name="artists", offset=0, limit=1
+        entity_kind="field", dataset_name="artists", offset=0, limit=1
     )
     assert len(page["items"]) == 1 and page["next_offset"] == 1
 
@@ -294,6 +296,7 @@ def test_browse_and_reviewed_value_lookup_do_not_bypass_sql_review(test_settings
 
 def test_ambiguous_declared_routes_are_explicit():
     from dataclasses import replace
+
     from data_analytics_agent.semantic import SemanticRelationship
 
     catalog = _chinook_catalog()
@@ -321,6 +324,7 @@ def test_ambiguous_declared_routes_are_explicit():
 
 def test_large_catalog_question_resolves_outside_overview(test_settings):
     from dataclasses import replace
+
     from data_analytics_agent.semantic import SemanticDataset, SemanticField
 
     catalog = load_semantic_catalog(
@@ -339,6 +343,8 @@ def test_large_catalog_question_resolves_outside_overview(test_settings):
     datasets.update(catalog.datasets)
     catalog = replace(catalog, datasets=datasets, content_hash="large-test")
     result = context(catalog, physical=True, question="artist_count")
-    assert result["complete"]
-    assert result["metrics"][0]["name"] == "artist_count"
+    assert not result["definitions_complete"]
+    assert result["candidates"]["metric"][0]["name"] == "artist_count"
+    result = context(catalog, physical=True, metric_names=["artist_count"])
+    assert result["definitions_complete"]
     assert any(d["source"] == "Artist" for d in result["datasets"])

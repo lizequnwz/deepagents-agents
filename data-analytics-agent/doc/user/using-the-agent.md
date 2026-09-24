@@ -52,10 +52,10 @@ has already changed the report, reload before editing. Reopening a conversation
 restores its latest successful presentation. Original chart/report versions and
 the original analytical turn remain saved. Finish active work before editing.
 
-Reports remain required and downloadable, with **Report preview** collapsed
-until opened. **Primary evidence** identifies the selected result, not a
-correctness certification. Forecast bounds show their declared interval/range
-kind and method; nominal coverage is explicitly distinguished from empirical
+Reports remain required and downloadable. **Report preview** opens expanded
+with a completed result and can be collapsed. **Primary evidence** identifies
+the selected result, not a correctness certification. Forecast bounds show their
+declared interval/range kind and method; nominal coverage is distinguished from empirical
 coverage measured on held-out observations.
 
 ## Follow work and inspect evidence

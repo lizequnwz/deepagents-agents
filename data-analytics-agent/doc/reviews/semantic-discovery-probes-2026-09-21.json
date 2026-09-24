@@ -1,0 +1,310 @@
+[
+  {
+    "case": "revenue by country",
+    "complete": true,
+    "datasets": [
+      "customers",
+      "employees",
+      "invoices",
+      "invoice_lines"
+    ],
+    "metrics": [
+      "line_revenue"
+    ],
+    "relationships": [
+      "customers_to_support_reps",
+      "invoices_to_customers",
+      "invoice_lines_to_invoices"
+    ],
+    "fields": {
+      "customers": [
+        "customer_id",
+        "first_name",
+        "last_name",
+        "company",
+        "address",
+        "city",
+        "state",
+        "country",
+        "postal_code",
+        "phone",
+        "fax",
+        "email",
+        "support_rep_id"
+      ],
+      "employees": [
+        "employee_id",
+        "last_name",
+        "first_name",
+        "title",
+        "reports_to",
+        "birth_date",
+        "hire_date",
+        "address",
+        "city",
+        "state",
+        "country",
+        "postal_code",
+        "phone",
+        "fax",
+        "email"
+      ],
+      "invoices": [
+        "invoice_id",
+        "customer_id",
+        "invoice_date",
+        "billing_address",
+        "billing_city",
+        "billing_state",
+        "billing_country",
+        "billing_postal_code",
+        "total"
+      ],
+      "invoice_lines": [
+        "invoice_line_id",
+        "invoice_id",
+        "track_id",
+        "unit_price",
+        "quantity"
+      ]
+    },
+    "ambiguities": [],
+    "unresolved": [],
+    "omissions": []
+  },
+  {
+    "case": "monthly revenue by genre",
+    "complete": true,
+    "datasets": [
+      "genres",
+      "invoices",
+      "tracks",
+      "invoice_lines"
+    ],
+    "metrics": [],
+    "relationships": [
+      "tracks_to_genres",
+      "invoice_lines_to_tracks",
+      "invoice_lines_to_invoices"
+    ],
+    "fields": {
+      "genres": [
+        "genre_id",
+        "name"
+      ],
+      "invoices": [
+        "invoice_id",
+        "customer_id",
+        "invoice_date",
+        "billing_address",
+        "billing_city",
+        "billing_state",
+        "billing_country",
+        "billing_postal_code",
+        "total"
+      ],
+      "tracks": [
+        "track_id",
+        "name",
+        "album_id",
+        "media_type_id",
+        "genre_id",
+        "composer",
+        "milliseconds",
+        "bytes",
+        "unit_price"
+      ],
+      "invoice_lines": [
+        "invoice_line_id",
+        "invoice_id",
+        "track_id",
+        "unit_price",
+        "quantity"
+      ]
+    },
+    "ambiguities": [],
+    "unresolved": [],
+    "omissions": []
+  },
+  {
+    "case": "employee-manager self relationship",
+    "complete": true,
+    "datasets": [
+      "employees"
+    ],
+    "metrics": [],
+    "relationships": [],
+    "fields": {
+      "employees": [
+        "employee_id",
+        "last_name",
+        "first_name",
+        "title",
+        "reports_to",
+        "birth_date",
+        "hire_date",
+        "address",
+        "city",
+        "state",
+        "country",
+        "postal_code",
+        "phone",
+        "fax",
+        "email"
+      ]
+    },
+    "ambiguities": [],
+    "unresolved": [],
+    "omissions": []
+  },
+  {
+    "case": "explicit dataset ignores question",
+    "complete": true,
+    "datasets": [
+      "invoices"
+    ],
+    "metrics": [],
+    "relationships": [],
+    "fields": {
+      "invoices": [
+        "invoice_id",
+        "customer_id",
+        "invoice_date",
+        "billing_address",
+        "billing_city",
+        "billing_state",
+        "billing_country",
+        "billing_postal_code",
+        "total"
+      ]
+    },
+    "ambiguities": [],
+    "unresolved": [],
+    "omissions": []
+  },
+  {
+    "case": "ambiguity coexists with complete",
+    "complete": true,
+    "datasets": [
+      "invoices",
+      "invoice_lines"
+    ],
+    "metrics": [
+      "total_revenue",
+      "line_revenue"
+    ],
+    "relationships": [
+      "invoice_lines_to_invoices"
+    ],
+    "fields": {
+      "invoices": [
+        "invoice_id",
+        "customer_id",
+        "invoice_date",
+        "billing_address",
+        "billing_city",
+        "billing_state",
+        "billing_country",
+        "billing_postal_code",
+        "total"
+      ],
+      "invoice_lines": [
+        "invoice_line_id",
+        "invoice_id",
+        "track_id",
+        "unit_price",
+        "quantity"
+      ]
+    },
+    "ambiguities": [
+      {
+        "metrics": [
+          "total_revenue",
+          "line_revenue"
+        ],
+        "message": "Several metric definitions match. Confirm which meanings the question requires."
+      }
+    ],
+    "unresolved": [],
+    "omissions": []
+  },
+  {
+    "case": "ordinary question exceeds budget",
+    "complete": false,
+    "datasets": [],
+    "metrics": [],
+    "relationships": [],
+    "fields": {},
+    "ambiguities": [],
+    "unresolved": [],
+    "omissions": [
+      "Requested definitions and their dependencies exceed the serialized context budget."
+    ]
+  },
+  {
+    "case": "wide dataset metric",
+    "complete": false,
+    "datasets": [],
+    "metrics": [],
+    "relationships": [],
+    "fields": {},
+    "ambiguities": [],
+    "unresolved": [],
+    "omissions": [
+      "Requested definitions and their dependencies exceed the serialized context budget."
+    ]
+  },
+  {
+    "case": "same metric with explicit field projection",
+    "complete": true,
+    "datasets": [
+      "invoices"
+    ],
+    "metrics": [
+      "total_revenue"
+    ],
+    "relationships": [],
+    "fields": {
+      "invoices": [
+        "total",
+        "invoice_id"
+      ]
+    },
+    "ambiguities": [],
+    "unresolved": [],
+    "omissions": []
+  },
+  {
+    "case": "unbound row-count metric",
+    "complete": true,
+    "datasets": [],
+    "metrics": [
+      "row_count"
+    ],
+    "relationships": [],
+    "fields": {},
+    "ambiguities": [],
+    "unresolved": [],
+    "omissions": []
+  },
+  {
+    "case": "nonrecursive logical field dependency",
+    "complete": true,
+    "datasets": [
+      "invoices"
+    ],
+    "metrics": [
+      "derived"
+    ],
+    "relationships": [],
+    "fields": {
+      "invoices": [
+        "adjusted",
+        "invoice_id"
+      ]
+    },
+    "ambiguities": [],
+    "unresolved": [],
+    "omissions": []
+  }
+]

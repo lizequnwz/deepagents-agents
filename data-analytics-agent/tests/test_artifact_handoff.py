@@ -2,10 +2,11 @@
 
 import pytest
 from langchain_core.tools import ToolException
-from data_analytics_agent.presentation import create_presentation_tools
+
 from data_analytics_agent.agents.text_to_sql.tools import (
     create_query_saved_results_tool,
 )
+from data_analytics_agent.presentation import create_presentation_tools
 from data_analytics_agent.reporting.tools import (
     create_inspect_conversation_analysis_tool,
 )
@@ -55,16 +56,21 @@ def test_sql_receipts_isolate_replayed_call_ids_and_support_reuse(
         create_inspect_conversation_result_tool,
     )
     from data_analytics_agent.backends.sqlite import SQLiteBackend
-    from data_analytics_agent.stores import RunStore
     from data_analytics_agent.persistence import LocalStorage
+    from data_analytics_agent.stores import RunStore
 
     w = workspace
     source = test_settings.load_catalog().get("test")
+    from data_analytics_agent.semantic import load_semantic_catalog
+
     tool = create_execute_sql_tool(
         source,
         SQLiteBackend(test_settings.project_root / source.target["path"]),
         w.results,
         w.runs,
+        catalog=load_semantic_catalog(
+            source.semantic_model_path, dialect=source.dialect
+        ).catalog,
     )
     runtime = w.runtime("same-call")
     first = tool.func(
@@ -96,9 +102,9 @@ def test_sql_receipts_isolate_replayed_call_ids_and_support_reuse(
 
 
 def test_analysis_completion_cannot_claim_another_assignments_execution(workspace):
+    from data_analytics_agent.agents.data_analysis.runner import PythonExecutionLimits
     from data_analytics_agent.agents.data_analysis.schemas import PythonExecutionResult
     from data_analytics_agent.agents.data_analysis.tools import create_analysis_tools
-    from data_analytics_agent.agents.data_analysis.runner import PythonExecutionLimits
 
     w = workspace
     w.runs.record_python_execution(
@@ -124,9 +130,9 @@ def test_analysis_completion_cannot_claim_another_assignments_execution(workspac
 
 def test_analysis_synthesis_omits_code_and_logs_but_keeps_evidence():
     from data_analytics_agent.agents.data_analysis.schemas import (
+        AnalysisOutput,
         DataAnalysisResult,
         PythonExecutionResult,
-        AnalysisOutput,
     )
 
     saved = DataAnalysisResult(
@@ -159,11 +165,12 @@ def test_analysis_synthesis_omits_code_and_logs_but_keeps_evidence():
 
 async def test_failed_run_continuation_includes_committed_work_after_restart(workspace):
     import json
-    from tests.test_run_manager import Graph, Stream, manager
-    from tests.test_persistent_analyst import save
+
+    from data_analytics_agent.persistence import LocalStorage
     from data_analytics_agent.schemas import CoordinatorResponse
     from data_analytics_agent.stores import RunStore
-    from data_analytics_agent.persistence import LocalStorage
+    from tests.test_persistent_analyst import save
+    from tests.test_run_manager import Graph, Stream, manager
 
     w = workspace
     dataset = save(w, [{"amount": 4}])
@@ -197,10 +204,10 @@ async def test_failed_run_continuation_includes_committed_work_after_restart(wor
 
 
 def test_report_cannot_change_published_evidence(workspace):
-    from tests.test_persistent_analyst import save
-    from data_analytics_agent.schemas import CoordinatorResponse
-    from data_analytics_agent.reporting.tools import create_create_report_tool
     from data_analytics_agent.reporting.schemas import ReportSpec
+    from data_analytics_agent.reporting.tools import create_create_report_tool
+    from data_analytics_agent.schemas import CoordinatorResponse
+    from tests.test_persistent_analyst import save
 
     w = workspace
     selected = save(w, [{"amount": 4}])
@@ -233,13 +240,15 @@ def test_report_cannot_change_published_evidence(workspace):
 async def test_chart_typo_is_repaired_without_recomputation(test_settings, monkeypatch):
     import json
     import shutil
-    from pathlib import Path
     from dataclasses import replace
+    from pathlib import Path
+
     from langchain_core.messages import AIMessage, ToolMessage
-    from langchain_core.outputs import ChatResult, ChatGeneration
-    from tests.test_agent_workflow import AnalystModel
-    from data_analytics_agent.api import Services
+    from langchain_core.outputs import ChatGeneration, ChatResult
+
     from data_analytics_agent import coordinator
+    from data_analytics_agent.api import Services
+    from tests.test_agent_workflow import AnalystModel
 
     class ChartRecoveryModel(AnalystModel):
         dataset: str
@@ -373,9 +382,9 @@ def test_completed_assignment_is_invalidated_by_new_correction(workspace):
 
 
 def test_chart_discovery_and_resolution_preserve_scope(workspace):
-    from data_analytics_agent.presentation import create_list_conversation_charts_tool
-    from data_analytics_agent.evidence import EvidenceResolver
     from data_analytics_agent.datasets import StoreNotFound
+    from data_analytics_agent.evidence import EvidenceResolver
+    from data_analytics_agent.presentation import create_list_conversation_charts_tool
 
     w = workspace
     for key, thread, source in [

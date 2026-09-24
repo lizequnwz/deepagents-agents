@@ -93,6 +93,14 @@ expression:
 The runtime chooses an exact dialect match first and falls back to
 `ANSI_SQL`. A field with neither is a blocking error.
 
+Fields must be scalar physical expressions within their dataset. Logical field
+composition, aggregates/windows in fields, and subqueries in semantic expressions
+are rejected. Metrics can reference declared logical fields or unambiguous physical
+field names; scalar expressions are expanded automatically. Metrics must reference
+at least one bound field: use a declared non-null key instead of a relation-free
+`COUNT(*)`. Relationship keys must be physical columns. See the
+[expression contract and execution checks](semantic-discovery.md).
+
 Do not claim portability merely because a query works in SQLite. Date,
 timezone, string, quoting, null, and numeric semantics often differ.
 

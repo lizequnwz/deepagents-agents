@@ -1,19 +1,22 @@
 """Source SQL, saved-data SQL, and bounded artifact discovery."""
 
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Any
+
 import json
 import time
+from dataclasses import dataclass
+from typing import Any
+
 import duckdb
 from deepagents.graph import DeepAgentState
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import ToolException
-from data_analytics_agent.backends import SQLValidationError, SQLExecutionError
+
+from data_analytics_agent.backends import SQLExecutionError, SQLValidationError
 from data_analytics_agent.backends.validation import validate_readonly_sql
-from data_analytics_agent.schemas import QueryResult
 from data_analytics_agent.execution import cancellable_query
-from data_analytics_agent.handoff import record_dataset, assignment_call_id
+from data_analytics_agent.handoff import assignment_call_id, record_dataset
+from data_analytics_agent.schemas import QueryResult
 
 
 @dataclass(frozen=True)
@@ -82,10 +85,16 @@ def execute_query(
     )
 
 
-def create_execute_sql_tool(source, backend, result_store, run_store):
+def create_execute_sql_tool(source, backend, result_store, run_store, *, catalog):
     @tool
-    def execute_sql(query: str, purpose: str, runtime: ToolRuntime) -> dict:
-        """Execute source SQL and save typed results. State this step's distinct business purpose."""
+    def execute_sql(
+        query: str,
+        purpose: str,
+        runtime: ToolRuntime,
+        metric_names: list[str] | None = None,
+        relationship_names: list[str] | None = None,
+    ) -> dict:
+        """Validate source SQL against the catalog and save results. Name canonical metrics used and selected relationship routes. State this step's distinct business purpose."""
         context = _runtime_context(runtime)
         if context.source_id != source.source_id:
             raise ValueError("Source mismatch")
@@ -98,6 +107,14 @@ def create_execute_sql_tool(source, backend, result_store, run_store):
         run_store.set_phase(context.run_id, "retrieving_data")
         with run_store.source_worker(context.run_id):
             try:
+                from data_analytics_agent.semantic_sql import validate_semantic_sql
+
+                grounding = validate_semantic_sql(
+                    query,
+                    catalog,
+                    metric_names=metric_names or (),
+                    relationship_names=relationship_names,
+                )
                 result = execute_query(
                     backend=backend,
                     source=source,
@@ -116,6 +133,7 @@ def create_execute_sql_tool(source, backend, result_store, run_store):
             ) as exc:
                 raise ToolException(str(exc)) from exc
         payload = result.model_dump(mode="json")
+        payload["semantic_grounding"] = grounding
         record_dataset(run_store, runtime, payload, purpose)
         run_store.storage.commit(
             context.run_id, assignment_call_id(runtime), json.dumps(payload)

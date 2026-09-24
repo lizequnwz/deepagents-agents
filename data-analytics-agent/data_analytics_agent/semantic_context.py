@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from collections import OrderedDict
-from itertools import combinations
 import json
+from collections import OrderedDict, deque
+from itertools import combinations
 from threading import RLock
 from typing import Any
-import sqlglot
-from sqlglot import exp
+
 from langchain_core.tools import ToolException
+
 from data_analytics_agent.semantic import (
     SemanticCatalog,
     SemanticDataset,
@@ -22,7 +22,6 @@ from data_analytics_agent.semantic import (
 CONTEXT_BUDGET = 12_000
 MAX_AVAILABLE_FIELD_NAMES = 25
 _CACHE: OrderedDict[tuple, str] = OrderedDict()
-_COMPACT_CACHE: OrderedDict[tuple, dict] = OrderedDict()
 _LOCK = RLock()
 
 
@@ -74,8 +73,12 @@ def _dataset_payload(
         "synonyms": list(dataset.synonyms),
         "instructions": dataset.instructions,
         "primary_key": list(dataset.primary_key),
-        "grain": list(dataset.primary_key),
+        "grain_basis": "declared primary key; aggregation grain must follow the business definition",
         "field_count": len(dataset.fields),
+        "omitted_field_count": len(dataset.fields)
+        - (
+            len(selected_fields) if selected_fields is not None else len(dataset.fields)
+        ),
         "fields": [
             _field_payload(field, include_physical=include_physical) for field in fields
         ],
@@ -104,6 +107,7 @@ def _metric_payload(
 
 def _relationship_payload(
     relationship: SemanticRelationship,
+    catalog: SemanticCatalog,
 ) -> dict[str, Any]:
     return {
         "name": relationship.name,
@@ -112,6 +116,13 @@ def _relationship_payload(
         "from_columns": list(relationship.from_columns),
         "to_columns": list(relationship.to_columns),
         "instructions": relationship.instructions,
+        "from_key_unique": bool(catalog.datasets[relationship.from_dataset].primary_key)
+        and set(catalog.datasets[relationship.from_dataset].primary_key)
+        <= set(relationship.from_columns),
+        "to_key_unique": bool(catalog.datasets[relationship.to_dataset].primary_key)
+        and set(catalog.datasets[relationship.to_dataset].primary_key)
+        <= set(relationship.to_columns),
+        "uniqueness_basis": "declared primary keys only; false means unknown, not verified nonunique",
     }
 
 
@@ -119,51 +130,49 @@ def _serialize(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def _compact_catalog(catalog, *, source_id, dialect, include_physical):
-    key = (source_id, catalog.content_hash, dialect, include_physical)
-    with _LOCK:
-        if key in _COMPACT_CACHE:
-            _COMPACT_CACHE.move_to_end(key)
-            return _COMPACT_CACHE[key]
-    payload = {
-        "datasets": {
-            name: _dataset_payload(
-                dataset, selected_fields=None, include_physical=include_physical
-            )
-            for name, dataset in catalog.datasets.items()
-        },
-        "metrics": {
-            name: _metric_payload(metric, include_physical=include_physical)
-            for name, metric in catalog.metrics.items()
-        },
-    }
-    # Cache only bounded metadata representations, never observations.
-    if len(_serialize(payload)) <= 1_000_000:
-        with _LOCK:
-            _COMPACT_CACHE[key] = payload
-            while len(_COMPACT_CACHE) > 16:
-                _COMPACT_CACHE.popitem(last=False)
-    return payload
-
-
 def _paths(catalog, start, target):
-    """Find up to two declared routes; distinguish a search cap from disconnection."""
-    shortest = catalog.shortest_path([start], target)
-    if shortest is None:
-        return [], False
-    found, stack, steps = [tuple(shortest)], [(start, (), frozenset([start]))], 0
-    while stack and len(found) < 2 and steps < 2000:
-        node, path, seen = stack.pop()
+    """Breadth-first bounded alternatives, without expanding their definitions."""
+    queue = deque([(start, (), frozenset([start]))])
+    found, steps = [], 0
+    while queue and len(found) < 2 and steps < 2000:
+        node, path, seen = queue.popleft()
         steps += 1
         if node == target:
-            if path not in found:
-                found.append(path)
+            found.append(path)
             continue
-        for edge in reversed(catalog.adjacency.get(node, ())):
+        for edge in sorted(catalog.adjacency.get(node, ()), key=lambda e: e.name):
             other = edge.to_dataset if edge.from_dataset == node else edge.from_dataset
             if other not in seen:
-                stack.append((other, (*path, edge), seen | {other}))
-    return found, bool(stack) and steps >= 2000
+                queue.append((other, (*path, edge), seen | {other}))
+    return found, bool(queue) and steps >= 2000
+
+
+def discovery_candidates(catalog, question):
+    """Independent quotas prevent fields from starving measures and time roles."""
+    candidates = {}
+    from data_analytics_agent.semantic import _normalize_search_text
+
+    if not _normalize_search_text(question):
+        return candidates
+    for kind in ("metric", "dataset", "field", "time"):
+        matches = catalog.search(
+            question,
+            entity_kinds=["field" if kind == "time" else kind],
+            limit=6,
+            time_only=kind == "time",
+            per_dataset_limit=2,
+        )
+        candidates[kind] = [
+            {
+                "name": m.name,
+                "dataset": m.parent_dataset,
+                "description": m.description[:240],
+                "reason": m.match_reason,
+                "score": m.score,
+            }
+            for m in matches
+        ]
+    return candidates
 
 
 def build_semantic_context(
@@ -176,18 +185,22 @@ def build_semantic_context(
     dataset_names=None,
     metric_names=None,
     field_names=None,
+    relationship_names=None,
     budget: int = CONTEXT_BUDGET,
     full: bool = False,
 ):
+    if budget < 512:
+        raise ValueError("Semantic context budget must be at least 512 characters.")
     key = (
         source_id,
         catalog.content_hash,
         dialect,
         include_physical,
-        " ".join(question.casefold().split()),
+        question,
         tuple(dataset_names or ()),
         tuple(metric_names or ()),
-        _serialize(field_names or {}),
+        _serialize(field_names),
+        _serialize(relationship_names),
         budget,
         full,
     )
@@ -195,172 +208,189 @@ def build_semantic_context(
         if key in _CACHE:
             _CACHE.move_to_end(key)
             return json.loads(_CACHE[key])
-    if budget < 512:
-        raise ValueError("Semantic context budget must be at least 512 characters.")
-    compact = _compact_catalog(
-        catalog, source_id=source_id, dialect=dialect, include_physical=include_physical
-    )
-    datasets = list(dict.fromkeys(dataset_names or ()))
+    datasets = list(dict.fromkeys([*(dataset_names or ()), *(field_names or {})]))
     metrics = list(dict.fromkeys(metric_names or ()))
-    discovered_metrics = []
-    if full:
-        datasets, metrics = list(catalog.datasets), list(catalog.metrics)
-    elif not datasets and not metrics:
-        for match in catalog.search(question, limit=5):
-            if match.kind == "metric":
-                metrics.append(match.name)
-                discovered_metrics.append(match.name)
-            else:
-                name = match.parent_dataset or match.name
-                if name not in datasets:
-                    datasets.append(name)
-    unknown = [n for n in datasets if n not in catalog.datasets]
-    unknown += [n for n in metrics if n not in catalog.metrics]
-    if unknown:
-        response = {
-            "complete": False,
-            "model_hash": catalog.content_hash,
-            "error": "Unknown exact logical names",
-            "unknown": [],
-            "alternatives": {"datasets": [], "metrics": []},
-            "refinement": "Use browse_semantic_model to page through valid names.",
-        }
-        for bucket, names in [
-            (response["unknown"], unknown[:10]),
-            (response["alternatives"]["datasets"], list(catalog.datasets)[:25]),
-            (response["alternatives"]["metrics"], list(catalog.metrics)[:25]),
-        ]:
-            for name in names:
-                bucket.append(name)
-                if len(_serialize(response)) > budget:
-                    bucket.pop()
-                    break
-        return response
-    unresolved, ambiguities, disconnected = [], [], []
-    if len(discovered_metrics) > 1:
-        ambiguities.append(
-            {
-                "metrics": discovered_metrics,
-                "message": "Several metric definitions match. Confirm which meanings the question requires.",
-            }
+    relationships = {e.name: e for e in catalog.relationships}
+    result = {
+        "model_hash": catalog.content_hash,
+        "source_id": source_id,
+        "dialect": dialect,
+        "projection": "physical" if include_physical else "business",
+        "mode": "definitions",
+        "definitions_complete": False,
+        "catalog_complete": False,
+        "question_coverage": "not_assessed",
+        "blocking_issues": [],
+        "omissions": [],
+        "datasets": [],
+        "metrics": [],
+        "relationships": [],
+        "ambiguities": [],
+        "disconnected": [],
+    }
+    if not full and not (datasets or metrics or relationship_names):
+        result.update(mode="discovery", question_coverage="requires_selection")
+        result["candidates"] = (
+            discovery_candidates(catalog, question) if question.strip() else {}
         )
-    required = {name: set() for name in datasets}
-    for name in metrics:
-        metric = catalog.metrics[name]
-        try:
-            expression = sqlglot.parse_one(metric.expression, read=dialect)
-            for column in expression.find_all(exp.Column):
-                candidates = []
-                for dataset in catalog.datasets.values():
-                    if column.table and column.table.casefold() not in {
-                        dataset.name.casefold(),
-                        dataset.source.casefold(),
-                    }:
-                        continue
-                    for field in dataset.fields.values():
-                        if column.name.casefold() in {
-                            field.name.casefold(),
-                            field.expression.casefold(),
-                        }:
-                            candidates.append((dataset.name, field.name))
-                if len(candidates) != 1:
-                    unresolved.append(
-                        f"{name}: unresolved or ambiguous reference"
-                        + (f" {column.sql()}" if include_physical else "")
-                    )
-                else:
-                    parent, field = candidates[0]
-                    if parent not in datasets:
-                        datasets.append(parent)
-                    required.setdefault(parent, set()).add(field)
-        except (sqlglot.errors.SqlglotError, ValueError):
-            unresolved.append(f"{name}: expression could not be reliably resolved")
-    edges = {edge.name: edge for edge in catalog.relationships} if full else {}
-    if not full:
-        for start, target in combinations(datasets.copy(), 2):
-            routes, capped = _paths(catalog, start, target)
-            if len(routes) > 1:
-                ambiguities.append(
+        result["refinement"] = (
+            "Search each measure, dimension, filter and time role separately with browse_semantic_model. "
+            "Choose exact metric/field/relationship names, then request definitions. "
+            "Candidates are not resolved definitions or proof of question coverage."
+        )
+        if not any(result["candidates"].values()):
+            result["blocking_issues"].append(
+                "No candidates; reformulate or browse the catalog."
+            )
+    else:
+        if full:
+            datasets, metrics = list(catalog.datasets), list(catalog.metrics)
+        unknown = [f"dataset:{n}" for n in datasets if n not in catalog.datasets]
+        unknown += [f"metric:{n}" for n in metrics if n not in catalog.metrics]
+        unknown += [
+            f"relationship:{n}"
+            for n in relationship_names or ()
+            if n not in relationships
+        ]
+        if unknown:
+            result["blocking_issues"].append(
+                "Unknown exact logical names: " + ", ".join(unknown)
+            )
+            result["refinement"] = (
+                "Browse the corresponding entity kind for valid logical names."
+            )
+        else:
+            try:
+                bindings = catalog.bindings
+            except ValueError as exc:
+                result["blocking_issues"].append(
+                    str(exc)
+                    if include_physical
+                    else "Catalog expression binding failed; correct the semantic model."
+                )
+                bindings = None
+            required = {n: set((field_names or {}).get(n, ())) for n in datasets}
+            if bindings:
+                for name in metrics:
+                    for parent, field in bindings.metrics[name].dependencies:
+                        if parent not in datasets:
+                            datasets.append(parent)
+                        required.setdefault(parent, set()).add(field)
+            edges = {n: relationships[n] for n in relationship_names or ()}
+            if full:
+                edges = relationships.copy()
+            elif relationship_names is None:
+                # A self relationship cannot be found by pairing distinct datasets.
+                edges.update(
                     {
-                        "datasets": [start, target],
-                        "routes": [[e.name for e in route] for route in routes],
-                        "message": "Alternative declared routes; confirm business meaning.",
+                        e.name: e
+                        for e in catalog.relationships
+                        if e.from_dataset == e.to_dataset and e.from_dataset in datasets
                     }
                 )
-            if capped:
-                unresolved.append(f"Join path search incomplete: {start} to {target}")
-            elif not routes:
-                disconnected.append([start, target])
-            for route in routes:
-                for edge in route:
-                    edges[edge.name] = edge
-    for edge in edges.values():
-        for parent, fields in (
-            (edge.from_dataset, edge.from_columns),
-            (edge.to_dataset, edge.to_columns),
-        ):
-            if parent not in datasets:
-                datasets.append(parent)
-            required.setdefault(parent, set()).update(fields)
-    unexpected = set(field_names or {}) - set(datasets)
-    if unexpected:
-        unresolved.append(
-            f"field_names includes unselected datasets: {sorted(unexpected)}"
-        )
-    definitions = []
-    for name in datasets:
-        dataset = catalog.datasets[name]
-        fields = None
-        if field_names is not None and name in field_names:
-            fields = list(
-                dict.fromkeys(
-                    [
-                        *field_names[name],
-                        *sorted(required.get(name, set())),
-                        *dataset.primary_key,
+                for start, target in combinations(datasets.copy(), 2):
+                    routes, capped = _paths(catalog, start, target)
+                    if capped:
+                        result["blocking_issues"].append(
+                            f"Join path search incomplete: {start} to {target}"
+                        )
+                    if len(routes) > 1:
+                        result["ambiguities"].append(
+                            {
+                                "datasets": [start, target],
+                                "routes": [[e.name for e in r] for r in routes],
+                            }
+                        )
+                        result["blocking_issues"].append(
+                            f"Select relationship_names for {start} to {target}."
+                        )
+                    elif routes and not capped:
+                        edges.update({e.name: e for e in routes[0]})
+                    elif not capped:
+                        result["disconnected"].append([start, target])
+            for edge in edges.values():
+                for parent, fields in (
+                    (edge.from_dataset, edge.from_columns),
+                    (edge.to_dataset, edge.to_columns),
+                ):
+                    if parent not in datasets:
+                        datasets.append(parent)
+                    required.setdefault(parent, set()).update(fields)
+            # Disconnection is informational: separate scalar populations need not join.
+            # Exact selected routes are validated with the actual SQL at execution.
+            for name in datasets:
+                dataset = catalog.datasets[name]
+                if bindings:
+                    for field in tuple(required.get(name, ())):
+                        required[name].update(
+                            bindings.field_dependencies.get((name, field), ())
+                        )
+                selected = sorted(required.get(name, set()) | set(dataset.primary_key))
+                try:
+                    result["datasets"].append(
+                        _dataset_payload(
+                            dataset,
+                            selected_fields=None if full else selected,
+                            include_physical=include_physical,
+                        )
+                    )
+                except ToolException as exc:
+                    result["blocking_issues"].append(str(exc))
+            for name in metrics:
+                payload = _metric_payload(
+                    catalog.metrics[name], include_physical=include_physical
+                )
+                if bindings:
+                    payload["dependencies"] = [
+                        {"dataset": d, "field": f}
+                        for d, f in bindings.metrics[name].dependencies
                     ]
-                )
+                    if include_physical:
+                        payload["expression"] = bindings.metrics[name].expression
+                        payload["expression_aliases"] = {
+                            d: catalog.datasets[d].source
+                            for d, _ in bindings.metrics[name].dependencies
+                        }
+                result["metrics"].append(payload)
+            result["relationships"] = [
+                _relationship_payload(e, catalog) for e in edges.values()
+            ]
+            result["instructions"] = catalog.instructions
+            result["definitions_complete"] = not result["blocking_issues"]
+            result["catalog_complete"] = full and result["definitions_complete"]
+            result["refinement"] = (
+                "Definitions cover only the explicit selections. Check every requested business role before SQL. Browse for additional fields or relationships."
             )
-        try:
-            definitions.append(
-                compact["datasets"][name]
-                if fields is None
-                else _dataset_payload(
-                    dataset, selected_fields=fields, include_physical=include_physical
-                )
-            )
-        except ToolException as exc:
-            unresolved.append(str(exc))
-    result = dict(
-        model_hash=catalog.content_hash,
-        source_id=source_id,
-        dialect=dialect,
-        projection="physical" if include_physical else "business",
-        complete=not unresolved and bool(datasets or metrics),
-        catalog_complete=full,
-        instructions=catalog.instructions,
-        datasets=definitions,
-        metrics=[compact["metrics"][n] for n in metrics],
-        relationships=[_relationship_payload(e) for e in edges.values()],
-        ambiguities=ambiguities,
-        disconnected=disconnected,
-        unresolved_references=unresolved,
-        omissions=[],
-    )
     if len(_serialize(result)) > budget:
-        # Never truncate a SQL expression, instruction or a join dependency.
-        result = dict(
-            model_hash=catalog.content_hash,
-            complete=False,
+        # Required definitions are indivisible. Preserve repair diagnostics, never
+        # silently drop dependencies while declaring the remainder complete.
+        result.update(
+            definitions_complete=False,
             catalog_complete=False,
             datasets=[],
             metrics=[],
             relationships=[],
-            omissions=[
-                "Requested definitions and their dependencies exceed the serialized context budget."
-            ],
-            refinement="Select fewer exact datasets/metrics and field_names; browse_semantic_model provides paginated fields.",
         )
+        result.pop("instructions", None)
+        result.pop("candidates", None)
+        result["omissions"] = [
+            "Requested content exceeds the serialized context budget."
+        ]
+        result["refinement"] = (
+            "Request fewer exact definitions; browse by entity kind, dataset and query."
+        )
+        # Diagnostic lists themselves may be large on disconnected or huge models.
+        for name in ("ambiguities", "disconnected", "blocking_issues"):
+            while result[name] and len(_serialize(result)) > budget:
+                result[name].pop()
+        if len(_serialize(result)) > budget:
+            result = {
+                "mode": "definitions",
+                "definitions_complete": False,
+                "model_hash": catalog.content_hash,
+                "omissions": ["Context budget exceeded, including diagnostics."],
+                "refinement": "Request fewer exact names or browse a smaller page.",
+            }
     serialized = _serialize(result)
     with _LOCK:
         _CACHE[key] = serialized
@@ -374,7 +404,7 @@ def render_sql_context(catalog, *, source_id, dialect):
     context = build_semantic_context(
         catalog, source_id=source_id, dialect=dialect, include_physical=True, full=True
     )
-    if context["complete"]:
+    if context["definitions_complete"]:
         return (
             "Complete exact catalog definitions (no discovery needed):\n"
             + _serialize(context)
@@ -383,5 +413,5 @@ def render_sql_context(catalog, *, source_id, dialect):
         render_semantic_overview(catalog)
         + "\nCatalog content hash: "
         + catalog.content_hash
-        + "\nExact context is incomplete. Use get_semantic_context for relevant definitions."
+        + "\nUse get_semantic_context for candidates, then exact selected definitions."
     )

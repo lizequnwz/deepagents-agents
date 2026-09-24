@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+import json
+from typing import Annotated, Literal
+
+from langchain.tools import ToolRuntime, tool
+from langchain_core.tools import ToolException
 from pydantic import Field
 
-from langchain.tools import tool, ToolRuntime
-from langchain_core.tools import ToolException
-
 from data_analytics_agent.semantic_context import (
-    build_semantic_context,
     _field_payload,
+    _metric_payload,
+    _relationship_payload,
+    _serialize,
+    build_semantic_context,
 )
 
 
@@ -35,6 +39,13 @@ def create_semantic_context_tool(catalog, *, source_id, dialect, include_physica
             list[str] | None,
             Field(max_length=10, description="Exact logical metric names."),
         ] = None,
+        relationship_names: Annotated[
+            list[str] | None,
+            Field(
+                max_length=20,
+                description="Exact declared relationships for the chosen route, including self joins. Empty means no joins requested.",
+            ),
+        ] = None,
         field_names: Annotated[
             dict[str, list[str]] | None,
             Field(
@@ -43,11 +54,13 @@ def create_semantic_context_tool(catalog, *, source_id, dialect, include_physica
             ),
         ] = None,
     ) -> dict:
-        """Get cohesive exact definitions, metric dependencies and declared join paths.
+        """Discover candidates or resolve exact definitions and declared join paths.
 
         Provide the business question; optionally refine with exact logical dataset,
-        metric and field names (never physical names). Check complete, omissions,
-        unresolved references and ambiguity before SQL. Use paginated browsing for
+        metric, field and relationship names (never physical names). Question-only
+        calls return candidates, not SQL context. Exact calls return only selected
+        fields, keys and metric dependencies. Check definitions_complete and
+        blocking_issues; question coverage always requires your review. Browse for
         unknown vocabulary. This reads metadata only, never source values.
         """
         return build_semantic_context(
@@ -59,6 +72,7 @@ def create_semantic_context_tool(catalog, *, source_id, dialect, include_physica
             dataset_names=dataset_names,
             metric_names=metric_names,
             field_names=field_names,
+            relationship_names=relationship_names,
         )
 
     get_semantic_context.handle_tool_error = True
@@ -68,34 +82,150 @@ def create_semantic_context_tool(catalog, *, source_id, dialect, include_physica
 def create_browse_semantic_tool(catalog, *, include_physical=False):
     @tool
     def browse_semantic_model(
-        dataset_name: str | None = None, offset: int = 0, limit: int = 25
+        entity_kind: Literal[
+            "dataset", "field", "metric", "relationship", "example"
+        ] = "dataset",
+        dataset_name: str | None = None,
+        query: str = "",
+        time_only: bool = False,
+        offset: int = 0,
+        limit: int = 25,
     ) -> dict:
-        """Browse datasets or fields by page when exact search terms are unknown."""
-        offset = max(0, offset)
-        limit = max(1, min(limit, 50))
-        if dataset_name:
-            dataset = catalog.datasets.get(dataset_name)
-            if dataset is None:
-                raise ToolException("Unknown dataset; browse datasets first.")
+        """Browse/search one semantic role by page, with a 6,000-character response budget.
+
+        Search measures as metrics; grouping/filter concepts as fields; dates as
+        fields with time_only. Dataset filters narrow fields and relationships.
+        Examples are curated question/context examples, NOT verified SQL.
+        Use separate searches for each part of a business question, then request
+        exact definitions with get_semantic_context. No source values are read.
+        """
+        if dataset_name and dataset_name not in catalog.datasets:
+            raise ToolException("Unknown logical dataset; browse datasets first.")
+        offset, limit = max(0, offset), max(1, min(limit, 50))
+        if entity_kind == "field":
             items = [
-                _field_payload(field, include_physical=include_physical)
-                for field in dataset.fields.values()
+                dict(
+                    dataset=d.name,
+                    **_field_payload(f, include_physical=include_physical),
+                )
+                for d in catalog.datasets.values()
+                if not dataset_name or d.name == dataset_name
+                for f in d.fields.values()
+                if not time_only or f.is_time
             ]
+        elif entity_kind == "metric":
+            items = [
+                _metric_payload(m, include_physical=include_physical)
+                for m in catalog.metrics.values()
+            ]
+        elif entity_kind == "relationship":
+            items = [
+                _relationship_payload(r, catalog)
+                for r in catalog.relationships
+                if not dataset_name or dataset_name in (r.from_dataset, r.to_dataset)
+            ]
+        elif entity_kind == "example":
+            items = (
+                [{"name": catalog.name, "example": e} for e in catalog.examples]
+                if not dataset_name
+                else []
+            )
+            for d in catalog.datasets.values():
+                if dataset_name and d.name != dataset_name:
+                    continue
+                items.extend({"name": d.name, "example": e} for e in d.examples)
+                items.extend(
+                    {"name": f"{d.name}.{f.name}", "example": e}
+                    for f in d.fields.values()
+                    for e in f.examples
+                )
+            if not dataset_name:
+                items.extend(
+                    {"name": m.name, "example": e}
+                    for m in catalog.metrics.values()
+                    for e in m.examples
+                )
+                items.extend(
+                    {"name": r.name, "example": e}
+                    for r in catalog.relationships
+                    for e in r.examples
+                )
         else:
             items = [
                 {
-                    "name": dataset.name,
-                    "description": dataset.description,
-                    "field_count": len(dataset.fields),
+                    "name": d.name,
+                    "description": d.description,
+                    "field_count": len(d.fields),
                 }
-                for dataset in catalog.datasets.values()
+                for d in catalog.datasets.values()
+                if not dataset_name or d.name == dataset_name
             ]
-        return {
-            "items": items[offset : offset + limit],
+        if query.strip() and entity_kind in {"dataset", "field", "metric"}:
+            # Search all eligible entities so pagination is not limited to the first top-k.
+            from data_analytics_agent.semantic import (
+                _normalize_search_text,
+                _score_entity,
+            )
+
+            scored = []
+            for item in items:
+                entity = (
+                    catalog.datasets[item["dataset"]].fields[item["name"]]
+                    if entity_kind == "field"
+                    else (
+                        catalog.metrics if entity_kind == "metric" else catalog.datasets
+                    )[item["name"]]
+                )
+                match = _score_entity(
+                    _normalize_search_text(query),
+                    kind=entity_kind,
+                    name=entity.name,
+                    parent_dataset=item.get("dataset"),
+                    description=entity.description,
+                    synonyms=entity.synonyms,
+                )
+                if match:
+                    scored.append(
+                        (match.score, dict(item, match_reason=match.match_reason))
+                    )
+            items = [
+                item
+                for _, item in sorted(
+                    scored,
+                    key=lambda pair: (
+                        -pair[0],
+                        pair[1].get("dataset", ""),
+                        pair[1]["name"],
+                    ),
+                )
+            ]
+        elif query.strip():
+            terms = query.casefold().split()
+            items = [
+                item
+                for item in items
+                if any(t in _serialize(item).casefold() for t in terms)
+            ]
+        result = {
+            "items": [],
             "total": len(items),
             "offset": offset,
-            "next_offset": offset + limit if offset + limit < len(items) else None,
+            "next_offset": None,
+            "omissions": [],
         }
+        for index in range(offset, min(len(items), offset + limit)):
+            result["items"].append(items[index])
+            result["next_offset"] = index + 1 if index + 1 < len(items) else None
+            if len(_serialize(result)) > 6000:
+                result["items"].pop()
+                if not result["items"]:
+                    result["omissions"] = [
+                        "One definition exceeds the page budget; narrow the model definition before using it."
+                    ]
+                else:
+                    result["next_offset"] = index
+                break
+        return result
 
     browse_semantic_model.handle_tool_error = True
     return browse_semantic_model
@@ -104,11 +234,12 @@ def create_browse_semantic_tool(catalog, *, include_physical=False):
 def create_lookup_values_tool(
     catalog, source, backend, results, runs, *, require_approval=False
 ):
+    from sqlglot import exp
+
     from data_analytics_agent.agents.text_to_sql.tools import (
         _runtime_context,
         execute_query,
     )
-    from sqlglot import exp
 
     @tool
     def lookup_values(
@@ -119,7 +250,6 @@ def create_lookup_values_tool(
         Source-value discovery for data-bearing assignments only. Uses a
         bounded generated query, not arbitrary identifiers or user SQL.
         """
-        import json
 
         context = _runtime_context(runtime)
         if committed := runs.storage.committed(context.run_id, runtime.tool_call_id):

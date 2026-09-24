@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
+from functools import cached_property
 from hashlib import sha256
 from pathlib import Path
-import re
 from types import MappingProxyType
 from typing import Any, Literal
-import unicodedata
 
 import yaml
 
@@ -42,6 +43,7 @@ class SemanticField:
     is_time: bool = False
     data_type: str | None = None
     physical_data_type: str | None = None
+    examples: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,7 @@ class SemanticDataset:
     fields: Mapping[str, SemanticField]
     synonyms: tuple[str, ...] = ()
     instructions: str = ""
+    examples: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,7 @@ class SemanticMetric:
     synonyms: tuple[str, ...] = ()
     instructions: str = ""
     data_type: str | None = None
+    examples: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -73,6 +77,7 @@ class SemanticRelationship:
     from_columns: tuple[str, ...]
     to_columns: tuple[str, ...]
     instructions: str = ""
+    examples: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -98,6 +103,13 @@ class SemanticCatalog:
     relationships: tuple[SemanticRelationship, ...]
     adjacency: Mapping[str, tuple[SemanticRelationship, ...]]
     content_hash: str
+    dialect: str = "sqlite"
+
+    @cached_property
+    def bindings(self):
+        from data_analytics_agent.semantic_bindings import build_bindings
+
+        return build_bindings(self)
 
     @property
     def field_count(self) -> int:
@@ -109,6 +121,9 @@ class SemanticCatalog:
         *,
         entity_kinds: Iterable[EntityKind] | None = None,
         limit: int = 10,
+        dataset_name: str | None = None,
+        time_only: bool = False,
+        per_dataset_limit: int | None = None,
     ) -> tuple[SemanticMatch, ...]:
         normalized_query = _normalize_search_text(query)
         if not normalized_query:
@@ -134,7 +149,11 @@ class SemanticCatalog:
                     matches.append(match)
         if "field" in kinds:
             for dataset in self.datasets.values():
+                if dataset_name and dataset.name != dataset_name:
+                    continue
                 for field in dataset.fields.values():
+                    if time_only and not field.is_time:
+                        continue
                     match = _score_entity(
                         normalized_query,
                         kind="field",
@@ -169,6 +188,16 @@ class SemanticCatalog:
                 item.name,
             )
         )
+        if per_dataset_limit is not None:
+            counts, diverse = {}, []
+            for match in matches:
+                parent = match.parent_dataset
+                if parent and counts.get(parent, 0) >= per_dataset_limit:
+                    continue
+                if parent:
+                    counts[parent] = counts.get(parent, 0) + 1
+                diverse.append(match)
+            matches = diverse
         return tuple(matches[:limit])
 
     def adjacent_relationships(
@@ -245,6 +274,8 @@ def _ai_context(
     item: Mapping[str, Any],
 ) -> tuple[tuple[str, ...], str, tuple[str, ...]]:
     context = item.get("ai_context")
+    if isinstance(context, str):
+        return (), _compact_text(context), ()
     if not isinstance(context, dict):
         return (), "", ()
     synonyms = context.get("synonyms")
@@ -373,7 +404,7 @@ def load_semantic_catalog(
                     "ANSI_SQL expression."
                 )
                 continue
-            synonyms, instructions, _ = _ai_context(field_value)
+            synonyms, instructions, examples = _ai_context(field_value)
             dimension = field_value.get("dimension")
             data_type = field_value.get("data_type")
             fields[field_name] = SemanticField(
@@ -382,6 +413,7 @@ def load_semantic_catalog(
                 expression=expression,
                 synonyms=synonyms,
                 instructions=instructions,
+                examples=examples,
                 is_time=isinstance(dimension, dict)
                 and dimension.get("is_time") is True,
                 data_type=str(data_type) if data_type is not None else None,
@@ -395,7 +427,7 @@ def load_semantic_catalog(
             primary_key: tuple[str, ...] = ()
         else:
             primary_key = tuple(str(value) for value in primary_key_value)
-        synonyms, instructions, _ = _ai_context(dataset_value)
+        synonyms, instructions, examples = _ai_context(dataset_value)
         datasets[name] = SemanticDataset(
             name=name,
             source=source,
@@ -404,6 +436,7 @@ def load_semantic_catalog(
             fields=_mapping(fields),
             synonyms=synonyms,
             instructions=instructions,
+            examples=examples,
         )
 
     relationships: list[SemanticRelationship] = []
@@ -444,7 +477,7 @@ def load_semantic_catalog(
             ) <= set(datasets[str(to_name)].fields):
                 errors.append(f"Relationship {name!r} references an unknown field.")
                 continue
-            _, instructions, _ = _ai_context(value)
+            _, instructions, examples = _ai_context(value)
             relationships.append(
                 SemanticRelationship(
                     name=name,
@@ -453,6 +486,7 @@ def load_semantic_catalog(
                     from_columns=tuple(str(column) for column in from_columns),
                     to_columns=tuple(str(column) for column in to_columns),
                     instructions=instructions,
+                    examples=examples,
                 )
             )
 
@@ -480,7 +514,7 @@ def load_semantic_catalog(
                     f"Metric {name!r} has no {dialect} or ANSI_SQL expression."
                 )
                 continue
-            synonyms, instructions, _ = _ai_context(value)
+            synonyms, instructions, examples = _ai_context(value)
             data_type = value.get("data_type")
             metrics[name] = SemanticMetric(
                 name=name,
@@ -488,6 +522,7 @@ def load_semantic_catalog(
                 expression=expression,
                 synonyms=synonyms,
                 instructions=instructions,
+                examples=examples,
                 data_type=str(data_type) if data_type is not None else None,
             )
 
@@ -495,7 +530,7 @@ def load_semantic_catalog(
         sources = sorted({dataset.source for dataset in datasets.values()})
         try:
             inspected_tables = backend.get_table_schema(sources)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - backend-specific readiness diagnostics
             errors.append(f"Could not inspect live table schemas: {exc}")
         else:
             schema_by_name = {
@@ -558,7 +593,29 @@ def load_semantic_catalog(
             }
         ),
         content_hash=sha256(raw).hexdigest(),
+        dialect=dialect,
     )
+    try:
+        bindings = catalog.bindings
+        if backend is not None:
+            for dataset in catalog.datasets.values():
+                available = {
+                    c.name.casefold()
+                    for c in schema_by_name[dataset.source.casefold()].columns
+                }
+                missing = {
+                    c
+                    for c in bindings.columns[dataset.name]
+                    if c.casefold() not in available
+                }
+                if missing:
+                    raise ValueError(
+                        f"Dataset {dataset.name}: expressions reference missing physical columns {sorted(missing)}"
+                    )
+    except ValueError as exc:
+        return SemanticLoadResult(
+            None, SemanticDiagnostics(errors=(str(exc),), warnings=tuple(warnings))
+        )
     return SemanticLoadResult(
         catalog=catalog,
         diagnostics=SemanticDiagnostics(warnings=tuple(warnings)),
@@ -581,7 +638,14 @@ def render_semantic_overview(
         ),
         (
             "Instructions: "
-            + (catalog.instructions[:4_000] or "No global instructions provided.")
+            + (
+                (
+                    catalog.instructions
+                    if len(catalog.instructions) <= 4_000
+                    else "Global instructions exceed overview space; retrieve exact definitions before SQL."
+                )
+                or "No global instructions provided."
+            )
         ),
         (
             f"Counts: {len(catalog.datasets)} datasets, {catalog.field_count} "
@@ -671,7 +735,7 @@ def _score_entity(
     searchable.extend((value, _tokens(value)) for value in synonyms)
     full_matches = [item for item in searchable if query_tokens <= item[1]]
     if full_matches:
-        matched = sorted(full_matches, key=lambda item: (len(item[1]), item[0]))[0]
+        matched = min(full_matches, key=lambda item: (len(item[1]), item[0]))
         return SemanticMatch(
             kind,
             name,

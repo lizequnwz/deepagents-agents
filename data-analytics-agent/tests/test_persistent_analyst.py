@@ -1,38 +1,40 @@
-from decimal import Decimal
-import pyarrow as pa
-from types import SimpleNamespace
 import sqlite3
+from decimal import Decimal
+from types import SimpleNamespace
+
+import pyarrow as pa
 import pytest
 from fastapi.testclient import TestClient
-from data_analytics_agent.persistence import LocalStorage
-from data_analytics_agent.stores import (
-    ResultStore,
-    RunStore,
-    ConversationStore,
-    DataAnalysisStore,
-    ReportStore,
-)
+
 from data_analytics_agent.agents.data_analysis.runner import PythonExecutionLimits
 from data_analytics_agent.agents.data_analysis.tools import create_analysis_tools
 from data_analytics_agent.agents.text_to_sql.tools import (
-    create_query_saved_results_tool,
-    create_inspect_conversation_result_tool,
     create_execute_sql_tool,
-)
-from data_analytics_agent.visualization.tools import create_chart_tool
-from data_analytics_agent.visualization.schemas import ChartSpec
-from data_analytics_agent.reporting.tools import create_create_report_tool
-from data_analytics_agent.reporting.schemas import ReportSpec
-from data_analytics_agent.presentation import create_presentation_tools
-from data_analytics_agent.schemas import (
-    CoordinatorResponse,
-    RunStatus,
-    ApprovalRequest,
-    Decision,
+    create_inspect_conversation_result_tool,
+    create_query_saved_results_tool,
 )
 from data_analytics_agent.api import Services, create_app
-from data_analytics_agent.backends.sqlite import SQLiteBackend
 from data_analytics_agent.approvals import decisions_to_command
+from data_analytics_agent.backends.sqlite import SQLiteBackend
+from data_analytics_agent.persistence import LocalStorage
+from data_analytics_agent.presentation import create_presentation_tools
+from data_analytics_agent.reporting.schemas import ReportSpec
+from data_analytics_agent.reporting.tools import create_create_report_tool
+from data_analytics_agent.schemas import (
+    ApprovalRequest,
+    CoordinatorResponse,
+    Decision,
+    RunStatus,
+)
+from data_analytics_agent.stores import (
+    ConversationStore,
+    DataAnalysisStore,
+    ReportStore,
+    ResultStore,
+    RunStore,
+)
+from data_analytics_agent.visualization.schemas import ChartSpec
+from data_analytics_agent.visualization.tools import create_chart_tool
 
 
 @pytest.fixture
@@ -92,15 +94,47 @@ def test_large_typed_extraction_python_pagination_download_and_restart(
             "INSERT INTO facts VALUES (?, ?)", ((i, i / 100) for i in range(100000))
         )
     from dataclasses import replace
+
     from data_analytics_agent.data_sources import ExecutionLimits
 
     source = replace(
         test_settings.load_catalog().get("test"),
         limits=ExecutionLimits(30, 1000000, 10),
     )
-    tool = create_execute_sql_tool(source, SQLiteBackend(path), w.results, w.runs)
+    from data_analytics_agent.semantic import (
+        SemanticCatalog,
+        SemanticDataset,
+        SemanticField,
+    )
+
+    catalog = SemanticCatalog(
+        "0.1.1",
+        "facts",
+        "",
+        "",
+        (),
+        {
+            "facts": SemanticDataset(
+                "facts",
+                "facts",
+                "",
+                (),
+                {
+                    "n": SemanticField("n", "", "n"),
+                    "amount": SemanticField("amount", "", "amount"),
+                },
+            )
+        },
+        {},
+        (),
+        {"facts": ()},
+        "facts-test",
+    )
+    tool = create_execute_sql_tool(
+        source, SQLiteBackend(path), w.results, w.runs, catalog=catalog
+    )
     output = tool.func(
-        query="SELECT * FROM facts",
+        query="SELECT n, amount FROM facts",
         purpose="Complete population",
         runtime=w.runtime("source"),
     )
@@ -112,14 +146,14 @@ def test_large_typed_extraction_python_pagination_download_and_restart(
     )
     assert (
         tool.func(
-            query="SELECT * FROM facts",
+            query="SELECT n, amount FROM facts",
             purpose="Complete population",
             runtime=w.runtime("source"),
         )
         == output
     )
     assert len(w.results.list_for_conversation(w.thread, source_id="test")) == 1
-    execute, finish = create_analysis_tools(
+    execute, _finish = create_analysis_tools(
         w.results, w.runs, w.analyses, source_id="test", limits=PythonExecutionLimits()
     )
     step = execute.func(
