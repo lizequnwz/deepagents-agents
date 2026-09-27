@@ -11,6 +11,9 @@ Return to the [documentation index](../README.md) for current guides, or check
 
 | Date | Document | Scope |
 |---|---|---|
+| 27 September 2026 | [Roadmap 1–3 delivery and verification](roadmap-implementation-2026-09-27.md) | Correctness grading, repair reduction, exact title edits and evidence-bound comparisons |
+| 26 September 2026 | [Documentation live-test results and issues](documentation-live-tests-2026-09-26.md) | Exact documented questions, independent checks, application observations, and improvement priorities |
+| 26 September 2026 | [Agent discovery, contracts and voice review](agent-review-2026-09-26.md) | End-to-end review, implemented retrieval/schema simplifications, native dictation and verification |
 | 21 September 2026 | [Semantic discovery review](semantic-discovery-review-2026-09-21.md) | Reproduced semantic retrieval gaps, bounded context design, and prioritized engineering improvements |
 | 20 September 2026 | [Artifact handoff review](artifact-handoff-review-2026-09-20.md) | Confirmed chart-ID failure and records the fixes delivered on 21 September |
 | 20 September 2026 | [Live smoke tests and retry repairs](live-smoke-2026-09-20.md) | This application's configured-provider trials, browser checks, repairs, and follow-up verification |

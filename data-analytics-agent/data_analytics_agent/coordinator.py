@@ -32,6 +32,7 @@ from data_analytics_agent.semantic_tools import (
 )
 from data_analytics_agent.reporting.tools import (
     create_create_report_tool,
+    create_revise_report_title_tool,
     create_list_conversation_analyses_tool,
     create_inspect_conversation_analysis_tool,
 )
@@ -142,6 +143,14 @@ def build_agent(
     ]
     tools = [
         request_clarification,
+        create_revise_report_title_tool(
+            result_store,
+            analyses,
+            runs,
+            reports,
+            conversations,
+            source_id=source.source_id,
+        ),
         create_list_conversation_charts_tool(runs, source_id=source.source_id),
         create_list_conversation_results_tool(result_store, source_id=source.source_id),
         create_inspect_conversation_result_tool(
@@ -153,7 +162,12 @@ def build_agent(
             result_store, analyses, runs, conversations, source_id=source.source_id
         ),
         create_create_report_tool(
-            result_store, analyses, runs, reports, source_id=source.source_id
+            result_store,
+            analyses,
+            runs,
+            reports,
+            source_id=source.source_id,
+            semantic_catalog=semantic_catalog,
         ),
     ]
     if semantic_catalog is not None:

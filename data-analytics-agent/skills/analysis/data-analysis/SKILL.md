@@ -21,6 +21,23 @@ original evidence retains precision. Do not analyze capped source prefixes.
 Request additional source data with a complete requested_data brief through
 finish_analysis(needs_sql_reshape). The coordinator obtains SQL and reassigns you.
 
+## Reconcile the final evidence
+
+When refining a method, recompute derived columns (especially candidate flags)
+and save the updated table. Derive narrative counts with groupby/value_counts from
+that exact final table. Print only compact diagnostics, never full row dumps.
+A zero MAD does not mean every candidate flag is false. If the rule is undefined,
+save missing scores AND nullable Boolean flags (`pd.NA` with dtype `boolean`),
+not False; missing means unassessed, False means assessed and not flagged.
+If you select a justified fallback rule, persist its flags and explain the rule. Earlier outputs remain
+provenance, but identify which output is final. Check all counts sum to the
+population and screening flags match the claimed observations before finishing.
+
+Use only declared units. Neither dollar symbols nor currency codes can be inferred
+from a column called revenue. Observed first/last dates do not establish a source
+cutoff. Preserve all requested periods and state completeness is unknown unless
+an explicit source statement establishes it.
+
 ## Choose a defensible method
 
 - Exploration: study distributions, missingness, segments, relationships and
@@ -32,6 +49,9 @@ finish_analysis(needs_sql_reshape). The coordinator obtains SQL and reassigns yo
   training data, preferably with sklearn pipelines. Avoid causal claims.
 - Time series: inspect frequency, gaps, sample length, trends, seasonality and
   structural breaks. Use temporal holdouts or rolling-origin evaluation.
+  Choose candidates using training-only diagnostics, even when prior conversation
+  analysis examined the full history. Do not use those full-history findings to
+  exclude candidates or call the holdout an untouched assessment after tuning.
   Compare naive/seasonal-naive baselines. Validate at the requested horizon;
   include prediction intervals and distinguish them from parameter confidence
   intervals. Do not assume seasonality from the date column alone. Examine

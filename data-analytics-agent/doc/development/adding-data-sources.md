@@ -23,7 +23,7 @@ accepts:
 
 ```yaml
 version: 1
-default_source: chinook
+default_source: source_id
 
 backends:
   local_sqlite:
@@ -97,11 +97,7 @@ sources:
     dialect: sqlite
     target:
       path: db/inventory/inventory.sqlite
-    examples:
-      - label: Low inventory
-        question: Which five products have the lowest available inventory?
-      - label: Fulfillment time
-        question: Show average fulfillment time by month.
+    examples: []  # Add questions after validating your own source.
     limits:
       timeout_seconds: 15
       max_result_rows: 1000
@@ -177,16 +173,16 @@ A source is blocked when:
 - OSI file is absent;
 - OSI version or structure is invalid;
 - dataset table is missing;
-- a simple physical field expression references a missing column;
+- a physical column referenced by a field expression is missing;
 - primary keys or relationships reference unknown logical fields;
 - declared dialect does not match the backend.
 
 One broken source does not disable healthy sources. Errors and warnings are
 returned independently.
 
-Readiness validates simple identifier expressions against live metadata.
-Complex SQL expressions cannot be fully proven by this check; tests and
-curation remain necessary.
+Readiness checks referenced physical columns, including columns inside computed
+expressions, against live metadata. It does not prove business correctness or
+execute every expression; focused tests and curation remain necessary.
 
 ## Cloud sources
 
@@ -228,5 +224,5 @@ backend is intentionally unavailable. See the
 - Source summary is ready.
 - Sidebar name, description, examples, backend, and dialect are correct.
 - Selecting the source creates a source-bound conversation.
-- A representative query reaches SQL review and executes only after approval.
+- A representative query returns checked results; when SQL review is enabled, it pauses and executes the exact approved query.
 - Result ID, source ID, SQL, and downloaded CSV describe the same execution.

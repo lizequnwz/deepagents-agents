@@ -710,9 +710,8 @@ def test_answer_currency_is_literal_markdown_in_all_prose_fields():
     app = AppTest.from_string(r"""
 from data_analytics_agent.ui.components import render_answer
 render_answer(None, {
-    "answer": "**Revenue** was $138.60 versus $105.93; already escaped \\$81.59.",
+    "answer": "**Revenue** was $138.60 versus $105.93; already escaped \\$81.59. The gap is $32.67, above $30.",
     "assumptions": ["Use $10 and $20 as thresholds."],
-    "interpretation": "The gap is $32.67, above $30.",
 }, turn_key="currency", source_id="test")
 """).run()
     assert not app.exception
@@ -761,7 +760,7 @@ def test_assumptions_collapse_but_partial_and_analysis_warnings_stay_visible():
     app = AppTest.from_string("""
 from data_analytics_agent.ui.components import render_answer
 render_answer(None, {"answer":"Estimate", "assumptions":["Stable demand"],
-    "interpretation":"Uncertain", "partial":True,
+    "partial":True,
     "unresolved_questions":["Validate forecast"],
     "analyses":[{"warnings":["Only six observations"], "executions":[]}]},
     turn_key="test", source_id="test")
@@ -769,7 +768,7 @@ render_answer(None, {"answer":"Estimate", "assumptions":["Stable demand"],
     assert not app.exception
     assert (
         next(
-            e for e in app.expander if e.label == "Assumptions and interpretation"
+            e for e in app.expander if e.label == "Assumptions"
         ).proto.expanded
         is False
     )

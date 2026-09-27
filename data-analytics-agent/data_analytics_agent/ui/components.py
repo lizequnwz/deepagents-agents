@@ -1402,16 +1402,10 @@ def render_answer(client, answer, *, turn_key, source_id):
     }
 
     assumptions = answer.get("assumptions") or []
-    interpretation = answer.get("interpretation")
-    if assumptions or interpretation:
-        with st.expander("Assumptions and interpretation", expanded=False):
-            if assumptions:
-                st.markdown("**Assumptions**")
-                for assumption in assumptions:
-                    st.markdown(prose_markdown(f"- {assumption}"))
-            if interpretation:
-                st.markdown("**Interpretation**")
-                st.markdown(prose_markdown(interpretation))
+    if assumptions:
+        with st.expander("Assumptions", expanded=False):
+            for assumption in assumptions:
+                st.markdown(prose_markdown(f"- {assumption}"))
 
     if answer.get("partial"):
         st.warning("Partial findings — the investigation is unfinished.")
@@ -1452,6 +1446,23 @@ def render_answer(client, answer, *, turn_key, source_id):
 
     report = answer.get("report")
     if report:
+        with st.popover(
+            "Edit report title",
+            icon=":material/edit:",
+            key=f"report_title_{turn_key}_{report['report_id']}",
+        ):
+            with st.form(f"report_title_form_{turn_key}_{report['report_id']}"):
+                title = st.text_input(
+                    "Report title", value=report["title"], max_chars=200
+                )
+                save = st.form_submit_button("Save title")
+            if save:
+                try:
+                    client.edit_report_title(turn_key, report["report_id"], title)
+                except APIError as exc:
+                    st.error(str(exc))
+                else:
+                    st.rerun()
         _render_report(
             client,
             report,
@@ -1466,7 +1477,7 @@ def render_answer(client, answer, *, turn_key, source_id):
             continue
         shown_result_ids.add(result_id)
         evidence_index += 1
-        label = str(reference.get("short_label") or "Saved dataset")
+        label = str(reference.get("short_label") or "Saved dataset").strip()
         st.markdown(f"**Evidence {evidence_index} · {label}**")
         if result_id == answer.get("primary_result_id"):
             st.badge(

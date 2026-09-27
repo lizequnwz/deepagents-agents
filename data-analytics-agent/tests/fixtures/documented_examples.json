@@ -1,0 +1,63 @@
+[
+  {
+    "id": "01-revenue",
+    "source": "chinook",
+    "conversation": "revenue",
+    "question": "Investigate how invoice revenue changed across the calendar years represented in this source. Show a plan. First save a complete monthly series with invoice revenue, invoice count and average invoice value. Identify the largest absolute year-over-year revenue change, showing both its amount and percentage. For those two years, quantify the contribution of each billing country to the change and reconcile the country contributions to the overall change. Discuss whether invoice volume or average invoice value moved with revenue, without claiming causation. Keep all countries in the calculation. State whether source completeness is known; do not drop a year merely because its last transaction precedes year-end. Produce a compact report with useful charts and limitations."
+  },
+  {
+    "id": "02-trend",
+    "source": "chinook",
+    "conversation": "revenue",
+    "question": "Reuse the complete saved monthly invoice series. Show a plan and run two independent saved-data analyses in parallel: one assessing trend and possible seasonality, and one identifying unusual months after accounting for trend. Each analysis should explain its method, uncertainty or screening threshold, and limitations. Preserve every requested month and distinguish missing months from confirmed zero-activity months. Synthesize where the analyses agree or disagree, and produce a report with the original series and useful diagnostics. Do not treat an unusual value as a confirmed data error or a causal explanation."
+  },
+  {
+    "id": "03-forecast",
+    "source": "chinook",
+    "conversation": "revenue",
+    "question": "Using the saved monthly invoice revenue, assess whether a six-month forecast is defensible. If the history is sufficient, reserve the last six observations as a chronological holdout and compare a simple baseline with one reasonable alternative. Use a seasonal-naive baseline only if there is enough seasonal history; otherwise explain the baseline you choose. Report MAE on the same holdout, avoid leakage, and do not select a method solely on training fit. Then refit the chosen approach on the full history and forecast the next six months with clearly labeled prediction intervals and their assumptions. Show actuals, the forecast boundary and forecast values. If a meaningful forecast or interval cannot be supported, explain why instead of inventing one. Include the comparison, limitations and report."
+  },
+  {
+    "id": "04-concentration",
+    "source": "chinook",
+    "conversation": "04-concentration",
+    "question": "Analyze sales concentration across all recorded invoice lines, first by artist and then by genre. Use line-item price times quantity as revenue. Calculate each group's revenue share, the top-five and top-ten cumulative shares where enough groups exist, and HHI on a declared scale. Use the complete populations for every denominator. Show a cumulative-share chart and a compact report. Explain how artist-level and genre-level concentration differ; an artist may have tracks in several genres. Reconcile aggregate line-item revenue to invoice-header revenue without duplicating invoice totals; report any mismatch rather than assuming equality. Do not use playlist membership as evidence of purchases."
+  },
+  {
+    "id": "05-metadata",
+    "source": "chinook",
+    "conversation": "clarify",
+    "question": "Without querying transaction values, explain which measures could help assess sales performance and what business definitions you would need from me."
+  },
+  {
+    "id": "06-clarification",
+    "source": "chinook",
+    "conversation": "clarify",
+    "question": "Are we doing better? Ask me to define the metric and comparison period before calculating anything.",
+    "clarification": "Compare total invoice revenue in calendar 2025 with calendar 2024 across all billing countries. Use the full requested periods and the source's declared monetary units. Report the absolute and percentage change, with a country breakdown and a compact report. If source completeness is unknown, say so."
+  },
+  {
+    "id": "07-upload",
+    "source": "upload",
+    "conversation": "07-upload",
+    "question": "Analyze all 24 complete monthly observations. month_index orders months 1\u201324; revenue_units is an index, not currency. Show a plan. Run two independent saved-data analyses in parallel: assess monotonic trend using Spearman correlation, and investigate unusual values using a Theil\u2013Sen trend with residual-based screening. Explain tied values, any degenerate residual scale, and the limitations of inference from a short time series. Keep all rows, synthesize both findings, and create a compact report with a line chart."
+  },
+  {
+    "id": "08-cash-flow",
+    "source": "financial",
+    "conversation": "08-cash-flow",
+    "question": "Investigate monthly cash flow during calendar 1998. Show a plan. Retrieve a complete monthly series of inflow, outflow magnitude, net cash flow and transaction count using the catalog's transaction-type definitions. Reconcile net cash flow to inflow minus outflow. Then use Python to screen for unusual months in net flow and explain the method's limitations with only 12 monthly observations. For the strongest candidate, ask SQL for a breakdown by operation and account branch district, and compare it with the preceding month when that month falls within 1998. Preserve the original monthly scope and distinguish descriptive contributors from causes. Report in the database's monetary unit."
+  },
+  {
+    "id": "09-loans",
+    "source": "financial",
+    "conversation": "09-loans",
+    "question": "Describe the recorded loan portfolio by the account's branch district and loan repayment status. Show a plan. Report distinct loan counts, approved principal, and count-based versus principal-based status shares. Keep completed contracts separate from active contracts and explain status codes A, B, C and D using the semantic catalog. Show both the largest portfolios and districts with unusual status composition, including their denominators so tiny portfolios are clear. Check that any joins to account relationships do not duplicate loans. Use the database's monetary unit. Produce an aggregate report; do not describe these recorded statuses as future default probabilities or recommend individual lending decisions."
+  },
+  {
+    "id": "10-report-revision",
+    "source": "chinook",
+    "conversation": "revenue",
+    "question": "Keep the findings, saved analyses and existing chart unchanged. Revise only the report title to \u201cInvestigation review\u201d. Reuse the saved evidence; do not rerun SQL or Python."
+  }
+]

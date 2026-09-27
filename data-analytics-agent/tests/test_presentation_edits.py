@@ -284,3 +284,120 @@ def test_downsampled_chart_cannot_be_reinterpreted_as_another_type(presented):
         edit_chart_presentation(w.services, w.run, w.edit).charts[0].result_id
         == w.dataset.result_id
     )
+
+
+def test_title_only_edit_preserves_every_other_field_and_restart(presented):
+    from data_analytics_agent.presentation_edits import (
+        ReportTitleEdit,
+        edit_report_title,
+    )
+
+    w = presented
+    before = w.storage.load("datasets", dict)
+    revised = edit_report_title(
+        w.services,
+        w.run,
+        ReportTitleEdit(report_id=w.report.report_id, title="Investigation review"),
+    )
+    artifact = w.reports.get(revised.report.report_id, w.thread)
+    assert artifact.spec.model_dump(
+        exclude={"title", "previous_report_id"}
+    ) == w.report.spec.model_dump(exclude={"title", "previous_report_id"})
+    assert revised.model_dump(exclude={"report"}) == w.answer.model_dump(
+        exclude={"report"}
+    )
+    assert artifact.previous_report_id == w.report.report_id
+    assert RunStore(w.storage).get(w.run).answer == revised
+    assert w.storage.load("datasets", dict) == before
+    with pytest.raises(PresentationConflict):
+        edit_report_title(
+            w.services,
+            w.run,
+            ReportTitleEdit(report_id=w.report.report_id, title="Stale"),
+        )
+
+
+def test_conversational_title_tool_reuses_authoritative_answer(presented):
+    from data_analytics_agent.reporting.tools import create_revise_report_title_tool
+
+    w = presented
+    run = w.runs.create(w.thread, "test", "Change only title")
+    w.conversations.begin_run(w.thread, run)
+    runtime = w.runtime("rename")
+    runtime.state = {**runtime.state, "run_id": run}
+    tool = create_revise_report_title_tool(
+        w.results, w.analyses, w.runs, w.reports, w.conversations, source_id="test"
+    )
+    result = tool.func(title="Investigation review", runtime=runtime)
+    assert result["ok"], result
+    findings = w.runs.get(run).findings
+    assert findings.model_dump(exclude={"report"}) == w.answer.model_dump(
+        exclude={"report"}
+    )
+    artifact = w.reports.get(result["report"]["report_id"], w.thread)
+    assert artifact.spec.model_dump(
+        exclude={"title", "previous_report_id"}
+    ) == w.report.spec.model_dump(exclude={"title", "previous_report_id"})
+    assert tool.func(title="Investigation review", runtime=runtime) == result
+
+
+def test_report_title_api_needs_no_model_or_source(
+    presented, test_settings, monkeypatch
+):
+    w = presented
+    services = Services(settings=test_settings, storage=w.storage)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("No source or model calls for title edits")
+
+    monkeypatch.setattr(services, "agent_for_source", forbidden)
+    monkeypatch.setattr(services, "backend_for_source", forbidden)
+    with TestClient(create_app(services)) as api:
+        response = api.post(
+            f"/api/runs/{w.run}/report-title",
+            json={"report_id": w.report.report_id, "title": "Just the title"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["answer"] == w.answer.answer
+        assert response.json()["report"]["title"] == "Just the title"
+
+
+def test_title_control_edits_only_title(presented, test_settings, monkeypatch):
+    w = presented
+    services = Services(settings=test_settings, storage=w.storage)
+    with TestClient(create_app(services)) as api:
+
+        def request(self, method, path, **kwargs):
+            kwargs.pop("timeout", None)
+            response = api.request(method, path, **kwargs)
+            if response.status_code >= 400:
+                raise APIError(
+                    str(response.json().get("detail")), status_code=response.status_code
+                )
+            return response.json()
+
+        monkeypatch.setattr(AgentAPIClient, "request", request)
+
+        def app_code(run_id):
+            from data_analytics_agent.ui.components import render_answer
+            from data_analytics_agent.ui.api_client import AgentAPIClient
+
+            client = AgentAPIClient("http://title-control-test")
+            render_answer(
+                client,
+                client.get_run(run_id)["answer"],
+                turn_key=run_id,
+                source_id="test",
+            )
+
+        app = AppTest.from_function(app_code, args=(w.run,)).run(timeout=15)
+        next(t for t in app.text_input if t.label == "Report title").set_value(
+            "Just this title"
+        )
+        next(b for b in app.button if b.label == "Save title").click().run(timeout=15)
+        assert not app.exception and not app.error
+        revised = services.runs.get(w.run).answer
+        assert revised.report.title == "Just this title"
+        assert revised.model_dump(exclude={"report"}) == w.answer.model_dump(
+            exclude={"report"}
+        )

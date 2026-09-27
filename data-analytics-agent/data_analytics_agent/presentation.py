@@ -17,14 +17,12 @@ def resolve_answer(response, *, thread_id, source_id, results, analyses, runs):
         analyses=analyses,
         runs=runs,
     )
-    for key in response.supporting_result_ids:
+    for key in response.result_ids:
         evidence.result(key)
-    if response.primary_result_id:
-        evidence.result(response.primary_result_id)
     analytical = [evidence.analysis(key) for key in response.analysis_ids]
     charts = [evidence.chart(key) for key in response.chart_ids]
     selected = evidence.results
-    primary = response.primary_result_id or next(iter(selected), None)
+    primary = next(iter(selected), None)
     ordered = ([primary] if primary else []) + [
         key for key in selected if key != primary
     ]
@@ -43,7 +41,6 @@ def resolve_answer(response, *, thread_id, source_id, results, analyses, runs):
         analyses=analytical,
         charts=charts,
         assumptions=response.assumptions,
-        interpretation=response.interpretation,
         partial=response.partial,
         unresolved_questions=response.unresolved_questions,
     )

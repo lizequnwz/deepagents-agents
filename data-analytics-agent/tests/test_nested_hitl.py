@@ -135,7 +135,6 @@ class ScriptedChatModel(BaseChatModel):
                         "args": {
                             "answer": "The reviewed query executed.",
                             "assumptions": [],
-                            "interpretation": "One result was returned.",
                         },
                         "id": "valid-completion",
                     }

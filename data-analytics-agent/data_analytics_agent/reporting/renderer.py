@@ -37,7 +37,7 @@ from data_analytics_agent.schemas import SavedResult
 
 _SCRIPT_PATTERN = re.compile(r"<script(?:\s[^>]*)?>(.*?)</script>", re.DOTALL)
 _INLINE_PATTERN = re.compile(r"\*\*(.+?)\*\*|`([^`]+)`")
-REPORT_RENDERER_VERSION = "1.6"
+REPORT_RENDERER_VERSION = "1.7"
 
 # Report-owned semantic chart tokens. Every categorical color maintains at
 # least 3:1 contrast against both the light and dark report surfaces.
@@ -149,11 +149,22 @@ def _table_html(
     caption: str | None,
     columns: Sequence[str],
     rows: Sequence[dict[str, Any]],
+    column_formats: Mapping[str, str] | None = None,
 ) -> str:
+    column_formats = column_formats or {}
+    if set(column_formats) - set(columns):
+        raise ValueError("Table formats reference a column not displayed in the table.")
+
+    def display(row, column):
+        value = row.get(column)
+        if column in column_formats and value is not None:
+            return format(value, column_formats[column])
+        return _value(value)
+
     header = "".join(f'<th scope="col">{escape(column)}</th>' for column in columns)
     body = "".join(
         "<tr>"
-        + "".join(f"<td>{escape(_value(row.get(column)))}</td>" for column in columns)
+        + "".join(f"<td>{escape(display(row, column))}</td>" for column in columns)
         + "</tr>"
         for row in rows
     )
@@ -182,17 +193,77 @@ def _narrative(block: ReportNarrativeBlock) -> str:
     )
 
 
+def _comparison_html(metric, result):
+    if metric.comparison is None:
+        return ""
+    from data_analytics_agent.reporting.comparisons import resolve_comparison
+
+    evidence = resolve_comparison(metric, result)
+    pct = evidence["percentage_change"]
+    percent_text = "undefined (zero baseline)" if pct is None else f"{pct:+.2f}%"
+    delta = format(evidence["delta"], "+,.2f")
+    unit = evidence["units"]
+    delta_unit = "percentage points" if unit == "percent" else unit
+    explanation = [
+        ("Measure", evidence["metric_ref"]),
+        ("Population", evidence["population"]),
+        (f"Current ({evidence['current_period']})", str(evidence["current"])),
+        (f"Baseline ({evidence['baseline_period']})", str(evidence["baseline"])),
+        ("Units", unit),
+        (
+            "Calculation",
+            "Current minus baseline; percentage change divides by the absolute baseline. A zero baseline has no percentage change.",
+        ),
+        (
+            "Checks",
+            "Saved row keys are unique, period labels and dimension keys match, and baseline plus change equals current.",
+        ),
+        (
+            "Metric binding",
+            "Verified canonical output column"
+            if evidence["metric_binding_verified"]
+            else "Not verified through derived-data lineage; review the measure definition and saved calculation.",
+        ),
+        (
+            "Completeness",
+            "Source completeness is unknown. Observed transaction dates do not prove complete periods.",
+        ),
+        (
+            "Evidence",
+            f"{evidence['result_id']}, column {evidence['column']}, rows {evidence['current_row_index']} and {evidence['baseline_row_index']}",
+        ),
+    ]
+    if evidence["denominators"]:
+        explanation.append(
+            (
+                "Denominators (current / baseline)",
+                " / ".join(map(str, evidence["denominators"])),
+            )
+        )
+        explanation.append(
+            (
+                "Rate check",
+                "Both saved rates reconcile to their saved numerator and denominator.",
+            )
+        )
+    detail = "".join(
+        f"<dt>{escape(label)}</dt><dd>{escape(value)}</dd>"
+        for label, value in explanation
+    )
+    return (
+        f'<p class="metric-change">{escape(delta)} {escape(delta_unit)} ({escape(percent_text)})</p>'
+        "<details><summary>How calculated?</summary><dl>" + detail + "</dl>"
+        "<p>These saved-data checks do not independently prove source join correctness or the stated population.</p></details>"
+    )
+
+
 def _metrics(block: ReportMetricsBlock, results) -> str:
     title = f"<h2>{escape(block.title)}</h2>" if block.title else ""
     items = "".join(
         '<article class="metric-card">'
         f'<p class="metric-label">{escape(metric.label)}</p>'
         f'<p class="metric-value">{escape(metric.prefix + format(results[metric.result_id].read_rows(1, metric.row_index)[0][metric.column], metric.number_format) + metric.suffix)}</p>'
-        + (
-            f'<p class="metric-change">{escape(metric.change)}</p>'
-            if metric.change
-            else ""
-        )
+        + _comparison_html(metric, results[metric.result_id])
         + (
             f'<p class="metric-context">{escape(metric.context)}</p>'
             if metric.context
@@ -293,7 +364,6 @@ def _statistical(
                     f"<h3>{name}</h3>{_rich_text(str(output.get('text') or ''))}"
                 )
     assumptions = analysis.assumptions
-    interpretation = analysis.interpretation
     method = analysis.method
     details: list[str] = []
     if method:
@@ -304,8 +374,6 @@ def _statistical(
             + "".join(f"<li>{_inline_text(item)}</li>" for item in assumptions)
             + "</ul>"
         )
-    if interpretation:
-        details.append(f"<h3>Interpretation</h3>{_rich_text(interpretation)}")
     warning_items = list(dict.fromkeys(analysis.warnings))
     warnings = (
         '<aside class="analysis-warnings"><h3>'
@@ -640,6 +708,7 @@ def render_report(
                     caption=block.caption,
                     columns=columns,
                     rows=rows,
+                    column_formats=block.column_formats,
                 )
             )
         elif isinstance(block, ReportChartBlock):

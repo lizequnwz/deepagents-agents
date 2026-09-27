@@ -117,7 +117,7 @@ class ParallelAnalyst(AnalystModel):
                 ids = [json.loads(m.content)["analysis_id"] for m in tasks]
                 findings = {
                     "answer": "Independent analyses finished.",
-                    "primary_result_id": self.dataset,
+                    "result_ids": [self.dataset],
                     "analysis_ids": ids,
                 }
                 if not any(m.name == "publish_findings" for m in tools):

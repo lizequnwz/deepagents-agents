@@ -14,7 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 13
+API_CONTRACT_VERSION = 15
 
 
 class StrictModel(BaseModel):
@@ -106,7 +106,6 @@ class SQLAnalysisResponse(StrictModel):
 
     answer: str
     assumptions: list[str] = Field(default_factory=list)
-    interpretation: str = ""
 
 
 class CoordinatorResponse(StrictModel):
@@ -117,10 +116,11 @@ class CoordinatorResponse(StrictModel):
     partial: bool = False
     unresolved_questions: list[str] = Field(default_factory=list)
     answer: str
-    primary_result_id: str | None = None
-    supporting_result_ids: list[str] = Field(default_factory=list)
+    result_ids: list[str] = Field(
+        default_factory=list,
+        description="Ordered material datasets; the first is primary. Chart/analysis inputs and lineage are attached automatically.",
+    )
     assumptions: list[str] = Field(default_factory=list)
-    interpretation: str = ""
 
 
 class ResultReference(StrictModel):
@@ -137,7 +137,6 @@ class FinalAnswer(StrictModel):
     primary_result_id: str | None = None
     results: list[ResultReference] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
-    interpretation: str = ""
     charts: list[ChartSpec] = Field(default_factory=list)
     analyses: list[DataAnalysisResult] = Field(default_factory=list)
     partial: bool = False
@@ -177,6 +176,7 @@ class SavedResult(StrictModel):
     result_id: str
     thread_id: str
     source_id: str
+    metric_columns: dict[str, str] = Field(default_factory=dict)
     executed_sql: str
     originating_question: str
     short_label: str

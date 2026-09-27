@@ -23,11 +23,16 @@ import pyarrow.parquet as pq
 from data_analytics_agent.coordinator import build_agent
 from data_analytics_agent.backends import SQLBackend, create_backend
 from data_analytics_agent.config import Settings
+from data_analytics_agent.transcription import (
+    MAX_AUDIO_BYTES,
+    TranscriptionResponse,
+    transcribe_audio,
+)
 from data_analytics_agent.data_sources import DataSource, DataSourceCatalog
 from data_analytics_agent.logging_config import configure_api_logging
 from data_analytics_agent.run_manager import RunManager
 from data_analytics_agent.approvals import decisions_to_command
-from data_analytics_agent.reporting.schemas import ReportResponse
+from data_analytics_agent.reporting.schemas import ReportResponse, ReportSpec
 from data_analytics_agent.uploads import (
     UploadReview,
     UploadSource,
@@ -39,6 +44,8 @@ from data_analytics_agent.uploads import (
 )
 from data_analytics_agent.presentation_edits import (
     ChartPresentationEdit,
+    ReportTitleEdit,
+    edit_report_title,
     PresentationConflict,
     PresentationRenderError,
     edit_chart_presentation,
@@ -384,6 +391,19 @@ def create_app(services: Services | None = None) -> FastAPI:
             data_analysis_enabled=(container.settings.enable_data_analysis),
             reporting_enabled=True,
             errors=errors,
+        )
+
+    @app.post("/api/transcriptions", response_model=TranscriptionResponse)
+    async def transcribe(request: Request):
+        content = bytearray()
+        async for chunk in request.stream():
+            if len(content) + len(chunk) > MAX_AUDIO_BYTES:
+                raise HTTPException(
+                    413, "Recording is too large. Record a shorter question."
+                )
+            content.extend(chunk)
+        return await transcribe_audio(
+            bytes(content), container.settings.transcription_model
         )
 
     @app.get("/api/data-sources", response_model=DataSourcesResponse)
@@ -838,6 +858,10 @@ def create_app(services: Services | None = None) -> FastAPI:
     async def get_report(report_id: str) -> ReportResponse:
         return container.reports.response_unscoped(report_id)
 
+    @app.get("/api/reports/{report_id}/spec", response_model=ReportSpec)
+    async def get_report_spec(report_id: str) -> ReportSpec:
+        return container.reports.get_unscoped(report_id).spec
+
     @app.post("/api/runs/{run_id}/presentation", response_model=FinalAnswer)
     async def edit_presentation(
         run_id: str, request: ChartPresentationEdit
@@ -847,6 +871,20 @@ def create_app(services: Services | None = None) -> FastAPI:
         try:
             with container._lock:
                 return edit_chart_presentation(container, run_id, request)
+        except PresentationConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except PresentationRenderError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/api/runs/{run_id}/report-title", response_model=FinalAnswer)
+    async def update_report_title(run_id: str, request: ReportTitleEdit) -> FinalAnswer:
+        run = container.runs.get(run_id)
+        ensure_not_deleting(run.thread_id)
+        try:
+            with container._lock:
+                return edit_report_title(container, run_id, request)
         except PresentationConflict as exc:
             raise HTTPException(409, str(exc)) from exc
         except PresentationRenderError as exc:

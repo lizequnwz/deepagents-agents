@@ -7,7 +7,7 @@ from pydantic_core import to_json
 from langchain.tools import tool, ToolRuntime
 from data_analytics_agent.schemas import ChartDataPreparation
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
-from data_analytics_agent.visualization.schemas import ChartSpec, ChartType
+from data_analytics_agent.visualization.schemas import ChartRequest, ChartSpec, ChartType
 from data_analytics_agent.visualization.validation import (
     validate_chart_spec,
     chart_columns,
@@ -19,7 +19,7 @@ MAX_CHART_BYTES = 4 * 1024 * 1024
 
 def create_chart_tool(results, runs, *, source_id):
     @tool
-    def create_chart(spec: ChartSpec, runtime: ToolRuntime) -> dict:
+    def create_chart(spec: ChartRequest, runtime: ToolRuntime) -> dict:
         """Validate and save one shared chart; returns chart_id for chat and reports.
 
         Use saved source or Python-derived datasets. Revise by previous_chart_id.
@@ -47,8 +47,9 @@ def create_chart_tool(results, runs, *, source_id):
                 ):
                     raise ValueError("Previous chart is not in this conversation.")
                 version = previous["spec"]["version"] + 1
-            spec = spec.model_copy(
-                update={
+            spec = ChartSpec.model_validate(
+                {
+                    **spec.model_dump(),
                     "chart_id": str(uuid4()),
                     "result_id": source.result_id,
                     "version": version,

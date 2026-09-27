@@ -181,3 +181,73 @@ def edit_chart_presentation(services, run_id: str, edit: ChartPresentationEdit):
         dict,
     )
     return revised_answer
+
+
+class ReportTitleEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    report_id: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=200)
+
+
+def revise_report_title(report, title, *, results, analyses, runs, reports):
+    """Render a title-only revision from the exact stored specification."""
+    spec = ReportSpec.model_validate(
+        {
+            **report.spec.model_dump(),
+            "title": title,
+            "previous_report_id": report.report_id,
+        }
+    )
+    return generate_report(
+        spec,
+        thread_id=report.thread_id,
+        source_id=report.source_id,
+        result_store=results,
+        analysis_store=analyses,
+        run_store=runs,
+        report_store=reports,
+    )
+
+
+def edit_report_title(services, run_id: str, edit: ReportTitleEdit):
+    run = services.runs.get(run_id)
+    conversation = services.conversations.get(run.thread_id)
+    if conversation.active_run_id or run.status != RunStatus.COMPLETED:
+        raise PresentationConflict(
+            "Finish or stop active work before editing a completed result."
+        )
+    answer = run.answer
+    if not answer or not answer.report or answer.report.report_id != edit.report_id:
+        raise PresentationConflict(
+            "This report has changed. Reload the result before editing."
+        )
+    if edit.title == answer.report.title:
+        return answer
+    report = services.reports.get(
+        edit.report_id, run.thread_id, source_id=run.source_id
+    )
+    try:
+        revised = revise_report_title(
+            report,
+            edit.title,
+            results=services.results,
+            analyses=services.analyses,
+            runs=services.runs,
+            reports=services.reports,
+        )
+    except (ValueError, KeyError, IndexError, OSError) as exc:
+        raise PresentationRenderError(
+            "The revised report could not be rendered. Your previous report is still displayed; retry the edit."
+        ) from exc
+    revised_answer = answer.model_copy(update={"report": revised.reference()})
+    services.storage.put(
+        "presentation_views",
+        run_id,
+        {
+            "thread_id": run.thread_id,
+            "source_id": run.source_id,
+            "answer": revised_answer.model_dump(mode="json"),
+        },
+        dict,
+    )
+    return revised_answer

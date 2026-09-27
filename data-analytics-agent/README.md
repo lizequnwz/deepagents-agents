@@ -33,6 +33,10 @@ saved-data follow-ups, a sample upload, and run-control checks.
   report** describes the current work. Descriptive questions may skip Python.
 - Findings appear before report rendering. Every data-backed answer finishes
   with a downloadable HTML report. Metadata-only discussion needs no report.
+- Click the microphone beside the question box, allow microphone access, speak,
+  and stop recording. The transcription fills the box for review/editing; press
+  Send when ready. Voice uses `OPENAI_API_KEY` and `TRANSCRIPTION_MODEL`
+  (default `whisper-1`), including when the analytics model uses Bedrock.
 - Ask follow-ups to refine charts or extend an investigation. Saved results are
   snapshots; ask for fresh/current data to execute source SQL again.
 - Use **Edit chart** to change a title, axis label, colors, or compatible chart

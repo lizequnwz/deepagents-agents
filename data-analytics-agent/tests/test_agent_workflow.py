@@ -68,8 +68,7 @@ class AnalystModel(BaseChatModel):
                 result = match.group()
                 findings = {
                     "answer": "There are no artists in the test table.",
-                    "primary_result_id": result,
-                    "supporting_result_ids": [result],
+                    "result_ids": [result],
                 }
                 if not any(m.name == "publish_findings" for m in tools):
                     message = call(

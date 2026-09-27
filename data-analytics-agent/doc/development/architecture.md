@@ -4,6 +4,10 @@
 flowchart TD
     UI[Streamlit chat and saved conversations] --> API[FastAPI lifecycle and artifact API]
     API --> C[Deep Agents coordinator]
+    UI --> Voice[Native WAV recorder]
+    Voice --> STT[Transcription API / LangChain Whisper runnable]
+    STT --> Draft[Editable question draft]
+    Draft --> UI
     API --> Edit[Validated presentation edits over saved evidence]
     C --> S[Text-to-SQL specialist]
     C --> P[Data-analysis specialist]
@@ -177,7 +181,7 @@ coordinator owns its context fields, so subagents cannot write conflicting copie
 back when they finish together. `AssignmentMiddleware` creates a private,
 checkpointed assignment ID in each SQL or Python branch. Tool commit keys include
 it. Each branch persists its own application-owned receipt in the existing run
-record. SQL's structured response contains interpretation only; code attaches the
+record. SQL's structured response contains answer and assumptions only; code attaches the
 saved datasets, including inspected/reused snapshots and multiple query results.
 Python's finish tool automatically attaches its own executions and inputs, saves
 a compact receipt, and returns that receipt through graph state without a final
@@ -198,3 +202,52 @@ The composer uses native `st.chat_input` attachments. An attachment creates a ne
 isolated file conversation; an optional question waits in UI session state until
 schema confirmation, then is consumed once. Reloading the confirmed conversation
 does not replay the question. The sidebar upload entry was removed.
+
+## Model-authored choices and application-owned responses
+
+`SQLAnalysisResponse` contains `answer` and `assumptions`. `CoordinatorResponse`
+contains `answer`, `assumptions`, ordered `result_ids`, `analysis_ids`, `chart_ids`,
+`partial`, and `unresolved_questions`. Interpretation belongs in `answer` rather
+than a duplicate narrative field. Evidence resolution derives the primary dataset
+from the ordered selection and attaches transitive lineage, exact SQL, stored
+analysis executions, charts, and the report. Selection remains model-authored:
+not every retrieved diagnostic dataset belongs in the published answer.
+
+`ChartRequest` contains chart choices and `previous_chart_id` for revisions.
+`ChartSpec` adds application-owned `chart_id`, `source_result_id`, and `version`.
+Run state, diagnostics, approval details, execution profiles, and persistence
+records are internal/application contracts, not model-generated final responses.
+The obsolete, unused `ReportBrief` contract has been removed.
+
+API contract 15 also replaces free-text metric changes with saved-evidence
+comparisons, following removal of duplicate narrative and primary/supporting selections. Both processes must run the same version. There is
+no old-record migration or compatibility reader; use a separate storage directory
+for a new-contract workspace when retaining old history. Existing storage is not
+deleted or modified by this code change.
+
+## Voice input
+
+Native Streamlit recording sends WAV bytes to `POST /api/transcriptions`. The
+LangChain async runnable in `transcription.py` calls the provider audio endpoint,
+returning only text. The UI inserts that text into the composer for review and
+explicit submission. This path creates no analytics run and does not add audio
+files to application storage. See [configuration](configuration.md#voice-dictation).
+
+## Exact presentation revisions and KPI comparisons
+
+`POST /api/runs/{run_id}/report-title` takes `report_id` and `title`. The current
+report ID guards stale edits. The application copies its saved specification,
+updates only the title/revision link, renders, then commits the presentation view.
+It preserves the previous view on failure and survives restart. No model, SQL, or
+Python execution is required. Conversational `revise_report_title` shares this
+renderer and reuses published findings. `GET /api/reports/{report_id}/spec` exposes
+the stored specification for auditing.
+
+`ReportMetric.comparison` binds two rows of one complete saved aggregate. The
+renderer calculates changes and reconciles periods, unique keys, dimension values,
+unit labels, and optional rate numerators/denominators. SQL grounding stores exact
+canonical output-column bindings in `SavedResult.metric_columns`; transparent CTE
+projections retain them, arbitrary transformations do not assert them. The report
+explicitly distinguishes verified from unverified metric binding. These checks
+cannot prove source joins or a model-authored population description. Completeness
+is currently always unknown. See the [report specification](../../skills/reporting/report-design/references/report-spec.md).

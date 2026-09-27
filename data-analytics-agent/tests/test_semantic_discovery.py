@@ -348,3 +348,94 @@ def test_large_catalog_question_resolves_outside_overview(test_settings):
     result = context(catalog, physical=True, metric_names=["artist_count"])
     assert result["definitions_complete"]
     assert any(d["source"] == "Artist" for d in result["datasets"])
+
+
+def test_large_catalog_field_search_ignores_parent_description_and_matches_browse():
+    from dataclasses import replace
+    from data_analytics_agent.semantic import SemanticDataset, SemanticField
+    from data_analytics_agent.semantic_tools import create_browse_semantic_tool
+
+    datasets = {
+        f"dataset_{i:03}": SemanticDataset(
+            f"dataset_{i:03}",
+            f"Table{i}",
+            "Payments including chargebacks and customer activity",
+            (),
+            {
+                f"field_{j:03}": SemanticField(
+                    f"field_{j:03}", "Ordinary attribute", f"Column{j}"
+                )
+                for j in range(40)
+            },
+        )
+        for i in range(300)
+    }
+    target = datasets["dataset_299"]
+    datasets[target.name] = replace(
+        target,
+        fields={
+            **target.fields,
+            "dispute_amount": SemanticField(
+                "dispute_amount", "Value of chargebacks", "DisputeAmount"
+            ),
+        },
+    )
+    catalog = replace(
+        _chinook_catalog(),
+        datasets=datasets,
+        metrics={},
+        relationships=(),
+        adjacency={},
+        content_hash="large-ranking",
+    )
+    found = catalog.search("chargebacks", entity_kinds=["field"])
+    assert [(m.parent_dataset, m.name) for m in found] == [
+        ("dataset_299", "dispute_amount")
+    ]
+    page = create_browse_semantic_tool(catalog).func(
+        entity_kind="field", query="chargebacks"
+    )
+    assert [(m["dataset"], m["name"]) for m in page["items"]] == [
+        ("dataset_299", "dispute_amount")
+    ]
+    assert catalog.search_index is catalog.search_index
+
+
+def test_browse_and_discovery_use_identical_order_and_scoping():
+    from data_analytics_agent.semantic_tools import create_browse_semantic_tool
+
+    catalog = _chinook_catalog()
+    tool = create_browse_semantic_tool(catalog)
+    for query in ("revenue country", "invoice date", "customer name"):
+        found = catalog.search(query, entity_kinds=["field"], limit=25)
+        page = tool.func(entity_kind="field", query=query, limit=2)
+        assert [(m["dataset"], m["name"]) for m in page["items"]] == [
+            (m.parent_dataset, m.name) for m in found[:2]
+        ]
+        if page["next_offset"]:
+            following = tool.func(
+                entity_kind="field", query=query, offset=page["next_offset"], limit=2
+            )
+            assert [(m["dataset"], m["name"]) for m in following["items"]] == [
+                (m.parent_dataset, m.name) for m in found[2:4]
+            ]
+    dates = catalog.search(
+        "date", entity_kinds=["field"], dataset_name="invoices", time_only=True
+    )
+    assert dates and all(m.parent_dataset == "invoices" for m in dates)
+
+
+def test_rare_business_terms_beat_generic_description_overlap():
+    from dataclasses import replace
+    from data_analytics_agent.semantic import SemanticMetric
+
+    metrics = {
+        f"metric_{i}": SemanticMetric(f"metric_{i}", "Monthly payment amount", "1")
+        for i in range(100)
+    }
+    metrics["disputes"] = SemanticMetric("disputes", "Chargebacks", "1")
+    catalog = replace(_chinook_catalog(), metrics=metrics)
+    assert (
+        catalog.search("monthly payment chargebacks", entity_kinds=["metric"])[0].name
+        == "disputes"
+    )

@@ -37,6 +37,13 @@ class AnalysisOutput(StrictModel):
 
     def model_facing(self):
         result = self.model_dump(mode="json", exclude_none=True)
+        if self.text:
+            result["text"] = "\n".join(self.text.splitlines()[:10])[:2000]
+            if result["text"] != self.text:
+                result["text_preview_truncated"] = True
+        if self.kind == AnalysisOutputKind.TABLE:
+            result["rows"] = self.rows[:10]
+            result["stored_output_row_count"] = len(self.rows)
         if self.image_path:
             result.pop("image_path", None)
             result["rendered"] = True
@@ -59,6 +66,9 @@ class PythonExecutionResult(StrictModel):
 
     def model_facing(self):
         result = self.model_dump(mode="json", exclude_none=True)
+        # Exact stdout/code remain in execution inspection, not repeated in model context.
+        result.pop("executed_python", None)
+        result["stdout"] = "\n".join(self.stdout.splitlines()[:10])[:2000]
         result["ok"] = self.error is None
         result["outputs"] = [output.model_facing() for output in self.outputs]
         return result
@@ -72,7 +82,6 @@ class DataAnalysisResult(StrictModel):
     answer: str
     method: str = ""
     assumptions: list[str] = Field(default_factory=list)
-    interpretation: str = ""
     warnings: list[str] = Field(default_factory=list)
     requested_data: str = ""
 

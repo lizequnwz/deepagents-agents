@@ -51,8 +51,8 @@ def test_direct_evidence_resolution_uses_saved_sql_and_lineage(workspace):
     answer = resolve_answer(
         CoordinatorResponse(
             answer="Four",
-            primary_result_id=derived.result_id,
-            supporting_result_ids=[derived.result_id],
+            result_ids=[derived.result_id],
+
         ),
         thread_id=w.thread,
         source_id="test",
@@ -78,8 +78,8 @@ async def test_findings_remain_visible_report_failure_retry_does_not_recompute(
     r = save(w, [{"value": 7}])
     response = CoordinatorResponse(
         answer="Seven",
-        primary_result_id=r.result_id,
-        supporting_result_ids=[r.result_id],
+        result_ids=[r.result_id],
+
     )
     w.runs.publish(
         w.run,
@@ -156,7 +156,7 @@ async def test_queued_follow_up_runs_after_report_failure_and_preserves_parent(
 ):
     w = workspace
     result = save(w, [{"value": 7}])
-    response = CoordinatorResponse(answer="Seven", primary_result_id=result.result_id)
+    response = CoordinatorResponse(answer="Seven", result_ids=[result.result_id])
     w.runs.publish(
         w.run,
         resolve_answer(
@@ -183,7 +183,7 @@ async def test_queued_follow_up_runs_after_report_failure_and_preserves_parent(
 
 def publish_test_findings(w):
     result = save(w, [{"value": 7}])
-    response = CoordinatorResponse(answer="Seven", primary_result_id=result.result_id)
+    response = CoordinatorResponse(answer="Seven", result_ids=[result.result_id])
     w.runs.publish(
         w.run,
         resolve_answer(
@@ -259,7 +259,7 @@ async def test_report_retry_repairs_missing_or_invalid_spec_without_analysis(
     async def repair(input, **kwargs):
         assert not w.runs.cancel_event(w.run).is_set()
         assert "Do not rerun SQL or Python" in input["messages"][0]["content"]
-        assert response.primary_result_id in input["messages"][0]["content"]
+        assert response.result_ids[0] in input["messages"][0]["content"]
         if invalid_spec:
             assert "wrong-id" in input["messages"][0]["content"]
         artifact = generate_report(

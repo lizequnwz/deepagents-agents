@@ -87,19 +87,7 @@ class ReportTheme(ReportingModel):
         return self
 
 
-class ReportBrief(ReportingModel):
-    """Coordinator interpretation of an open-ended reporting request."""
-
-    purpose: str = Field(min_length=1, max_length=2_000)
-    audience: str | None = Field(default=None, max_length=500)
-    primary_questions: list[str] = Field(default_factory=list, max_length=20)
-    key_messages: list[str] = Field(default_factory=list, max_length=20)
-    design_direction: str = Field(default="", max_length=2_000)
-    requested_sections: list[str] = Field(default_factory=list, max_length=30)
-    evidence_result_ids: list[str] = Field(default_factory=list, max_length=50)
-    evidence_analysis_ids: list[str] = Field(default_factory=list, max_length=50)
-    constraints: list[str] = Field(default_factory=list, max_length=30)
-    unresolved_questions: list[str] = Field(default_factory=list, max_length=10)
+from data_analytics_agent.reporting.comparisons import PeriodComparison
 
 
 class ReportMetric(ReportingModel):
@@ -107,10 +95,14 @@ class ReportMetric(ReportingModel):
     result_id: str
     column: str
     row_index: int = Field(default=0, ge=0)
-    number_format: str = Field(default=",.2f", max_length=20)
+    number_format: str = Field(
+        default=",.2f",
+        max_length=20,
+        description="One Python numeric format such as ,.2f or +,.2f; not Excel sections or D3 patterns.",
+    )
     prefix: str = Field(default="", max_length=20)
     suffix: str = Field(default="", max_length=20)
-    change: str | None = Field(default=None, max_length=100)
+    comparison: PeriodComparison | None = None
     context: str | None = Field(default=None, max_length=240)
 
 
@@ -155,6 +147,10 @@ class ReportTableBlock(ReportingModel):
     title: str = Field(min_length=1, max_length=160)
     caption: str | None = Field(default=None, max_length=1_000)
     columns: list[str] = Field(default_factory=list, max_length=40)
+    column_formats: dict[str, str] = Field(
+        default_factory=dict,
+        description="Explicit Python formats, e.g. year: d (integer) or .0f (numeric); omit for normal display.",
+    )
     include_all_rows: bool = False
     row_limit: int = Field(default=25, ge=1, le=10_000)
 
@@ -265,6 +261,5 @@ class ResolvedDataAnalysis(ReportingModel):
     answer: str
     method: str = ""
     assumptions: list[str] = Field(default_factory=list)
-    interpretation: str = ""
     warnings: list[str] = Field(default_factory=list)
     outputs: list[dict[str, Any]] = Field(default_factory=list)

@@ -70,6 +70,9 @@ class Settings:
         default_factory=lambda: os.getenv("MODEL_PROVIDER", "openai")
     )
     model: str = field(default_factory=lambda: os.getenv("MODEL_ID", "gpt-5.6-luna"))
+    transcription_model: str = field(
+        default_factory=lambda: os.getenv("TRANSCRIPTION_MODEL", "whisper-1")
+    )
     data_sources_config_path: Path = field(default_factory=_data_sources_config_path)
     api_base_url: str = field(
         default_factory=lambda: os.getenv("API_BASE_URL", "http://127.0.0.1:8000")

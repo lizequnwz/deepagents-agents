@@ -11,8 +11,8 @@ SQL. It should answer:
 - Which measures and definitions are canonical?
 - Which encoded values, dates, units, and caveats matter?
 
-The model is primary schema context. Live metadata tools are fallbacks for
-ambiguity and drift, not substitutes for curation.
+The model is primary schema context. Source readiness inspects declared physical metadata; runtime semantic tools
+expose curated objects rather than discovering an unrestricted database schema.
 
 Authoritative examples:
 
@@ -21,7 +21,7 @@ Authoritative examples:
 
 ## Required structure
 
-The readiness validator currently requires:
+Structure outline (datasets must be populated before this is valid):
 
 ```yaml
 version: "0.1.1"
@@ -173,7 +173,7 @@ metrics:
     expression:
       dialects:
         - dialect: ANSI_SQL
-          expression: SUM(amount)
+          expression: SUM(transactions.amount)
 ```
 
 For each metric, document:
@@ -235,7 +235,7 @@ The dictionary is evidence, not executable runtime configuration.
 - duplicate metric and relationship names;
 - selected-dialect metric expressions;
 - live table existence;
-- simple physical identifier existence.
+- physical columns referenced by scalar expressions.
 
 Successful readiness retains the parsed model as an immutable process-local
 catalog. Agents receive a compact overview and use deterministic semantic tools
@@ -243,8 +243,10 @@ to search candidates, fetch exact entity definitions, and traverse declared
 relationships. They do not read the raw YAML file. Restart the application to
 load a changed OSI model.
 
-Complex expressions are not fully checked against the database. Add focused
-tests and representative queries.
+Readiness checks expression bindings and referenced columns, not their business
+meaning or every database execution behavior. Add focused tests and representative
+queries. Retrieval ranks each field from its own name, synonyms, and description:
+put critical field meaning on the field, not only in its parent table description.
 
 ## Invariants
 

@@ -86,16 +86,24 @@ def build_text_to_sql_subagent(
 Own semantic grounding, retrieval, descriptive calculations, category lookup,
 and saved-data shaping. Use supplied exact definitions when sufficient; otherwise
 use get_semantic_context for candidates, then select exact definitions. Question-only
-responses are candidates, never complete SQL context. Search each measure, grouping,
-filter and time concept separately with browse_semantic_model; use entity_kind=metric
-for measures and entity_kind=field with time_only=true for dates. Select field_names
+responses are candidates, never complete SQL context. Resolve sufficient candidates
+directly without repeating searches. Browse only missing or ambiguous business roles,
+using dataset_name to narrow columns after identifying tables; use entity_kind=metric
+for measures and entity_kind=field with time_only=true for dates. If a time intent
+such as monthly has no lexical date match, browse time_only=true with an empty query
+within the relevant dataset. Select field_names
 explicitly: datasets include only requested fields, primary keys and dependencies.
 Check definitions_complete and blocking_issues, and verify coverage of every requested
 business role yourself. Select relationship_names to resolve alternate paths and self
 join roles. Disconnected datasets may support independent scalar queries, never guessed
 joins. Return material business ambiguity to the coordinator for clarification.
 Pass canonical metric_names and selected relationship_names to execute_sql; preserve
-metric expressions and declared grain. Use semantic validation feedback to repair SQL.
+metric expressions and declared grain. metric_names names aggregates actually computed by
+this query, not metrics that a later calculation will use. For complete row-level
+extractions, select primitive fields and pass metric_names=[]; aggregate saved rows
+later. Build calendar grids and compare independent grouped snapshots with
+query_saved_results (DuckDB), rather than inventing warehouse relationships for
+calendar/self-aggregate joins. Use semantic validation feedback to repair SQL.
 Browse when vocabulary is unknown; lookup_values discovers actual category spellings. Never guess a
 physical source, field, metric meaning, or join, or probe undeclared objects.
 Use the source dialect for execute_sql and DuckDB for query_saved_results with

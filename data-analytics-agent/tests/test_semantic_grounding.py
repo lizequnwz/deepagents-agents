@@ -415,3 +415,24 @@ def test_financial_metric_keeps_embedded_business_filters():
             catalog,
             metric_names=["transaction_inflow"],
         )
+
+
+def test_metric_column_bindings_follow_only_transparent_output_projections(catalog):
+    direct = validate_semantic_sql(
+        "SELECT strftime('%Y', InvoiceDate) AS yr, SUM(Total) AS revenue FROM Invoice GROUP BY strftime('%Y', InvoiceDate)",
+        catalog,
+        metric_names=["total_revenue"],
+    )
+    assert direct["metric_columns"] == {"revenue": "total_revenue"}
+    cte = validate_semantic_sql(
+        "WITH totals AS (SELECT SUM(Total) AS revenue FROM Invoice) SELECT revenue AS amount FROM totals",
+        catalog,
+        metric_names=["total_revenue"],
+    )
+    assert cte["metric_columns"] == {"amount": "total_revenue"}
+    modified = validate_semantic_sql(
+        "WITH totals AS (SELECT SUM(Total) AS revenue FROM Invoice) SELECT revenue * 2 AS amount FROM totals",
+        catalog,
+        metric_names=["total_revenue"],
+    )
+    assert modified["metric_columns"] == {}

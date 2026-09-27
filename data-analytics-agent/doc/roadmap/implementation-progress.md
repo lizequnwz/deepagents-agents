@@ -1,6 +1,6 @@
 # Roadmap implementation progress
 
-Updated 21 September 2026. This is a dated implementation record; the roadmap and ablation
+Updated 27 September 2026. This is a dated implementation record; the roadmap and ablation
 documents retain their review-time recommendations. Delivery follows the
 simplification plan's initial setup and presentation increments, with the
 independent forecast-label correction from the product roadmap, followed by
@@ -62,7 +62,41 @@ isolated tabular uploads.
    continuation. The [artifact handoff review](../reviews/artifact-handoff-review-2026-09-20.md)
    records the failure, implementation, and verification.
 
+9. **Large-catalog retrieval and smaller model responses.** Discovery/browsing
+   share a cached lexical index with exact-name/synonym priority. Fields rank on
+   their own descriptions. Model-authored evidence selections are separated from
+   application-owned provenance, chart IDs, and versions. Duplicate interpretation
+   fields were removed; API contract 14 is strict and has no old-record migration.
+10. **Voice dictation.** Native record/stop sends WAV to a LangChain Whisper
+    runnable and fills the editable composer. It never submits an analytics question
+    automatically. Storage remains directly under `.analytics/` or the configured root.
+11. **Documentation verification.** Current guides now distinguish runtime
+    behavior, repeatable test prompts, observed live outcomes, and historical reviews.
+    The [live-test record](../reviews/documentation-live-tests-2026-09-26.md)
+    records per-example outcomes and outstanding issues.
+
+12. **Reproducible correctness and repair checks.** Corpus/source/code/instruction
+    fingerprints, resumable receipts, explicit seven-part grading, four held-out
+    cases, bounded model-visible analysis previews, and scoped reference repair hints.
+    Local analysis guidance preserves units, completeness, final counts and nullable
+    decisions when a statistical screen is undefined.
+13. **Exact report-title revisions.** UI/API editing copies the stored specification
+    without model/source calls; conversational editing invokes one dedicated tool.
+    Other answer fields and report blocks remain unchanged; stale writes are rejected.
+14. **Evidence-bound comparisons.** API contract 15 removes free-text metric changes.
+    Current/baseline bindings drive deterministic deltas and How calculated?. Checks
+    cover saved grain, dimensions, periods, units, rates, and evidence completeness.
+    Canonical output bindings are persisted where source grounding establishes them;
+    unverified derived bindings are explicitly disclosed.
+
 ## Verification and limits
+
+The 27 September roadmap pass has **326 deterministic tests passing, six skipped**
+across 332 collected tests.
+Ten documented cases, four held-out cases, five targeted reruns, a screening rerun,
+and a live KPI-card scenario were executed. Earlier failed attempts are retained.
+See the [delivery review](../reviews/roadmap-implementation-2026-09-27.md) for exact
+arithmetic checks, failures, repair counts, and limitations. Completion is not a grade.
 
 The original deterministic baseline passed 188 tests. Setup/presentation and
 upload increments increased coverage to 217 cases. The 20 September test/fix
@@ -90,16 +124,14 @@ are not a model-quality benchmark or evidence for instruction ablation.
   coordinator policy, feature switches, planning persistence, or specialist
   harness capabilities on the basis of deterministic tests alone. Use the
   roadmap's paired held-out live trials and declared tolerance before adopting
-  behavior-changing removals. Those trials still need explicit fixture/provider
-  authorization under the project's evaluation policy.
+  behavior-changing removals. The documented smoke trials are not paired ablation trials; broader removals
+  still need their own authorized evaluation.
 - **Upload extensions** remain separate work: multiple files, warehouse
   enrichment and research documents are not included. The first increment has
   one file per conversation, with no in-place refresh or schema migration.
-- **Checked KPI story** remains the first larger product increment: OSI-bound
-  metric meaning and scope, stored current/baseline bindings, deterministic
-  deltas/checks, How calculated?, and negative evaluation cases for duplicated
-  joins and incompatible periods. Free-text numeric changes remain until that
-  replacement is implemented together.
+- **Comparison extensions** remain: cross-snapshot scope proof, explicit source
+  cutoffs, and propagation of canonical metric meaning through arbitrary derived
+  SQL/Python. Current checks do not prove a source join or free-text population.
 - **Full results workspace and forecast evaluation** remain open: shared scope,
   selected-scope actions, forecast holdouts/baseline scores, multiple forecast
   series, and forecast-start markers are not supplied by these increments.

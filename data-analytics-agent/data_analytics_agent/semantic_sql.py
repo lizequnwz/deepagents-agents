@@ -414,8 +414,37 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
             raise SQLValidationError(
                 f"Selected metric {name!r} does not match its canonical expression. Retrieve its definition and preserve its aggregation and filters."
             )
+
+    def output_expression(scope, node, seen=frozenset()):
+        node = node.this if isinstance(node, exp.Alias) else node
+        if isinstance(node, exp.Column):
+            key = (id(scope), node.table, node.name)
+            source = scope.sources.get(node.table)
+            if (
+                key not in seen
+                and isinstance(source, Scope)
+                and isinstance(source.expression, exp.Select)
+            ):
+                for item in source.expression.selects:
+                    if item.alias_or_name.casefold() == node.name.casefold():
+                        return output_expression(source, item, seen | {key})
+        return normalized(node, scope)
+
+    # Persist only exact output bindings; expressions modified by arithmetic,
+    # windows or opaque saved-data transformations are not claimed as canonical.
+    metric_columns = {}
+    if scopes and isinstance(scopes[-1].expression, exp.Select):
+        for projection in scopes[-1].expression.selects:
+            actual = output_expression(scopes[-1], projection)
+            for name in metrics:
+                expected = normalized(
+                    parse_expression(bindings.metrics[name].expression, catalog.dialect)
+                )
+                if actual is not None and actual == expected:
+                    metric_columns[projection.alias_or_name.casefold()] = name
     return {
         "metric_names": metrics,
+        "metric_columns": metric_columns,
         "relationship_names": sorted(used),
         "warnings": sorted(warnings),
     }

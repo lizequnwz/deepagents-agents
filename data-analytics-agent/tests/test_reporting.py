@@ -7,7 +7,6 @@ import pytest
 
 from data_analytics_agent.reporting.renderer import render_report
 from data_analytics_agent.reporting.schemas import (
-    ReportBrief,
     ReportSpec,
 )
 from data_analytics_agent.reporting.tools import create_create_report_tool
@@ -36,13 +35,6 @@ def _saved_result(results: ResultStore, *, thread_id: str = "thread-1"):
 
 
 def test_report_spec_rejects_executable_markup_and_inaccessible_theme() -> None:
-    brief = ReportBrief(
-        purpose="Explain the operational findings.",
-        audience="Operations leaders",
-        design_direction="Editorial infographic",
-    )
-    assert brief.audience == "Operations leaders"
-
     with pytest.raises(ValueError, match="extra"):
         ReportSpec.model_validate(
             {
@@ -221,7 +213,7 @@ def test_report_rejects_conflicting_metric_labels_for_one_saved_cell(workspace):
         resolve_answer(
             CoordinatorResponse(
                 answer="Total 100: East 40, West 60.",
-                primary_result_id=result.result_id,
+                result_ids=[result.result_id],
             ),
             thread_id=w.thread,
             source_id="test",
@@ -320,3 +312,35 @@ def test_report_analysis_details_are_collapsed_and_table_previews_are_bounded():
         is None
     )
     assert len(analysis.outputs[0]["rows"]) == 24
+
+
+def test_explicit_year_format_does_not_add_thousands_separator(workspace):
+    from data_analytics_agent.reporting.renderer import render_report
+    from data_analytics_agent.reporting.schemas import ReportSpec
+    from datetime import datetime, timezone
+
+    w = workspace
+    result = w.results.save(
+        thread_id=w.thread,
+        source_id="test",
+        columns=["year", "amount"],
+        rows=[{"year": 2025, "amount": 2000}],
+    )
+    spec = ReportSpec(
+        title="Years",
+        blocks=[
+            {
+                "type": "table",
+                "title": "Annual",
+                "result_id": result.result_id,
+                "column_formats": {"year": "d"},
+            }
+        ],
+    )
+    html = render_report(
+        spec,
+        results={result.result_id: result},
+        analyses={},
+        generated_at=datetime.now(timezone.utc),
+    )
+    assert "<td>2025</td>" in html and "<td>2,000</td>" in html

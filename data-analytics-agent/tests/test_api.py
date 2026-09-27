@@ -94,7 +94,7 @@ def test_resume_after_publication_finishes_report_without_restarting_analysis(
     services.runs.publish(
         run,
         resolve_answer(
-            CoordinatorResponse(answer="Zero", primary_result_id=result.result_id),
+            CoordinatorResponse(answer="Zero", result_ids=[result.result_id]),
             thread_id=thread,
             source_id="test",
             results=services.results,

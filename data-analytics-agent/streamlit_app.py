@@ -67,6 +67,7 @@ def clear_conversation_state() -> None:
         "review_phase_",
         "starter_question_",
         "chat_input_",
+        "voice_",
     )
     for key in list(st.session_state):
         if key.startswith(removable_prefixes):
@@ -350,6 +351,7 @@ if conversation is None:
         "Ask a question and attach a CSV or Parquet file",
         key="chat_input_upload",
         max_bytes=upload_max_bytes,
+        client=client,
     )
     if submission:
         if submission.files:
@@ -522,6 +524,7 @@ submission = chat_submission(
     else f"Ask a business question about {source['name']}",
     key=chat_input_key,
     max_bytes=upload_max_bytes,
+    client=client,
 )
 if submission and submission.files:
     open_attachment(submission)

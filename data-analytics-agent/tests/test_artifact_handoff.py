@@ -217,7 +217,7 @@ def test_report_cannot_change_published_evidence(workspace):
     )
     publish.func(
         findings=CoordinatorResponse(
-            answer="Four", primary_result_id=selected.result_id
+            answer="Four", result_ids=[selected.result_id]
         ),
         runtime=w.runtime("publish"),
     )
@@ -281,7 +281,7 @@ async def test_chart_typo_is_repaired_without_recomputation(test_settings, monke
                     {
                         "findings": {
                             "answer": "Amounts by category",
-                            "primary_result_id": self.dataset,
+                            "result_ids": [self.dataset],
                             "chart_ids": [typo],
                         }
                     },
@@ -296,7 +296,7 @@ async def test_chart_typo_is_repaired_without_recomputation(test_settings, monke
                     {
                         "findings": {
                             "answer": "Amounts by category",
-                            "primary_result_id": self.dataset,
+                            "result_ids": [self.dataset],
                             "chart_ids": [saved],
                         }
                     },
@@ -452,3 +452,21 @@ def test_sql_handoff_attaches_all_saved_results_without_model_ids(workspace):
         and "sql" not in SQLAnalysisResponse.model_fields
     )
     assert completed["answer"] == "Two saved results"
+
+
+def test_chart_request_excludes_application_owned_fields(workspace):
+    from data_analytics_agent.visualization.schemas import ChartRequest, ChartSpec
+    from data_analytics_agent.visualization.tools import create_chart_tool
+    from tests.test_persistent_analyst import save
+
+    w = workspace
+    dataset = save(w, [{'category': 'A', 'amount': 3}])
+    request = ChartRequest(result_id=dataset.result_id, chart_type='bar', title='Amount', x='category', y=['amount'])
+    assert not {'chart_id', 'version', 'source_result_id'} & set(ChartRequest.model_fields)
+    tool = create_chart_tool(w.results, w.runs, source_id='test')
+    result = tool.func(spec=request, runtime=w.runtime('chart-request'))
+    assert result['ok']
+    chart = ChartSpec.model_validate(result['chart'])
+    assert chart.chart_id and chart.version == 1 and chart.source_result_id == dataset.result_id
+    revision = tool.func(spec=request.model_copy(update={'previous_chart_id': chart.chart_id}), runtime=w.runtime('chart-revision'))
+    assert revision['ok'] and revision['chart']['version'] == 2

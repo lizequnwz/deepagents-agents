@@ -295,8 +295,7 @@ class UploadAnalyst(AnalystModel):
                 ).group()
                 findings = {
                     "answer": "The total is 12.",
-                    "primary_result_id": result,
-                    "supporting_result_ids": [result],
+                    "result_ids": [result],
                 }
                 if not any(m.name == "publish_findings" for m in tools):
                     message = call(
@@ -355,7 +354,7 @@ class RecoveringUploadAnalyst(UploadAnalyst):
                     {
                         "findings": {
                             "answer": "The total is 12.",
-                            "primary_result_id": result[:-1],
+                            "result_ids": [result[:-1]],
                         }
                     },
                     "typo",
@@ -371,7 +370,7 @@ class RecoveringUploadAnalyst(UploadAnalyst):
                         {
                             "findings": {
                                 "answer": "The total is 12.",
-                                "primary_result_id": result,
+                                "result_ids": [result],
                             }
                         },
                         "corrected-id",

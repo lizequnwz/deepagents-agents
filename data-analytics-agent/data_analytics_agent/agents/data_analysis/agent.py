@@ -68,8 +68,11 @@ examine the results, and revise as needed. Each call starts a fresh process
 with named DataFrames in datasets. For inputs={{'sales': '<saved ID>'}}, access
 the frame as datasets['sales']; no bare variable sales/source/data is created. Save intermediate data in output_datasets;
 reuse those artifact IDs in later inputs. Return compact analysis_outputs.
+Keep source units exactly as declared; when unspecified use source units, never dollars.
+First/last observed dates do not establish completeness. Preserve all requested
+periods unless an explicit source cutoff establishes partial coverage.
 Use the simplest defensible methods. Distinguish associations from causes.
-Keep scope aligned with the business question. Do not replace the requested
+Keep scope aligned with this assignment. Do not repeat a sibling assignment's methods merely because the overall question mentions them. Do not replace the requested
 outcome with a convenient proxy. Do not analyze incomplete prefixes.
 You may execute several successful steps. Use failures to repair the code;
 do not repeat unchanged failing code. Stop when evidence is sufficient or

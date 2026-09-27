@@ -3,7 +3,7 @@
 The current release supports iterative analysis over one configured SQL source
 or one reviewed CSV/Parquet file per conversation. Read the
 [implementation log](doc/roadmap/implementation-progress.md) for delivered work
-and remaining gates, then the [19 September roadmap](doc/roadmap/roadmap.md)
+and remaining gates, then the [current roadmap](doc/roadmap/roadmap.md)
 for the priority order of subsequent work.
 
 Start with an inspectable metric definition, a checked comparison, outcome-based
@@ -18,7 +18,7 @@ analysis requires an explicit change to the source-isolation policy. Notebook
 editing remains deferred.
 
 Cross-conversation automatic learning and persistent live Python kernels are
-outside this version. No migration is required from obsolete in-memory state.
+outside this version. Persisted schema changes have no compatibility reader or migration; start with fresh storage after an incompatible change.
 Live model evaluations require explicit authorization for fixture contents and
 the configured provider. Deterministic tests and local browser verification
 should run independently of that external evaluation.
@@ -27,7 +27,7 @@ should run independently of that external evaluation.
 
 The initial roadmap increments now include minimal onboarding, direct chart
 presentation edits with matching immutable report revisions and failure/retry,
-collapsed report previews, explicit interval/range labels and methods, and
+collapsible report previews, explicit interval/range labels and methods, and
 isolated CSV/Parquet uploads with mandatory schema review. Subsequent work added
 chat attachments, bounded independent analysis assignments, and visible plans.
 See the [implementation log](doc/roadmap/implementation-progress.md) for verification
@@ -67,3 +67,7 @@ the UI in Stopping until it returns. LangGraph's v3 streaming API currently emit
 an upstream beta warning; deterministic harness and checkpoint tests cover the
 installed integration. The current architecture document is authoritative;
 the [diagram index](doc/diagrams/README.md) identifies the retained visual sources.
+
+The [26 September documentation tests](doc/reviews/documentation-live-tests-2026-09-26.md)
+record the current example suite, live outcomes, independent checks, and prioritized
+issues. Use these receipts before treating earlier smoke results as current.

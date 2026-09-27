@@ -4,9 +4,17 @@ Select a source, ask a question, and inspect findings while their report is
 prepared. “Show monthly sales” uses descriptive SQL. “Forecast sales and explain
 seasonality” asks Python to explore and evaluate an analytical model.
 
-For copy-ready investigations and checks, use the
-[deep-dive test questions](deep-dive-examples.md), including a small synthetic CSV
-for testing uploads, parallel analysis, and reports.
+For simple questions, complex reports and follow-up sequences, use the
+[example question guide](deep-dive-examples.md). It includes source selection,
+expected checks and a small synthetic CSV for uploaded-data analysis.
+
+## Dictate a question
+
+Click the microphone beside the composer, allow microphone access, speak, and stop.
+Wait for transcription, review or edit the resulting text, then Send. Dictation
+replaces the current draft; it does not submit the question. Microphone access
+requires localhost or HTTPS. A failed transcription offers an explicit retry;
+typed questions remain available. See [voice configuration](../development/configuration.md#voice-dictation).
 
 ## Upload and review a file
 
@@ -37,6 +45,18 @@ Use saved conversation navigation to return after a restart. Follow-up requests
 such as “make that a line chart” reuse suitable saved evidence; “refresh using
 current data” requests new source execution. Download full CSV/Parquet from the
 evidence panel and HTML from the report panel. Preview pages are labeled.
+
+## Report titles and calculation details
+
+Open **Edit report title**, edit the text, and choose **Save title**. This changes
+only the title and report revision; findings, evidence and charts stay unchanged.
+The form uses no model calls. A conversational title-only request also reuses the
+stored report, with one model call to select the edit tool.
+
+Comparison cards can include **How calculated?**. Expand it to see the saved
+current/baseline values, units, formula, exact evidence bindings and performed
+checks. Zero baselines have no percentage change. Unknown source completeness
+stays unknown; a successful calculation check does not certify source joins.
 
 ## Edit charts and open reports
 
@@ -79,7 +99,7 @@ parallel worker has its own activity identity and, when enabled, its own review.
 Approving one proposal leaves the other awaiting review. Approval pauses are
 labeled as waiting for input; stopped operations are labeled stopped.
 
-**Assumptions and interpretation** starts collapsed. Open it for analytical context;
+**Assumptions** starts collapsed. Interpretation is part of the answer;
 partial-result notices, unresolved questions and analysis warnings remain visible.
 
 ## Clarify or correct a request

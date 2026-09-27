@@ -226,7 +226,9 @@ def test_iterative_python_repairs_reuses_multiple_inputs_and_saves_all_steps(wor
     persisted = DataAnalysisStore(LocalStorage(w.storage.root)).get(
         completed["analysis_id"], w.thread, source_id="test"
     )
-    assert persisted.analysis.executions[0].executed_python == a["executed_python"]
+    assert "executed_python" not in a
+    assert "pd.to_numeric" in persisted.analysis.executions[0].executed_python
+    assert persisted.analysis.executions[0].execution_id == a["execution_id"]
     assert w.results.get_unscoped(r.result_id).rows[0]["value"] == Decimal("12.35")
 
 
@@ -317,8 +319,7 @@ def test_shared_chart_versions_uncertainty_and_report_metric_binding(workspace):
     publish.func(
         findings=CoordinatorResponse(
             answer="Forecast with uncertainty.",
-            primary_result_id=r.result_id,
-            supporting_result_ids=[r.result_id],
+            result_ids=[r.result_id],
             chart_ids=[revised["chart_id"]],
         ),
         runtime=w.runtime("publish"),
@@ -578,7 +579,7 @@ def test_publication_reference_errors_are_recoverable_and_do_not_publish(
     )
     findings = CoordinatorResponse(
         answer="12",
-        primary_result_id=valid.result_id if reference_kind == "chart" else missing,
+        result_ids=[valid.result_id if reference_kind == "chart" else missing],
         chart_ids=[missing] if reference_kind == "chart" else [],
     )
     with pytest.raises(ToolException, match="list_conversation_results"):
@@ -586,10 +587,41 @@ def test_publication_reference_errors_are_recoverable_and_do_not_publish(
     assert w.runs.get(w.run).findings is None
     assert publish.handle_tool_error is True
     response = publish.func(
-        findings=CoordinatorResponse(answer="12", primary_result_id=valid.result_id),
+        findings=CoordinatorResponse(answer="12", result_ids=[valid.result_id]),
         runtime=w.runtime("fixed-publication"),
     )
     assert (
         response["ok"]
         and w.runs.get(w.run).findings.primary_result_id == valid.result_id
     )
+
+
+def test_unknown_reference_feedback_contains_exact_scoped_choices(workspace):
+    from data_analytics_agent.datasets import StoreNotFound
+
+    w = workspace
+    own = save(w, [{"value": 3}])
+    other = w.results.save(
+        thread_id="another-thread",
+        source_id="test",
+        columns=["value"],
+        rows=[{"value": 4}],
+    )
+    with pytest.raises(StoreNotFound) as failure:
+        w.results.get("mistyped", w.thread, source_id="test")
+    assert own.result_id in str(failure.value)
+    assert other.result_id not in str(failure.value)
+
+
+def test_model_facing_outputs_bound_rows_but_preserve_saved_inspection():
+    from data_analytics_agent.agents.data_analysis.schemas import AnalysisOutput
+
+    output = AnalysisOutput(
+        name="diagnostics",
+        kind="table",
+        columns=["x"],
+        rows=[{"x": i} for i in range(30)],
+    )
+    assert len(output.model_facing()["rows"]) == 10
+    assert len(output.rows) == 30
+    assert output.model_facing()["stored_output_row_count"] == 30

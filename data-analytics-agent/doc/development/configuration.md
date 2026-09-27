@@ -118,3 +118,37 @@ not rerun an analysis merely because a file was saved.
 Shell options: `API_HOST` (127.0.0.1), `API_PORT` (8000), `STREAMLIT_HOST`
 (127.0.0.1), `STREAMLIT_PORT` (8501), and `API_AUTO_RELOAD` (false).
 Keep a single API process for the local storage and run lifecycle.
+
+Application storage lives directly in `ANALYTICS_STORAGE_DIR` (default `.analytics/`).
+Metadata, artifacts, uploads, and checkpoints share this directory; there is no
+versioned subdirectory. Persisted records are strictly validated, with no migrations
+or compatibility readers. Incompatible history must be cleared or a fresh storage
+directory configured before starting a version with breaking schema changes.
+
+## Voice dictation
+
+The native Streamlit recorder produces 16 kHz WAV audio. On stop, Streamlit sends
+it to `POST /api/transcriptions` as an `audio/wav` body. The API invokes the LangChain `whisper_transcriber` runnable, which uses the
+OpenAI async file-transcription endpoint and returns `{"text": "..."}`. No analytics run
+is created until the user reviews/edits the text and sends the question.
+
+`TRANSCRIPTION_MODEL` defaults to `whisper-1`. The SDK reuses `OPENAI_API_KEY`
+and, when configured, `OPENAI_BASE_URL`; a custom endpoint must support the
+OpenAI audio transcription API. Bedrock chat still requires a separate OpenAI
+key for voice. Missing voice credentials do not disable typed questions.
+
+Microphone access requires localhost or HTTPS and browser permission. Provider
+errors offer an explicit retry; ordinary UI reruns do not repeat a transcription.
+The endpoint accepts at most 24 MiB, with a 60-second provider timeout and no
+implicit provider retries. Audio is held in memory for transcription, not stored
+in conversation history, datasets, or temporary files. Successful dictation resets
+the recording widget; failed recordings remain available for retry until replaced,
+cleared with the native control, or the conversation is changed. Dictation replaces
+the question-box text; it is not a realtime voice conversation.
+
+The runnable supports LangChain `ainvoke`, model binding, and callbacks. It uses
+the existing SDK transport because Whisper is an audio endpoint, not a chat model.
+The community Whisper document loader is not used: it re-encodes WAV to MP3,
+requires additional codecs, and suppresses exhausted provider errors. The runnable
+keeps the native WAV bytes and propagates errors to the HTTP boundary. If LangSmith
+tracing is enabled, its input/output tracing policy also applies to this runnable.

@@ -31,17 +31,39 @@ datasets therefore do not bring their entire schemas into model context.
 
 `browse_semantic_model` supports `dataset`, `field`, `metric`, `relationship`,
 and `example` entity kinds. It accepts `query`, a logical `dataset_name` filter,
-`time_only`, `offset`, and `limit`. Search one business role at a time: a measure
-as a metric, grouping/filter concepts as fields, and dates as time fields.
+`time_only`, `offset`, and `limit`. Browse unresolved business roles: measures as metrics, grouping/filter concepts
+as fields, and dates as time fields. Reuse sufficient discovery candidates instead
+of forcing a separate search call for each role.
 An empty query with `time_only=true` lists declared dates even when a phrase
 such as “monthly” does not overlap their names. Returned examples are curated
 context/question examples, **not verified question/SQL pairs**.
+
+### Shared lexical retrieval
+
+Discovery and browsing use the same per-catalog cached TF-IDF index over names,
+synonyms and descriptions. Exact names and synonyms have priority; phrase matches
+receive a boost, then term rarity distinguishes partial matches. Column documents
+contain their own metadata, not copies of the parent description. A matching
+parent name can boost an already relevant column but cannot create column evidence.
+One ranking pass supplies independent metric/dataset/field/time quotas.
+
+After identifying tables, narrow field browsing with `dataset_name`; do not repeat
+searches for already sufficient candidates. Browsing constructs definitions only
+for the requested page. Catalogs with more than 25 datasets show counts and model
+orientation rather than an arbitrary alphabetical prefix. Small catalog inline
+SQL definitions and exact dependency/relationship resolution remain unchanged.
+
+This is lexical retrieval, not embedding similarity. Unstated synonyms and
+abstract time intents can need on-demand browsing. Similar scores are candidates
+for review, not confidence values or evidence of semantic equivalence.
 
 ### Example
 
 For monthly line revenue by genre:
 
-1. Discover revenue metrics, genre fields, and invoice date fields separately.
+1. Use discovery candidates for revenue and genre; browse only missing or
+   ambiguous roles. For monthly time intent, list declared time fields within the
+   relevant dataset if lexical candidates do not include the needed date.
 2. Resolve `metric_names=["line_revenue"]` and
    `field_names={"genres": ["name"], "invoices": ["invoice_date"]}`.
 3. Inspect the declared bridge relationships and any blocking issues. If routes

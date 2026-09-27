@@ -84,14 +84,11 @@ class ChartInterval(VisualizationModel):
         )
 
 
-class ChartSpec(VisualizationModel):
-    """One reviewed, declarative chart over one saved result."""
+class ChartRequest(VisualizationModel):
+    """Model-authored chart choices over one saved result."""
 
     result_id: str
-    chart_id: str = ""
     previous_chart_id: str | None = None
-    source_result_id: str | None = None
-    version: int = 1
     notes: list[str] = Field(default_factory=list)
     lower_bound: str | None = None
     upper_bound: str | None = None
@@ -99,7 +96,10 @@ class ChartSpec(VisualizationModel):
     error_y: str | None = None
     chart_type: ChartType
     title: str
-    x: str | None = None
+    x: str | None = Field(
+        default=None,
+        description="Saved x column. Scatter axes must be numeric; use a line chart for calendar dates.",
+    )
     y: list[str] = Field(default_factory=list)
     secondary_y: str | None = None
     color: str | None = None
@@ -175,7 +175,7 @@ class ChartSpec(VisualizationModel):
         return value
 
     @model_validator(mode="after")
-    def validate_shape(self) -> ChartSpec:
+    def validate_shape(self) -> ChartRequest:
         chart_type = self.chart_type
         map_fields = {
             self.location,
@@ -320,3 +320,11 @@ class ChartSpec(VisualizationModel):
         ):
             raise ValueError("Error bars require a single-series bar or scatter chart.")
         return self
+
+
+class ChartSpec(ChartRequest):
+    """Stored chart with identity and provenance assigned by the application."""
+
+    chart_id: str = ""
+    source_result_id: str | None = None
+    version: int = 1

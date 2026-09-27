@@ -154,14 +154,25 @@ def discovery_candidates(catalog, question):
 
     if not _normalize_search_text(question):
         return candidates
+    ranked = catalog.search_index.search(question)
     for kind in ("metric", "dataset", "field", "time"):
-        matches = catalog.search(
-            question,
-            entity_kinds=["field" if kind == "time" else kind],
-            limit=6,
-            time_only=kind == "time",
-            per_dataset_limit=2,
-        )
+        matches, counts = [], {}
+        for match in ranked:
+            if match.kind != ("field" if kind == "time" else kind):
+                continue
+            parent = match.parent_dataset
+            if (
+                kind == "time"
+                and not catalog.datasets[parent].fields[match.name].is_time
+            ):
+                continue
+            if parent and counts.get(parent, 0) >= 2:
+                continue
+            if parent:
+                counts[parent] = counts.get(parent, 0) + 1
+            matches.append(match)
+            if len(matches) == 6:
+                break
         candidates[kind] = [
             {
                 "name": m.name,
@@ -234,7 +245,8 @@ def build_semantic_context(
             discovery_candidates(catalog, question) if question.strip() else {}
         )
         result["refinement"] = (
-            "Search each measure, dimension, filter and time role separately with browse_semantic_model. "
+            "Use these candidates directly when sufficient; browse only missing or ambiguous roles. "
+            "Narrow fields by dataset_name, and dates with time_only. "
             "Choose exact metric/field/relationship names, then request definitions. "
             "Candidates are not resolved definitions or proof of question coverage."
         )

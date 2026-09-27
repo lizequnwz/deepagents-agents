@@ -106,7 +106,6 @@ def generate_report(
                 answer=saved.answer,
                 method=saved.method,
                 assumptions=saved.assumptions,
-                interpretation=saved.interpretation,
                 warnings=saved.warnings,
                 outputs=outputs,
             )
@@ -155,7 +154,13 @@ def generate_report(
 
 
 def create_create_report_tool(
-    result_store, analysis_store, run_store, report_store, *, source_id
+    result_store,
+    analysis_store,
+    run_store,
+    report_store,
+    *,
+    source_id,
+    semantic_catalog=None,
 ):
     @tool
     def create_report(report_json: str, runtime: ToolRuntime) -> dict:
@@ -163,13 +168,28 @@ def create_create_report_tool(
 
         Publish findings first. Use chart blocks with chart_id, table blocks
         with result_id, and data_analysis blocks with analysis_id. Report metric
-        values must reference a dataset column and row_index. Do not write HTML.
+        values must reference a dataset column and row_index. Period change cards use
+        comparison bindings (metric_ref, population, grain, period_column,
+        current_period, baseline_period, baseline_row_index); application code
+        calculates changes. No free-text change field. Do not write HTML.
         """
         context = _runtime_context(runtime)
         if saved := run_store.storage.committed(context.run_id, runtime.tool_call_id):
             return json.loads(saved)
         try:
             spec = ReportSpec.model_validate_json(report_json)
+            if semantic_catalog is not None:
+                for block in spec.blocks:
+                    if isinstance(block, ReportMetricsBlock):
+                        for metric in block.metrics:
+                            if (
+                                metric.comparison
+                                and metric.comparison.metric_ref
+                                not in semantic_catalog.metrics
+                            ):
+                                raise ValueError(
+                                    "Comparison metric_ref must be an exact catalog metric; inspect semantic definitions before retrying."
+                                )
             if run_store.get(context.run_id).findings is None:
                 raise ValueError("Call publish_findings before creating the report.")
             run_store.save_report_spec(context.run_id, spec.model_dump(mode="json"))
@@ -240,3 +260,74 @@ def create_inspect_conversation_analysis_tool(analysis_store, *, source_id):
             }
 
     return inspect_conversation_analysis
+
+
+def create_revise_report_title_tool(
+    results, analyses, runs, reports, conversations, *, source_id
+):
+    @tool
+    def revise_report_title(title: str, runtime: ToolRuntime) -> dict:
+        """Change only the latest saved report title; preserve findings, charts and every report block.
+
+        Use for title-only requests instead of publish_findings/create_report.
+        The application selects the exact prior report; no artifact ID is needed.
+        """
+        from data_analytics_agent.presentation_edits import (
+            ReportTitleEdit,
+            revise_report_title as render_title,
+        )
+
+        context = _runtime_context(runtime)
+        if saved := runs.storage.committed(context.run_id, runtime.tool_call_id):
+            return json.loads(saved)
+        try:
+            previous = next(
+                (
+                    t.answer
+                    for t in reversed(conversations.get(context.thread_id).turns)
+                    if t.answer and t.answer.report
+                ),
+                None,
+            )
+            if previous is None:
+                return {"ok": False, "error": "No saved report to rename."}
+            edit = ReportTitleEdit(report_id=previous.report.report_id, title=title)
+            report = reports.get(edit.report_id, context.thread_id, source_id=source_id)
+            existing = runs.get(context.run_id).findings
+            if existing and existing.model_dump(
+                exclude={"report"}
+            ) != previous.model_dump(exclude={"report"}):
+                return {
+                    "ok": False,
+                    "error": "Rewritten findings are already published. Title-only changes must preserve findings and run before publication.",
+                }
+            runs.save_report_spec(
+                context.run_id,
+                {
+                    **report.spec.model_dump(mode="json"),
+                    "title": edit.title,
+                    "previous_report_id": report.report_id,
+                },
+            )
+            runs.publish(context.run_id, previous.model_copy(update={"report": None}))
+            artifact = render_title(
+                report,
+                edit.title,
+                results=results,
+                analyses=analyses,
+                runs=runs,
+                reports=reports,
+            )
+            runs.attach_report(context.run_id, artifact.reference())
+            response = {
+                "ok": True,
+                "report": artifact.reference().model_dump(mode="json"),
+            }
+            runs.storage.commit(
+                context.run_id, runtime.tool_call_id, json.dumps(response)
+            )
+            return response
+        except (ValueError, KeyError, IndexError, OSError) as exc:
+            return {"ok": False, "error": str(exc)}
+
+    return revise_report_title

@@ -12,7 +12,11 @@ semantic_model:
         canonical line-level revenue. Join only through declared relationships.
         SQLite dates are stored as timestamp-like text. Unless the user asks for
         more rows, do not impose a hidden limit. Never infer sales from playlist
-        membership.
+        membership. Monetary amounts have no declared currency code or symbol.
+        Report monetary values in source units; never label them with dollar
+        signs, dollars, USD, or another currency unless the user explicitly
+        provides that business definition. Source completeness is unknown; the
+        final observed transaction date is not a documented cutoff.
       examples:
         - Which five artists generated the most revenue?
         - How many customers are in each country?
@@ -207,7 +211,7 @@ semantic_model:
             description: Billing postal code.
           - name: total
             expression: {dialects: [{dialect: ANSI_SQL, expression: Total}]}
-            description: Total invoice value in the sample database currency.
+            description: Total invoice value in unspecified source monetary units; no currency code or symbol is declared.
             ai_context: {synonyms: [revenue, sales, invoice amount]}
 
       - name: media_types
@@ -382,14 +386,14 @@ semantic_model:
           dialects:
             - dialect: ANSI_SQL
               expression: SUM(invoices.Total)
-        description: Canonical revenue summed once per invoice.
+        description: Canonical revenue summed once per invoice, in unspecified source monetary units (no currency symbol or code).
         ai_context: {synonyms: [revenue, total sales, gross sales]}
       - name: line_revenue
         expression:
           dialects:
             - dialect: ANSI_SQL
               expression: SUM(invoice_lines.UnitPrice * invoice_lines.Quantity)
-        description: Revenue calculated from individual invoice lines.
+        description: Revenue calculated from individual invoice lines, in unspecified source monetary units (no currency symbol or code).
         ai_context: {synonyms: [item revenue, track sales]}
       - name: units_sold
         expression:

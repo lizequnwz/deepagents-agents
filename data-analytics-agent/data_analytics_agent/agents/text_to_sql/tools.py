@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import duckdb
 from deepagents.graph import DeepAgentState
@@ -66,6 +66,7 @@ def execute_query(
     result_store,
     originating_question="",
     purpose="",
+    metric_columns=None,
     cancel=None,
 ):
     started = time.monotonic()
@@ -78,6 +79,7 @@ def execute_query(
         executed_sql=query,
         originating_question=originating_question,
         purpose=purpose,
+        metric_columns=metric_columns,
         max_rows=source.limits.max_result_rows,
     )
     return QueryResult(
@@ -94,7 +96,7 @@ def create_execute_sql_tool(source, backend, result_store, run_store, *, catalog
         metric_names: list[str] | None = None,
         relationship_names: list[str] | None = None,
     ) -> dict:
-        """Validate source SQL against the catalog and save results. Name canonical metrics used and selected relationship routes. State this step's distinct business purpose."""
+        """Validate source SQL against the catalog and save results. Name canonical metrics used and selected relationship routes. Use a short business label for purpose, not the full assignment brief."""
         context = _runtime_context(runtime)
         if context.source_id != source.source_id:
             raise ValueError("Source mismatch")
@@ -123,6 +125,7 @@ def create_execute_sql_tool(source, backend, result_store, run_store, *, catalog
                     result_store=result_store,
                     originating_question=context.question,
                     purpose=purpose,
+                    metric_columns=grounding["metric_columns"],
                     cancel=run_store.cancel_event(context.run_id),
                 )
             except (
@@ -262,7 +265,7 @@ def create_inspect_conversation_result_tool(
         result_id: str,
         runtime: ToolRuntime,
         columns: list[str] | None = None,
-        sample: str = "head",
+        sample: Literal["head", "random"] = "head",
         filters: dict[str, Any] | None = None,
     ) -> dict:
         """Inspect selected columns with head/random samples, equality filters and full-slice statistics.

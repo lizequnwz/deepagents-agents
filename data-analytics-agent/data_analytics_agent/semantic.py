@@ -88,7 +88,7 @@ class SemanticMatch:
     description: str
     matched_text: str
     match_reason: str
-    score: int
+    score: float
 
 
 @dataclass(frozen=True)
@@ -110,6 +110,12 @@ class SemanticCatalog:
         from data_analytics_agent.semantic_bindings import build_bindings
 
         return build_bindings(self)
+
+    @cached_property
+    def search_index(self):
+        from data_analytics_agent.semantic_search import SemanticSearchIndex
+
+        return SemanticSearchIndex(self)
 
     @property
     def field_count(self) -> int:
@@ -134,59 +140,11 @@ class SemanticCatalog:
         if not kinds <= {"dataset", "field", "metric"}:
             raise ValueError("Unknown semantic entity kind.")
 
-        matches: list[SemanticMatch] = []
-        if "dataset" in kinds:
-            for dataset in self.datasets.values():
-                match = _score_entity(
-                    normalized_query,
-                    kind="dataset",
-                    name=dataset.name,
-                    parent_dataset=None,
-                    description=dataset.description,
-                    synonyms=dataset.synonyms,
-                )
-                if match:
-                    matches.append(match)
-        if "field" in kinds:
-            for dataset in self.datasets.values():
-                if dataset_name and dataset.name != dataset_name:
-                    continue
-                for field in dataset.fields.values():
-                    if time_only and not field.is_time:
-                        continue
-                    match = _score_entity(
-                        normalized_query,
-                        kind="field",
-                        name=field.name,
-                        parent_dataset=dataset.name,
-                        description=f"{field.description} {dataset.description}",
-                        synonyms=(
-                            *field.synonyms,
-                            *(f"{word} {field.name}" for word in dataset.synonyms),
-                        ),
-                    )
-                    if match:
-                        matches.append(match)
-        if "metric" in kinds:
-            for metric in self.metrics.values():
-                match = _score_entity(
-                    normalized_query,
-                    kind="metric",
-                    name=metric.name,
-                    parent_dataset=None,
-                    description=metric.description,
-                    synonyms=metric.synonyms,
-                )
-                if match:
-                    matches.append(match)
-
-        matches.sort(
-            key=lambda item: (
-                -item.score,
-                item.kind,
-                item.parent_dataset or "",
-                item.name,
-            )
+        matches = self.search_index.search(
+            normalized_query,
+            entity_kinds=kinds,
+            dataset_name=dataset_name,
+            time_only=time_only,
         )
         if per_dataset_limit is not None:
             counts, diverse = {}, []
@@ -655,6 +613,14 @@ def render_semantic_overview(
         f"Model hash: {catalog.content_hash}",
         "Datasets:",
     ]
+    if len(catalog.datasets) > 25:
+        # An alphabetical prefix is neither representative nor question-relevant.
+        lines[-1] = (
+            f"{len(catalog.datasets)} additional datasets omitted from orientation; "
+            "use get_semantic_context or paginated browsing. "
+            "Search metrics and datasets, then narrow fields by dataset."
+        )
+        return "\n".join(lines)
     omitted_datasets = 0
     for dataset in sorted(catalog.datasets.values(), key=lambda item: item.name):
         line = f"- {dataset.name}: {dataset.description}"
@@ -684,90 +650,3 @@ def render_semantic_overview(
 def _normalize_search_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold()
     return " ".join(TOKEN_PATTERN.findall(normalized))
-
-
-def _tokens(value: str) -> set[str]:
-    return {
-        token
-        for token in _normalize_search_text(value).split()
-        if token not in SEARCH_STOP_WORDS
-    }
-
-
-def _score_entity(
-    query: str,
-    *,
-    kind: EntityKind,
-    name: str,
-    parent_dataset: str | None,
-    description: str,
-    synonyms: tuple[str, ...],
-) -> SemanticMatch | None:
-    normalized_name = _normalize_search_text(name)
-    normalized_synonyms = tuple(_normalize_search_text(value) for value in synonyms)
-    if query == normalized_name:
-        return SemanticMatch(
-            kind, name, parent_dataset, description, name, "exact_name", 500
-        )
-    for raw, normalized in zip(synonyms, normalized_synonyms, strict=True):
-        if query == normalized:
-            return SemanticMatch(
-                kind,
-                name,
-                parent_dataset,
-                description,
-                raw,
-                "exact_synonym",
-                400,
-            )
-
-    query_tokens = _tokens(query)
-    if not query_tokens:
-        return None
-    searchable = [(name, _tokens(name))]
-    if parent_dataset:
-        searchable.append(
-            (
-                f"{parent_dataset}.{name}",
-                _tokens(f"{parent_dataset} {name}"),
-            )
-        )
-    searchable.extend((value, _tokens(value)) for value in synonyms)
-    full_matches = [item for item in searchable if query_tokens <= item[1]]
-    if full_matches:
-        matched = min(full_matches, key=lambda item: (len(item[1]), item[0]))
-        return SemanticMatch(
-            kind,
-            name,
-            parent_dataset,
-            description,
-            matched[0],
-            "all_tokens_in_name_or_synonym",
-            300,
-        )
-    overlaps = [(len(query_tokens & tokens), raw) for raw, tokens in searchable]
-    best_overlap, matched_text = max(overlaps, default=(0, ""))
-    if best_overlap:
-        score = 200 + round(100 * best_overlap / len(query_tokens))
-        return SemanticMatch(
-            kind,
-            name,
-            parent_dataset,
-            description,
-            matched_text,
-            "name_or_synonym_token_overlap",
-            score,
-        )
-    description_overlap = len(query_tokens & _tokens(description))
-    if description_overlap:
-        score = 100 + round(100 * description_overlap / len(query_tokens))
-        return SemanticMatch(
-            kind,
-            name,
-            parent_dataset,
-            description,
-            description,
-            "description_token_overlap",
-            score,
-        )
-    return None

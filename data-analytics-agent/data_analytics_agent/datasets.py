@@ -81,6 +81,7 @@ class ResultStore:
         execution_id: str | None = None,
         chart_preparation: ChartDataPreparation | None = None,
         upload_provenance: UploadProvenance | None = None,
+        metric_columns: dict[str, str] | None = None,
         max_rows: int | None = None,
     ) -> SavedResult:
         started = perf_counter()
@@ -199,6 +200,7 @@ class ResultStore:
             thread_id=thread_id,
             source_id=source_id,
             executed_sql=executed_sql,
+            metric_columns=metric_columns or {},
             originating_question=originating_question,
             short_label=clean[:100],
             columns=columns or [],
@@ -228,12 +230,31 @@ class ResultStore:
             return self._items[result_id]
 
     def get(self, result_id: str, thread_id: str, *, source_id: str | None = None):
-        result = self.get_unscoped(result_id)
-        if result.thread_id != thread_id or (
-            source_id is not None and result.source_id != source_id
-        ):
-            raise StoreNotFound(result_id)
-        return result
+        try:
+            result = self.get_unscoped(result_id)
+            if result.thread_id == thread_id and (
+                source_id is None or result.source_id == source_id
+            ):
+                return result
+        except StoreNotFound:
+            pass
+        candidates = sorted(
+            (
+                r
+                for r in self._items.values()
+                if r.thread_id == thread_id
+                and (source_id is None or r.source_id == source_id)
+            ),
+            key=lambda r: r.created_at,
+            reverse=True,
+        )[:8]
+        choices = "; ".join(
+            f"{r.result_id}: {r.short_label[:80]} ({', '.join(r.columns[:8])})"
+            for r in candidates
+        )
+        raise StoreNotFound(
+            f"Unknown dataset {result_id}. Exact recent references: {choices or 'none'}. Use list_conversation_results for all references; do not reconstruct IDs."
+        )
 
     def list_for_conversation(self, thread_id: str, *, source_id: str):
         return sorted(

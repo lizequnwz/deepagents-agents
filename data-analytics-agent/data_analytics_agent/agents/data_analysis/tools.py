@@ -25,7 +25,11 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
 
         Set analysis_outputs to compact text/scalars/tables/figures and
         output_datasets to named DataFrames to save for later steps. Each call
-        is a fresh process; explicitly load all needed saved inputs.
+        is a fresh process; explicitly load all needed saved inputs. Return at most
+        10 named outputs; combine related scalar diagnostics in a small table.
+        Save full rows in output_datasets, not strings, stdout or analysis_outputs.
+        For labeled Series (including statsmodels parameters), use .iloc for
+        positional access. Recompute and save flags whenever a screening rule changes.
         Example: inputs={"sales": "saved-result-id"}, code="df = datasets['sales'];
         analysis_outputs = {'rows': len(df)}". There are no automatic variables
         named sales, source, data, or df: use datasets['sales'] explicitly.
@@ -115,7 +119,6 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
         runtime: ToolRuntime,
         method: str = "",
         assumptions: list[str] | None = None,
-        interpretation: str = "",
         warnings: list[str] | None = None,
         requested_data: str = "",
     ) -> dict:
@@ -123,7 +126,11 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
 
         All executions and inputs from this assignment are attached automatically.
         You may be assigned again after the coordinator retrieves more data.
-        Supply interpretation, not artifact IDs or copied code.
+        Supply interpretation, not artifact IDs or copied code. Derive counts and
+        flagged observations from the final saved output, never from mental counting.
+        Before finishing, verify the saved flag column matches your final method;
+        a degenerate-scale fallback requires recomputing and saving that column.
+        Keep declared units and unknown completeness consistent in ALL outputs.
         """
         context = _runtime_context(runtime)
         assignment_id = runtime.state["assignment_id"]
@@ -154,7 +161,6 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
             answer=answer,
             method=method,
             assumptions=assumptions or [],
-            interpretation=interpretation,
             warnings=warnings or [],
             requested_data=requested_data,
         )
@@ -171,4 +177,9 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
         runs.storage.commit(context.run_id, call_id, json.dumps(response))
         return response
 
+    execute_analysis_python.description += (
+        f" Configured limits: {limits.max_output_items} outputs, "
+        f"{min(10, limits.max_output_rows)} model-visible table rows, "
+        f"{limits.max_output_columns} columns. Complete tables belong in output_datasets."
+    )
     return [execute_analysis_python, finish_analysis]

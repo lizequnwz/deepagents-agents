@@ -1,7 +1,7 @@
 # Documentation
 
 Start with the task you want to complete. Current guides, delivery status,
-proposals, and dated evidence serve different purposes.
+proposals, and dated evidence serve different purposes. Updated 26 September 2026.
 
 ## Start here
 
@@ -9,10 +9,11 @@ proposals, and dated evidence serve different purposes.
 |---|---|
 | Install and run the app | [Quick start](../README.md#run), then [configuration](development/configuration.md) |
 | Use the analyst or upload a file | [User guide](user/using-the-agent.md) |
-| Try realistic questions | [Deep-dive examples](user/deep-dive-examples.md) and the [sample CSV](user/examples/monthly-index.csv) |
+| Try realistic questions | [Simple questions and complex reports](user/deep-dive-examples.md) and the [sample CSV](user/examples/monthly-index.csv) |
 | Understand how the system works | [Architecture](development/architecture.md) |
 | Connect a data source | [Source onboarding](development/adding-data-sources.md), then [semantic modeling](development/semantic-model-best-practices.md) |
 | See what is delivered and what is next | [Implementation progress](roadmap/implementation-progress.md), then the [roadmap](roadmap/roadmap.md) |
+| Run regression and live example tests | [Testing guide](development/testing.md) |
 | Inspect test outcomes or earlier assessments | [Reviews and evidence](reviews/README.md) |
 | Open a source-onboarding diagram | [Diagram index](diagrams/README.md) |
 
@@ -24,8 +25,7 @@ proposals, and dated evidence serve different purposes.
 - **Delivery status:** [implementation progress](roadmap/implementation-progress.md)
   records delivered work and remaining acceptance gates. Check it before treating
   a roadmap recommendation as unfinished.
-- **Proposals:** the roadmap and simplification plan preserve their dated
-  recommendations. [Deferred next steps](../HANDOFF.md) is a short handoff.
+- **Proposals:** the roadmap and simplification plan identify remaining work and acceptance gates. [Deferred next steps](../HANDOFF.md) is a short handoff.
 - **Historical evidence:** `reviews/` holds dated reviews, test records, and
   supporting artifacts. Their findings describe the version reviewed.
 - **Visual material:** `diagrams/` keeps the current onboarding diagram with
@@ -38,10 +38,12 @@ proposals, and dated evidence serve different purposes.
 
 - [Using the agent](user/using-the-agent.md) — the supported analyst workflow,
   controls, and report behavior.
-- [Deep-dive test questions](user/deep-dive-examples.md) — copy-ready investigations,
+- [Example questions](user/deep-dive-examples.md) — simple answers, complex investigations,
   a synthetic upload, expected behavior, and report/run-control checks.
 
 ### Development
+
+- [Testing](development/testing.md) — isolated live runs, exact prompts, independent grading, and evidence limits.
 
 - [Configuration](development/configuration.md) — first-run setup, provider
   alternatives, approval, run controls, and development reload.
@@ -61,10 +63,8 @@ proposals, and dated evidence serve different purposes.
 ### Roadmap and deferred work
 
 - [Implementation progress](roadmap/implementation-progress.md) — dated
-  delivery record through 21 September 2026 and remaining acceptance gates.
-- [Improvement roadmap](roadmap/roadmap.md) — recommendations refreshed on
-  19 September 2026, with dated product research, an actionable next-release
-  scope, and acceptance criteria for agent quality and result interactions.
+  delivery record through 26 September 2026 and remaining acceptance gates.
+- [Improvement roadmap](roadmap/roadmap.md) — current priorities, concrete acceptance criteria, and links to observed issues.
 - [Deferred next steps](../HANDOFF.md) — work explicitly outside the current
   release.
 - [Simplification and ablation plan](roadmap/simplification-and-ablation.md) —
@@ -72,6 +72,8 @@ proposals, and dated evidence serve different purposes.
 
 ### Reviews and historical records
 
+- [Documentation live tests — 26 September 2026](reviews/documentation-live-tests-2026-09-26.md)
+- [Agent discovery, response contracts and voice — 26 September 2026](reviews/agent-review-2026-09-26.md)
 - [Reviews and evidence index](reviews/README.md)
 - [Semantic discovery review — 21 September 2026](reviews/semantic-discovery-review-2026-09-21.md)
 - [Artifact handoff review — 20 September 2026](reviews/artifact-handoff-review-2026-09-20.md)
@@ -100,3 +102,5 @@ and verification in the implementation log. Put dated assessments and test
 receipts in `reviews/`; put proposed work in `roadmap/`. Keep example data beside
 its user guide and generated assets beside their editable sources. Add new
 reading material to this index, and update links whenever a file moves.
+
+Latest delivery: [Roadmap 1–3 verification and remaining issues](reviews/roadmap-implementation-2026-09-27.md).
