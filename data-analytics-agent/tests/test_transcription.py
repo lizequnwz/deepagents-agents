@@ -7,8 +7,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from openai import APIConnectionError, APITimeoutError
 
-from data_analytics_agent.api import Services, create_app
 from data_analytics_agent import transcription
+from data_analytics_agent.api import Services, create_app
 
 
 def provider(monkeypatch, *, text=" Sales by month? ", error=None):
@@ -80,21 +80,29 @@ def test_transcription_endpoint_does_not_start_agent_or_save_audio(
     assert not list(services.storage.artifacts.rglob("*.wav"))
 
 
-def test_voice_populates_composer_once_without_submitting(monkeypatch):
+@pytest.mark.parametrize("with_attachment", [False, True])
+def test_voice_populates_composer_once_without_submitting(monkeypatch, with_attachment):
     import streamlit as st
     from streamlit.testing.v1 import AppTest
+
     from data_analytics_agent.ui.api_client import AgentAPIClient
 
     calls = []
-    native = st.audio_input
+    attachment = SimpleNamespace(name="sales.csv")
+    native = st.chat_input
 
     def recorded(*args, **kwargs):
-        native(*args, **kwargs)
-        if st.session_state.get("voice_question", 0) == 0:
-            return SimpleNamespace(getvalue=lambda: b"recorded wav")
-        return None
+        value = native(*args, **kwargs)
+        if not st.session_state.get("recording_delivered"):
+            st.session_state["recording_delivered"] = True
+            return SimpleNamespace(
+                audio=SimpleNamespace(getvalue=lambda: b"recorded wav"),
+                text="Keep this context" if with_attachment else "",
+                files=[attachment] if with_attachment else [],
+            )
+        return value
 
-    monkeypatch.setattr(st, "audio_input", recorded)
+    monkeypatch.setattr(st, "chat_input", recorded)
     monkeypatch.setattr(
         AgentAPIClient,
         "transcribe",
@@ -107,15 +115,23 @@ from data_analytics_agent.ui.uploads import chat_submission
 submission = chat_submission("Question", key="question", max_bytes=1000, client=AgentAPIClient("http://test"))
 if submission:
     st.session_state["sent"] = submission.text
+    st.session_state["sent_files"] = [file.name for file in submission.files]
 """).run()
     assert not app.exception
     assert calls == [b"recorded wav"]
-    assert app.chat_input[0].proto.value == "Sales by month?"
+    assert app.chat_input[0].proto.accept_audio
+    assert not app.get("audio_input")
+    assert app.chat_input[0].proto.value == (
+        "Keep this context\n\nSales by month?" if with_attachment else "Sales by month?"
+    )
     assert "sent" not in app.session_state
     app.run()
     assert calls == [b"recorded wav"]
     app.chat_input[0].set_value("Edited question").run()
     assert app.session_state["sent"] == "Edited question"
+    assert app.session_state["sent_files"] == (["sales.csv"] if with_attachment else [])
+    assert "voice_question_pending" not in app.session_state
+    assert "voice_question_files" not in app.session_state
     assert not any(
         isinstance(value, bytes) for value in app.session_state.filtered_state.values()
     )
@@ -124,18 +140,22 @@ if submission:
 def test_voice_failure_requires_explicit_retry(monkeypatch):
     import streamlit as st
     from streamlit.testing.v1 import AppTest
+
     from data_analytics_agent.ui.api_client import AgentAPIClient, APIError
 
     attempts = []
-    native = st.audio_input
+    native = st.chat_input
 
     def recorded(*args, **kwargs):
-        native(*args, **kwargs)
-        return (
-            SimpleNamespace(getvalue=lambda: b"wav")
-            if st.session_state.get("voice_question", 0) == 0
-            else None
-        )
+        value = native(*args, **kwargs)
+        if not st.session_state.get("recording_delivered"):
+            st.session_state["recording_delivered"] = True
+            return SimpleNamespace(
+                audio=SimpleNamespace(getvalue=lambda: b"wav"),
+                text="",
+                files=[],
+            )
+        return value
 
     def transcribe(self, content):
         attempts.append(content)
@@ -143,7 +163,7 @@ def test_voice_failure_requires_explicit_retry(monkeypatch):
             raise APIError("Transcription failed. Try again.")
         return "Recovered question"
 
-    monkeypatch.setattr(st, "audio_input", recorded)
+    monkeypatch.setattr(st, "chat_input", recorded)
     monkeypatch.setattr(AgentAPIClient, "transcribe", transcribe)
     app = AppTest.from_string("""
 from data_analytics_agent.ui.api_client import AgentAPIClient

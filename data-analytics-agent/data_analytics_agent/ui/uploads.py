@@ -1,29 +1,31 @@
 """Native file entry and explicit schema/grain review before analytical work."""
 
 import streamlit as st
+
 from data_analytics_agent.ui.api_client import APIError
 from data_analytics_agent.uploads import TYPE_LABELS
 
 
 def chat_submission(placeholder, *, key, max_bytes, client):
-    """Pinned native recording control beside the existing file/text composer."""
-    from data_analytics_agent.ui.voice import render_voice_input
+    """One native composer for attachments, editable text, and voice recording."""
+    from data_analytics_agent.ui.voice import (
+        prepare_voice_draft,
+        review_voice_submission,
+    )
 
     with st.bottom:
-        voice, composer = st.columns([1, 5], vertical_alignment="bottom")
-        with voice:
-            render_voice_input(client, key)
-        with composer:
-            if text := st.session_state.pop(f"voice_{key}_text", None):
-                st.session_state[key] = text
-            return st.chat_input(
-                placeholder,
-                key=key,
-                accept_file=True,
-                file_type=["csv", "parquet"],
-                max_upload_size=max(1, (max_bytes + 1_048_575) // 1_048_576),
-                submit_mode="disable",
-            )
+        prepare_voice_draft(client, key)
+        submission = st.chat_input(
+            placeholder,
+            key=key,
+            accept_file=True,
+            file_type=["csv", "parquet"],
+            accept_audio=True,
+            audio_sample_rate=16000,
+            max_upload_size=max(1, (max_bytes + 1_048_575) // 1_048_576),
+            submit_mode="disable",
+        )
+        return review_voice_submission(submission, key)
 
 
 def stage_attachment(client, submission, max_bytes):
