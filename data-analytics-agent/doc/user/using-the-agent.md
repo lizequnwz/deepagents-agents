@@ -74,7 +74,7 @@ evidence panel and HTML from the report panel. Preview pages are labeled.
 On a completed result, expand **Download data and calculations** and choose
 **Download analysis ZIP**. The button prepares the package when clicked and shows
 loading feedback; merely opening an answer does not prepare it. Extract the ZIP
-to get `analysis.py`, `analysis.ipynb`, exact steps, typed Parquet inputs/results,
+to get `analysis.py`, `analysis.ipynb`, exact Python steps, SQL query files, typed Parquet inputs/results,
 diagnostic figures, the HTML report, requirements and a hashed provenance
 manifest. The download uses saved evidence without model or source calls and
 matches the report revision displayed. If that revision has changed, reload
@@ -82,6 +82,14 @@ before trying again. Failed attempts and unrelated conversation evidence are
 excluded from runnable steps. Partial findings and incomplete extracted
 populations retain their labels. **Open full report** and **Download HTML report**
 need only a browser; replaying calculations requires a local Python environment.
+
+Executed queries are separate `.sql` files under `sql/`, linked from the package's
+README. `sql-provenance.json` maps each query to its saved result, Parquet snapshot,
+question and input result IDs. Supporting queries from reused evidence are
+included; unrelated queries and chart copies of the same query are excluded.
+Source queries refer to the original database; saved-data queries require their
+named snapshot inputs. The files preserve the exact executed SQL, including
+reviewed edits. Downloading or replaying Python does not execute those queries.
 
 Install the recorded dependencies in a local Python environment and run `python analysis.py`. Open the notebook in Jupyter from the extracted folder and run all cells in order. Each step uses a fresh local process with its original named inputs. Python-derived datasets and scalar/table diagnostics are compared to stored evidence with numerical tolerance; randomized code needs its own seeds. SQL results remain fixed snapshots; replay does not reconnect to or refresh the warehouse. Original business charts remain in the self-contained HTML report, with chart definitions exported separately.
 

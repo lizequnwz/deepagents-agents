@@ -21,7 +21,8 @@ The latest implementation added:
   Identifiers, dates, formula-cache choices, warnings and original-file provenance
   persist. One selected table is supported; workbook editing and joins are not.
 - **Download analysis**: selected report/evidence, typed snapshots, exact successful
-  Python steps and necessary producers, SQL provenance, versions and hashes.
+  Python steps and necessary producers, exact SQL query files linked to their
+  saved snapshots, SQL provenance, versions and hashes.
 - An editable `analysis.ipynb` with stored outputs in the same bundle. Script and
   notebook replay preserve a fresh local process per analytical step. SQL remains
   a saved snapshot boundary; replay does not refresh a warehouse or rewrite findings.
@@ -61,6 +62,10 @@ passed **378 tests**, with six opt-in provider tests skipped. It exercises the
 guided file setup, preserved edits after validation errors, optional review
 readiness and deferred revision-bound downloads through native widgets and the
 real API. This revision has no new browser or business-user study.
+
+The [SQL export follow-up](doc/reviews/sql-export-2026-10-01.md) adds exact query
+files and links them to their saved snapshots. Its focused export, workbook and
+presentation suite passed **27 tests**, including notebook replay.
 
 The work is in the local working tree; it has not been committed or deployed.
 Preserve it when continuing. API contract is **17**: restart both services together

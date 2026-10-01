@@ -45,7 +45,7 @@ saved-data follow-ups, a sample upload, and run-control checks.
   restart, unfinished work waits for an explicit Resume. A report failure can
   be retried without rerunning data retrieval or analysis.
 - **Download data and calculations** offers an analysis ZIP, prepared on click,
-  containing a portable script, notebook, typed data and saved report. Python
+  containing SQL query files, a portable Python script, notebook, typed data and saved report. Python
   steps replay locally; SQL remains snapshot provenance.
 - Evidence panels contain bounded previews, exact SQL/Python and full CSV and
   Parquet download links. Diagnostic images and HTML remain local artifacts.

@@ -165,6 +165,28 @@ def write_bundle(services, run_id, report_id, target):
             ]
         )
     )
+    sql_queries = [
+        {
+            "result_id": d.result_id,
+            "path": f"sql/query-{index + 1:03}.sql",
+            "query": d.executed_sql,
+            "kind": d.kind,
+            "label": d.short_label,
+            "snapshot_path": f"data/{d.result_id}.parquet",
+            "parent_result_ids": d.parent_result_ids,
+            "question": d.originating_question,
+        }
+        for index, d in enumerate(
+            sorted(
+                (
+                    d
+                    for d in datasets.values()
+                    if d.kind in {"source_sql", "saved_sql"} and d.executed_sql
+                ),
+                key=lambda d: (d.created_at, d.result_id),
+            )
+        )
+    ]
     readme = f"""# {report.title}
 
 Question: {run.question}
@@ -175,7 +197,7 @@ Question: {run.question}
 
 Partial findings: {answer.partial}. Extracted populations complete: {manifest["population_complete"]}.
 These are immutable saved snapshots. Source freshness/completeness is established only by an explicit source statement, not by upload time or first/last transaction dates.
-SQL appears as provenance; this package does not refresh warehouse data or re-execute SQL transformations.
+Exact executed SQL is included for inspection; this package does not refresh warehouse data or re-execute SQL transformations.
 Chart presentation snapshots may be sampled; their complete parents remain in data/ and the manifest.
 
 """
@@ -185,6 +207,21 @@ Chart presentation snapshots may be sampled; their complete parents remain in da
             f"\n\n## Method\n\n{analysis.method}\n\n{analysis.answer}\n"
             + "\n".join("- " + x for x in analysis.assumptions)
         )
+    readme += "\n\n## SQL queries\n\n"
+    if sql_queries:
+        readme += (
+            "Each file in sql/ contains one exact executed query. "
+            "sql-provenance.json maps the files to their saved data snapshots, questions and input result IDs. "
+            "Source queries refer to the original database; saved-data queries use named snapshot inputs. "
+            "Input result IDs are evidence references, not warehouse table names.\n\n"
+        )
+        readme += "\n".join(
+            f"- [{Path(q['path']).name}]({q['path']}) — {q['label']} "
+            + ("(saved-data query)" if q["kind"] == "saved_sql" else "(source query)")
+            for q in sql_queries
+        )
+    else:
+        readme += "No SQL queries were recorded for this exported evidence.\n"
     readme += """
 
 ## Run locally
@@ -241,21 +278,10 @@ Dependencies from recorded executions are included where available; versions for
         put("replay.py", Path(export_replay.__file__).read_bytes())
         put("worker.py", Path(worker.__file__).read_bytes())
         copy("report.html", report.html_path)
+        for query in sql_queries:
+            put(query["path"], query["query"])
         put(
-            "sql-provenance.json",
-            json.dumps(
-                [
-                    {
-                        "result_id": d.result_id,
-                        "query": d.executed_sql,
-                        "parent_result_ids": d.parent_result_ids,
-                        "question": d.originating_question,
-                    }
-                    for d in datasets.values()
-                    if d.executed_sql
-                ],
-                indent=2,
-            ),
+            "sql-provenance.json", json.dumps(sql_queries, indent=2, ensure_ascii=False)
         )
         put(
             "charts.json",
@@ -321,7 +347,7 @@ def build_notebook(manifest, readme, executions, datasets):
     if not executions:
         cells.append(
             nbf.v4.new_markdown_cell(
-                "## Saved SQL results\n\nInspect complete snapshots locally. Original source queries are in sql-provenance.json."
+                "## Saved data\n\nInspect complete snapshots locally. Exact SQL files, when present, are linked in README.md and indexed in sql-provenance.json."
             )
         )
         cells.append(

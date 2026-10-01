@@ -1472,7 +1472,7 @@ def render_answer(
             "Download data and calculations", icon=":material/folder_zip:"
         ):
             st.caption(
-                "For sharing or checking the work: saved data, calculations, notebook and this report in one ZIP."
+                "For sharing or checking the work: saved data, SQL queries, Python code, notebook and this report in one ZIP."
             )
             st.caption(
                 "This package uses the data already analyzed. It does not refresh the source. Replaying calculations requires Python; opening the HTML report only needs a browser."

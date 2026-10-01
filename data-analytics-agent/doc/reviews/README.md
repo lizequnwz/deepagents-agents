@@ -8,6 +8,7 @@ supersede the [capability status](../roadmap/implementation-progress.md).
 
 | Date | Record | How to use it |
 |---|---|---|
+| 1 October 2026 | [SQL export files](sql-export-2026-10-01.md) | Exact `.sql` files, snapshot/lineage index, query selection and export/replay regressions |
 | 1 October 2026 | [Business usability](business-usability-2026-10-01.md) | Guided workbook/file review, confirmed population details, deferred downloads and deliberate optional reviews; automated interaction checks and their limits |
 | 1 October 2026 | [Ablation outcome and batch review](ablation-outcomes-2026-10-01.md) | Rejected prompt candidate, preserved early-terminated live study, shared approval repair and independently recomputed live workflow; remaining ablation gates stay open |
 | 30 September 2026 | [Ablation readiness](ablation-readiness-2026-09-30.md) | Frozen synthetic inputs, receipt/grading repairs and paired gates; prepared prompt candidate, without live adoption claims |

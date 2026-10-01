@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 from io import BytesIO
+import hashlib
 import json
 import subprocess
 import sys
@@ -191,6 +192,8 @@ def test_bundle_replays_exact_steps_and_scoped_typed_outputs(analytical_bundle):
         not in (w.folder / manifest["steps"][0]["code_path"]).read_text()
     )
     assert manifest["runtime"]["pandas"]
+    assert json.loads((w.folder / "sql-provenance.json").read_text()) == []
+    assert "No SQL queries were recorded" in (w.folder / "README.md").read_text()
     result = subprocess.run(
         [sys.executable, str(w.folder / "analysis.py")],
         cwd="/tmp",
@@ -278,12 +281,13 @@ def test_sql_only_snapshot_export_labels_incomplete_and_replays(
     thread = s.conversations.create("test")
     run = s.runs.create(thread, "test", "Show total")
     s.conversations.begin_run(thread, run)
+    executed_sql = "-- Reviewed total: café\nSELECT SUM(amount) AS total FROM sales\n\n"
     result = s.results.save(
         columns=["total"],
         rows=[{"total": 10}],
         thread_id=thread,
         source_id="test",
-        executed_sql="SELECT SUM(amount) AS total FROM sales",
+        executed_sql=executed_sql,
         truncated=partial,
     )
     answer = complete(s, thread, run, [result], partial=partial)
@@ -297,6 +301,16 @@ def test_sql_only_snapshot_export_labels_incomplete_and_replays(
     assert manifest["population_complete"] is not partial
     assert manifest["partial"] is partial
     assert not manifest["steps"]
+    queries = json.loads((folder / "sql-provenance.json").read_text())
+    assert len(queries) == 1
+    query = queries[0]
+    assert query["result_id"] == result.result_id
+    assert (folder / query["path"]).read_bytes() == executed_sql.encode("utf-8")
+    assert (
+        manifest["files"][query["path"]]
+        == hashlib.sha256(executed_sql.encode("utf-8")).hexdigest()
+    )
+    assert f"]({query['path']})" in (folder / "README.md").read_text()
     result = subprocess.run(
         [sys.executable, str(folder / "analysis.py")], capture_output=True, text=True
     )
@@ -304,6 +318,104 @@ def test_sql_only_snapshot_export_labels_incomplete_and_replays(
     notebook = nbformat.read(folder / "analysis.ipynb", as_version=4)
     nbformat.validate(notebook)
     assert any(c.get("outputs") for c in notebook.cells)
+
+
+def test_download_includes_reused_sql_lineage_without_chart_copies_or_other_queries(
+    test_settings, monkeypatch
+):
+    from data_analytics_agent import coordinator
+
+    s = Services(settings=test_settings)
+    thread = s.conversations.create("test")
+    prior_run = s.runs.create(thread, "test", "List artists")
+    s.conversations.begin_run(thread, prior_run)
+    source = s.results.save(
+        columns=["Name"],
+        rows=[{"Name": "Café ensemble"}],
+        thread_id=thread,
+        source_id="test",
+        executed_sql='-- Exact reviewed SQL\nSELECT "Name" FROM "Artist"\n',
+        purpose="Artists from the source",
+        originating_question="List artists",
+    )
+    complete(s, thread, prior_run, [source])
+    run = s.runs.create(thread, "test", "Use the saved artist list")
+    s.conversations.begin_run(thread, run)
+    shaped = s.results.save(
+        columns=["Name"],
+        rows=source.rows,
+        thread_id=thread,
+        source_id="test",
+        executed_sql='SELECT "Name" FROM saved_artists WHERE "Name" IS NOT NULL\n',
+        kind="saved_sql",
+        parent_result_ids=[source.result_id],
+        purpose="Artists from the saved snapshot",
+        originating_question="Use the saved artist list",
+    )
+    chart_data = s.results.save(
+        columns=["Name"],
+        rows=shaped.rows,
+        thread_id=thread,
+        source_id="test",
+        executed_sql=shaped.executed_sql,
+        kind="presentation",
+        parent_result_ids=[shaped.result_id],
+    )
+    unrelated = s.results.save(
+        columns=["Name"],
+        rows=[{"Name": "Other"}],
+        thread_id=thread,
+        source_id="test",
+        executed_sql="SELECT Name FROM Unrelated",
+    )
+    answer = complete(s, thread, run, [chart_data])
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError(
+            "SQL downloads use saved evidence without source/model calls"
+        )
+
+    monkeypatch.setattr(s, "backend_for_source", forbidden)
+    monkeypatch.setattr(coordinator, "_build_chat_model", forbidden)
+    with TestClient(create_app(s)) as api:
+        response = api.get(
+            f"/api/runs/{run}/download",
+            params={"report_id": answer.report.report_id},
+        )
+        assert response.status_code == 200, response.text
+        with ZipFile(BytesIO(response.content)) as bundle:
+            index = json.loads(bundle.read("sql-provenance.json"))
+            manifest = json.loads(bundle.read("manifest.json"))
+            assert [q["result_id"] for q in index] == [
+                source.result_id,
+                shaped.result_id,
+            ]
+            assert [q["kind"] for q in index] == ["source_sql", "saved_sql"]
+            assert [q["parent_result_ids"] for q in index] == [[], [source.result_id]]
+            assert [q["question"] for q in index] == [
+                "List artists",
+                "Use the saved artist list",
+            ]
+            assert [q["label"] for q in index] == [
+                source.short_label,
+                shaped.short_label,
+            ]
+            assert set(n for n in bundle.namelist() if n.endswith(".sql")) == {
+                q["path"] for q in index
+            }
+            for query, saved in zip(index, [source, shaped], strict=True):
+                content = saved.executed_sql.encode("utf-8")
+                assert bundle.read(query["path"]) == content
+                assert (
+                    query["snapshot_path"]
+                    == manifest["datasets"][saved.result_id]["path"]
+                )
+                assert query["snapshot_path"] in bundle.namelist()
+                assert (
+                    manifest["files"][query["path"]]
+                    == hashlib.sha256(content).hexdigest()
+                )
+            assert unrelated.result_id not in manifest["datasets"]
 
 
 def test_unfinished_turn_has_no_download(test_settings, tmp_path):

@@ -18,7 +18,7 @@ Updated 1 October 2026. This is the current delivery inventory. Start with the
 | Analytical visibility | Visible plans, compact investigation records, bounded independent Python assignments, ordered batch review, exact all-input review and code inspection |
 | Run recovery | Durable conversations/checkpoints, approvals/corrections, Stop/Resume and history deletion; blocking source cancellation remains cooperative |
 | Voice | Record → transcribe → edit composer draft; no automatic question submission |
-| Portable work | Selected report/data/code ZIP prepared on click with native loading feedback, provenance, versions and hashes; editable notebook with stored outputs; script/notebook replay over saved snapshots |
+| Portable work | Selected report/data/code ZIP prepared on click with native loading feedback, exact SQL files linked to saved snapshots, provenance, versions and hashes; editable notebook with stored outputs; script/notebook replay over saved snapshots |
 | Evaluation tooling | Documented/held-out and synthetic ablation corpora; serving-runtime fingerprints; failure-preserving receipts; independent grading and paired adoption gates; opt-in provider tests |
 
 The latest cleanup removed the unused debug-details setting and inactive validation
