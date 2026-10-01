@@ -1,0 +1,53 @@
+{
+  "run_id": "7ed3869b-0c08-4df8-9f76-d906dc82564e",
+  "status": "completed",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "input_rows": [
+    60,
+    60
+  ],
+  "combined_rows": 120,
+  "recomputed_means": [
+    159.0,
+    279.0
+  ],
+  "recomputed_medians": [
+    160.0,
+    280.0
+  ],
+  "mean_shift": 120.0,
+  "sample_standard_deviation": 35.659186674241255,
+  "checks": {
+    "exact_source_population": "pass",
+    "original_sql_executed_once_each": "pass",
+    "reviewed_sql_edit_persisted": "pass",
+    "complete_named_python_inputs": "pass",
+    "reviewed_python_edit_persisted": "pass",
+    "stop_resume_preserved_review": "pass",
+    "table_report_analysis_agreement": "pass",
+    "zip_exact_steps_and_populations": "pass",
+    "no_tool_failures": "pass"
+  },
+  "operator_code_repairs": 1,
+  "limitations": [
+    "One synthetic operator-reviewed smoke; not first-attempt analytical accuracy, repeated model quality or performance evidence.",
+    "Client evaluation scripts changed during collection; serving application fingerprints remained identical."
+  ],
+  "evidence_root": ".analytics/evaluations/approval-batch-2026-10-01",
+  "artifact_hashes": {
+    "59b08c7c-2234-42f7-96e3-a0f7323a2965.csv": "1add5d95ff70808a5e6532c1d44cc9ec802123f2e37a4dee7b8f5d4afa663c45",
+    "59b08c7c-2234-42f7-96e3-a0f7323a2965.parquet": "b26ec79b53c26138e002d09a9045758227ae9f0f6677b912ee142c3d68888cae",
+    "62d77363-dba9-4a04-8215-32d954936368.csv": "0d1295fc61398f6ac20ecf2ea539811d047689d724e64604682730168e8ba7ff",
+    "62d77363-dba9-4a04-8215-32d954936368.parquet": "c75ba61a15a71d812c42d8c05e2f0c8c1a4afb051af2e630a3837e35d7a89119",
+    "986646a5-f40d-43db-b748-9e4a58b42d14.csv": "1f3794ce5afe0638a49bf43d89814fe5cc168be4bc548b606467a7de29356703",
+    "986646a5-f40d-43db-b748-9e4a58b42d14.parquet": "7a8d6daf7aaa6f39ddd1e259638d396d6c1e6fb9c6f2e5d57ee5c88abcdfe73f",
+    "a049fbee-490a-42c5-b9ba-57f35c044ac3.csv": "83cd54d2ad6d1c1b56f1d2b1b4f44208ffc2e5df56f89bab38c13e17f886d84d",
+    "a049fbee-490a-42c5-b9ba-57f35c044ac3.parquet": "387401cd42292f9b6db30dcc31762b9edd82ed5695ec13283ae2105fd947af9b",
+    "analysis.zip": "c4362e887fa4bac43df919518d89e2d1824b1441fcae0773ba67199241e89968",
+    "d36b3f25-2d6e-48e4-95b1-ce48aed30412.csv": "1dda7a2fbd3c12e69d54f75d245e50f706e0aced4a38ab0ed02a711cc1f312b3",
+    "d36b3f25-2d6e-48e4-95b1-ce48aed30412.parquet": "ca98e973e585f0e9be5144cd65c691e219931c4289a27e959912bc48c19acd86",
+    "report.html": "b2ce6d7cb7704a59ea0ca7ea78e389e9b898675a3ab4be6d4bde29c1726b6756"
+  },
+  "operator_repair_reason": "Explicit skew column lookup avoids the pandas Series.skew method; NumPy was already preloaded, so the additional import was redundant."
+}

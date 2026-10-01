@@ -15,7 +15,7 @@ cp .env.example .env
 Open Streamlit at `http://127.0.0.1:8501`. The API runs at
 `http://127.0.0.1:8000`; `/docs` exposes its contract. Restart both processes after
 code changes. The launcher installs the locked dependencies and checks model
-configuration before starting either service. Upload a CSV/Parquet file and
+configuration before starting either service. Upload a CSV, Parquet or Excel file and
 review its schema, or select a configured warehouse. The included SQLite sources
 use `data_sources.yaml`; see [adding sources](doc/development/adding-data-sources.md)
 to connect your own data.
@@ -27,7 +27,7 @@ saved-data follow-ups, a sample upload, and run-control checks.
 
 ## Workflow
 
-- Select a configured source, or upload one CSV/Parquet file and confirm its
+- Select a configured source, or upload one CSV, Parquet or Excel file and confirm its
   column types. Each file has its own conversation. Reopen either from history.
 - **Understanding → Retrieving data → Analyzing → Findings ready → Preparing
   report** describes the current work. Descriptive questions may skip Python.
@@ -44,6 +44,9 @@ saved-data follow-ups, a sample upload, and run-control checks.
 - Stop preserves committed artifacts. Resume continues interrupted work; after
   restart, unfinished work waits for an explicit Resume. A report failure can
   be retried without rerunning data retrieval or analysis.
+- **Download data and calculations** offers an analysis ZIP, prepared on click,
+  containing a portable script, notebook, typed data and saved report. Python
+  steps replay locally; SQL remains snapshot provenance.
 - Evidence panels contain bounded previews, exact SQL/Python and full CSV and
   Parquet download links. Diagnostic images and HTML remain local artifacts.
 
@@ -66,6 +69,9 @@ errors preserve earlier steps.
 
 Both SQL and Python review are independently configurable and off by default.
 Enabled review executes exact edited code with its original dataset bindings.
+Each review shows every proposal in the interrupt and submits their decisions
+together. Choose a decision for each proposal; none is preselected. Decisions
+for an older review are rejected.
 The active analysis budget is 15 minutes, individual Python execution 120
 seconds, and presentation has a separate two-minute budget. Framework call
 limits remain emergency stops. Partial work is identified as partial.
@@ -91,8 +97,8 @@ reuse saved output during resumption. An execution interrupted before output
 commit may execute again. Use a single API process for this local deployment.
 
 See the [documentation index](doc/README.md), [architecture](doc/development/architecture.md),
-[user workflow](doc/user/using-the-agent.md), and [deferred work](HANDOFF.md). The
-[implementation log](doc/roadmap/implementation-progress.md) tracks roadmap delivery.
+[user workflow](doc/user/using-the-agent.md), and [next implementation handoff](HANDOFF.md). The
+[capability status](doc/roadmap/implementation-progress.md) records delivered behavior.
 The [tutorial](agent_internals_tutorial.ipynb)
 walks through the artifact workflow without a model call.
 

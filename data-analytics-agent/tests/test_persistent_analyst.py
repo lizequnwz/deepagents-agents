@@ -21,6 +21,7 @@ from data_analytics_agent.presentation import create_presentation_tools
 from data_analytics_agent.reporting.schemas import ReportSpec
 from data_analytics_agent.reporting.tools import create_create_report_tool
 from data_analytics_agent.schemas import (
+    ApprovalAction,
     ApprovalRequest,
     CoordinatorResponse,
     Decision,
@@ -363,11 +364,15 @@ def test_restart_preserves_pending_reviews_and_pauses_computation(workspace):
     assert resumed.get(w.run).status == RunStatus.PAUSED
     approval = ApprovalRequest(
         interrupt_id="review",
-        action_name="execute_analysis_python",
-        query="print(1)",
-        review_type="python",
-        arguments={"code": "print(1)", "inputs": {"a": "one", "b": "two"}},
-        allowed_decisions=["edit"],
+        actions=[
+            ApprovalAction(
+                action_name="execute_analysis_python",
+                query="print(1)",
+                review_type="python",
+                arguments={"code": "print(1)", "inputs": {"a": "one", "b": "two"}},
+                allowed_decisions=["edit"],
+            )
+        ],
     )
     w.runs.require_approval(w.run, approval)
     reopened = RunStore(LocalStorage(w.storage.root))

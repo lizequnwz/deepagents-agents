@@ -1,5 +1,13 @@
 # Testing the application
 
+Historical live-test claims whose receipts are unavailable in this checkout are
+unverified. Current review/comparator checks and the early-terminated synthetic
+study are recorded in the [1 October outcome](../reviews/ablation-outcomes-2026-10-01.md).
+The [30 September release verification](../reviews/release-verification-2026-09-30.md)
+records the earlier Excel/export release checks.
+The [business usability verification](../reviews/business-usability-2026-10-01.md)
+records subsequent native-widget/API interaction checks and their browser limits.
+
 Use three distinct evidence levels: deterministic regression tests, live model
 runs through the API, and browser interaction checks. None substitutes for the
 others. A successful HTTP response or completed report is not a correctness grade.
@@ -53,10 +61,13 @@ uv run python scripts/evaluate_documented_examples.py \
 The runner preserves conversation dependencies, confirms the synthetic upload's
 schema, answers only the specified clarification, and saves requests, run events,
 CSV results, and report HTML. It stops at unexpected clarification/review states
-rather than inventing business answers or approving code. Recorded cases are
-skipped on a subsequent invocation. A saved request without final receipts is
+rather than inventing business answers or approving code. Completed receipt collections are
+preserved on a subsequent invocation. Interrupted artifact downloads can be retried
+over the same terminal run. Review/paused runs can be reattached after manual action;
+failed trials remain failed and independent repetitions need fresh directories. A saved request without final receipts is
 reattached by run ID; the question is not submitted again. Missing prerequisites
-and recorded runs requiring attention stop the runner. Polling elapsed time on a
+and runs requiring attention stop the runner by default. `--keep-going` records
+failures and missing dependent cases, continues independent cases and exits nonzero. Polling elapsed time on a
 reattached run measures that invocation; use run diagnostics for execution timing. To repeat a full independent trial, use a new
 receipt directory and a new API storage directory. `--case ID` selects a case;
 follow-ups require their prior conversation receipts.
@@ -79,12 +90,17 @@ Store compact, dated outcomes and issues under `doc/reviews/`. Keep bulky raw ru
 Parquet, and HTML in the isolated receipt/workspace directories unless a particular
 artifact is needed to explain a finding. Record model, source hashes, prompt IDs,
 run IDs, settings, elapsed time, grading method, and limitations. Never commit keys.
-See the [26 September test record](../reviews/documentation-live-tests-2026-09-26.md).
+See the [latest release verification](../reviews/release-verification-2026-09-30.md)
+for available local checks and their limitations.
 
 ## Reproducible grading and held-out cases
 
-The runner stores a manifest containing the exact corpus and hashes of source DBs,
-semantic catalogs, uploads, application code and instructions. Reusing a receipt
+The runner stores the entire frozen corpus, upload hashes and an execution
+fingerprint from the serving API. It includes source DB/catalog hashes, code and
+instructions, locked/installed dependencies, provider/model and execution settings.
+The before/after fingerprints must agree. `--case` limits this invocation; every
+corpus case remains in grading, with missing cases unreviewed. For an intentionally
+smaller study, provide a smaller corpus before the first run. Reusing a receipt
 directory with changed inputs fails; use a new directory for each revision. Each
 completed case includes its saved report specification. Run the alternate corpus:
 
@@ -107,5 +123,21 @@ uv run python scripts/grade_documented_examples.py /tmp/analytics-example-receip
 
 Failed, partial, missing-evidence, and unreviewed outcomes exit nonzero. Human
 review and independent recomputation remain necessary; this is not an automatic
-semantic-accuracy judge. [Dated evidence](../reviews/roadmap-evidence/README.md)
-includes failing as well as passing trials and reproducible numeric checkers.
+semantic-accuracy judge. Keep failing and passing receipts with their independent
+numeric checks. Historical live-trial claims without receipts are unverified;
+current deterministic checks do not replace provider evaluation.
+
+## Paired ablations
+
+Use the [ablation execution guide](../roadmap/ablation-execution.md) for the
+predeclared prompt study, frozen synthetic sources, explicit workbook/schema
+fixtures and paired reducer. `scripts/compare_ablation.py` requires independent
+per-case grading bound to exact manifests/receipts, fresh repetitions and
+evidenced boundary checks. It rejects changed inputs/settings and stale or reused
+receipts. Unknown usage/cost and absent reviews cannot satisfy adoption gates.
+Incomplete, failing or unreviewed outcome pairs suppress aggregate performance
+estimates. The first patch was rejected after three live metadata regressions;
+the mixed study ended early. See the
+[1 October outcome and batch-review checks](../reviews/ablation-outcomes-2026-10-01.md).
+Deterministic/scripted checks and operator-reviewed smoke runs are not
+first-attempt live-model quality evidence.

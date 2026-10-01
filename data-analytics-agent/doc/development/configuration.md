@@ -62,7 +62,6 @@ SQL_AGENT_MODEL_CALL_LIMIT=48
 SQL_AGENT_TOOL_CALL_LIMIT=64
 ANALYSIS_AGENT_MODEL_CALL_LIMIT=64
 ANALYSIS_AGENT_TOOL_CALL_LIMIT=80
-AGENT_DEBUG_DETAILS=false
 # PGEOCODE_DATA_DIR=/tmp/pgeocode_data
 
 LANGSMITH_TRACING=false
@@ -96,7 +95,7 @@ remain enforced. Defaults still apply; put overrides in `.env` and restart both 
 |---|---|
 | Stop / Resume | Stop requests cancellation and waits for active execution to exit. Saved evidence and checkpoints remain. Resume continues from saved state; an uncommitted interrupted step may execute again. |
 | Corrections and clarification | The composer accepts corrections during work. They take effect at the next safe model/tool boundary; already executing work may finish. Business clarification pauses for an answer. |
-| SQL / Python review | `REQUIRE_SQL_APPROVAL=true` and `REQUIRE_PYTHON_APPROVAL=true` independently pause before proposed execution. Approve, edit or reject; saved-data SQL is covered too. |
+| SQL / Python review | `REQUIRE_SQL_APPROVAL=true` and `REQUIRE_PYTHON_APPROVAL=true` independently pause before proposed execution. Review every proposal in an interrupt, then submit one ordered batch of approve/edit/reject decisions; saved-data SQL is covered too. |
 | Parallel saved-data analysis | `ANALYSIS_PARALLEL_WORKERS=2` bounds simultaneous analysis assignments per source graph. Set `1` for sequential execution. Source retrieval remains sequential. Workers share the run’s active-time budget and cancellation; each keeps separate execution evidence and approvals. |
 | Active analysis budget | `ANALYSIS_BUDGET_SECONDS=900` counts active analysis, not user wait time. Exhaustion ends computation and attempts a supported partial answer/report with unresolved questions. Resume does not reset accumulated analysis time. |
 | Execution timeouts | `SQL_TIMEOUT_SECONDS=10` is the source-query default (sources can override it); `ANALYSIS_PYTHON_TIMEOUT_SECONDS=120` bounds each Python step. Saved-data SQL has its own 120-second timeout. |
@@ -152,3 +151,17 @@ The community Whisper document loader is not used: it re-encodes WAV to MP3,
 requires additional codecs, and suppresses exhausted provider errors. The runnable
 keeps the native WAV bytes and propagates errors to the HTTP boundary. If LangSmith
 tracing is enabled, its input/output tracing policy also applies to this runnable.
+
+
+## Release storage contract
+
+This release uses API contract **17**. An approval contains `interrupt_id` and an
+ordered `actions` list; each action carries its code, allowed decisions and all
+named Python inputs when applicable. Decision requests contain that current
+`interrupt_id` and one decision for every action. Stale reviews are rejected.
+Obsolete single-action approval fields, unused review-type state and
+`AGENT_DEBUG_DETAILS` are removed. There are no migrations or compatibility paths.
+Use fresh application storage when upgrading records from an older contract;
+preserve needed reports/datasets separately before switching storage directories.
+
+Excel uses the upload byte limit, dataset row/column limits and decoded-workbook byte limit. `.xlsx` imports save their original bytes, worksheet/range choices and formula-cache acceptance. Notebook exports use `nbformat`; `nbclient` and the local Jupyter kernel are verification/development dependencies. The app continues to execute Python locally without a dedicated sandbox or shell agent tool.

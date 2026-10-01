@@ -281,7 +281,7 @@ def test_chat_attachment_preserves_question_until_review(test_settings, monkeypa
         assert not services.conversations.get(thread).run_ids
         assert any("What can you analyze?" in i.value for i in app.info)
         next(
-            b for b in app.button if b.label == "Confirm schema and start conversation"
+            b for b in app.button if b.label == "Confirm data and continue"
         ).click().run(timeout=15)
         assert not app.exception
         conversation = services.conversations.get(thread)

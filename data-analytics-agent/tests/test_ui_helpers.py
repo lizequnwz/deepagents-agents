@@ -347,10 +347,17 @@ render_approval(
         "run_id": "run-1",
         "next_event_id": 8,
         "approval": {
+            "interrupt_id": "sql-review",
+            "actions": [{
+            "action_name": "execute_sql",
+            "review_type": "sql",
+            "arguments": {},
+            "allowed_decisions": ["approve", "edit", "reject"],
             "query": "SELECT 1 LIMIT 10",
             "dialect": "sqlite",
             "timeout_seconds": 10,
             "max_result_rows": 500,
+            }],
         },
     },
     revision_feedback="Let's make it top 10.",
@@ -359,7 +366,7 @@ render_approval(
     ).run()
 
     assert not app.exception
-    assert app.success[0].value == ("Revised SQL is ready for another review.")
+    assert app.success[0].value == "Revised proposals are ready for review."
     assert any(
         caption.value == "Your feedback: Let's make it top 10."
         for caption in app.caption
@@ -375,31 +382,35 @@ render_approval({
     "run_id": "run-python",
     "next_event_id": 12,
     "approval": {
+        "interrupt_id": "python-review",
+        "actions": [{
+        "action_name": "execute_analysis_python",
+        "arguments": {},
+        "allowed_decisions": ["approve", "edit", "reject"],
         "review_type": "python",
-        "query": "analysis_outputs = {'Mean': float(df.value.mean())}",
+        "query": "analysis_outputs = {'Mean': float(datasets['measurements'].value.mean())}",
         "source_id": "test",
-        "parent_result_id": "result-12345678",
-        "originating_question": "Return all values",
-        "executed_sql": "SELECT value FROM measurements",
-        "columns": ["value"],
-        "sample_rows": [{"value": 1}, {"value": 2}],
-        "profile": {"scope": "stored_rows", "row_count": 2, "columns": []},
-        "row_count": 2,
-        "truncated": False,
+        "input_datasets": {
+            "measurements": {"result_id": "result-12345678", "originating_question": "Return all values", "executed_sql": "SELECT value FROM measurements", "columns": ["value"], "sample_rows": [{"value": 1}, {"value": 2}], "profile": {}, "row_count": 2, "truncated": False, "parent_result_ids": [], "upload_provenance": None},
+            "baseline": {"result_id": "result-baseline", "originating_question": "Baseline", "executed_sql": "SELECT baseline FROM measurements", "columns": ["baseline"], "sample_rows": [], "profile": {}, "row_count": 1, "truncated": False, "parent_result_ids": [], "upload_provenance": None},
+        },
         "timeout_seconds": 30,
+        }],
     },
 })
 """
     ).run()
 
     assert not app.exception
-    assert app.subheader[0].value == "Review Python before execution"
+    assert app.subheader[0].value == "Review proposals before execution"
     assert app.text_area[0].value == (
-        "analysis_outputs = {'Mean': float(df.value.mean())}"
+        "analysis_outputs = {'Mean': float(datasets['measurements'].value.mean())}"
     )
     assert any(
-        "exact code that will execute" in caption.value for caption in app.caption
+        "Edited code runs exactly as shown" in caption.value for caption in app.caption
     )
+    assert any("measurements" in e.label for e in app.expander)
+    assert any("baseline" in e.label for e in app.expander)
 
 
 def test_current_activity_prefers_leaf_and_preserves_report_failure():
@@ -527,7 +538,7 @@ def test_status_does_not_reuse_retrieval_phase_and_prioritizes_wait_states():
                 [event],
                 findings=findings,
                 status="approval_required",
-                approval={"review_type": "python"},
+                approval={"actions": [{"review_type": "python"}]},
             )
             == "Waiting for Python review"
         )
@@ -767,9 +778,7 @@ render_answer(None, {"answer":"Estimate", "assumptions":["Stable demand"],
 """).run()
     assert not app.exception
     assert (
-        next(
-            e for e in app.expander if e.label == "Assumptions"
-        ).proto.expanded
+        next(e for e in app.expander if e.label == "Assumptions").proto.expanded
         is False
     )
     assert any("Partial findings" in w.value for w in app.warning)
@@ -847,3 +856,51 @@ if st.session_state.finished:
         assert any(
             f"Compare regional sales · {step_status}" in m.value for m in app.markdown
         )
+
+
+def test_batch_review_submits_ordered_edit_and_rejection_and_resets_one_editor():
+    app = AppTest.from_string("""
+import streamlit as st
+from data_analytics_agent.schemas import ApprovalAction, ApprovalRequest
+from data_analytics_agent.ui.components import render_approval
+review = ApprovalRequest(interrupt_id="two-proposals", actions=[
+    ApprovalAction(action_name="execute_sql", query="SELECT 1", allowed_decisions=["approve", "edit", "reject"]),
+    ApprovalAction(action_name="execute_sql", query="SELECT 2", allowed_decisions=["approve", "edit", "reject"]),
+])
+result = render_approval({"run_id":"batch-review", "approval":review.model_dump()})
+if result:
+    st.session_state["submitted_decisions"] = result
+""").run()
+    assert not app.exception
+    assert app.text_area[0].value == "SELECT 1"
+    assert app.text_area[1].value == "SELECT 2"
+    assert all(choice.value is None for choice in app.segmented_control)
+    assert app.button[-1].disabled
+    app.text_area[0].set_value("SELECT 11\n")
+    app.text_area[1].set_value("SELECT 22")
+    next(
+        button for button in app.button if button.label == "Reset SQL proposal 2"
+    ).click().run()
+    assert not app.exception
+    assert app.text_area[0].value == "SELECT 11\n"
+    assert app.text_area[1].value == "SELECT 2"
+    assert "submitted_decisions" not in app.session_state
+    app.segmented_control[0].set_value("Run reviewed code").run()
+    assert app.button[-1].disabled
+    assert len(app.text_area) == 2
+    app.segmented_control[1].set_value("Request changes").run()
+    assert app.button[-1].disabled
+    assert "Add feedback" in app.error[0].value
+    next(t for t in app.text_area if t.label == "Feedback for proposal 2").set_value(
+        "Retrieve the last population instead."
+    ).run()
+    assert not app.error
+    assert not app.button[-1].disabled
+    next(
+        button for button in app.button if button.label == "Apply reviewed decisions"
+    ).click().run()
+    assert not app.exception
+    assert app.session_state["submitted_decisions"] == [
+        {"action": "edit", "edited_sql": "SELECT 11\n"},
+        {"action": "reject", "feedback": "Retrieve the last population instead."},
+    ]

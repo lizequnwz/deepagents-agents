@@ -18,13 +18,36 @@ typed questions remain available. See [voice configuration](../development/confi
 
 ## Upload and review a file
 
-To use a local file, attach one CSV or Parquet with the upload button in the chat
+To use a local file, attach one CSV, Parquet or Excel workbook with the upload button in the chat
 composer and send it, optionally with your question. Check suggested column types,
 optionally declare what one row
 represents and the columns that uniquely identify it, then confirm. Analysis is
 unavailable until confirmation. If you included a question, it starts once you
-confirm the schema. The review shows ten sample rows; conversion and
+confirm the data. The review shows ten sample rows; conversion and
 key validation use the complete file. Duplicate keys are rejected, never removed.
+
+Columns with notes appear first; **Other column types** retains suggested types
+for the remaining columns. Both groups stay editable. **Describe the rows
+(optional)** holds the row meaning and identifiers; **Original column details**
+holds stored types and unique-value counts. Choose **Confirm data and continue**
+to validate every column. A failed check keeps the choices so you can correct
+them. **Your confirmed data** then shows the saved population, row meaning,
+identifiers and confirmed types during follow-ups; hashes and raw metadata remain
+under **Technical file details**.
+
+Excel (`.xlsx`) first asks you to choose a worksheet, the row containing column
+names and the last data row. The preview uses Excel row numbers and column
+letters. Expand **Columns to include** to limit the first and last columns.
+Check the displayed row/column counts and exact worksheet range, then choose
+**Continue to data review**. This selects one rectangular table including its
+header; only that table enters the conversation. Exclude titles, subtotals and
+footers outside the intended population; all selected rows are retained.
+Merged cells within the selected table must be unmerged before import. Native
+dates and simple zero-padded identifier formats are preserved; mixed types are
+retained as text for review. Formula cells require explicit acceptance of values
+saved by Excel, whose freshness is unknown. Missing caches and Excel errors
+require a corrected or values-only workbook. The app does not calculate formulas.
+Other workbook formats and multiple-sheet joins are not supported.
 
 CSV starts as text to preserve leading zeros and literal values such as `NA`.
 Ambiguous slash dates stay text until you explicitly select day-first or
@@ -45,6 +68,24 @@ Use saved conversation navigation to return after a restart. Follow-up requests
 such as “make that a line chart” reuse suitable saved evidence; “refresh using
 current data” requests new source execution. Download full CSV/Parquet from the
 evidence panel and HTML from the report panel. Preview pages are labeled.
+
+## Download and replay analysis
+
+On a completed result, expand **Download data and calculations** and choose
+**Download analysis ZIP**. The button prepares the package when clicked and shows
+loading feedback; merely opening an answer does not prepare it. Extract the ZIP
+to get `analysis.py`, `analysis.ipynb`, exact steps, typed Parquet inputs/results,
+diagnostic figures, the HTML report, requirements and a hashed provenance
+manifest. The download uses saved evidence without model or source calls and
+matches the report revision displayed. If that revision has changed, reload
+before trying again. Failed attempts and unrelated conversation evidence are
+excluded from runnable steps. Partial findings and incomplete extracted
+populations retain their labels. **Open full report** and **Download HTML report**
+need only a browser; replaying calculations requires a local Python environment.
+
+Install the recorded dependencies in a local Python environment and run `python analysis.py`. Open the notebook in Jupyter from the extracted folder and run all cells in order. Each step uses a fresh local process with its original named inputs. Python-derived datasets and scalar/table diagnostics are compared to stored evidence with numerical tolerance; randomized code needs its own seeds. SQL results remain fixed snapshots; replay does not reconnect to or refresh the warehouse. Original business charts remain in the self-contained HTML report, with chart definitions exported separately.
+
+Stored notebook outputs let you inspect diagnostic tables and figures before replay. Editing the notebook's step cells writes new replay code without changing original saved data or the published report. The notebook is an export; the app has no notebook editor or persistent kernel. Custom code using external files, services or dynamic imports may require manual environment setup. Runtime versions are recorded for new Python executions; versions for earlier executions are unknown.
 
 ## Report titles and calculation details
 
@@ -128,6 +169,20 @@ uses report recovery once findings are published. A successful retry clears the
 old error; retries wait until previous execution has exited. Optional review settings expose exact SQL or Python edits before
 execution. Time, call and data limits remain enforced even with review disabled;
 see [run controls and defaults](../development/configuration.md#controlling-a-run).
+
+## Optional review of calculations
+
+SQL and Python review are off by default, so ordinary analysis runs automatically.
+The separate confirmation for uploaded data still applies. If review is enabled,
+each proposal shows its purpose; Python also lists every saved input and whether
+its extraction is complete. Expand **Review or edit SQL/Python code** for exact
+code and per-proposal reset controls.
+
+Choose **Run reviewed code** or **Request changes** for each proposal. No decision
+is preselected. Feedback appears only for requested changes; missing feedback or
+empty code is explained beside that proposal. **Apply reviewed decisions** stays
+disabled until every proposal is ready. Applying sends the complete ordered batch;
+editing or selecting a decision alone does not execute anything.
 
 ## Delete saved history
 

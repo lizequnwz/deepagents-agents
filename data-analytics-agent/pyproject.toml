@@ -31,12 +31,15 @@ dependencies = [
     "pyarrow>=24.0.0",
     "duckdb>=1.4.0",
     "langgraph-checkpoint-sqlite>=3.0.1",
+    "openpyxl>=3.1.5",
+    "nbformat>=5.10.4",
 ]
 
 [dependency-groups]
 dev = [
     "ipykernel>=6.29.5",
     "jupyterlab>=4.4.0",
+    "nbclient>=0.10.4",
     "nbconvert>=7.16.6",
     "pytest>=8.4.0",
     "pytest-asyncio>=1.1.0",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from functools import partial
 import hashlib
 import io
 import re
@@ -540,9 +541,11 @@ def current_activity(
     source_id=None,
 ):
     if status == "approval_required":
-        language = (
-            "Python" if (approval or {}).get("review_type") == "python" else "SQL"
-        )
+        languages = {
+            "Python" if action["review_type"] == "python" else "SQL"
+            for action in (approval or {}).get("actions", [])
+        }
+        language = " and ".join(sorted(languages)) or "execution"
         return f"Waiting for {language} review"
     if status in {
         "paused",
@@ -777,8 +780,8 @@ def python_review_decision(
     return {"action": "edit", "edited_python": reviewed_python}
 
 
-def _reset_sql_editor(editor_key: str, generated_sql: str) -> None:
-    st.session_state[editor_key] = generated_sql
+def _reset_review_editor(editor_key: str, generated_code: str) -> None:
+    st.session_state[editor_key] = generated_code
 
 
 @st.cache_resource
@@ -1393,7 +1396,9 @@ def render_turn(
         render_answer(client, turn["answer"], turn_key=turn_key, source_id=source_id)
 
 
-def render_answer(client, answer, *, turn_key, source_id):
+def render_answer(
+    client, answer, *, turn_key, source_id, analysis_download_available=True
+):
     st.markdown(prose_markdown(answer["answer"]))
     executions = {
         execution["execution_id"]: execution
@@ -1463,6 +1468,30 @@ def render_answer(client, answer, *, turn_key, source_id):
                     st.error(str(exc))
                 else:
                     st.rerun()
+        with st.expander(
+            "Download data and calculations", icon=":material/folder_zip:"
+        ):
+            st.caption(
+                "For sharing or checking the work: saved data, calculations, notebook and this report in one ZIP."
+            )
+            st.caption(
+                "This package uses the data already analyzed. It does not refresh the source. Replaying calculations requires Python; opening the HTML report only needs a browser."
+            )
+            st.download_button(
+                "Download analysis ZIP",
+                data=partial(client.download_analysis, turn_key, report["report_id"]),
+                file_name=f"analysis-{turn_key[:8]}.zip",
+                mime="application/zip",
+                icon=":material/download:",
+                on_click="ignore",
+                disabled=not analysis_download_available,
+                key=f"analysis_download_{turn_key}_{report['report_id']}",
+                help="The ZIP is prepared when you click. The button shows progress while the file is prepared.",
+            )
+            if not analysis_download_available:
+                st.caption(
+                    "The analysis ZIP will be available when this answer is complete."
+                )
         _render_report(
             client,
             report,
@@ -1592,294 +1621,183 @@ def render_pending_user_message(question: str) -> None:
         st.markdown(prose_markdown(question))
 
 
+def review_decisions(actions, choices, reviewed_code, feedback):
+    """Build an ordered batch only when every proposal has a valid decision."""
+    decisions = []
+    for action, choice, code, message in zip(
+        actions, choices, reviewed_code, feedback, strict=True
+    ):
+        if choice == "Request changes":
+            if not message.strip():
+                raise ValueError("Add feedback for each proposal you want revised.")
+            decision = {"action": "reject", "feedback": message.strip()}
+        elif choice == "Run reviewed code":
+            if not code.strip():
+                raise ValueError("Reviewed code cannot be empty.")
+            build = (
+                python_review_decision
+                if action["review_type"] == "python"
+                else sql_review_decision
+            )
+            decision = build(action["query"], code)
+        else:
+            raise ValueError("Choose a decision for every proposal.")
+        if decision["action"] not in action["allowed_decisions"]:
+            raise ValueError(
+                "This proposal does not allow that decision. Review the permitted choices."
+            )
+        decisions.append(decision)
+    return decisions
+
+
 def render_approval(
     run: dict[str, Any],
     *,
     revision_feedback: str | None = None,
-) -> dict[str, Any] | None:
-    """Render the appropriate SQL or Python human-review surface."""
-
-    if run["approval"].get("review_type") == "python":
-        return _render_python_approval(
-            run,
-            revision_feedback=revision_feedback,
-        )
-    return _render_sql_approval(
-        run,
-        revision_feedback=revision_feedback,
-    )
-
-
-def _render_sql_approval(
-    run: dict[str, Any],
-    *,
-    revision_feedback: str | None = None,
-) -> dict[str, Any] | None:
+) -> list[dict[str, Any]] | None:
+    """Review all actions in one interrupt before resuming any of them."""
     approval = run["approval"]
-    query = approval["query"]
-    cycle_source = f"{run['next_event_id']}\0{query}"
-    cycle_key = hashlib.sha256(cycle_source.encode("utf-8")).hexdigest()[:10]
-    editor_key = f"sql_review_{run['run_id']}_{cycle_key}"
-    st.session_state.setdefault(editor_key, query)
-
+    actions = approval["actions"]
+    cycle_key = hashlib.sha256(approval["interrupt_id"].encode()).hexdigest()[:10]
     with st.container(border=True):
-        st.subheader(
-            "Review SQL before execution",
-            anchor=False,
-        )
+        st.subheader("Review proposals before execution", anchor=False)
         st.warning(
-            "Nothing has been executed yet.",
-            icon=":material/security:",
+            "These proposals have not been executed yet.", icon=":material/security:"
         )
+        if any(action["review_type"] == "python" for action in actions):
+            st.caption(
+                "Approved Python runs with the local API service's file and process access."
+            )
         if revision_feedback:
             st.success(
-                "Revised SQL is ready for another review.",
+                "Revised proposals are ready for review.",
                 icon=":material/check_circle:",
             )
             st.caption(f"Your feedback: {revision_feedback}")
         st.caption(
-            "Compare the joins, filters, metric definitions, sorting, and row "
-            "limit with your question. The SQL visible in the editor is the "
-            "SQL that will run."
+            "Choose a decision for each proposal, then apply them together. Edited code runs exactly as shown."
         )
-        with st.form(
-            f"sql_run_form_{run['run_id']}_{cycle_key}",
-            border=False,
-            enter_to_submit=False,
-        ):
-            reviewed_sql = st.text_area(
-                "SQL to execute",
-                height=240,
-                key=editor_key,
-                help=(
-                    "Review or edit the query. This exact text is parsed and "
-                    "validated by the backend before execution."
-                ),
-            )
-            st.caption(
-                f"Read-only {approval['dialect']} · one statement · "
-                f"{approval['timeout_seconds']:g}-second timeout · "
-                f"{approval['max_result_rows']}-row result cap"
-            )
-            run_sql = st.form_submit_button(
-                "Run this SQL",
-                icon=":material/play_arrow:",
-                type="primary",
-                key=f"run_sql_{run['run_id']}_{cycle_key}",
-            )
-        st.button(
-            "Reset to generated SQL",
-            icon=":material/restart_alt:",
-            type="tertiary",
-            key=f"reset_sql_{run['run_id']}_{cycle_key}",
-            on_click=_reset_sql_editor,
-            args=(editor_key, query),
-        )
-
-        if run_sql:
-            return sql_review_decision(query, reviewed_sql)
-
-        with st.expander(
-            "Reject and request changes",
-            icon=":material/replay:",
-            expanded=False,
-        ):
-            st.caption(
-                "The analyst will propose revised SQL. You will review it "
-                "again before anything is executed."
-            )
-            with st.form(
-                f"sql_reject_form_{run['run_id']}_{cycle_key}",
-                border=False,
-                enter_to_submit=False,
-            ):
-                feedback = st.text_area(
-                    "Feedback for the analyst",
-                    placeholder=(
-                        "Explain what should change, such as the metric, "
-                        "filter, grouping, or sort order."
-                    ),
-                    height=100,
-                    key=(f"rejection_feedback_{run['run_id']}_{cycle_key}"),
-                )
-                reject = st.form_submit_button(
-                    "Send feedback and revise",
-                    icon=":material/replay:",
-                    key=f"reject_{run['run_id']}_{cycle_key}",
-                )
-            if reject:
-                if not feedback.strip():
-                    st.error(
-                        "Add feedback describing how the SQL should change.",
-                        icon=":material/error:",
+        summary = st.empty()
+        decisions = []
+        for index, action in enumerate(actions):
+            with st.container(border=True):
+                language = "Python" if action["review_type"] == "python" else "SQL"
+                item_key = f"{run['run_id']}_{cycle_key}_{index}"
+                st.markdown(f"**{language} proposal {index + 1} of {len(actions)}**")
+                purpose = action["arguments"].get("purpose")
+                st.write(
+                    prose_markdown(
+                        purpose
+                        or (
+                            "Analyze the saved datasets listed below."
+                            if language == "Python"
+                            else "Calculate from saved data."
+                            if action["action_name"] == "query_saved_results"
+                            else "Retrieve data for your question."
+                        )
                     )
-                    return None
-                return {
-                    "action": "reject",
-                    "feedback": feedback.strip(),
-                }
-    return None
-
-
-def _render_python_approval(
-    run: dict[str, Any],
-    *,
-    revision_feedback: str | None = None,
-) -> dict[str, Any] | None:
-    approval = run["approval"]
-    generated_python = approval["query"]
-    cycle_source = f"{run['next_event_id']}\0{generated_python}"
-    cycle_key = hashlib.sha256(cycle_source.encode("utf-8")).hexdigest()[:10]
-    editor_key = f"python_review_{run['run_id']}_{cycle_key}"
-    st.session_state.setdefault(editor_key, generated_python)
-
-    with st.container(border=True):
-        st.subheader("Review Python before execution", anchor=False)
-        st.warning(
-            "Nothing in this Python proposal has been executed yet. Approved "
-            "code runs with the local API service's file and process access.",
-            icon=":material/security:",
-        )
-        if revision_feedback:
-            st.success(
-                "Revised Python is ready for another review.",
-                icon=":material/check_circle:",
-            )
-            st.caption(f"Your feedback: {revision_feedback}")
-
-        with st.container(
-            horizontal=True,
-            vertical_alignment="center",
-            gap="small",
-        ):
-            st.badge(
-                f"Result {str(approval.get('parent_result_id') or '')[:8]}",
-                icon=":material/database:",
-                color="blue",
-            )
-            st.badge(
-                f"{approval.get('row_count', 0)} rows",
-                icon=":material/table_rows:",
-                color="gray",
-            )
-            st.badge(
-                str(approval.get("source_id") or "source"),
-                icon=":material/storage:",
-                color="gray",
-            )
-
-        st.caption(
-            "The immutable parent result is loaded as pandas `df`; `pd` and "
-            "`np` are preloaded. The complete code visible in the editor is "
-            "the exact code that will execute."
-        )
-        with st.expander(
-            "Input dataset provenance",
-            icon=":material/data_object:",
-            expanded=False,
-        ):
-            if approval.get("originating_question"):
-                st.markdown("**Originating question**")
-                st.markdown(str(approval["originating_question"]))
-            st.markdown("**Executed SQL**")
-            st.code(str(approval.get("executed_sql") or ""), language="sql")
-            st.markdown("**Columns and full-result profile**")
-            st.json(
-                {
-                    "columns": approval.get("columns") or [],
-                    "profile": approval.get("profile") or {},
-                    "truncated": approval.get("truncated"),
-                }
-            )
-            sample_rows = approval.get("sample_rows") or []
-            if sample_rows:
-                st.markdown("**First 10 rows at most**")
-                st.dataframe(
-                    sample_rows,
-                    column_order=approval.get("columns") or None,
-                    hide_index=True,
-                    width="stretch",
                 )
-
-        with st.form(
-            f"python_run_form_{run['run_id']}_{cycle_key}",
-            border=False,
-            enter_to_submit=False,
-        ):
-            reviewed_python = st.text_area(
-                "Python to execute",
-                height=420,
-                key=editor_key,
-                help=(
-                    "Review or edit the code. This exact text executes in a "
-                    "bounded subprocess against the immutable parent result."
-                ),
-            )
-            st.caption(
-                f"{approval['timeout_seconds']:g}-second timeout · scoped `df` "
-                "input · bounded stdout, tables, and figures"
-            )
-            run_python = st.form_submit_button(
-                "Run this Python",
-                icon=":material/play_arrow:",
-                type="primary",
-                key=f"run_python_{run['run_id']}_{cycle_key}",
-            )
-        st.button(
-            "Reset to generated Python",
-            icon=":material/restart_alt:",
-            type="tertiary",
-            key=f"reset_python_{run['run_id']}_{cycle_key}",
-            on_click=_reset_sql_editor,
-            args=(editor_key, generated_python),
-        )
-
-        if run_python:
-            if not reviewed_python.strip():
-                st.error(
-                    "Python code cannot be empty.",
-                    icon=":material/error:",
-                )
-                return None
-            return python_review_decision(
-                generated_python,
-                reviewed_python,
-            )
-
-        with st.expander(
-            "Reject and request changes",
-            icon=":material/replay:",
-            expanded=False,
-        ):
-            st.caption(
-                "The statistical analyst will propose revised Python. You "
-                "will review it again before anything executes."
-            )
-            with st.form(
-                f"python_reject_form_{run['run_id']}_{cycle_key}",
-                border=False,
-                enter_to_submit=False,
-            ):
-                feedback = st.text_area(
-                    "Feedback for the analyst",
-                    placeholder=(
-                        "Explain what should change in the method, data "
-                        "handling, outputs, or figures."
-                    ),
-                    height=100,
-                    key=(f"rejection_feedback_{run['run_id']}_{cycle_key}"),
-                )
-                reject = st.form_submit_button(
-                    "Send feedback and revise",
-                    icon=":material/replay:",
-                    key=f"reject_python_{run['run_id']}_{cycle_key}",
-                )
-            if reject:
-                if not feedback.strip():
-                    st.error(
-                        "Add feedback describing how the Python should change.",
-                        icon=":material/error:",
+                if language == "Python":
+                    for alias, item in action["input_datasets"].items():
+                        st.caption(
+                            f"{alias}: {item['row_count']:,} saved rows · "
+                            + (
+                                "incomplete extraction"
+                                if item["truncated"]
+                                else "complete extraction"
+                            )
+                        )
+                        with st.expander(f"View data used: {alias}"):
+                            st.markdown(prose_markdown(item["originating_question"]))
+                            st.write("Columns: " + ", ".join(item["columns"]))
+                            if item["executed_sql"]:
+                                st.code(item["executed_sql"], language="sql")
+                            if item["sample_rows"]:
+                                st.dataframe(item["sample_rows"][:10], hide_index=True)
+                                st.caption(
+                                    "Preview only. The analysis uses all saved rows."
+                                )
+                            with st.expander("Technical data details"):
+                                st.json(
+                                    {
+                                        k: item[k]
+                                        for k in (
+                                            "result_id",
+                                            "profile",
+                                            "truncated",
+                                            "parent_result_ids",
+                                            "upload_provenance",
+                                        )
+                                    }
+                                )
+                    st.caption(
+                        f"{action['timeout_seconds']:g}-second timeout · named datasets · bounded outputs"
                     )
-                    return None
-                return {"action": "reject", "feedback": feedback.strip()}
+                else:
+                    st.caption(
+                        f"Read-only {action['dialect']} · one statement · {action['timeout_seconds']:g}-second timeout · {action['max_result_rows']}-row cap"
+                    )
+                with st.expander(f"Review or edit {language} code"):
+                    if language == "Python":
+                        st.caption(
+                            "Inputs are DataFrames in datasets[alias]; pd and np are preloaded."
+                        )
+                    editor_key = f"{language.lower()}_review_{item_key}"
+                    st.session_state.setdefault(editor_key, action["query"])
+                    code = st.text_area(
+                        f"{language} to execute",
+                        height=240,
+                        key=editor_key,
+                        disabled="edit" not in action["allowed_decisions"],
+                    )
+                    st.button(
+                        f"Reset {language} proposal {index + 1}",
+                        type="tertiary",
+                        key=f"review_reset_{item_key}",
+                        on_click=_reset_review_editor,
+                        args=(editor_key, action["query"]),
+                    )
+                options = []
+                if {"approve", "edit"} & set(action["allowed_decisions"]):
+                    options.append("Run reviewed code")
+                if "reject" in action["allowed_decisions"]:
+                    options.append("Request changes")
+                choice = st.segmented_control(
+                    f"Decision for proposal {index + 1}",
+                    options,
+                    default=None,
+                    key=f"review_choice_{item_key}",
+                )
+                message = ""
+                if choice == "Request changes":
+                    message = st.text_area(
+                        f"Feedback for proposal {index + 1}",
+                        help="Tell the analyst what to change. This proposal will not execute.",
+                        height=100,
+                        key=f"review_feedback_{item_key}",
+                    )
+                try:
+                    decisions.extend(
+                        review_decisions([action], [choice], [code], [message])
+                    )
+                except ValueError as exc:
+                    if choice is None:
+                        st.caption(
+                            "Choose a decision to finish reviewing this proposal."
+                        )
+                    else:
+                        st.error(str(exc), icon=":material/error:")
+        summary.progress(
+            len(decisions) / len(actions),
+            text=f"{len(decisions)} of {len(actions)} proposals ready",
+        )
+        submitted = st.button(
+            "Apply reviewed decisions",
+            type="primary",
+            icon=":material/play_arrow:",
+            key=f"review_submit_{run['run_id']}_{cycle_key}",
+            disabled=len(decisions) != len(actions),
+        )
+        if submitted:
+            return decisions
     return None

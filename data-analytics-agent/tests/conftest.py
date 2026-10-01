@@ -100,7 +100,6 @@ sources:
     )
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("SQL_MAX_RESULT_ROWS", "10000")
-    monkeypatch.setenv("AGENT_DEBUG_DETAILS", "false")
     monkeypatch.setenv("ANALYTICS_STORAGE_DIR", str(tmp_path / "storage"))
     return Settings(
         project_root=project_root,

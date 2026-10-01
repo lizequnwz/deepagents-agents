@@ -1,0 +1,311 @@
+{
+  "study": "prompt-ownership",
+  "nominal_run_slots": 150,
+  "recorded_runs": 138,
+  "unattempted_followups": 12,
+  "decision": "retain_baseline",
+  "early_termination": "Candidate metadata-only failure reproduced in all three repetitions; shared two-call approval bug reproduced in both variants across all three repetitions.",
+  "trials": {
+    "baseline-r1-receipts": {
+      "recorded_runs": 23,
+      "statuses": {
+        "completed": 5,
+        "paused": 12,
+        "failed": 1,
+        "clarification_required": 5
+      }
+    },
+    "baseline-r2-receipts": {
+      "recorded_runs": 23,
+      "statuses": {
+        "completed": 5,
+        "paused": 12,
+        "failed": 1,
+        "clarification_required": 5
+      }
+    },
+    "baseline-r3-receipts": {
+      "recorded_runs": 23,
+      "statuses": {
+        "completed": 6,
+        "paused": 12,
+        "failed": 1,
+        "clarification_required": 4
+      }
+    },
+    "candidate-r1-receipts": {
+      "recorded_runs": 23,
+      "statuses": {
+        "completed": 4,
+        "paused": 14,
+        "failed": 2,
+        "clarification_required": 3
+      }
+    },
+    "candidate-r2-receipts": {
+      "recorded_runs": 23,
+      "statuses": {
+        "completed": 3,
+        "paused": 16,
+        "failed": 2,
+        "clarification_required": 2
+      }
+    },
+    "candidate-r3-receipts": {
+      "recorded_runs": 23,
+      "statuses": {
+        "completed": 4,
+        "paused": 14,
+        "failed": 2,
+        "clarification_required": 3
+      }
+    }
+  },
+  "metadata_pairs": {
+    "baseline-r1-receipts": {
+      "status": "completed",
+      "run_id": "c773d49b-3dd6-4108-aea2-962abaecbcde",
+      "error": null
+    },
+    "baseline-r2-receipts": {
+      "status": "completed",
+      "run_id": "e942e1db-9a7a-4b44-a039-da89144a50fb",
+      "error": null
+    },
+    "baseline-r3-receipts": {
+      "status": "completed",
+      "run_id": "ba09858f-0232-447a-bd7a-27d5a95388b2",
+      "error": null
+    },
+    "candidate-r1-receipts": {
+      "status": "failed",
+      "run_id": "4af866f3-9dc2-4636-bbfc-0533c3a840a6",
+      "error": "Agent finished without a structured response."
+    },
+    "candidate-r2-receipts": {
+      "status": "failed",
+      "run_id": "0221abc1-dba1-4666-9f3f-6d70af9a8df8",
+      "error": "Agent finished without a structured response."
+    },
+    "candidate-r3-receipts": {
+      "status": "failed",
+      "run_id": "f7fc77ce-8db6-4c34-94d0-dc18e79ac71b",
+      "error": "Agent finished without a structured response."
+    }
+  },
+  "terminal_errors": {
+    "Number of human decisions (1) does not match number of hanging tool calls (2).": 6,
+    "Agent finished without a structured response.": 3
+  },
+  "observed_tool_calls": [
+    {
+      "agent": "coordinator",
+      "tool": "browse_semantic_model",
+      "count": 21
+    },
+    {
+      "agent": "coordinator",
+      "tool": "create_chart",
+      "count": 8
+    },
+    {
+      "agent": "coordinator",
+      "tool": "create_report",
+      "count": 24
+    },
+    {
+      "agent": "coordinator",
+      "tool": "get_semantic_context",
+      "count": 17
+    },
+    {
+      "agent": "coordinator",
+      "tool": "inspect_conversation_result",
+      "count": 26
+    },
+    {
+      "agent": "coordinator",
+      "tool": "list_conversation_analyses",
+      "count": 5
+    },
+    {
+      "agent": "coordinator",
+      "tool": "list_conversation_charts",
+      "count": 4
+    },
+    {
+      "agent": "coordinator",
+      "tool": "list_conversation_results",
+      "count": 13
+    },
+    {
+      "agent": "coordinator",
+      "tool": "ls",
+      "count": 1
+    },
+    {
+      "agent": "coordinator",
+      "tool": "publish_findings",
+      "count": 24
+    },
+    {
+      "agent": "coordinator",
+      "tool": "read_file",
+      "count": 41
+    },
+    {
+      "agent": "coordinator",
+      "tool": "request_clarification",
+      "count": 22
+    },
+    {
+      "agent": "coordinator",
+      "tool": "task",
+      "count": 220
+    },
+    {
+      "agent": "coordinator",
+      "tool": "write_todos",
+      "count": 83
+    },
+    {
+      "agent": "data-analysis",
+      "tool": "inspect_conversation_result",
+      "count": 17
+    },
+    {
+      "agent": "data-analysis",
+      "tool": "list_conversation_results",
+      "count": 9
+    },
+    {
+      "agent": "data-analysis",
+      "tool": "read_file",
+      "count": 27
+    },
+    {
+      "agent": "text-to-sql",
+      "tool": "execute_sql",
+      "count": 65
+    },
+    {
+      "agent": "text-to-sql",
+      "tool": "get_semantic_context",
+      "count": 4
+    },
+    {
+      "agent": "text-to-sql",
+      "tool": "inspect_conversation_result",
+      "count": 10
+    },
+    {
+      "agent": "text-to-sql",
+      "tool": "list_conversation_results",
+      "count": 1
+    },
+    {
+      "agent": "text-to-sql",
+      "tool": "lookup_values",
+      "count": 6
+    },
+    {
+      "agent": "text-to-sql",
+      "tool": "query_saved_results",
+      "count": 9
+    }
+  ],
+  "evidence_root": "/Users/charlie/Repos/deepagents-agents/data-analytics-agent/.analytics/evaluations/prompt-ownership-2026-09-30",
+  "limitations": [
+    "The mixed corpus is incomplete and mostly unreviewed; no overall quality, token or latency improvement is inferred.",
+    "The reducer is used for a conservative rejection, not evidence of a passing adoption gate.",
+    "Cost and warehouse query-count telemetry are unavailable.",
+    "Actual multi-input SQL was stopped before most Python execution; this does not establish statistical-method or parallelism performance."
+  ],
+  "coordinator_prediction_metadata_research": [
+    {
+      "trial": "baseline-r1-receipts",
+      "case": "12-prediction",
+      "run_id": "86e74f2f-5af3-44bc-b32f-cc45532485d3",
+      "metadata_calls": [
+        {
+          "tool": "get_semantic_context",
+          "input": {
+            "question": "User requests predicting a target from a predictor using all observations with held-out assessment and simple baseline. Discover available target/predictor fields in monthly facts dataset and clarify names/roles.",
+            "dataset_names": null,
+            "metric_names": null,
+            "relationship_names": null,
+            "field_names": null
+          }
+        },
+        {
+          "tool": "get_semantic_context",
+          "input": {
+            "question": "Retrieve complete monthly observations to predict numeric target from observed predictor, using all 120 observations and month for ordered held-out assessment; retain source scope and units.",
+            "dataset_names": [
+              "facts"
+            ],
+            "field_names": {
+              "facts": [
+                "month",
+                "predictor",
+                "target"
+              ]
+            },
+            "metric_names": [],
+            "relationship_names": []
+          }
+        }
+      ]
+    },
+    {
+      "trial": "baseline-r2-receipts",
+      "case": "12-prediction",
+      "run_id": "e6bbdf47-1a1a-47ae-ab63-7742f90d06d7",
+      "metadata_calls": [
+        {
+          "tool": "browse_semantic_model",
+          "input": {
+            "entity_kind": "dataset",
+            "dataset_name": null,
+            "query": "monthly observations revenue regions predictor target fields",
+            "time_only": false,
+            "offset": 0,
+            "limit": 25
+          }
+        },
+        {
+          "tool": "browse_semantic_model",
+          "input": {
+            "entity_kind": "field",
+            "dataset_name": "facts",
+            "query": "",
+            "time_only": false,
+            "offset": 0,
+            "limit": 25
+          }
+        }
+      ]
+    },
+    {
+      "trial": "baseline-r3-receipts",
+      "case": "12-prediction",
+      "run_id": "4af5ea1e-8c97-46f9-a8c4-d13fcac4ead8",
+      "metadata_calls": [
+        {
+          "tool": "browse_semantic_model",
+          "input": {
+            "entity_kind": "field",
+            "dataset_name": "facts",
+            "query": "",
+            "time_only": false,
+            "offset": 0,
+            "limit": 25
+          }
+        }
+      ]
+    }
+  ],
+  "completed_analytical_assignments_before_termination": 0,
+  "performance_estimate": null,
+  "metadata_followup": "Narrower controlled routing study needed; coordinator metadata-only research and SQL semantic grounding remain required."
+}

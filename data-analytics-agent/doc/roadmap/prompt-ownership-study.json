@@ -1,0 +1,36 @@
+{
+  "name": "prompt-ownership",
+  "hypothesis": "One authoritative policy per owner reduces repeated model input while preserving scope, routing and recovery.",
+  "changed_component": "prompt ownership only",
+  "target_metric": "input_tokens",
+  "minimum_improvement": 0.15,
+  "minimum_cases": 20,
+  "minimum_repetitions": 3,
+  "confidence_level": 0.95,
+  "bootstrap_seed": 20260930,
+  "changed_files": [
+    "AGENTS.md",
+    "data_analytics_agent/coordinator.py",
+    "data_analytics_agent/agents/data_analysis/agent.py",
+    "skills/analysis/data-analysis/SKILL.md"
+  ],
+  "changed_settings": [],
+  "required_scenarios": [
+    "descriptive",
+    "metadata",
+    "clarification",
+    "relationship_roles",
+    "date_roles",
+    "file_review",
+    "completeness",
+    "multiple_inputs",
+    "iterative_analysis",
+    "approval_edits",
+    "stop_resume",
+    "report_retry",
+    "incomplete_data",
+    "partial"
+  ],
+  "adoption_scope": "Prompt wording only. A diagnostic pass does not justify removing a specialist, persistence or publication.",
+  "statistic": "Median case-level relative improvement, taking the median paired (baseline minus candidate) / baseline over repetitions within each case. Bootstrap conversations, keeping follow-ups and repetitions together."
+}

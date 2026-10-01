@@ -618,11 +618,22 @@ def _upload_sources(results: Mapping[str, SavedResult]) -> str:
         types = ", ".join(
             f"{column}: {kind}" for column, kind in provenance.types.items()
         )
+        selection = provenance.excel_selection
+        excel_scope = (
+            f"<p>Worksheet: {escape(selection['sheet'])}; selected table: "
+            f"{escape(selection['cell_range'])} (first row is the header).</p>"
+            if selection
+            else ""
+        )
+        import_notes = "".join(
+            f"<p>{escape(warning)}</p>" for warning in provenance.warnings
+        )
         items.append(
             f"<article><h3>{escape(provenance.filename)}</h3>"
             f"<p>File SHA-256: <code>{escape(provenance.sha256)}</code></p>"
             f"<p>Imported {escape(original.created_at.isoformat())}; {result.row_count:,} rows. "
             "Source freshness is unknown.</p>"
+            f"{excel_scope}{import_notes}"
             f"<p>Declared grain: {escape(provenance.grain or 'Unspecified')}. "
             f"Row keys: {escape(', '.join(provenance.key_columns) or 'Unspecified')}.</p>"
             f"<p>Reviewed types: {escape(types or 'Unreviewed')}. "

@@ -1,0 +1,350 @@
+[
+  {
+    "id": "01-total",
+    "source": "fixture",
+    "conversation": "01-total",
+    "question": "What is total recorded revenue and the count of monthly observations? Use declared source units and include a compact report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "descriptive",
+      "scope",
+      "units"
+    ]
+  },
+  {
+    "id": "02-total-paraphrase",
+    "source": "fixture",
+    "conversation": "02-total-paraphrase",
+    "question": "Across the entire recorded history, add up the revenue index and count its observations. State the population and units and give me the report.",
+    "expected_outcome": "complete",
+    "held_out": true,
+    "scenarios": [
+      "descriptive",
+      "scope",
+      "units"
+    ]
+  },
+  {
+    "id": "03-monthly",
+    "source": "fixture",
+    "conversation": "monthly",
+    "question": "Show all monthly revenue observations as a line chart. Keep the complete requested history and include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "date_roles",
+      "descriptive"
+    ]
+  },
+  {
+    "id": "04-yearly",
+    "source": "fixture",
+    "conversation": "04-yearly",
+    "question": "Show recorded revenue and observation count by calendar year. Reconcile the years to the full recorded total and include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "scope",
+      "date_roles"
+    ]
+  },
+  {
+    "id": "05-regions",
+    "source": "fixture",
+    "conversation": "05-regions",
+    "question": "Compare revenue by named region over the full history. Use the declared relationship without multiplying observations; reconcile the groups to the total and report the results.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "relationship_roles"
+    ]
+  },
+  {
+    "id": "06-categories",
+    "source": "fixture",
+    "conversation": "06-categories",
+    "question": "Find the actual region spellings, then report the recorded monthly revenue for the region named West. Do not guess a category value.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "category_lookup"
+    ]
+  },
+  {
+    "id": "07-date-paraphrase",
+    "source": "fixture",
+    "conversation": "07-date-paraphrase",
+    "question": "Break the revenue index into calendar-month buckets for 2017 and show each bucket chronologically. Include every requested month and report the scope.",
+    "expected_outcome": "complete",
+    "held_out": true,
+    "scenarios": [
+      "date_roles"
+    ]
+  },
+  {
+    "id": "08-multiple-inputs",
+    "source": "fixture",
+    "conversation": "08-multiple-inputs",
+    "question": "Save the first 60 and last 60 monthly observations as separate complete datasets. Use both named saved inputs in Python to compare their revenue distributions. State each population, avoid causal claims and include a report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "multiple_inputs",
+      "iterative_analysis"
+    ]
+  },
+  {
+    "id": "09-seasonality",
+    "source": "fixture",
+    "conversation": "09-seasonality",
+    "question": "Assess trend and seasonality over the complete monthly revenue history using Python. Inspect results before choosing the final method. State assumptions and uncertainty, and save useful diagnostics for the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "iterative_analysis"
+    ]
+  },
+  {
+    "id": "10-forecast",
+    "source": "fixture",
+    "conversation": "10-forecast",
+    "question": "Evaluate a six-month revenue forecast. Reserve the last six observations as a chronological holdout, compare a simple baseline and one alternative without leakage, save actuals, predictions and MAE, inspect these results, then refit and forecast with justified uncertainty. Include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "forecast",
+      "iterative_analysis"
+    ]
+  },
+  {
+    "id": "11-short-history",
+    "source": "fixture",
+    "conversation": "11-short-history",
+    "question": "Using only the first six monthly revenue observations, assess whether a 12-month forecast with prediction intervals is defensible. Explain unsupported conclusions and limitations and include a report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "forecast_feasibility"
+    ]
+  },
+  {
+    "id": "12-prediction",
+    "source": "fixture",
+    "conversation": "12-prediction",
+    "question": "Predict target from predictor using all observations, a held-out assessment and a simple baseline. Save predictions and errors, explain the split and limitations, and give me the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "prediction"
+    ]
+  },
+  {
+    "id": "13-file-analysis",
+    "source": "upload",
+    "conversation": "13-file-analysis",
+    "question": "For these 24 complete monthly index observations, use Python to assess monotonic trend and residual-based unusual values. Explain ties or degenerate scales, save final scored rows, retain index units and include a line chart and report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "file_review",
+      "iterative_analysis"
+    ],
+    "upload": {
+      "path": "doc/user/examples/monthly-index.csv",
+      "review": {
+        "types": {
+          "month_index": "integer",
+          "revenue_units": "integer"
+        },
+        "grain": "One complete monthly index observation per row, 24 months; source index units, not currency.",
+        "key_columns": [
+          "month_index"
+        ]
+      }
+    }
+  },
+  {
+    "id": "14-nullable-flags",
+    "source": "upload",
+    "conversation": "14-nullable-flags",
+    "question": "For these eight constant monthly observations, compute MAD-based residual scores. If the scale is zero, save missing scores and nullable Boolean flags rather than marking all observations assessed and normal. Describe the limitation and include a report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "nullable_decisions"
+    ],
+    "upload": {
+      "path": "tests/fixtures/constant-index.csv",
+      "review": {
+        "types": {
+          "month_index": "integer",
+          "revenue_units": "integer"
+        },
+        "grain": "Eight complete monthly observations; index units, not currency.",
+        "key_columns": [
+          "month_index"
+        ]
+      }
+    }
+  },
+  {
+    "id": "15-clarification",
+    "source": "fixture",
+    "conversation": "15-clarification",
+    "question": "Are we doing better? Ask me to specify a metric and comparison period before calculating anything.",
+    "expected_outcome": "clarification",
+    "held_out": false,
+    "scenarios": [
+      "clarification"
+    ]
+  },
+  {
+    "id": "16-ambiguity-paraphrase",
+    "source": "fixture",
+    "conversation": "16-ambiguity-paraphrase",
+    "question": "Which region is best? Ask what best means and which time window I intend before reading source values.",
+    "expected_outcome": "clarification",
+    "held_out": true,
+    "scenarios": [
+      "clarification"
+    ]
+  },
+  {
+    "id": "17-metadata",
+    "source": "fixture",
+    "conversation": "17-metadata",
+    "question": "Without reading source values, explain the available measures, date fields and declared relationships that could support a revenue comparison.",
+    "expected_outcome": "metadata",
+    "held_out": false,
+    "scenarios": [
+      "metadata",
+      "relationship_roles",
+      "date_roles"
+    ]
+  },
+  {
+    "id": "18-file-completeness",
+    "source": "upload",
+    "conversation": "18-file-completeness",
+    "question": "Summarize recorded index values by month for calendar 2024. A last recorded transaction date is not a source cutoff. Keep the requested scope, distinguish observed values from unknown completeness, and include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "completeness",
+      "units"
+    ],
+    "upload": {
+      "path": "tests/fixtures/dated-index.csv",
+      "review": {
+        "types": {
+          "transaction_date": "date_iso",
+          "revenue_units": "integer"
+        },
+        "grain": "One recorded transaction per row. Source cutoff and period completeness are unknown; index units, not currency.",
+        "key_columns": []
+      }
+    }
+  },
+  {
+    "id": "19-excel",
+    "source": "upload",
+    "conversation": "19-excel",
+    "question": "For the explicitly reviewed Sales table, report the total revenue index, number of rows and the original text customer identifiers. Preserve leading zeros, source units and the selected range in the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "file_review",
+      "units"
+    ],
+    "upload": {
+      "path": "tests/fixtures/ablation-sales.xlsx",
+      "selection": {
+        "sheet": "Sales",
+        "cell_range": "A2:C10",
+        "use_cached_formulas": false
+      },
+      "review": {
+        "types": {
+          "date": "original",
+          "customer_id": "text",
+          "revenue_units": "integer"
+        },
+        "grain": "Eight recorded monthly rows with text customer identifiers; source index units, not currency.",
+        "key_columns": [
+          "customer_id"
+        ]
+      }
+    }
+  },
+  {
+    "id": "20-ranking",
+    "source": "fixture",
+    "conversation": "20-ranking",
+    "question": "Rank all regions by recorded revenue and show each region’s share of the full total. Keep complete denominators and produce a compact report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "descriptive",
+      "relationship_roles"
+    ]
+  },
+  {
+    "id": "21-saved-followup",
+    "source": "fixture",
+    "conversation": "monthly",
+    "question": "Reuse the saved monthly revenue dataset and compare 2018 with 2019. Preserve the intended years and declared units, and report the absolute and percentage changes without new source execution if the saved grain is sufficient.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "saved_followup"
+    ]
+  },
+  {
+    "id": "22-chart-revision",
+    "source": "fixture",
+    "conversation": "monthly",
+    "question": "Use the existing monthly revenue chart and saved evidence. Change its title to Revenue history and produce the revised report without running SQL or Python.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "presentation_reuse"
+    ]
+  },
+  {
+    "id": "23-approval-edit",
+    "source": "fixture",
+    "conversation": "23-approval-edit",
+    "question": "Report the revenue total for calendar 2018. If execution review is enabled, pause for review; the reviewed query or Python edit is authoritative. Describe the actual executed scope and include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "approval_edits"
+    ]
+  },
+  {
+    "id": "24-recovery",
+    "source": "fixture",
+    "conversation": "24-recovery",
+    "question": "Retrieve the full monthly revenue population, then assess trend in Python and report the results. If interrupted, reuse saved evidence and continue the same assignment. If report rendering fails, repair the report over saved findings.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "stop_resume",
+      "report_retry",
+      "iterative_analysis"
+    ]
+  },
+  {
+    "id": "25-incomplete-population",
+    "source": "capped_fixture",
+    "conversation": "25-incomplete-population",
+    "question": "First save raw monthly observations for the entire history without a LIMIT. This source caps retrieval at 12 rows. Then separately compute a complete scalar revenue total and observation count. Publish an explicitly partial report with those supported totals, the incomplete extraction warning and an unresolved full-history trend question. Do not infer trend or statistics from the capped prefix.",
+    "expected_outcome": "partial",
+    "held_out": false,
+    "scenarios": [
+      "incomplete_data",
+      "partial"
+    ]
+  }
+]

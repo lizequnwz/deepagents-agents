@@ -1,6 +1,8 @@
 # Example questions: simple answers to complex reports
 
-Updated 27 September 2026. Copy a question into the app after selecting its data
+Historical live-test claims whose receipts are unavailable in this checkout are unverified. Current repeatable checks are recorded in the [30 September release verification](../reviews/release-verification-2026-09-30.md).
+
+Updated 30 September 2026. Copy a question into the app after selecting its data
 source. Start with the simple questions below; then try an investigation or a
 sequence of follow-ups. Data-backed answers include an HTML report automatically,
 so a simple total does not need a request for a large report or a plan.
@@ -36,9 +38,9 @@ progress, and use the evidence downloads to inspect complete results.
 
 ## Simple questions
 
-These exact S1–S4 prompts were live-tested in the
-[held-out corpus](../../tests/fixtures/held_out_examples.json). S5 was separately
-[live-tested](../reviews/roadmap-evidence/comparison-final-manifest.json).
+S1–S4 are recorded in the [held-out corpus](../../tests/fixtures/held_out_examples.json).
+S5 exercises checked KPI comparisons. Historical live-trial receipts are absent;
+these prompts are evaluation inputs, not evidence of current live-model accuracy.
 
 ### S1: Annual revenue
 
@@ -92,11 +94,7 @@ For a first complex report, try **01**, **04** or **09**. For iterative analysis
 run **01 → 02 → 03 → 10** in one conversation. Run **05 → 06** in a separate
 conversation; the other examples each start fresh.
 
-**Latest verification:** the [27 September delivery review](../reviews/roadmap-implementation-2026-09-27.md)
-records corrected units, undefined screening flags and title-only editing, plus
-remaining repair and methodology limits. The [26 September review](../reviews/documentation-live-tests-2026-09-26.md)
-is the historical baseline, not current failure status. A forecast refusal can be
-a valid outcome; a completed report alone is not a correctness guarantee.
+**Current verification:** see the [30 September release checks](../reviews/release-verification-2026-09-30.md). Earlier 26/27 September live-trial receipts are unavailable in this checkout, so their analytical outcomes are unverified here. A forecast refusal can be a valid outcome; a completed report alone is not a correctness guarantee.
 
 For exact reruns, use the [testing guide](../development/testing.md). SQL wording,
 analytical method and report layout may vary across runs. These prompts were not

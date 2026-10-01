@@ -1,97 +1,100 @@
-# Improvement priorities
+# Next capability increments
 
-Updated 27 September 2026. Sections 1–3 now have working implementations and
-dated verification; remaining limits are stated below. The [implementation log](implementation-progress.md) records delivered
-capabilities; the [live-test issue register](../reviews/documentation-live-tests-2026-09-26.md)
-provides concrete evidence and separates confirmed problems from risks.
+Updated 1 October 2026. Excel intake, portable script/data bundles and notebook
+export/replay are [delivered](implementation-progress.md). This roadmap describes
+remaining work. The [handoff](../../HANDOFF.md) sets product constraints and the
+[ablation plan](simplification-and-ablation.md) covers optional simplifications.
+Dedicated execution isolation remains deferred; reuse the local runner.
 
-## Immediate correctness fixes from the live trial
+## 1. Establish outcome and usability evidence
 
-- **Saved analysis agreement (02, 07):** derive residual counts/flags from final
-  saved computations; propagate units/completeness and reconcile contradictory
-  attached narratives before publication. Check downloads and report attachments.
-- **Exact title edits (10):** copy the stored report specification, change only
-  title and revision identity, and preserve findings/charts/analyses without calls.
-- **Reliable artifact handoff (09):** stop repeated UUID transcription mistakes
-  with exact reference selection and useful tool feedback.
-- **Repair reduction (01, 08, 09):** target observed query-shape, output-budget and
-  generated-code failures, then rerun the original questions with identical checks.
+Extend the existing evaluation corpus and independent grader rather than build a
+benchmark service. Include workbook range/formula interpretation, multi-input
+analysis, reconciliation, cohorts/funnels, missingness, forecast feasibility,
+temporal leakage, baseline comparison and report/evidence agreement. Hold out
+paraphrases and ambiguous requests. Recompute arithmetic and statistical outcomes
+from complete saved evidence; a completed report is not a grade.
 
-These fixes were implemented and retested in the [roadmap delivery review](../reviews/roadmap-implementation-2026-09-27.md). Exact title editing is deterministic. Analysis consistency and artifact-reference repairs improved in the observed trials, but generated prose and arbitrary source-query correctness still require review.
+Observe business users uploading/reviewing a workbook, identifying its population,
+asking a follow-up and finding limitations. Observe analysts tracing and replaying
+the exported calculation. Measure task success, time, errors and repairs. Use the
+largest observed friction to choose the next usability change; foreground risky
+schema columns without removing explicit confirmation.
 
-## 1. Make correct outcomes reproducible — delivered
+**Completion gate:** exact prompts/configuration/fingerprints, independent expected
+values or method checks, retained failures and a dated outcome for every evaluated
+case. Distinguish deterministic/scripted, live-provider and browser evidence. Model
+quality claims require live outcomes, not more implementation-only tests.
 
-Keep exact documented prompts, independent expected values, source fingerprints,
-and per-run receipts. Grade scope, joins, aggregation, units, assumptions,
-methodology, and report/evidence agreement. Record first-attempt failures and
-self-repairs, not just eventual completion. Add held-out paraphrases and ambiguous
-requests before claiming a general SQL accuracy gain.
+**Existing boundaries:** `scripts/evaluate_documented_examples.py`,
+`scripts/grade_documented_examples.py`, `tests/fixtures/`, and upload review UI.
 
-Acceptance: every released example has a dated outcome; arithmetic recomputes from
-complete saved evidence; incorrect or incomplete answers fail even when a report
-exists. Live trials complement deterministic tests and do not replace them.
+The [ablation execution workflow](ablation-execution.md) now supplies 25 synthetic
+cases, complete receipts and paired gates. The first prompt candidate was rejected
+after repeated metadata regressions; the shared batch-review failure was repaired
+and verified through a live reviewed run. See the
+[dated result](../reviews/ablation-outcomes-2026-10-01.md). The mixed study ended
+early and does not complete live grading or observed usability evidence.
 
-## 2. Reduce repairs that obscure analytical work — delivered, continue measuring
+## 2. Deliver an explicit saved-dataset follow-up
 
-Use the issue register to prioritize observed retrieval, tool-input, execution,
-and presentation failures. Improve model-visible tool descriptions or feedback
-at the responsible boundary. Avoid global prompt additions for one local defect.
-Keep SQL, analysis, and report composition responsibilities distinct.
+Let a user select a named saved dataset and ask a narrower analytical question.
+Carry that explicit reference and scope into the existing conversation workflow.
+Reuse complete saved evidence where it answers the question. Coarse aggregates
+cannot support finer populations; require suitable retrieval rather than infer
+missing detail. Keep chart display samples separate from analytical inputs.
 
-Acceptance: reproduce the original failing question, add a targeted regression,
-and compare the same question after the fix. Preserve first-attempt receipts.
+**Completion gate:** the chosen dataset/population is visible; SQL/Python receive
+the intended IDs; incompatible grain and incomplete evidence produce useful
+feedback; report and download agree on scope; reopening preserves the conversation.
+Source access still follows the configured warehouse/file boundary.
 
-## 3. Bind comparisons to stored evidence — delivered for shared snapshots
+**Existing boundaries:** result inspection UI, run request/context, scoped evidence
+resolver and saved-dataset tools. Start with explicit selection; linked chart
+interaction is a later increment.
 
-Add an explicit KPI comparison contract using metric references, population,
-period, grain, units, and current/baseline result bindings. Derive absolute and
-percentage changes deterministically and attach reconciliation checks. Expose
-**How calculated?** without a model call.
+## 3. Make forecast evaluation inspectable
 
-Implemented checks reject period/denominator mismatches, duplicate aggregate keys,
-incompatible dimensions/units, incomplete snapshots, and false completeness labels.
-Displayed deltas are derived from saved values. These checks cannot detect a source
-join that already inflated an otherwise unique aggregate; independent source-grain
-reconciliation remains required. Cross-snapshot comparisons and an explicit source
-cutoff contract remain future work.
+Display saved training/holdout boundaries, observed/predicted values, requested
+horizon, baseline/candidate errors, forecast start and interval method. Persist
+evaluation tables plus a small descriptor; extend existing chart/report contracts
+only for the required actual/forecast series and start marker. Interval labeling
+already exists. Do not introduce an algorithm registry or new forecasting agent.
 
-## 4. Make forecast evaluation inspectable
+**Completion gate:** scores recompute from saved actuals/predictions; no temporal
+leakage; a baseline is visible; short/noisy/structural-break fixtures are covered;
+nominal interval coverage is distinguished from measured holdout coverage and its
+limited sample. Chat, HTML, notebook and saved tables describe the same scope/method.
 
-Persist training/holdout boundaries, method and baseline scores, predictions,
-observations, and interval assumptions. Existing interval labels are delivered;
-a dedicated forecast-evaluation workspace and shared multi-series/start-marker
-contract remain open.
+**Existing boundaries:** data-analysis outputs, shared chart schemas and renderer,
+report blocks and export evidence. This can proceed independently of scope controls.
 
-Acceptance: recomputable holdout errors, no temporal leakage, explicit baseline
-comparison, actuals visible beside forecasts, and nominal coverage distinguished
-from measured coverage. Include short/noisy/structural-break fixtures.
+## 4. Add shared scope, then manual refresh
 
-## 5. Measure large-catalog discovery before adding infrastructure
+After explicit follow-ups work, introduce one filter state over a complete suitable
+saved dataset. Bind cards/charts/tables/downloads to it. Keep unsupported filtering
+of aggregates explicit. Then add manual warehouse refresh as a new analysis and
+immutable report revision, preserving the last successful view on failure.
 
-Evaluate the current lexical index using expected semantic roles, relationships,
-and reviewed results over real-sized catalogs. Include table-name ambiguity,
-abstract date intents, rare concepts, overloaded terminology, and many-hop joins.
-Compare hybrid embeddings only under equal context/call budgets.
+**Completion gate:** all surfaces and exports agree on scope, reopening restores
+the view, stale edits are rejected, presentation changes make no model/source
+calls, and refresh records actual source cutoff/completeness separately from query
+time. File refresh remains a new upload/conversation under the current policy.
 
-Acceptance: necessary-entity recall and downstream correctness improve without
-unacceptable latency, context growth, or operational complexity. A controlled
-synthetic retrieval benchmark alone does not meet this gate.
+**Existing boundaries:** presentation revisions, evidence resolution, run lifecycle
+and export preparation. Do not add scheduling before refresh is validated.
 
-## 6. Extend the result workspace incrementally
+## Later, driven by evidence
 
-After direct title/style editing, add explicit selected-scope follow-ups, then a
-shared filter over complete saved evidence, then manual report refresh. Preserve
-immutable revisions and the last successful view on failure. Do not infer scope
-from visual row positions or label a new query timestamp as fresh source data.
+Improve cross-snapshot comparison proof and deliberately reviewed metric meaning;
+existing same-snapshot checks do not establish source join correctness or freshness.
+Support focused business workflows with skills/examples and graded outcomes before
+adding method-specific agents. Add bounded registered-image inspection only when
+visual reasoning is needed. Measure lexical retrieval misses before testing hybrid
+retrieval at equal context budgets and grading downstream results.
 
-Acceptance: metric/chart/table/export agree on scope; reopen restores the view;
-unsupported rescoping of aggregates explains its limitation; presentation-only
-edits make no provider or warehouse calls.
-
-## Deferred expansion
-
-Multiple-file joins, warehouse enrichment, document research, new exports,
-scheduling, hosted collaboration, and persistent Python kernels remain separate
-initiatives. They should not precede measured reliability of the current local
-single-source workflow. See the [ablation plan](simplification-and-ablation.md)
-for evidence gates on further simplification.
+Additional delimited/flat JSON formats, Excel result export, other workbook formats
+and analyst code editing need observed demand. Reuse the existing ingestion/export
+paths. Multi-file/sheet joins, warehouse enrichment, document research, scheduling,
+hosting and live kernels require separate product decisions. None is a prerequisite
+for these increments. Remove obsolete paths when replacements are adopted.

@@ -9,6 +9,7 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import ToolException
 from pydantic import Field
 
+from data_analytics_agent.handoff import assignment_call_id, record_dataset
 from data_analytics_agent.semantic_context import (
     _field_payload,
     _metric_payload,
@@ -240,7 +241,10 @@ def create_lookup_values_tool(
         """
 
         context = _runtime_context(runtime)
-        if committed := runs.storage.committed(context.run_id, runtime.tool_call_id):
+        if context.source_id != source.source_id:
+            raise ValueError("Source mismatch")
+        call_id = assignment_call_id(runtime)
+        if committed := runs.storage.committed(context.run_id, call_id):
             return json.loads(committed)
         if reason := runs.analysis_stop_reason(context.run_id):
             return {"ok": False, "error": reason}
@@ -263,6 +267,7 @@ def create_lookup_values_tool(
                 "instruction": "Execute this generated query with execute_sql so the configured SQL review applies.",
             }
         runs.set_phase(context.run_id, "retrieving_data")
+        purpose = f"Value lookup: {dataset_name}.{field_name}"
         with runs.source_worker(context.run_id):
             result = execute_query(
                 backend=backend,
@@ -271,11 +276,12 @@ def create_lookup_values_tool(
                 thread_id=context.thread_id,
                 result_store=results,
                 originating_question=context.question,
-                purpose=f"Value lookup: {dataset_name}.{field_name}",
+                purpose=purpose,
                 cancel=runs.cancel_event(context.run_id),
             )
         response = result.model_dump(mode="json")
-        runs.storage.commit(context.run_id, runtime.tool_call_id, json.dumps(response))
+        record_dataset(runs, runtime, response, purpose)
+        runs.storage.commit(context.run_id, call_id, json.dumps(response))
         return response
 
     return lookup_values

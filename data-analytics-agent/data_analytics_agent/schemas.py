@@ -14,7 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 15
+API_CONTRACT_VERSION = 17
 
 
 class StrictModel(BaseModel):
@@ -166,6 +166,8 @@ class UploadProvenance(StrictModel):
     filename: str
     sha256: str
     file_bytes: int
+    excel_selection: dict[str, Any] | None = None
+    warnings: list[str] = Field(default_factory=list)
     schema_reviewed: bool = False
     types: dict[str, str] = Field(default_factory=dict)
     grain: str = ""
@@ -359,26 +361,36 @@ class AgentStateSnapshot(StrictModel):
     captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class ApprovalRequest(StrictModel):
-    interrupt_id: str = Field(min_length=1)
+class PythonReviewInput(StrictModel):
+    result_id: str
+    originating_question: str
+    executed_sql: str
+    columns: list[str]
+    sample_rows: list[dict[str, Any]]
+    profile: ResultProfile
+    row_count: int
+    truncated: bool
+    parent_result_ids: list[str]
+    upload_provenance: UploadProvenance | None = None
+
+
+class ApprovalAction(StrictModel):
     action_name: str
     query: str
     arguments: dict[str, Any] = Field(default_factory=dict)
-    allowed_decisions: list[Literal["approve", "edit", "reject"]]
+    allowed_decisions: list[Literal["approve", "edit", "reject"]] = Field(min_length=1)
     review_type: Literal["sql", "python"] = "sql"
     source_id: str = ""
     dialect: str = "sqlite"
     timeout_seconds: float = Field(default=10, gt=0)
     max_result_rows: int = Field(default=10_000, ge=1)
-    parent_result_id: str | None = None
-    originating_question: str = ""
-    executed_sql: str | None = None
-    columns: list[str] = Field(default_factory=list)
-    sample_rows: list[dict[str, Any]] = Field(default_factory=list)
-    profile: ResultProfile | None = None
-    row_count: int | None = Field(default=None, ge=0)
-    truncated: bool | None = None
+    input_datasets: dict[str, PythonReviewInput] = Field(default_factory=dict)
     description: str = "Review the generated SQL before it is executed."
+
+
+class ApprovalRequest(StrictModel):
+    interrupt_id: str = Field(min_length=1)
+    actions: list[ApprovalAction] = Field(min_length=1)
 
 
 class Correction(StrictModel):
@@ -471,6 +483,7 @@ class Decision(StrictModel):
 
 
 class DecisionRequest(StrictModel):
+    interrupt_id: str = Field(min_length=1)
     decisions: list[Decision] = Field(min_length=1)
 
 

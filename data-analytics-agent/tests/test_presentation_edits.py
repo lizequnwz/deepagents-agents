@@ -1,6 +1,8 @@
 """Presentation-only edits preserve evidence, immutable history and report parity."""
 
+from io import BytesIO
 from types import SimpleNamespace
+from zipfile import ZipFile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -244,6 +246,97 @@ def test_chart_controls_save_matching_report_and_show_preview(
             "Revised revenue"
             in services.reports.get(revised.report.report_id, w.thread).html
         )
+
+
+def test_analysis_zip_is_deferred_and_bound_to_the_displayed_report(
+    presented, test_settings, monkeypatch
+):
+    from streamlit.runtime.media_file_manager import MediaFileManager
+    from streamlit.runtime.media_file_storage import MediaFileStorageError
+
+    w = presented
+    services = Services(settings=test_settings, storage=w.storage)
+    registered = []
+    downloads = []
+    add_deferred = MediaFileManager.add_deferred
+
+    def register(manager, *args, **kwargs):
+        file_id = add_deferred(manager, *args, **kwargs)
+        registered.append((manager, file_id))
+        return file_id
+
+    monkeypatch.setattr(MediaFileManager, "add_deferred", register)
+    with TestClient(create_app(services)) as api:
+
+        def response(self, method, path, **kwargs):
+            kwargs.pop("timeout", None)
+            result = api.request(method, path, **kwargs)
+            if path.endswith("/download"):
+                downloads.append((path, kwargs["params"], result.content))
+            if result.status_code >= 400:
+                raise APIError(
+                    str(result.json()["detail"]), status_code=result.status_code
+                )
+            return result
+
+        monkeypatch.setattr(AgentAPIClient, "_response", response)
+
+        def app_code(run_id):
+            import streamlit as st
+            from data_analytics_agent.ui.api_client import AgentAPIClient
+            from data_analytics_agent.ui.components import render_answer
+
+            client = AgentAPIClient("http://download-test")
+            render_answer(
+                client,
+                client.get_run(run_id)["answer"],
+                turn_key=run_id,
+                source_id="test",
+                analysis_download_available=st.session_state.get("finished", True),
+            )
+
+        app = AppTest.from_function(app_code, args=(w.run,)).run(timeout=15)
+        assert not app.exception
+        assert not downloads
+        button = next(
+            b for b in app.download_button if b.label == "Download analysis ZIP"
+        )
+        assert button.proto.ignore_rerun
+        manager, file_id = registered[-1]
+        assert button.proto.deferred_file_id == file_id
+        assert manager.execute_deferred(file_id).endswith(".zip")
+        path, params, content = downloads[-1]
+        assert path == f"/api/runs/{w.run}/download"
+        assert params == {"report_id": w.report.report_id}
+        with ZipFile(BytesIO(content)) as bundle:
+            assert bundle.read("report.html").decode() == w.report.html
+
+        revised = api.post(
+            f"/api/runs/{w.run}/report-title",
+            json={"report_id": w.report.report_id, "title": "Revised report"},
+        )
+        assert revised.status_code == 200
+        revised_report = revised.json()["report"]
+        with pytest.raises(MediaFileStorageError, match="Callable execution failed"):
+            manager.execute_deferred(file_id)
+        assert downloads[-1][1] == {"report_id": w.report.report_id}
+        app.run(timeout=15)
+        assert not app.exception
+        manager, file_id = registered[-1]
+        manager.execute_deferred(file_id)
+        assert downloads[-1][1] == {"report_id": revised_report["report_id"]}
+        with ZipFile(BytesIO(downloads[-1][2])) as bundle:
+            assert "Revised report" in bundle.read("report.html").decode()
+
+        app.session_state["finished"] = False
+        before = len(downloads)
+        app.run(timeout=15)
+        assert not app.exception
+        assert next(
+            b for b in app.download_button if b.label == "Download analysis ZIP"
+        ).proto.disabled
+        assert len(downloads) == before
+        assert any("when this answer is complete" in c.value for c in app.caption)
 
 
 def test_unchanged_edit_does_not_create_revision(presented):

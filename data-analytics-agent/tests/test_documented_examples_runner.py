@@ -63,7 +63,7 @@ def test_followup_requires_completed_prior_case(runner):
     invoke, requests = runner
     with pytest.raises(RuntimeError, match="requires completed 01-revenue"):
         invoke("02-trend")
-    assert requests == [("GET", "/health")]
+    assert requests == [("GET", "/health"), ("GET", "/api/evaluation-context")]
 
 
 def test_reattaches_recorded_run_without_resubmission(runner, tmp_path):
@@ -82,5 +82,44 @@ def test_reattaches_recorded_run_without_resubmission(runner, tmp_path):
         )
     )
     invoke(case["id"])
-    assert requests == [("GET", "/health"), ("GET", "/api/runs/run-1")]
+    assert requests == [
+        ("GET", "/health"),
+        ("GET", "/api/evaluation-context"),
+        ("GET", "/api/runs/run-1"),
+        ("GET", "/api/evaluation-context"),
+    ]
     assert json.loads((folder / "run.json").read_text())["status"] == "completed"
+
+
+def test_finished_receipts_are_preserved_when_runner_is_repeated(runner, tmp_path):
+    invoke, requests = runner
+    case = json.loads((ROOT / "tests/fixtures/documented_examples.json").read_text())[0]
+    (tmp_path / "conversations.json").write_text(json.dumps({"revenue": "thread-1"}))
+    folder = tmp_path / case["id"]
+    folder.mkdir()
+    (folder / "run.json").write_text(
+        json.dumps({"run_id": "run-1", "status": "completed", "phase": "done"})
+    )
+    (folder / "artifact-hashes.json").write_text("{}")
+    original = (folder / "run.json").read_bytes()
+    invoke(case["id"])
+    assert (folder / "run.json").read_bytes() == original
+    assert ("GET", "/api/runs/run-1") not in requests
+
+
+def test_reviewed_run_is_reattached_without_new_question(runner, tmp_path):
+    invoke, requests = runner
+    case = json.loads((ROOT / "tests/fixtures/documented_examples.json").read_text())[0]
+    (tmp_path / "conversations.json").write_text(json.dumps({"revenue": "thread-1"}))
+    folder = tmp_path / case["id"]
+    folder.mkdir()
+    recorded = {
+        "run_id": "run-1",
+        "thread_id": "thread-1",
+        "status": "approval_required",
+    }
+    (folder / "run.json").write_text(json.dumps(recorded))
+    invoke(case["id"])
+    assert json.loads((folder / "interrupted-run.json").read_text()) == recorded
+    assert json.loads((folder / "run.json").read_text())["status"] == "completed"
+    assert ("GET", "/api/runs/run-1") in requests

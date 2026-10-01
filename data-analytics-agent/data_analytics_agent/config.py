@@ -161,9 +161,6 @@ class Settings:
     analysis_agent_tool_call_limit: int = field(
         default_factory=lambda: _env_positive_int("ANALYSIS_AGENT_TOOL_CALL_LIMIT", 80)
     )
-    agent_debug_details: bool = field(
-        default_factory=lambda: _env_bool("AGENT_DEBUG_DETAILS", False)
-    )
 
     @property
     def storage_dir(self) -> Path:

@@ -112,7 +112,6 @@ def _figure_output(
 def _normalize_outputs(
     raw_outputs: Any,
     limits: dict[str, Any],
-    input_frame: pd.DataFrame | None,
 ) -> list[dict[str, Any]]:
     if not isinstance(raw_outputs, dict):
         raise TypeError(
@@ -155,13 +154,6 @@ def _normalize_outputs(
                 _table_output(name, value.rename(column_name).reset_index(), limits)
             )
         elif isinstance(value, pd.DataFrame):
-            if input_frame is not None and (
-                value is input_frame or value.equals(input_frame)
-            ):
-                raise ValueError(
-                    "analysis_outputs cannot return the complete input DataFrame; "
-                    "return a compact statistical summary instead."
-                )
             outputs.append(_table_output(name, value, limits))
         elif isinstance(value, np.ndarray):
             array = np.asarray(value)
@@ -234,7 +226,6 @@ def main() -> int:
         outputs = _normalize_outputs(
             namespace.get("analysis_outputs") or {"status": "Derived datasets saved"},
             limits,
-            None,
         )
         derived = {}
         import pyarrow as pa
@@ -263,8 +254,18 @@ def main() -> int:
             target = output_path.parent / f"derived-{index}.parquet"
             pq.write_table(table, target)
             derived[name] = str(target)
+        from importlib.metadata import packages_distributions, version
+        import platform
+
+        imported = {name.split(".")[0] for name in sys.modules}
+        runtime_versions = {"python": platform.python_version()}
+        for module, distributions in packages_distributions().items():
+            if module in imported:
+                for distribution in distributions:
+                    runtime_versions[distribution] = version(distribution)
         payload = {
             "ok": True,
+            "runtime_versions": runtime_versions,
             "outputs": outputs,
             "output_datasets": derived,
             "warnings": [],

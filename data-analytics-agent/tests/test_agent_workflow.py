@@ -7,15 +7,22 @@ from pathlib import Path
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage, SystemMessage
 from langchain_core.outputs import ChatResult, ChatGeneration
+from langchain_core.utils.function_calling import convert_to_openai_tool
+from pydantic import PrivateAttr
 from data_analytics_agent.api import Services
 
 
 class AnalystModel(BaseChatModel):
+    _bound_tool_names: list[set[str]] = PrivateAttr(default_factory=list)
+
     @property
     def _llm_type(self):
         return "local-analyst-workflow-test"
 
-    def bind_tools(self, *args, **kwargs):
+    def bind_tools(self, tools, **kwargs):
+        names = {convert_to_openai_tool(t)["function"]["name"] for t in tools}
+        assert not {"write_file", "edit_file", "delete"} & names
+        self._bound_tool_names.append(names)
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
@@ -111,10 +118,11 @@ async def test_descriptive_question_through_real_harness_produces_report(
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
     from data_analytics_agent import coordinator
 
+    model = AnalystModel()
     monkeypatch.setattr(
         coordinator,
         "_build_chat_model",
-        lambda *args, **kwargs: AnalystModel(),
+        lambda *args, **kwargs: model,
     )
     # Keep the isolated source configuration and use the real project instructions/skills.
     import shutil
@@ -137,6 +145,10 @@ async def test_descriptive_question_through_real_harness_produces_report(
     assert len(services.storage.load("reports", dict)) == 1
     assert len(services.results.list_for_conversation(thread, source_id="test")) == 1
     assert not state.answer.analyses and not services.runs.get_python_execution(run)
+    coordinator_tools = next(n for n in model._bound_tool_names if "task" in n)
+    sql_tools = next(n for n in model._bound_tool_names if "execute_sql" in n)
+    assert {"read_file", "write_todos", "create_report"} <= coordinator_tools
+    assert {"read_file", "lookup_values", "execute_sql"} <= sql_tools
     assert services.results.get_unscoped(state.answer.primary_result_id).rows == [
         {"artists": 0}
     ]

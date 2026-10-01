@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from data_analytics_agent.data_sources import ExecutionLimits
 from data_analytics_agent.datasets import StoreNotFound
 from data_analytics_agent.schemas import UploadProvenance
+from data_analytics_agent.excel import ExcelSelection, read_excel_table
 
 UploadType = Literal[
     "original",
@@ -36,7 +37,7 @@ TYPE_LABELS = {
     "original": "Keep stored type",
     "text": "Text / identifier",
     "integer": "Whole number",
-    "number": "Number (floating point)",
+    "number": "Number (approximate)",
     "boolean": "True / false",
     "date_iso": "Date: YYYY-MM-DD",
     "date_dmy": "Date: DD/MM/YYYY",
@@ -73,6 +74,8 @@ class UploadedFile(BaseModel):
     result_id: str
     row_count: int
     columns: list[UploadColumn]
+    excel_selection: ExcelSelection | None = None
+    warnings: list[str] = Field(default_factory=list)
     confirmed: bool = False
     review: UploadReview | None = None
 
@@ -107,6 +110,10 @@ def upload_source(upload, settings):
         "file_sha256": upload.sha256,
         "saved_result_id": upload.result_id,
         "rows": upload.row_count,
+        "excel_selection": upload.excel_selection.model_dump()
+        if upload.excel_selection
+        else None,
+        "import_warnings": upload.warnings,
         "schema": [
             {"column": c.name, "stored_type": c.stored_type} for c in upload.columns
         ],
@@ -205,7 +212,7 @@ def _read_table(content: bytes, filename: str, settings) -> pa.Table:
             raise ValueError("Decoded upload exceeds the dataset byte limit.")
         batches = reader.iter_batches(batch_size=8192)
     else:
-        raise ValueError("Upload one CSV or Parquet file.")
+        raise ValueError("Upload one CSV, Parquet or .xlsx file.")
     _validate_schema(schema)
     kept, rows, size = [], 0, 0
     try:
@@ -276,7 +283,12 @@ def _suggest(name, column):
     return "text", ""
 
 
-def stage_upload(services, content: bytes, filename: str):
+def stage_upload(
+    services,
+    content: bytes,
+    filename: str,
+    excel_selection: ExcelSelection | None = None,
+):
     if not content or len(content) > services.settings.upload_max_bytes:
         raise ValueError("Upload is empty or exceeds UPLOAD_MAX_BYTES.")
     filename = filename.replace("\\", "/").rsplit("/", 1)[-1]
@@ -285,7 +297,20 @@ def stage_upload(services, content: bytes, filename: str):
             "Use a filename of at most 255 characters without control characters."
         )
     try:
-        table = _read_table(content, filename, services.settings)
+        warnings = []
+        if Path(filename).suffix.lower() == ".xlsx":
+            if excel_selection is None:
+                raise ValueError(
+                    "Select a worksheet and table range before importing Excel."
+                )
+            table, warnings = read_excel_table(
+                content, excel_selection, services.settings
+            )
+            _validate_schema(table.schema)
+        else:
+            if excel_selection is not None:
+                raise ValueError("Worksheet selection applies only to .xlsx files.")
+            table = _read_table(content, filename, services.settings)
     except pa.ArrowException as exc:
         raise ValueError(f"The file could not be read: {exc}") from exc
     source_id = "upload:" + str(uuid4())
@@ -296,7 +321,11 @@ def stage_upload(services, content: bytes, filename: str):
     sha = hashlib.sha256(content).hexdigest()
     # The original bytes and immutable typed snapshot are both local evidence.
     provenance = UploadProvenance(
-        filename=filename, sha256=sha, file_bytes=len(content)
+        filename=filename,
+        sha256=sha,
+        file_bytes=len(content),
+        excel_selection=excel_selection.model_dump() if excel_selection else None,
+        warnings=warnings,
     )
     try:
         original_path.write_bytes(content)
@@ -332,6 +361,8 @@ def stage_upload(services, content: bytes, filename: str):
             result_id=result.result_id,
             row_count=result.row_count,
             columns=columns,
+            excel_selection=excel_selection,
+            warnings=warnings,
         )
         services.storage.put("uploads", source_id, upload)
         return upload
@@ -452,6 +483,10 @@ def confirm_upload(services, thread_id, review: UploadReview):
             sha256=upload.sha256,
             file_bytes=upload.file_bytes,
             schema_reviewed=True,
+            excel_selection=upload.excel_selection.model_dump()
+            if upload.excel_selection
+            else None,
+            warnings=upload.warnings,
             types=review.types,
             grain=review.grain,
             key_columns=review.key_columns,

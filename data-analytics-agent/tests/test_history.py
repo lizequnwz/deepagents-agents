@@ -10,7 +10,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
     AnalysisOutput,
 )
 from data_analytics_agent.reporting.schemas import ReportSpec
-from data_analytics_agent.schemas import ApprovalRequest, RunStatus
+from data_analytics_agent.schemas import ApprovalAction, ApprovalRequest, RunStatus
 from tests.test_persistent_analyst import save
 
 
@@ -63,9 +63,13 @@ def test_delete_history_removes_artifacts_checkpoints_and_preserves_other_conver
         w.run,
         ApprovalRequest(
             interrupt_id="pending",
-            action_name="execute_sql",
-            query="SELECT 1",
-            allowed_decisions=["approve"],
+            actions=[
+                ApprovalAction(
+                    action_name="execute_sql",
+                    query="SELECT 1",
+                    allowed_decisions=["approve"],
+                )
+            ],
         ),
     )
     other = w.conversations.create("test")

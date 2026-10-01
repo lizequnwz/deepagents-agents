@@ -137,9 +137,12 @@ fragment so typing and focus persist.
 
 ## Isolated uploaded files
 
-`uploads.py` stages one bounded CSV/Parquet file in its own conversation and
+`uploads.py` stages one bounded CSV/Parquet/Excel table in its own conversation and
 requires explicit schema confirmation before any run. CSV first enters Arrow as
-text; Parquet retains supported scalar types. Type suggestions and review checks
+text; Parquet retains supported scalar types. `excel.py` uses read-only `openpyxl`
+to inspect `.xlsx` worksheets and normalize one explicit header/table range through
+the same Arrow/Parquet review path. Range and formula-cache choices are saved;
+formula recalculation and multiple-sheet joins are unsupported. Type suggestions and review checks
 use the full bounded population. Confirmation creates an immutable reviewed
 Parquet child, retains original bytes and snapshot, and saves SHA-256, selected
 types, declared grain and verified row keys. Unsupported nested types, invalid
@@ -153,6 +156,7 @@ uses the same saved-input execution tools. Charts and reports retain the existin
 parent lineage. Reports include upload provenance. Warehouse agents keep their
 curated semantic catalog requirements.
 
+`POST /api/uploads/workbook` inspects workbook bytes before creating a conversation.
 `POST /api/uploads?filename=...` accepts raw file bytes and creates the staged
 conversation. `GET /api/conversations/{id}/upload` returns at most ten preview rows
 and review metadata; `POST /api/conversations/{id}/upload/confirm` commits explicit
@@ -161,6 +165,11 @@ source. Upload sources never appear in the reusable source listing. Imports and
 confirmation run off the event loop; history deletion refuses active imports or
 reviews. Restart reopens staged or confirmed files. Source-configuration errors
 are separate from model readiness so files work without a warehouse registry.
+
+Excel staging also requires `sheet`, `cell_range` and, when applicable, explicit
+`use_cached_formulas` acceptance. Cached formula freshness is unknown. Original
+bytes/hash, selected range, warnings, types and keys remain visible on reopening
+and in report provenance.
 
 
 ## Plans and concurrent analysis assignments
@@ -219,11 +228,34 @@ Run state, diagnostics, approval details, execution profiles, and persistence
 records are internal/application contracts, not model-generated final responses.
 The obsolete, unused `ReportBrief` contract has been removed.
 
-API contract 15 also replaces free-text metric changes with saved-evidence
-comparisons, following removal of duplicate narrative and primary/supporting selections. Both processes must run the same version. There is
+API contract **17** exposes all actions in an interrupt as one ordered review,
+including all named Python inputs. The UI submits one decision per action together
+with the current interrupt ID; missing and stale decisions are rejected. Different
+worker interrupts remain separate. One common form replaces the old SQL/Python
+forms, and unused stored review-type state is removed. Saved-evidence comparisons and compact responses
+remain implemented. Both processes must run the same version. There is
 no old-record migration or compatibility reader; use a separate storage directory
 for a new-contract workspace when retaining old history. Existing storage is not
 deleted or modified by this code change.
+
+## Portable analysis
+
+`exports.py` resolves the completed turn's selected report/evidence and necessary
+successful Python producers, including earlier same-conversation steps. One export
+preparation supplies the script and `nbformat` notebook, typed snapshots, saved
+outputs, dependency versions, hashes, SQL provenance and exact current HTML.
+Failed attempts and unrelated evidence are excluded from executable replay.
+
+`GET /api/runs/{run_id}/download?report_id=...` builds a temporary ZIP without
+model/source calls, rejects unfinished turns and stale report IDs, and cleans up
+after download. Export preparation is protected against concurrent history deletion.
+`export_replay.py` and a copy of the existing worker form the standalone replay
+runtime; each step runs in a fresh local process with exact named bindings.
+Dataset and scalar/table results are compared with saved evidence. SQL is a fixed
+snapshot boundary; replay does not refresh sources or regenerate interpretations
+and published business charts. There is no app notebook editor or persistent kernel.
+See [release verification](../reviews/release-verification-2026-09-30.md) for replay
+checks and limitations.
 
 ## Voice input
 

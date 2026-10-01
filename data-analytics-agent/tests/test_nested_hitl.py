@@ -212,6 +212,7 @@ def _build_graph(
     state: ScriptState,
     *,
     coordinator_model: BaseChatModel | None = None,
+    sql_model: BaseChatModel | None = None,
     require_approval: bool = True,
 ):
     @tool
@@ -234,7 +235,7 @@ def _build_graph(
         "description": "Generate and execute reviewed SQL.",
         "system_prompt": "Use execute_sql and finish only after it succeeds.",
         "tools": [execute_sql],
-        "model": ScriptedChatModel(role="sql", script_state=state),
+        "model": sql_model or ScriptedChatModel(role="sql", script_state=state),
         "response_format": ToolStrategy(
             SQLAnalysisResponse,
             handle_errors="Please fix your mistakes",
@@ -398,3 +399,104 @@ def test_multi_step_sql_assignments_complete_autonomously() -> None:
     assert "__interrupt__" not in completed
     assert state.executed == [GENERATED_SQL, GENERATED_SQL]
     assert len(state.coordinator_assignments) == 2
+
+
+class BatchSQLModel(ScriptedChatModel):
+    """Reproduce the live two-query interrupt within one specialist call."""
+
+    def _sql_response(self, messages):
+        if not any(isinstance(message, ToolMessage) for message in messages):
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "execute_sql",
+                        "args": {"query": GENERATED_SQL},
+                        "id": "batch-first",
+                    },
+                    {
+                        "name": "execute_sql",
+                        "args": {"query": REVISED_SQL},
+                        "id": "batch-second",
+                    },
+                ],
+            )
+        rejected = [
+            message
+            for message in messages
+            if isinstance(message, ToolMessage)
+            and message.tool_call_id == "batch-second"
+            and message.status == "error"
+        ]
+        if rejected and not any(
+            isinstance(message, ToolMessage) and message.tool_call_id == "revised-sql"
+            for message in messages
+        ):
+            self.script_state.rejection_feedback = str(rejected[0].content)
+            return self._execute_call(REVISED_SQL, "revised-sql")
+        return super()._sql_response(messages)
+
+
+def test_one_specialist_batch_reviews_both_queries_and_executes_exact_edit():
+    state = ScriptState()
+    graph = _build_graph(state, sql_model=BatchSQLModel(role="sql", script_state=state))
+    config = _config("batch-sql-edit")
+    paused = graph.invoke(
+        {"messages": [{"role": "user", "content": "Retrieve two populations"}]}, config
+    )
+    approval = _extract_approval(paused["__interrupt__"])
+    assert [action.query for action in approval.actions] == [GENERATED_SQL, REVISED_SQL]
+    assert state.executed == []
+    with pytest.raises(ValueError, match="each action"):
+        decisions_to_command(approval, [Decision(action="approve")])
+    done = graph.invoke(
+        decisions_to_command(
+            approval,
+            [
+                Decision(action="edit", edited_sql=EDITED_SQL),
+                Decision(action="approve"),
+            ],
+        ),
+        config,
+    )
+    assert "__interrupt__" not in done
+    assert sorted(state.executed) == sorted([EDITED_SQL, REVISED_SQL])
+    assert GENERATED_SQL not in state.executed
+
+
+def test_one_specialist_batch_rejects_only_selected_query_and_keeps_prior_execution():
+    state = ScriptState()
+    graph = _build_graph(state, sql_model=BatchSQLModel(role="sql", script_state=state))
+    config = _config("batch-sql-reject")
+    paused = graph.invoke(
+        {"messages": [{"role": "user", "content": "Retrieve two populations"}]}, config
+    )
+    approval = _extract_approval(paused["__interrupt__"])
+    revised = graph.invoke(
+        decisions_to_command(
+            approval,
+            [
+                Decision(action="approve"),
+                Decision(action="reject", feedback="Revise only the second query"),
+            ],
+        ),
+        config,
+    )
+    assert state.executed == [GENERATED_SQL]
+    assert revised["__interrupt__"]
+    second = _extract_approval(revised["__interrupt__"])
+    assert len(second.actions) == 1
+    assert state.rejection_feedback and "second query" in state.rejection_feedback
+    completed = graph.invoke(
+        decisions_to_command(
+            second,
+            [
+                Decision(
+                    action="edit", edited_sql="SELECT Name FROM Artist ORDER BY Name"
+                )
+            ],
+        ),
+        config,
+    )
+    assert "__interrupt__" not in completed
+    assert state.executed == [GENERATED_SQL, "SELECT Name FROM Artist ORDER BY Name"]

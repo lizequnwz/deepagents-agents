@@ -1,37 +1,41 @@
 # Reviews and evidence
 
-This area contains dated assessments and the receipts used to support them.
-They preserve project history and should be read as snapshots, not as current
-implementation instructions.
+Updated 1 October 2026. Use the current guides for behavior and the
+[handoff](../../HANDOFF.md) for next work. Reviews are dated snapshots; they do not
+supersede the [capability status](../roadmap/implementation-progress.md).
 
-Return to the [documentation index](../README.md) for current guides, or check
-[implementation progress](../roadmap/implementation-progress.md) for delivery status.
+## Latest records
 
-## Assessments and test records
-
-| Date | Document | Scope |
+| Date | Record | How to use it |
 |---|---|---|
-| 27 September 2026 | [Roadmap 1–3 delivery and verification](roadmap-implementation-2026-09-27.md) | Correctness grading, repair reduction, exact title edits and evidence-bound comparisons |
-| 26 September 2026 | [Documentation live-test results and issues](documentation-live-tests-2026-09-26.md) | Exact documented questions, independent checks, application observations, and improvement priorities |
-| 26 September 2026 | [Agent discovery, contracts and voice review](agent-review-2026-09-26.md) | End-to-end review, implemented retrieval/schema simplifications, native dictation and verification |
-| 21 September 2026 | [Semantic discovery review](semantic-discovery-review-2026-09-21.md) | Reproduced semantic retrieval gaps, bounded context design, and prioritized engineering improvements |
-| 20 September 2026 | [Artifact handoff review](artifact-handoff-review-2026-09-20.md) | Confirmed chart-ID failure and records the fixes delivered on 21 September |
-| 20 September 2026 | [Live smoke tests and retry repairs](live-smoke-2026-09-20.md) | This application's configured-provider trials, browser checks, repairs, and follow-up verification |
-| 14 September 2026 | [Data plugin comparative review](data-plugin-comparative-review-2026-09-14.md) | Historical comparison of this project with Data plugin 1.0.8 |
-| 14 September 2026 | [Standalone Data plugin review](data-plugin-standalone-review-2026-09-14.md) | Detailed assessment of Data plugin 1.0.8 |
-| 10 September 2026 | [Architecture and product review](design-review-2026-09-10.md) | Earlier assessment of this project's architecture and product direction |
+| 1 October 2026 | [Business usability](business-usability-2026-10-01.md) | Guided workbook/file review, confirmed population details, deferred downloads and deliberate optional reviews; automated interaction checks and their limits |
+| 1 October 2026 | [Ablation outcome and batch review](ablation-outcomes-2026-10-01.md) | Rejected prompt candidate, preserved early-terminated live study, shared approval repair and independently recomputed live workflow; remaining ablation gates stay open |
+| 30 September 2026 | [Ablation readiness](ablation-readiness-2026-09-30.md) | Frozen synthetic inputs, receipt/grading repairs and paired gates; prepared prompt candidate, without live adoption claims |
+| 30 September 2026 | [Release verification](release-verification-2026-09-30.md) | Delivered cleanup, Excel, bundle/notebook exports; deterministic/browser/replay checks and limits |
+| 29 September 2026 | [Capability and usability review](capability-review-2026-09-29.md) | Pre-release investigation and primary comparison sources; its delivery order is superseded by the handoff |
 
-## Reading copies and supporting evidence
+Supporting evidence: [29 September check record](capability-review-evidence-2026-09-29.json),
+[Excel browser check](excel-browser-2026-09-30.jpg),
+[download browser check](export-browser-2026-09-30.jpg), and the
+[portable synthetic example](../examples/README.md).
 
-- [Standalone review HTML](data-plugin-standalone-review-2026-09-14.html) —
-  reading copy of the standalone plugin review.
-- [Standalone review evidence](data-plugin-review-evidence/README.md) — test logs,
-  screenshots, source hashes, and validation receipts, with reproduction notes.
+## Historical assessments
 
-## Rebuild reading copies
+The [14 September reading copy](data-plugin-standalone-review-2026-09-14.html)
+remains as historical material. Superseded review sources and screenshots were
+removed during cleanup; there is no archive directory in this checkout. Do not
+treat that reading copy as current implementation guidance or available receipts
+for its historical live claims.
 
-The standalone review HTML is generated from its Markdown source with:
+References to unavailable September smoke/documentation/delivery reviews were
+removed from current indexes. Their reported live outcomes remain unverified;
+no missing or skipped evidence is counted as a pass. Existing implementation checks
+are recorded separately in release verification. No paired behavioral ablation or
+competitive model-accuracy benchmark has been completed.
 
-```sh
-node doc/reviews/data-plugin-review-evidence/build-report.mjs
-```
+## Adding evidence
+
+Record the revision, exact inputs/configuration, independent checks, failures and
+limitations. Distinguish deterministic/scripted execution, live-model accuracy and
+browser usability evidence. Keep bulky artifacts only when they explain a finding.
+Archive superseded narratives with useful receipts; remove redundant completed plans.

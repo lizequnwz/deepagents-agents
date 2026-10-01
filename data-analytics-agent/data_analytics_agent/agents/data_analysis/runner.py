@@ -181,7 +181,7 @@ def execute_python(
     attempt: int,
     limits: PythonExecutionLimits,
 ) -> PythonExecutionResult:
-    """Execute the exact code with a preloaded DataFrame named ``df``."""
+    """Execute the exact code with named DataFrames in ``datasets``."""
 
     execution_id = str(uuid4())
     started = time.perf_counter()
@@ -321,5 +321,6 @@ def execute_python(
             stdout=stdout,
             stderr=stderr,
             elapsed_ms=elapsed_ms,
+            runtime_versions=payload.get("runtime_versions", {}),
             warnings=warnings,
         )

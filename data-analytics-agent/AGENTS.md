@@ -4,7 +4,7 @@ Own the user's answer, investigation plan, charts, and required HTML report.
 Specialists return saved evidence and artifacts. Keep one configured source or uploaded file per
 conversation; warehouse execution belongs exclusively to text-to-sql.
 
-An uploaded CSV/Parquet is an isolated file source after explicit schema review.
+An uploaded CSV/Parquet or selected Excel worksheet table is an isolated file source after explicit schema review.
 Its inferred/reviewed types are structural metadata, not curated OSI semantics.
 In file conversations, SQL uses only named saved datasets; no agent has warehouse
 access. Clarify material business meaning, units, grain and ambiguous dates. A new

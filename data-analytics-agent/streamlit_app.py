@@ -31,6 +31,8 @@ from data_analytics_agent.ui.uploads import (
     chat_submission,
     stage_attachment,
     render_upload_review,
+    render_uploaded_source,
+    render_workbook_selection,
 )
 
 load_dotenv()
@@ -65,6 +67,7 @@ def clear_conversation_state() -> None:
         "rejection_feedback_",
         "review_feedback_",
         "review_phase_",
+        "review_choice_",
         "starter_question_",
         "chat_input_",
         "voice_",
@@ -78,10 +81,13 @@ def clear_conversation_state() -> None:
 
 def open_attachment(submission):
     try:
-        uploaded = stage_attachment(client, submission, upload_max_bytes)
+        with st.spinner("Opening your file…"):
+            uploaded = stage_attachment(client, submission, upload_max_bytes)
     except APIError as exc:
         st.error(str(exc))
         return
+    if uploaded is None:
+        st.rerun()
     clear_conversation_state()
     new_thread = uploaded["thread_id"]
     st.session_state.setdefault("upload_questions", {})[new_thread] = submission.text
@@ -245,9 +251,11 @@ def render_active_run(
                         client.answer_clarification(run_id, answer)
                         st.rerun()
             if state == "approval_required":
-                decision = render_approval(run)
-                if decision:
-                    client.submit_decision(run_id, decision)
+                decisions = render_approval(run)
+                if decisions:
+                    client.submit_decisions(
+                        run_id, run["approval"]["interrupt_id"], decisions
+                    )
                     st.rerun()
             elif state in {"paused", "failed"}:
                 # Re-run once to release the chat input after a stop.
@@ -274,7 +282,11 @@ def render_active_run(
             )
             if run.get("findings"):
                 render_answer(
-                    client, run["findings"], turn_key=run_id, source_id=source_id
+                    client,
+                    run["findings"],
+                    turn_key=run_id,
+                    source_id=source_id,
+                    analysis_download_available=False,
                 )
                 st.caption(
                     "Report: retry available"
@@ -318,6 +330,10 @@ except APIError as exc:
 
 upload_max_bytes = (health or {}).get("upload_max_bytes", 33_554_432)
 
+if st.session_state.get("pending_workbook"):
+    render_workbook_selection(client)
+    st.stop()
+
 sources_by_id = {source["source_id"]: source for source in data_sources["sources"]}
 ready_source_ids = {
     source_id for source_id, source in sources_by_id.items() if source["ready"]
@@ -340,7 +356,7 @@ except APIError as exc:
 if conversation is None:
     render_page_header()
     st.info(
-        "Upload a CSV or Parquet file to start. A warehouse connection is optional."
+        "Upload a CSV, Parquet or Excel file to start. A warehouse connection is optional."
     )
     for error in data_sources.get("errors", []):
         st.caption(f"Source configuration: {error}")
@@ -348,7 +364,7 @@ if conversation is None:
         for error in configured.get("errors", []):
             st.caption(f"{configured['name']}: {error}")
     submission = chat_submission(
-        "Ask a question and attach a CSV or Parquet file",
+        "Ask a question and attach a CSV, Parquet or Excel file",
         key="chat_input_upload",
         max_bytes=upload_max_bytes,
         client=client,
@@ -357,7 +373,7 @@ if conversation is None:
         if submission.files:
             open_attachment(submission)
         else:
-            st.info("Attach a CSV or Parquet file to start this conversation.")
+            st.info("Attach a CSV, Parquet or Excel file to start this conversation.")
     st.stop()
 
 if conversation["source_id"] not in sources_by_id:
@@ -454,7 +470,7 @@ if source["backend_type"] == "upload":
     if not uploaded_file["confirmed"]:
         pending_question = st.session_state.get("upload_questions", {}).get(thread_id)
         if pending_question:
-            st.info("After confirming the schema, I’ll answer: " + pending_question)
+            st.info("After you confirm the data, I’ll answer: " + pending_question)
         render_upload_review(client, uploaded_file)
         st.stop()
     pending_question = st.session_state.get("upload_questions", {}).pop(thread_id, None)
@@ -467,21 +483,7 @@ if source["backend_type"] == "upload":
         except APIError as exc:
             st.session_state[f"chat_input_{thread_id}"] = pending_question
             st.error(str(exc))
-    with st.expander("Uploaded file and reviewed schema", expanded=False):
-        st.caption(
-            f"{uploaded_file['filename']} · {uploaded_file['row_count']:,} rows · source freshness unknown"
-        )
-        st.json(
-            {
-                "sha256": uploaded_file["sha256"],
-                "review": uploaded_file["review"],
-                "imported_at": uploaded_file["imported_at"],
-            }
-        )
-        st.link_button(
-            "Download reviewed data",
-            client.dataset_download_url(uploaded_file["result_id"]),
-        )
+    render_uploaded_source(client, uploaded_file)
 
 
 if st.session_state.get("conversation_notice"):

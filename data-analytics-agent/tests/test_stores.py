@@ -7,7 +7,7 @@ from data_analytics_agent.agents.text_to_sql.tools import (
     create_inspect_conversation_result_tool,
     create_list_conversation_results_tool,
 )
-from data_analytics_agent.schemas import ApprovalRequest, FinalAnswer
+from data_analytics_agent.schemas import ApprovalAction, ApprovalRequest, FinalAnswer
 from data_analytics_agent.stores import ResultStore, RunStore, StoreNotFound
 
 
@@ -60,9 +60,13 @@ def test_run_diagnostics_aggregate_tokens_agents_and_timing() -> None:
 
     approval = ApprovalRequest(
         interrupt_id="review-1",
-        action_name="execute_sql",
-        query="SELECT 1",
-        allowed_decisions=["approve"],
+        actions=[
+            ApprovalAction(
+                action_name="execute_sql",
+                query="SELECT 1",
+                allowed_decisions=["approve"],
+            )
+        ],
     )
     store.require_approval(run_id, approval)
     clock.advance(3)

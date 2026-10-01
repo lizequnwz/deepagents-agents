@@ -25,6 +25,7 @@
   },
   {
     "id": "05-metadata",
+    "expected_outcome": "metadata",
     "source": "chinook",
     "conversation": "clarify",
     "question": "Without querying transaction values, explain which measures could help assess sales performance and what business definitions you would need from me."
@@ -40,6 +41,14 @@
     "id": "07-upload",
     "source": "upload",
     "conversation": "07-upload",
+    "upload": {
+      "path": "doc/user/examples/monthly-index.csv",
+      "review": {
+        "types": {"month_index": "integer", "revenue_units": "integer"},
+        "grain": "One complete month per row; revenue_units is an index, not currency.",
+        "key_columns": ["month_index"]
+      }
+    },
     "question": "Analyze all 24 complete monthly observations. month_index orders months 1\u201324; revenue_units is an index, not currency. Show a plan. Run two independent saved-data analyses in parallel: assess monotonic trend using Spearman correlation, and investigate unusual values using a Theil\u2013Sen trend with residual-based screening. Explain tied values, any degenerate residual scale, and the limitations of inference from a short time series. Keep all rows, synthesize both findings, and create a compact report with a line chart."
   },
   {

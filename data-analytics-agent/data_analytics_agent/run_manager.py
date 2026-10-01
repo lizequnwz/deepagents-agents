@@ -38,7 +38,6 @@ class RunManager:
         source_resolver=None,
         catalog_version_resolver=None,
         python_execution_limits=None,
-        debug_details=False,
         presentation_budget_seconds=120,
     ):
         self.conversations, self.runs, self.results = conversations, runs, results

@@ -150,6 +150,60 @@ class ParallelAnalyst(AnalystModel):
         return ChatResult(generations=[ChatGeneration(message=message)])
 
 
+class SkillReadingAnalyst(ParallelAnalyst):
+    """Read each owning skill through the restricted native filesystem tool."""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        system = " ".join(
+            str(m.content) for m in messages if isinstance(m, SystemMessage)
+        )
+        skill = (
+            "analysis/data-analysis"
+            if "You are the data-analysis specialist" in system
+            else "reporting/report-design"
+        )
+        read = next(
+            (m for m in messages if isinstance(m, ToolMessage) and m.tool_call_id == "read-skill"),
+            None,
+        )
+        if read is None:
+            message = AIMessage(
+                content="",
+                tool_calls=[{
+                    "name": "read_file",
+                    "args": {"file_path": f"/project/skills/{skill}/SKILL.md"},
+                    "id": "read-skill",
+                }],
+            )
+            return ChatResult(generations=[ChatGeneration(message=message)])
+        assert "name: " + skill.split("/")[-1] in str(read.content), read.content
+        return super()._generate(messages, stop, run_manager, **kwargs)
+
+
+async def test_restricted_harness_reads_owned_skills_and_finishes_analysis(
+    test_settings, monkeypatch
+):
+    from data_analytics_agent import coordinator
+
+    s, thread, run = setup_parallel(test_settings, monkeypatch, branches=1)
+    result = s.results.list_for_conversation(thread, source_id="test")[0]
+    model = SkillReadingAnalyst(dataset=result.result_id, branches=1)
+    monkeypatch.setattr(coordinator, "_build_chat_model", lambda *a, **k: model)
+    await s.manager().start(run)
+    state = s.runs.get(run)
+    assert state.status == "completed", state.error
+    assert state.answer.report and len(state.answer.analyses) == 1
+    assert s.runs.get_python_execution(run)[0].outputs[0].value == 30
+    python_tools = next(n for n in model._bound_tool_names if "finish_analysis" in n)
+    assert {"read_file", "execute_analysis_python", "finish_analysis"} <= python_tools
+    assert "execute_sql" not in python_tools
+    readers = {
+        e.agent for e in state.events
+        if e.tool and e.tool.name == "read_file" and e.phase == "completed"
+    }
+    assert readers == {"coordinator", "data-analysis"}
+
+
 def setup_parallel(test_settings, monkeypatch, *, review=False, branches=3, workers=2):
     from data_analytics_agent import coordinator
 

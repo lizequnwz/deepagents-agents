@@ -2,58 +2,42 @@
 
 from typing import Any
 from langgraph.types import Command
-from data_analytics_agent.schemas import ApprovalRequest, Decision
+from data_analytics_agent.schemas import (
+    ApprovalAction,
+    ApprovalRequest,
+    Decision,
+    PythonReviewInput,
+)
 from data_analytics_agent.data_sources import DataSource
 from data_analytics_agent.stores import ResultStore, StoreNotFound
 from data_analytics_agent.agents.data_analysis.runner import PythonExecutionLimits
 
 
-def _single_decision(
-    approval: ApprovalRequest,
-    decisions: list[Decision],
-) -> Decision:
-    if len(decisions) != 1:
-        raise ValueError("Exactly one decision is required for this review.")
-    decision = decisions[0]
-    if decision.action not in approval.allowed_decisions:
+def _translate_decision(action: ApprovalAction, decision: Decision) -> dict:
+    if decision.action not in action.allowed_decisions:
         raise ValueError(f"Decision {decision.action!r} is not allowed.")
-    return decision
-
-
-def decisions_to_command(
-    approval: ApprovalRequest,
-    decisions: list[Decision],
-) -> Command:
-    """Validate and translate API decisions to LangGraph's resume shape."""
-
-    decision = _single_decision(approval, decisions)
 
     if decision.action == "reject":
         default_feedback = (
             "Revise the Python and submit it for review again."
-            if approval.review_type == "python"
+            if action.review_type == "python"
             else "Revise the query and submit it for review again."
         )
-        translated = {
+        return {
             "type": "reject",
             "message": decision.feedback or default_feedback,
         }
-        return Command(
-            resume={
-                approval.interrupt_id: {"decisions": [translated]},
-            }
-        )
 
     if decision.action == "approve":
         translated = {"type": "approve"}
-    elif approval.review_type == "sql":
+    elif action.review_type == "sql":
         if not decision.edited_sql:
             raise ValueError("edited_sql is required for an edit decision.")
         translated = {
             "type": "edit",
             "edited_action": {
-                "name": approval.action_name,
-                "args": {**approval.arguments, "query": decision.edited_sql},
+                "name": action.action_name,
+                "args": {**action.arguments, "query": decision.edited_sql},
             },
         }
     else:
@@ -64,16 +48,31 @@ def decisions_to_command(
         translated = {
             "type": "edit",
             "edited_action": {
-                "name": approval.action_name,
+                "name": action.action_name,
                 "args": {
-                    **approval.arguments,
+                    **action.arguments,
                     "code": decision.edited_python,
                 },
             },
         }
+    return translated
+
+
+def decisions_to_command(
+    approval: ApprovalRequest,
+    decisions: list[Decision],
+) -> Command:
+    """Resume one interrupt with exactly one ordered decision per action."""
+
+    if len(decisions) != len(approval.actions):
+        raise ValueError("One decision is required for each action in this review.")
+    translated = [
+        _translate_decision(action, decision)
+        for action, decision in zip(approval.actions, decisions, strict=True)
+    ]
     return Command(
         resume={
-            approval.interrupt_id: {"decisions": [translated]},
+            approval.interrupt_id: {"decisions": translated},
         }
     )
 
@@ -95,11 +94,12 @@ def _extract_approval(
             continue
         requests = value.get("action_requests") or []
         configs = value.get("review_configs") or []
+        actions = []
         for index, action in enumerate(requests):
             if not isinstance(action, dict):
-                continue
+                raise RuntimeError("The review contains an invalid action.")
             name = action.get("name")
-            arguments = action.get("args") or action.get("arguments") or {}
+            arguments = action.get("args") or {}
             allowed = ["approve", "edit", "reject"]
             if index < len(configs) and isinstance(configs[index], dict):
                 configured = configs[index].get("allowed_decisions")
@@ -110,68 +110,93 @@ def _extract_approval(
                         if item in {"approve", "edit", "reject"}
                     ]
             if not isinstance(arguments, dict):
-                continue
+                raise RuntimeError("The review contains invalid action arguments.")
             query = arguments.get("query")
             if name in {"execute_sql", "query_saved_results"} and isinstance(
                 query, str
             ):
-                return ApprovalRequest(
-                    interrupt_id=interrupt_id,
-                    action_name=name,
-                    query=query,
-                    arguments=arguments,
-                    allowed_decisions=allowed,
-                    source_id=source.source_id if source else "",
-                    dialect=source.dialect if source else "sqlite",
-                    timeout_seconds=(source.limits.timeout_seconds if source else 10),
-                    max_result_rows=(
-                        source.limits.max_result_rows if source else 10_000
-                    ),
-                    description=(
-                        "Review the generated SQL before it is executed. "
-                        "The database has not been queried yet."
-                    ),
+                actions.append(
+                    ApprovalAction(
+                        action_name=name,
+                        query=query,
+                        arguments=arguments,
+                        allowed_decisions=allowed,
+                        source_id=source.source_id if source else "",
+                        dialect=(
+                            "duckdb"
+                            if name == "query_saved_results"
+                            else source.dialect
+                            if source
+                            else "sqlite"
+                        ),
+                        timeout_seconds=(
+                            source.limits.timeout_seconds if source else 10
+                        ),
+                        max_result_rows=(
+                            source.limits.max_result_rows if source else 10_000
+                        ),
+                        description=(
+                            "Review the generated SQL before it is executed. "
+                            "The database has not been queried yet."
+                        ),
+                    )
                 )
+                continue
             code = arguments.get("code")
             inputs = arguments.get("inputs") or {}
-            result_id = next(iter(inputs.values()), None)
             if (
                 name == "execute_analysis_python"
                 and isinstance(code, str)
-                and isinstance(result_id, str)
+                and isinstance(inputs, dict)
+                and inputs
                 and result_store is not None
             ):
                 try:
-                    result = result_store.get(
-                        result_id,
-                        thread_id,
-                        source_id=source.source_id if source else None,
-                    )
+                    selected = {
+                        alias: result_store.get(
+                            key,
+                            thread_id,
+                            source_id=source.source_id if source else None,
+                        )
+                        for alias, key in inputs.items()
+                    }
                 except StoreNotFound as exc:
                     raise RuntimeError(
                         "The Python review references an out-of-scope result."
                     ) from exc
                 limits = analysis_limits or PythonExecutionLimits()
-                return ApprovalRequest(
-                    interrupt_id=interrupt_id,
-                    action_name=name,
-                    query=code,
-                    arguments=arguments,
-                    allowed_decisions=allowed,
-                    review_type="python",
-                    source_id=result.source_id,
-                    timeout_seconds=limits.timeout_seconds,
-                    parent_result_id=result.result_id,
-                    originating_question=result.originating_question,
-                    executed_sql=result.executed_sql,
-                    columns=result.columns,
-                    sample_rows=result.preview,
-                    profile=result.profile,
-                    row_count=result.row_count,
-                    truncated=result.truncated,
-                    description=(
-                        "Review the complete generated Python before it is "
-                        "executed against the scoped saved result."
-                    ),
+                actions.append(
+                    ApprovalAction(
+                        action_name=name,
+                        query=code,
+                        arguments=arguments,
+                        allowed_decisions=allowed,
+                        review_type="python",
+                        source_id=next(iter(selected.values())).source_id,
+                        timeout_seconds=limits.timeout_seconds,
+                        input_datasets={
+                            alias: PythonReviewInput(
+                                result_id=r.result_id,
+                                originating_question=r.originating_question,
+                                executed_sql=r.executed_sql,
+                                columns=r.columns,
+                                sample_rows=r.preview[:10],
+                                profile=r.profile,
+                                row_count=r.row_count,
+                                truncated=r.truncated,
+                                parent_result_ids=r.parent_result_ids,
+                                upload_provenance=r.upload_provenance,
+                            )
+                            for alias, r in selected.items()
+                        },
+                        description=(
+                            "Review the complete generated Python before it is "
+                            "executed against all named saved datasets."
+                        ),
+                    )
                 )
+                continue
+            raise RuntimeError(f"The review contains an unsupported action: {name!r}.")
+        if actions:
+            return ApprovalRequest(interrupt_id=interrupt_id, actions=actions)
     raise RuntimeError("The run interrupted without a reviewable action.")

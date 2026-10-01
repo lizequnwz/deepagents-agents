@@ -33,6 +33,7 @@ from data_analytics_agent.logging_config import configure_api_logging
 from data_analytics_agent.run_manager import RunManager
 from data_analytics_agent.approvals import decisions_to_command
 from data_analytics_agent.reporting.schemas import ReportResponse, ReportSpec
+from data_analytics_agent.excel import ExcelSelection, inspect_workbook
 from data_analytics_agent.uploads import (
     UploadReview,
     UploadSource,
@@ -308,7 +309,6 @@ class Services:
                     analyses=self.analyses,
                     reports=self.reports,
                     python_execution_limits=(self.settings.python_execution_limits()),
-                    debug_details=self.settings.agent_debug_details,
                     presentation_budget_seconds=self.settings.presentation_budget_seconds,
                 )
             return self._manager
@@ -393,6 +393,17 @@ def create_app(services: Services | None = None) -> FastAPI:
             errors=errors,
         )
 
+    @app.get("/api/evaluation-context")
+    async def get_evaluation_context(source_id: list[str] = Query(default=[])):
+        from data_analytics_agent.evaluation import evaluation_context
+
+        catalog = container.source_catalog() if source_id else None
+        if catalog and any(name not in catalog.sources for name in source_id):
+            raise HTTPException(422, "Unknown evaluation source.")
+        return await run_in_threadpool(
+            evaluation_context, container.settings, catalog, source_id
+        )
+
     @app.post("/api/transcriptions", response_model=TranscriptionResponse)
     async def transcribe(request: Request):
         content = bytearray()
@@ -435,18 +446,45 @@ def create_app(services: Services | None = None) -> FastAPI:
             "source_freshness": None,
         }
 
-    @app.post("/api/uploads", status_code=201)
-    async def upload_file(
-        request: Request, filename: str = Query(min_length=1, max_length=255)
-    ):
+    async def upload_bytes(request):
         content = bytearray()
         async for chunk in request.stream():
             if len(content) + len(chunk) > container.settings.upload_max_bytes:
                 raise HTTPException(413, "File exceeds UPLOAD_MAX_BYTES.")
             content.extend(chunk)
+        return bytes(content)
+
+    @app.post("/api/uploads/workbook")
+    async def workbook_info(request: Request):
+        try:
+            return await run_in_threadpool(
+                inspect_workbook, await upload_bytes(request), container.settings
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/api/uploads", status_code=201)
+    async def upload_file(
+        request: Request,
+        filename: str = Query(min_length=1, max_length=255),
+        sheet: str | None = Query(default=None, max_length=200),
+        cell_range: str | None = Query(default=None, max_length=40),
+        use_cached_formulas: bool = False,
+    ):
+        content = await upload_bytes(request)
         try:
             upload = await run_in_threadpool(
-                stage_upload, container, bytes(content), filename
+                stage_upload,
+                container,
+                content,
+                filename,
+                ExcelSelection(
+                    sheet=sheet,
+                    cell_range=cell_range,
+                    use_cached_formulas=use_cached_formulas,
+                )
+                if sheet and cell_range
+                else None,
             )
             return upload_response(upload)
         except ValueError as exc:
@@ -620,6 +658,7 @@ def create_app(services: Services | None = None) -> FastAPI:
                         action="reject",
                         feedback="User corrected the request: " + message,
                     )
+                    for _ in current.approval.actions
                 ],
             )
             container.runs.claim_approval(run_id, current.approval)
@@ -682,6 +721,8 @@ def create_app(services: Services | None = None) -> FastAPI:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This run is not awaiting a decision.",
             )
+        if request.interrupt_id != run.approval.interrupt_id:
+            raise HTTPException(409, "This review has changed. Refresh before deciding.")
         try:
             command = decisions_to_command(
                 run.approval,
@@ -810,6 +851,39 @@ def create_app(services: Services | None = None) -> FastAPI:
         claim_saved_run(run_id)
         background_tasks.add_task(container.manager().retry_report, run_id)
         return {"run_id": run_id, "status": "queued"}
+
+    @app.get("/api/runs/{run_id}/download")
+    async def download_analysis(run_id: str, report_id: str):
+        from tempfile import TemporaryDirectory
+        from starlette.background import BackgroundTask
+        from data_analytics_agent.exports import write_bundle, ExportConflict
+
+        temporary = TemporaryDirectory(prefix="analysis-export-")
+        target = Path(temporary.name) / "analysis.zip"
+
+        def build():
+            with container._lock:
+                run = container.runs.get(run_id)
+                ensure_not_deleting(run.thread_id)
+                write_bundle(container, run_id, report_id, target)
+
+        try:
+            await run_in_threadpool(build)
+        except ExportConflict as exc:
+            temporary.cleanup()
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            temporary.cleanup()
+            raise HTTPException(422, str(exc)) from exc
+        except BaseException:
+            temporary.cleanup()
+            raise
+        return FileResponse(
+            target,
+            filename=f"analysis-{run_id[:8]}.zip",
+            media_type="application/zip",
+            background=BackgroundTask(temporary.cleanup),
+        )
 
     @app.get("/api/results/{result_id}/download")
     async def download_dataset(result_id: str, format: str = "csv"):

@@ -45,6 +45,11 @@ class AgentAPIClient:
         timeout: float = 20.0,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        return self._response(method, path, timeout=timeout, **kwargs).json()
+
+    def _response(
+        self, method: str, path: str, *, timeout: float = 20.0, **kwargs: Any
+    ) -> httpx.Response:
         try:
             response = httpx.request(
                 method,
@@ -53,7 +58,7 @@ class AgentAPIClient:
                 **kwargs,
             )
             response.raise_for_status()
-            return response.json()
+            return response
         except httpx.HTTPStatusError as exc:
             try:
                 body = exc.response.json()
@@ -82,14 +87,19 @@ class AgentAPIClient:
             timeout=70,
         )["text"]
 
-    def upload_file(self, filename: str, content: bytes):
+    def upload_file(self, filename: str, content: bytes, selection=None):
         return self.request(
             "POST",
             "/api/uploads",
-            params={"filename": filename},
+            params={"filename": filename, **(selection or {})},
             content=content,
             headers={"Content-Type": "application/octet-stream"},
             timeout=120,
+        )
+
+    def inspect_workbook(self, content):
+        return self.request(
+            "POST", "/api/uploads/workbook", content=content, timeout=120
         )
 
     def get_upload(self, thread_id: str):
@@ -141,11 +151,13 @@ class AgentAPIClient:
             timeout=10,
         )
 
-    def submit_decision(self, run_id: str, decision: dict[str, Any]) -> dict[str, Any]:
+    def submit_decisions(
+        self, run_id: str, interrupt_id: str, decisions: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         return self.request(
             "POST",
             f"/api/runs/{run_id}/decisions",
-            json={"decisions": [decision]},
+            json={"interrupt_id": interrupt_id, "decisions": decisions},
         )
 
     def delete_conversation(self, thread_id: str) -> dict[str, Any]:
@@ -189,6 +201,14 @@ class AgentAPIClient:
             f"/api/results/{result_id}",
             params={"offset": offset, "limit": limit},
         )
+
+    def download_analysis(self, run_id: str, report_id: str) -> bytes:
+        return self._response(
+            "GET",
+            f"/api/runs/{run_id}/download",
+            params={"report_id": report_id},
+            timeout=120,
+        ).content
 
     def dataset_download_url(self, result_id: str, format: str = "csv") -> str:
         return f"{self.base_url.rstrip('/')}/api/results/{result_id}/download?format={format}"

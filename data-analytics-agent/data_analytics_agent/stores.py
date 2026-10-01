@@ -425,7 +425,6 @@ class _Run:
     chart_specs: list[dict] = field(default_factory=list)
     assignments: dict[str, AssignmentRecord] = field(default_factory=dict)
     report_reference: dict | None = None
-    last_review_type: str = "sql"
     terminal_at: float | None = None
     active_started_at: float | None = None
     active_seconds: float = 0.0
@@ -867,10 +866,6 @@ class RunStore:
                 ],
             }
 
-    def get_last_review_type(self, run_id: str) -> str:
-        with self._lock:
-            return self._get_mutable(run_id).last_review_type
-
     def dataset_python_source(self, result):
         """Resolve exact producing code, including datasets reused in later turns."""
         with self._lock:
@@ -970,7 +965,6 @@ class RunStore:
                 item.approval_seconds += wait_seconds
                 item.approval_started_at = None
             item.status = RunStatus.RUNNING
-            item.last_review_type = expected.review_type
             item.approval = None
             item.error = None
             return _rounded_ms(wait_seconds)

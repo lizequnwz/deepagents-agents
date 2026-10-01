@@ -1,0 +1,219 @@
+{
+  "failed_tools": {
+    "execute_sql": 8,
+    "task": 6,
+    "ls": 1,
+    "query_saved_results": 1
+  },
+  "events": [
+    {
+      "trial": "baseline-r1-receipts",
+      "case": "05-regions",
+      "tool": "execute_sql",
+      "output": {
+        "content": "Join needs an explicit ON predicate over declared relationship keys.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "execute_sql",
+        "id": null,
+        "tool_call_id": "call_E76YAlFpkvXDH8n36OnhJc3f",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "baseline-r1-receipts",
+      "case": "08-multiple-inputs",
+      "tool": "task",
+      "output": {
+        "error": "Number of human decisions (1) does not match number of hanging tool calls (2)."
+      }
+    },
+    {
+      "trial": "baseline-r1-receipts",
+      "case": "10-forecast",
+      "tool": "ls",
+      "output": {
+        "content": "Error: permission denied for read on /project",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "ls",
+        "id": null,
+        "tool_call_id": "call_fOmwgLIHs23VU7ZpYhpnzokG",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "baseline-r2-receipts",
+      "case": "05-regions",
+      "tool": "execute_sql",
+      "output": {
+        "content": "Join needs an explicit ON predicate over declared relationship keys.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "execute_sql",
+        "id": null,
+        "tool_call_id": "call_QV5Qj4u5zL2T0hcAvHJT8R6l",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "baseline-r2-receipts",
+      "case": "08-multiple-inputs",
+      "tool": "task",
+      "output": {
+        "error": "Number of human decisions (1) does not match number of hanging tool calls (2)."
+      }
+    },
+    {
+      "trial": "baseline-r3-receipts",
+      "case": "05-regions",
+      "tool": "execute_sql",
+      "output": {
+        "content": "Join needs an explicit ON predicate over declared relationship keys.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "execute_sql",
+        "id": null,
+        "tool_call_id": "call_2gpsPWF0hrwUDXQAWMRhmXVG",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "baseline-r3-receipts",
+      "case": "08-multiple-inputs",
+      "tool": "task",
+      "output": {
+        "error": "Number of human decisions (1) does not match number of hanging tool calls (2)."
+      }
+    },
+    {
+      "trial": "candidate-r1-receipts",
+      "case": "07-date-paraphrase",
+      "tool": "execute_sql",
+      "output": {
+        "content": "Join is not grounded in the selected declared relationships. Retrieve/select the correct relationship and all composite keys; computed join keys are unsupported.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "execute_sql",
+        "id": null,
+        "tool_call_id": "call_P1VoodsVp4HKGWc0pcFuQVc9",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "candidate-r1-receipts",
+      "case": "08-multiple-inputs",
+      "tool": "task",
+      "output": {
+        "error": "Number of human decisions (1) does not match number of hanging tool calls (2)."
+      }
+    },
+    {
+      "trial": "candidate-r1-receipts",
+      "case": "18-file-completeness",
+      "tool": "query_saved_results",
+      "output": {
+        "content": "Query only the explicitly bound saved datasets and your CTEs.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "query_saved_results",
+        "id": null,
+        "tool_call_id": "call_2ZfXNtpcph8bimjJne2ZA77Q",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "candidate-r1-receipts",
+      "case": "20-ranking",
+      "tool": "execute_sql",
+      "output": {
+        "content": "Join needs an explicit ON predicate over declared relationship keys.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "execute_sql",
+        "id": null,
+        "tool_call_id": "call_DVdW1by7rf1mogUksNdsWhBg",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "candidate-r2-receipts",
+      "case": "05-regions",
+      "tool": "execute_sql",
+      "output": {
+        "content": "Aggregate can fan out across a join whose opposite keys are not declared unique. Aggregate at the required grain before joining, or use the appropriate line-level metric.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "execute_sql",
+        "id": null,
+        "tool_call_id": "call_dcwB3jM3zOxR3tolCnxZHWc5",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "candidate-r2-receipts",
+      "case": "07-date-paraphrase",
+      "tool": "execute_sql",
+      "output": {
+        "content": "Join is not grounded in the selected declared relationships. Retrieve/select the correct relationship and all composite keys; computed join keys are unsupported.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "execute_sql",
+        "id": null,
+        "tool_call_id": "call_P1kjUY7cCLFf7V2Ckw0nuDLQ",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "candidate-r2-receipts",
+      "case": "08-multiple-inputs",
+      "tool": "task",
+      "output": {
+        "error": "Number of human decisions (1) does not match number of hanging tool calls (2)."
+      }
+    },
+    {
+      "trial": "candidate-r3-receipts",
+      "case": "05-regions",
+      "tool": "execute_sql",
+      "output": {
+        "content": "Join needs an explicit ON predicate over declared relationship keys.",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "tool",
+        "name": "execute_sql",
+        "id": null,
+        "tool_call_id": "call_o6YL9BoQHGBvfV1PNiFy9ncb",
+        "artifact": null,
+        "status": "error"
+      }
+    },
+    {
+      "trial": "candidate-r3-receipts",
+      "case": "08-multiple-inputs",
+      "tool": "task",
+      "output": {
+        "error": "Number of human decisions (1) does not match number of hanging tool calls (2)."
+      }
+    }
+  ],
+  "scope": "Frozen early-terminated prompt study only; approval waits are separate from failures."
+}

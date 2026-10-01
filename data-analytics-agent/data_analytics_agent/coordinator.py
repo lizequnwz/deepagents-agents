@@ -103,12 +103,13 @@ def _model_harness_profile_key(model: Any, settings: Settings) -> str:
 
 
 def _configure_harness_profile(model: Any, settings: Settings) -> None:
-    """Disable only the default general-purpose subagent for this model."""
+    """Expose only usable filesystem tools and the two owned specialists."""
 
     register_harness_profile(
         _model_harness_profile_key(model, settings),
         HarnessProfile(
-            general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False)
+            general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
+            excluded_tools=frozenset({"write_file", "edit_file", "delete"}),
         ),
     )
 

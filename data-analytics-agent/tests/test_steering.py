@@ -251,10 +251,24 @@ def test_correction_invalidates_pending_sql_approval(test_settings, monkeypatch)
         assert response.status_code == 202
         snapshot = services.runs.get(run)
         assert snapshot.status == "approval_required", snapshot.error
-        assert "WHERE ArtistId > 10" in snapshot.approval.query
+        assert "WHERE ArtistId > 10" in snapshot.approval.actions[0].query
+        assert not services.results.list_for_conversation(thread, source_id="test")
+        stale = api.post(
+            f"/api/runs/{run}/decisions",
+            json={
+                "interrupt_id": "another-review",
+                "decisions": [{"action": "approve"}],
+            },
+        )
+        assert stale.status_code == 409
+        assert services.runs.get(run).status == "approval_required"
         assert not services.results.list_for_conversation(thread, source_id="test")
         api.post(
-            f"/api/runs/{run}/decisions", json={"decisions": [{"action": "approve"}]}
+            f"/api/runs/{run}/decisions",
+            json={
+                "interrupt_id": snapshot.approval.interrupt_id,
+                "decisions": [{"action": "approve"}],
+            },
         )
         snapshot = services.runs.get(run)
         assert snapshot.status == "completed", snapshot.error
@@ -296,7 +310,11 @@ def test_corrections_and_nested_approval_survive_service_restart(
     assert [c.message_id for c in second.runs.get(run).corrections] == [one, two]
     with TestClient(create_app(second)) as api:
         response = api.post(
-            f"/api/runs/{run}/decisions", json={"decisions": [{"action": "approve"}]}
+            f"/api/runs/{run}/decisions",
+            json={
+                "interrupt_id": second.runs.get(run).approval.interrupt_id,
+                "decisions": [{"action": "approve"}],
+            },
         )
         assert response.status_code == 202
         snapshot = second.runs.get(run)

@@ -110,6 +110,117 @@ def test_parquet_retains_decimal_timestamp_and_identifier_types(test_settings):
     assert stored.to_pylist() == table.to_pylist()
 
 
+def test_schema_review_preserves_all_column_choices_after_key_error(
+    test_settings, monkeypatch
+):
+    s = Services(settings=test_settings)
+    u = stage_upload(
+        s,
+        b"id,date,amount\n001,02/03/2026,10\n002,03/04/2026,10\n",
+        "sales.csv",
+    )
+    with TestClient(create_app(s)) as api:
+
+        def request(self, method, path, **kwargs):
+            kwargs.pop("timeout", None)
+            response = api.request(method, path, **kwargs)
+            if response.status_code >= 400:
+                raise APIError(
+                    str(response.json()["detail"]), status_code=response.status_code
+                )
+            return response.json()
+
+        monkeypatch.setattr(AgentAPIClient, "request", request)
+
+        def submit_review(app):
+            app.button[0].click()
+            states = app._tree.get_widget_states()
+            # AppTest does not serialize data-editor widgets. Send their native
+            # state alongside the form fields, as the browser does on each submit.
+            for editor in app.dataframe:
+                if editor.key in {
+                    f"upload_notes_{u.thread_id}",
+                    f"upload_types_{u.thread_id}",
+                }:
+                    states.widgets.add(
+                        id=editor.proto.id,
+                        string_value=json.dumps(app.session_state[editor.key]),
+                    )
+            app._run(states)
+
+        def app_code(thread_id):
+            from data_analytics_agent.ui.api_client import AgentAPIClient
+            from data_analytics_agent.ui.uploads import (
+                render_upload_review,
+                render_uploaded_source,
+            )
+
+            client = AgentAPIClient("http://upload-test")
+            upload = client.get_upload(thread_id)
+            if upload["confirmed"]:
+                render_uploaded_source(client, upload)
+            else:
+                render_upload_review(client, upload)
+
+        app = AppTest.from_function(app_code, args=(u.thread_id,)).run()
+        assert not app.exception
+        assert not get_upload(s.storage, u.source_id).confirmed
+        assert next(
+            d for d in app.dataframe if d.key == f"upload_notes_{u.thread_id}"
+        ).value["Column"].tolist() == ["id", "date"]
+        other = next(e for e in app.expander if e.label == "Other column types · 1")
+        assert other.proto.expanded is False
+        # AppTest exposes data-editor edits through native widget session state.
+        app.session_state[f"upload_notes_{u.thread_id}"] = {
+            "edited_rows": {1: {"Use as": "Date: DD/MM/YYYY"}},
+            "added_rows": [],
+            "deleted_rows": [],
+        }
+        app.session_state[f"upload_types_{u.thread_id}"] = {
+            "edited_rows": {0: {"Use as": "Number (approximate)"}},
+            "added_rows": [],
+            "deleted_rows": [],
+        }
+        app.text_input[0].set_value("One sale")
+        app.multiselect[0].set_value(["amount"])
+        submit_review(app)
+        assert not app.exception
+        assert "duplicated" in app.error[0].value
+        assert not get_upload(s.storage, u.source_id).confirmed
+        assert app.text_input[0].value == "One sale"
+        assert (
+            app.session_state[f"upload_notes_{u.thread_id}"]["edited_rows"][1]["Use as"]
+            == "Date: DD/MM/YYYY"
+        )
+        assert (
+            app.session_state[f"upload_types_{u.thread_id}"]["edited_rows"][0]["Use as"]
+            == "Number (approximate)"
+        )
+
+        app.multiselect[0].set_value(["id"])
+        submit_review(app)
+        assert not app.exception
+        assert not app.error
+        confirmed = get_upload(s.storage, u.source_id)
+        assert confirmed.review == UploadReview(
+            types={"id": "text", "date": "date_dmy", "amount": "number"},
+            grain="One sale",
+            key_columns=["id"],
+        )
+        rows = s.results.get(confirmed.result_id, u.thread_id).rows
+        assert len(rows) == 2
+        assert rows[0] == {"id": "001", "date": date(2026, 3, 2), "amount": 10.0}
+        assert any(m.value == "One row represents: One sale" for m in app.markdown)
+        assert any(m.value == "Row identifiers: id" for m in app.markdown)
+        assert any("last updated is unknown" in c.value for c in app.caption)
+        assert (
+            next(
+                e for e in app.expander if e.label == "Technical file details"
+            ).proto.expanded
+            is False
+        )
+
+
 @pytest.mark.parametrize(
     "content,message",
     [
@@ -436,7 +547,7 @@ async def test_uploaded_file_through_real_agent_harness_and_report(
 
         paused = s.runs.get(run)
         assert paused.status == "approval_required", paused.error
-        assert paused.approval.action_name == "query_saved_results"
+        assert paused.approval.actions[0].action_name == "query_saved_results"
         assert not any(
             r.kind == "saved_sql"
             for r in s.results.list_for_conversation(
@@ -517,7 +628,7 @@ def test_upload_ui_review_and_reopen_without_configured_sources(
         assert not app.exception
         assert not app.chat_input
         next(
-            b for b in app.button if b.label == "Confirm schema and start conversation"
+            b for b in app.button if b.label == "Confirm data and continue"
         ).click().run(timeout=15)
         assert not app.exception
         assert len(app.chat_input) == 1

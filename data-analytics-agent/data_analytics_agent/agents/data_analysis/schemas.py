@@ -56,6 +56,7 @@ class PythonExecutionResult(StrictModel):
     inputs: dict[str, str]
     executed_python: str
     attempt: int
+    runtime_versions: dict[str, str] = Field(default_factory=dict)
     outputs: list[AnalysisOutput] = Field(default_factory=list)
     output_datasets: dict[str, str] = Field(default_factory=dict)
     stdout: str = ""
@@ -68,6 +69,7 @@ class PythonExecutionResult(StrictModel):
         result = self.model_dump(mode="json", exclude_none=True)
         # Exact stdout/code remain in execution inspection, not repeated in model context.
         result.pop("executed_python", None)
+        result.pop("runtime_versions", None)
         result["stdout"] = "\n".join(self.stdout.splitlines()[:10])[:2000]
         result["ok"] = self.error is None
         result["outputs"] = [output.model_facing() for output in self.outputs]
