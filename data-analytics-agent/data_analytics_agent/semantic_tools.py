@@ -54,6 +54,14 @@ def create_semantic_context_tool(catalog, *, source_id, dialect, include_physica
                 description="Dataset to exact logical field selections. Metric dependencies, primary keys and join keys are included automatically.",
             ),
         ] = None,
+        role_queries: Annotated[
+            dict[Literal["measure", "dimension", "filter", "time"], str] | None,
+            Field(max_length=4, description="Batch only unresolved business roles. Empty time query lists declared time fields; candidates never certify question coverage."),
+        ] = None,
+        candidate_dataset_names: Annotated[
+            list[str] | None,
+            Field(max_length=10, description="Narrow discovery to these known logical datasets; this does not select definitions."),
+        ] = None,
     ) -> dict:
         """Discover candidates or resolve exact definitions and declared join paths.
 
@@ -64,6 +72,10 @@ def create_semantic_context_tool(catalog, *, source_id, dialect, include_physica
         blocking_issues; question coverage always requires your review. Browse for
         unknown vocabulary. This reads metadata only, never source values.
         """
+        if candidate_dataset_names and set(candidate_dataset_names) - set(catalog.datasets):
+            raise ToolException("Unknown discovery dataset; browse datasets first.")
+        if role_queries and sum(len(query) for query in role_queries.values()) > 4000:
+            raise ToolException("Role queries exceed 4,000 characters; narrow the unresolved roles.")
         return build_semantic_context(
             catalog,
             source_id=source_id,
@@ -74,6 +86,8 @@ def create_semantic_context_tool(catalog, *, source_id, dialect, include_physica
             metric_names=metric_names,
             field_names=field_names,
             relationship_names=relationship_names,
+            role_queries=role_queries,
+            candidate_dataset_names=candidate_dataset_names,
         )
 
     get_semantic_context.handle_tool_error = True
@@ -127,7 +141,7 @@ def create_browse_semantic_tool(catalog, *, include_physical=False):
             )
         elif entity_kind == "relationship":
             items = [
-                _relationship_payload(r, catalog)
+                _relationship_payload(r, catalog, include_physical=include_physical)
                 for r in catalog.relationships
                 if not dataset_name or dataset_name in (r.from_dataset, r.to_dataset)
             ]
@@ -248,6 +262,10 @@ def create_lookup_values_tool(
             return json.loads(committed)
         if reason := runs.analysis_stop_reason(context.run_id):
             return {"ok": False, "error": reason}
+        try:
+            runs.require_source_access(context.run_id)
+        except ValueError as exc:
+            raise ToolException(str(exc)) from exc
         dataset = catalog.datasets[dataset_name]
         field = dataset.fields[field_name]
         literal = exp.Literal.string("%" + search.lower() + "%").sql(

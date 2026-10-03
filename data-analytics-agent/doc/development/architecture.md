@@ -228,7 +228,7 @@ Run state, diagnostics, approval details, execution profiles, and persistence
 records are internal/application contracts, not model-generated final responses.
 The obsolete, unused `ReportBrief` contract has been removed.
 
-API contract **17** exposes all actions in an interrupt as one ordered review,
+API contract **19** exposes all actions in an interrupt as one ordered review,
 including all named Python inputs. The UI submits one decision per action together
 with the current interrupt ID; missing and stale decisions are rejected. Different
 worker interrupts remain separate. One common form replaces the old SQL/Python
@@ -237,6 +237,38 @@ remain implemented. Both processes must run the same version. There is
 no old-record migration or compatibility reader; use a separate storage directory
 for a new-contract workspace when retaining old history. Existing storage is not
 deleted or modified by this code change.
+
+## Explicit analytical input and population
+
+`AnalyticalMessageRequest` carries the question, optional selected_result_id,
+SavedScope and previous_report_id. Correction and clarification remain separate
+requests. Conversation-scoped dataset and scope-option endpoints list complete,
+reviewed analytical populations. `analytical_scope.py` materializes native
+category/date filters through saved-data DuckDB and records exact input lineage.
+Saved SQL results retain alias-to-parent bindings so date lineage follows the
+selected projection through joins, CTEs and prior scoped inputs. All stored result
+and inspection records require this field under contract 19; source/file/Python
+records carry an empty mapping. Exports retain the bindings as SQL provenance.
+Selected references persist in run state, specialist briefs, checkpoints, completed
+turns, findings and exports. SQL/Python execution and publication enforce the
+selected input or its descendants. An explicit decision on the current scope
+clarification can authorize source expansion; free-text agreement alone does not.
+
+Warehouse refresh creates a new run of the current question and accepted
+corrections with fresh_source_required and previous_report_id. New source SQL must
+execute. If an input is selected, the coordinator regenerates its equivalent base
+dataset and calls bind_refreshed_input to apply the stored scope. Publication must
+use that fresh binding. Failed runs leave the previous completed turn/report intact.
+Field/type equivalence is checked; business grain equivalence remains specialist
+responsibility. File refresh requires a new upload and conversation.
+
+`ForecastEvaluationRequest` describes a named prediction dataset and chronological
+evaluation windows, frequency, origin, horizon, baseline/candidate and interval.
+`forecasting.py` validates typed, regular complete periods and recomputes a named
+score dataset. The stored ForecastEvaluation carries counts, forecast start and
+limitations. Chart interval_series binds a band to one series and forecast_start
+marks the first future period. Chat and HTML always expose evaluation evidence;
+method-code inspection remains necessary to assess leakage beyond chronology.
 
 ## Portable analysis
 
@@ -254,8 +286,13 @@ runtime; each step runs in a fresh local process with exact named bindings.
 Dataset and scalar/table results are compared with saved evidence. SQL is a fixed
 snapshot boundary; replay does not refresh sources or regenerate interpretations
 and published business charts. There is no app notebook editor or persistent kernel.
-See [release verification](../reviews/release-verification-2026-09-30.md) for replay
-checks and limitations.
+New bundles use format **2** and include analytical input/scope, expansion/refresh
+provenance and forecast descriptors. Forecast errors and measured coverage recompute
+from immutable or replayed predictions in both script and notebook. Lineage datasets
+are distinguished from the selected scoped results.
+See [portable replay checks](testing.md#portable-replay) and the
+[historical record](../reviews/README.md#earlier-implementation-checks) for their
+limits.
 
 ## Voice input
 

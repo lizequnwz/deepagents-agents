@@ -8,8 +8,10 @@ import argparse
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import math
+import pyarrow.parquet as pq
 
-from data_analytics_agent.evaluation import file_hash, receipt_hash
+from data_analytics_agent.evaluation import file_hash, receipt_hash, semantic_metrics
 
 RUBRIC = (
     "scope",
@@ -29,6 +31,32 @@ DATA_TOOLS = {
     "inspect_conversation_result",
     "inspect_conversation_analysis",
 }
+
+
+def check_expected_values(folder, expected, review):
+    """Check scalar source-reference values against full typed stored snapshots."""
+    failures, missing = [], []
+    for metric, value in expected.get("expected_values", {}).items():
+        binding = review.get("value_bindings", {}).get(metric)
+        if not binding:
+            missing.append("value_binding:" + metric)
+            continue
+        key = binding["result_id"]
+        if Path(key).name != key:
+            raise ValueError("Result bindings must be opaque artifact IDs.")
+        path = folder / f"{key}.parquet"
+        if not path.exists():
+            missing.append("value_snapshot:" + metric)
+            continue
+        table = pq.read_table(path)
+        column, index = binding["column"], binding.get("row_index", 0)
+        if index < 0 or index >= table.num_rows or column not in table.column_names:
+            failures.append("value_binding:" + metric)
+            continue
+        actual = table[column][index].as_py()
+        if isinstance(actual, bool) or not isinstance(actual, (int, float)) or not math.isclose(actual, value, rel_tol=1e-9, abs_tol=1e-8):
+            failures.append("independent_value:" + metric)
+    return failures, missing
 
 
 def grade(run, review, *, expected_outcome="complete"):
@@ -117,6 +145,25 @@ def grade_receipts(receipts, review):
             item,
             expected_outcome=cases[case_id].get("expected_outcome", "complete"),
         )
+        if expected := cases[case_id].get("semantic_expectations"):
+            outcome["semantic_metrics"] = semantic_metrics(run, expected, item)
+            failures, missing = check_expected_values(folder, expected, item)
+            outcome["failures"].extend(failures)
+            outcome["unreviewed"].extend(missing)
+            if cases[case_id].get("expected_outcome", "complete") == "complete" and not outcome["semantic_metrics"]["snapshot_reviews_complete"]:
+                outcome["unreviewed"].append("snapshot_reviews")
+            if not item.get("semantic_roles", {}).get("evidence") or item.get("semantic_roles", {}).get("status") not in {"pass", "fail"}:
+                outcome["unreviewed"].append("semantic_roles")
+            elif item["semantic_roles"]["status"] == "fail":
+                outcome["failures"].append("semantic_roles")
+            if not run.get("evaluation_receipts") and cases[case_id].get("expected_outcome", "complete") == "complete":
+                outcome["unreviewed"].append("semantic_receipts")
+                if outcome["outcome"] == "pass":
+                    outcome["outcome"] = "unreviewed"
+            if outcome["failures"]:
+                outcome["outcome"] = "fail"
+            elif outcome["unreviewed"]:
+                outcome["outcome"] = "unreviewed"
         outcome.update(
             run_id=run["run_id"],
             run_sha256=file_hash(path),

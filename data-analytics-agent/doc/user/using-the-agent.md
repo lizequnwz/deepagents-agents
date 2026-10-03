@@ -69,6 +69,64 @@ such as “make that a line chart” reuse suitable saved evidence; “refresh u
 current data” requests new source execution. Download full CSV/Parquet from the
 evidence panel and HTML from the report panel. Preview pages are labeled.
 
+Choose **Analyze** beside the composer to bind a question to one complete saved
+dataset. The list includes source snapshots, reviewed uploads and Python-derived
+datasets. It shows saved row count and completeness; the captions show known scope,
+row meaning and applied population. Chart presentation samples and incomplete
+extractions are excluded. The chosen input persists through clarification,
+Stop/Resume, restart and reopening history.
+
+If the saved conversation's source configuration is unavailable, its saved answers
+and reports remain readable. Restore the source and reload before starting new
+analysis.
+
+If the saved fields or row meaning cannot answer the question, the analyst explains
+the missing detail. A source-expansion clarification has an explicit permission
+checkbox; answering text alone does not authorize broader or newer retrieval.
+The answer, report and analysis download identify the selected starting population
+and disclose any authorized expansion.
+
+## Refine population and refresh a warehouse
+
+After a completed report, enable **Refine saved population**. Select categorical
+fields and values, or a typed date column with inclusive start/end dates, then
+choose **Apply population**. This selects existing rows from one saved dataset
+and starts a new analytical turn of the business question and accepted corrections.
+Metrics, charts, tables, narrative, HTML and downloads share the resulting scope.
+The previous successful answer remains available during the new run.
+
+Filters cannot recover finer detail from aggregates. Supported monthly, quarterly
+and yearly SQL aggregates require whole periods; other unsuitable grain needs
+analytical feedback. Text or timezone-bearing dates require explicit preparation.
+Scope persists after reopening. If another view changes the report while a form
+is open, review the latest answer before applying the population again.
+
+If refresh removes a selected value, the applied filter remains in place and may
+select zero rows. An unchanged follow-up uses that same saved population. Scope
+controls explain absent values. If an applied field grows beyond the available
+category controls, **Apply population** is disabled; ask for a saved-data analysis
+to change that filter.
+
+**Refresh from warehouse** reruns the current question and scope using fresh source
+SQL and recomputed analysis. A successful refresh adds a new immutable report
+revision; failure preserves the last successful answer and report. The query time
+does not establish the source's cutoff or completeness. To refresh a file, upload
+the new file in a separate conversation.
+
+## Inspect forecast evaluation
+
+Forecast evidence includes named prediction and score tables, training and later
+holdout windows, origin, requested horizon/frequency, baseline and candidate
+methods, and evaluation sample size. MAE and RMSE recompute from saved actuals and
+predictions. Measured holdout coverage is separate from nominal interval coverage.
+Short holdouts disclose unstable estimates; missing or duplicate periods require
+explicit preparation. Chronological windows do not certify arbitrary fitting code;
+the exact executed code and preparation remain inspectable.
+
+Actual and forecast series can share a line chart, with bounds attached to the
+forecast series and a forecast-start marker. Chat, HTML, notebook and downloadable
+tables retain the same evaluation descriptor and evidence.
+
 ## Download and replay analysis
 
 On a completed result, expand **Download data and calculations** and choose
@@ -82,6 +140,12 @@ before trying again. Failed attempts and unrelated conversation evidence are
 excluded from runnable steps. Partial findings and incomplete extracted
 populations retain their labels. **Open full report** and **Download HTML report**
 need only a browser; replaying calculations requires a local Python environment.
+
+New packages use format 2. Their README, notebook and manifest identify selected
+input/scope and any authorized expansion or refresh revision. Forecast evaluation
+descriptors, predictions and scores are included; script and notebook recompute
+errors and measured coverage and compare them with the saved score tables.
+Supporting lineage is distinct from the selected scoped results.
 
 Executed queries are separate `.sql` files under `sql/`, linked from the package's
 README. `sql-provenance.json` maps each query to its saved result, Parquet snapshot,

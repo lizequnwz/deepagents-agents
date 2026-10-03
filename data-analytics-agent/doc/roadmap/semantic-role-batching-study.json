@@ -1,0 +1,50 @@
+{
+  "name": "semantic-role-batching",
+  "hypothesis": "Batch unresolved measure, dimension, filter and time searches in the existing semantic tool; preserve exact definition selection.",
+  "changed_component": "Batch unresolved measure, dimension, filter and time searches in the existing semantic tool; preserve exact definition selection.",
+  "target_metric": "active_ms_to_first_correct_snapshot",
+  "minimum_improvement": 0.15,
+  "minimum_cases": 20,
+  "minimum_repetitions": 3,
+  "confidence_level": 0.95,
+  "bootstrap_seed": 20260930,
+  "changed_files": [
+    "data_analytics_agent/semantic_context.py",
+    "data_analytics_agent/semantic_tools.py",
+    "data_analytics_agent/agents/text_to_sql/agent.py"
+  ],
+  "changed_settings": [],
+  "required_scenarios": [
+    "descriptive",
+    "relationship_roles",
+    "date_roles",
+    "clarification",
+    "saved_population"
+  ],
+  "adoption_scope": "This change only. No new outcome failures or boundary violations; independent complete snapshot and semantic role grading. Speed requires at least 15% lower median paired active time to the first correct SQL snapshot. No provider or fixture authorization is implied.",
+  "statistic": "Median case-level relative improvement, taking the median paired (baseline minus candidate) / baseline over repetitions within each case. Bootstrap conversations, keeping follow-ups and repetitions together.",
+  "gate_kind": "speed",
+  "timed_case_ids": [
+    "01-total",
+    "02-total-paraphrase",
+    "03-monthly",
+    "04-yearly",
+    "05-regions",
+    "06-categories",
+    "07-date-paraphrase",
+    "semantic-large-01-total",
+    "semantic-large-02-total-paraphrase",
+    "semantic-large-03-monthly",
+    "semantic-large-04-yearly",
+    "semantic-large-05-regions",
+    "semantic-large-06-categories",
+    "semantic-large-07-date-paraphrase",
+    "semantic-west-total",
+    "semantic-year-filter",
+    "semantic-measure-competition",
+    "semantic-date-competition",
+    "semantic-region-paraphrase",
+    "semantic-role-batch"
+  ],
+  "required_candidate_scenarios": []
+}

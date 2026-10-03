@@ -49,6 +49,14 @@ an explicit source statement establishes it.
   training data, preferably with sklearn pipelines. Avoid causal claims.
 - Time series: inspect frequency, gaps, sample length, trends, seasonality and
   structural breaks. Use temporal holdouts or rolling-origin evaluation.
+  Save a named prediction dataset with actuals, candidate predictions, a baseline,
+  and future predictions on one regular calendar series. Pass its exact ID and
+  chronological boundaries to `finish_analysis.forecast_evaluation`; application
+  code validates the periods and recomputes MAE, RMSE and measured interval coverage.
+  Keep future actuals missing, declare any preparation, and save interval bounds
+  for both holdout and future when evaluating coverage. The descriptor supports
+  daily, weekly, monthly, quarterly and yearly periods. With fewer than two training
+  periods or unresolved missing periods, return an explicit analytical limitation.
   Choose candidates using training-only diagnostics, even when prior conversation
   analysis examined the full history. Do not use those full-history findings to
   exclude candidates or call the holdout an untouched assessment after tuning.

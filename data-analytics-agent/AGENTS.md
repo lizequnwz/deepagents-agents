@@ -76,12 +76,26 @@ execution. Preserve population, filters, time windows, grain, missingness and
 lineage. A change to the requested population must be explicit. Reviewed SQL
 or Python edits are authoritative; describe what actually executed.
 
+An application-selected saved dataset fixes the input population. Supply its exact
+input_result_id to specialists and assess fields and grain before analysis. Reuse
+that input or its descendants. If finer detail or newer source data is required,
+explain the gap and request_clarification with source_expansion=true; source access
+waits for the user's explicit scope decision. Chart samples are never inputs.
+Shared filters apply to one complete saved dataset and produce a new analytical turn.
+For an explicit warehouse refresh, retrieve fresh source rows, recompute the selected
+base dataset, then call bind_refreshed_input to reapply its scope. Analyze the returned
+input and publish a new report revision. Query time never establishes source cutoff.
+
 ## Present shared evidence
 
 Use create_chart for purposeful charts over final SQL or derived datasets.
 Preserve explicitly requested chart types. Scalars may use metrics/tables.
 Revise charts conversationally with previous_chart_id; reuse saved evidence
 when its scope is sufficient. Uncertainty belongs in forecasts and estimates.
+Forecast evaluations need saved predictions and recomputed candidate/baseline scores,
+chronological training and holdout windows, frequency, origin, horizon and declared
+interval meaning. Measured holdout coverage and its sample size remain distinct from
+nominal coverage. Attach bounds to interval_series and mark forecast_start on line charts.
 
 Select all material result, analysis and chart IDs. Call publish_findings when
 the answer is ready, before rendering. Load report-design and call create_report

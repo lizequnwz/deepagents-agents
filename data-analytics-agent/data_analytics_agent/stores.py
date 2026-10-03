@@ -39,6 +39,7 @@ from data_analytics_agent.schemas import (
     RunStatus,
     SavedDataAnalysis,
     TokenUsage,
+    AnalyticalInput,
 )
 
 
@@ -262,6 +263,7 @@ class ConversationStore:
             if item is None:
                 raise StoreNotFound(thread_id)
             return ConversationResponse(
+                analytical_input=item.turns[-1].analytical_input if item.turns else None,
                 thread_id=item.thread_id,
                 source_id=item.source_id,
                 turns=[
@@ -401,6 +403,12 @@ class _Run:
     source_id: str
     question: str
     created_at: float
+    analytical_input: AnalyticalInput | None = None
+    source_expansion_allowed: bool = False
+    fresh_source_required: bool = False
+    fresh_result_ids: list[str] = field(default_factory=list)
+    previous_report_id: str | None = None
+    evaluation_receipts: list[dict] = field(default_factory=list)
     last_saved_at: float = 0
     model: str = ""
     status: RunStatus = RunStatus.QUEUED
@@ -502,6 +510,9 @@ class RunStore:
         question: str,
         *,
         model: str = "",
+        analytical_input: AnalyticalInput | None = None,
+        fresh_source_required: bool = False,
+        previous_report_id: str | None = None,
     ) -> str:
         run_id = str(uuid4())
         with self._lock:
@@ -512,6 +523,9 @@ class RunStore:
                 question=question,
                 created_at=self._clock(),
                 model=model,
+                analytical_input=analytical_input,
+                fresh_source_required=fresh_source_required,
+                previous_report_id=previous_report_id,
             )
         return run_id
 
@@ -606,6 +620,11 @@ class RunStore:
             item = self._get_mutable(run_id)
             events = [event for event in item.events if event.id > after_event_id]
             return RunResponse(
+                analytical_input=item.analytical_input,
+                source_expansion_allowed=item.source_expansion_allowed,
+                fresh_source_required=item.fresh_source_required,
+                previous_report_id=item.previous_report_id,
+                evaluation_receipts=list(item.evaluation_receipts),
                 report_ready=item.report_reference is not None,
                 active_model_agent=(
                     max(
@@ -637,6 +656,40 @@ class RunStore:
     def diagnostics(self, run_id: str) -> RunDiagnostics:
         with self._lock:
             return self._run_diagnostics(self._get_mutable(run_id), self._clock())
+
+    @persist_run
+    def record_evaluation(self, run_id, receipt):
+        self._get_mutable(run_id).evaluation_receipts.append(receipt)
+
+    def require_source_access(self, run_id):
+        run = self.get(run_id)
+        if run.fresh_source_required and run.analytical_input and run.analytical_input.input_result_id in self.fresh_results(run_id):
+            raise ValueError("The refreshed population is bound. Use its exact input ID or descendants for the answer.")
+        if run.analytical_input and not run.source_expansion_allowed and not run.fresh_source_required:
+            raise ValueError("The user selected a saved snapshot. Explain the missing detail and request clarification with source_expansion=true before retrieving a broader or newer source population.")
+
+    @persist_run
+    def allow_source_expansion(self, run_id):
+        self._get_mutable(run_id).source_expansion_allowed = True
+
+    @persist_run
+    def record_fresh_result(self, run_id, result_id):
+        item = self._get_mutable(run_id)
+        if result_id not in item.fresh_result_ids:
+            item.fresh_result_ids.append(result_id)
+
+    def fresh_results(self, run_id):
+        with self._lock:
+            return list(self._get_mutable(run_id).fresh_result_ids)
+
+    @persist_run
+    def bind_refreshed_input(self, run_id, analytical_input):
+        item = self._get_mutable(run_id)
+        if not item.fresh_source_required or not item.analytical_input:
+            raise ValueError("This run has no selected input to refresh.")
+        item.analytical_input = analytical_input
+        item.fresh_result_ids = [analytical_input.input_result_id]
+
 
     def conversation_diagnostics(self, run_ids: list[str]) -> ConversationDiagnostics:
         with self._lock:
@@ -1017,7 +1070,13 @@ class RunStore:
             )
         if item.findings is not None:
             return
-        item.findings = answer
+        if item.fresh_source_required and not item.fresh_result_ids:
+            raise ValueError("Fresh source SQL is required before publishing refreshed findings.")
+        if item.fresh_source_required and item.analytical_input and item.analytical_input.input_result_id not in item.fresh_result_ids:
+            raise ValueError("Bind the regenerated selected input and reapply its scope before publication.")
+        item.findings = answer.model_copy(update={"analytical_input": item.analytical_input,
+            "source_expansion_allowed": item.source_expansion_allowed,
+            "refreshed_from_report_id": item.previous_report_id if item.fresh_source_required else None})
         item.findings_at = self._clock()
         item.phase = "findings_ready"
 

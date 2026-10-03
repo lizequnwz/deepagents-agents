@@ -589,7 +589,8 @@ def build_chart(
     else:
         figure = _render_cartesian(frame, spec, warnings, style)
     if spec.lower_bound and spec.upper_bound:
-        band = frame.sort_values(spec.x)
+        target = spec.interval_series or spec.y[0]
+        band = frame.dropna(subset=[target, spec.lower_bound, spec.upper_bound]).sort_values(spec.x)
         figure.add_trace(
             go.Scatter(
                 x=band[spec.x],
@@ -598,6 +599,7 @@ def build_chart(
                 mode="lines",
                 showlegend=False,
                 hoverinfo="skip",
+                legendgroup=target,
             )
         )
         figure.add_trace(
@@ -608,9 +610,14 @@ def build_chart(
                 fill="tonexty",
                 fillcolor="rgba(54,135,39,.15)",
                 name=spec.interval.display_label,
+                legendgroup=target,
                 hoverinfo="skip",
             )
         )
+    if spec.forecast_start:
+        marker = spec.forecast_start.isoformat()
+        figure.add_shape(type="line", x0=marker, x1=marker, y0=0, y1=1, xref="x", yref="paper", line=dict(color="#525150", dash="dash"))
+        figure.add_annotation(x=marker, y=1, xref="x", yref="paper", text="Forecast start", showarrow=False, yshift=12)
     if spec.error_y:
         axis = (
             "error_x"

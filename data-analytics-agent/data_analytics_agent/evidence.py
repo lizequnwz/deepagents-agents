@@ -26,6 +26,9 @@ class EvidenceResolver:
             self.analyses[key] = item
             for result_id in item.input_result_ids:
                 self.result(result_id)
+            if item.forecast_evaluation:
+                self.result(item.forecast_evaluation.predictions_result_id)
+                self.result(item.forecast_evaluation.scores_result_id)
             for execution in item.executions:
                 for result_id in [
                     *execution.inputs.values(),

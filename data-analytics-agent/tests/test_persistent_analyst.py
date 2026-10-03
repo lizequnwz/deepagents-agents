@@ -314,7 +314,7 @@ def test_shared_chart_versions_uncertainty_and_report_metric_binding(workspace):
     assert (
         revised["chart"]["version"] == 2 and revised["chart_id"] != created["chart_id"]
     )
-    publish, _ = create_presentation_tools(
+    publish, _, _ = create_presentation_tools(
         w.results, w.analyses, w.runs, w.conversations, source_id="test"
     )
     publish.func(
@@ -579,7 +579,7 @@ def test_publication_reference_errors_are_recoverable_and_do_not_publish(
         missing = w.results.save(
             thread_id=other, source_id="test", columns=["total"], rows=[{"total": 999}]
         ).result_id
-    publish, _ = create_presentation_tools(
+    publish, _, _ = create_presentation_tools(
         w.results, w.analyses, w.runs, w.conversations, source_id="test"
     )
     findings = CoordinatorResponse(

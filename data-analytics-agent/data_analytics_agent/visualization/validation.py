@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from numbers import Real
 from decimal import Decimal
 from typing import Any
+import pandas as pd
 
 from data_analytics_agent.visualization.schemas import (
     ChartSpec,
@@ -140,6 +141,16 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     rows = presentation_rows(result.rows, spec)
     if not rows:
         raise ValueError("The reviewed presentation operations removed all rows.")
+    if spec.forecast_start:
+        _require_role(result, spec.x, {AnalyticalRole.TEMPORAL}, "a typed temporal axis for a forecast-start marker")
+        marker = pd.Timestamp(spec.forecast_start)
+        times = pd.to_datetime([row.get(spec.x) for row in rows if row.get(spec.x) is not None])
+        if times.tz is not None or not times.min() <= marker <= times.max():
+            raise ValueError("Forecast start must fall within the saved calendar series without timezone.")
+    if spec.lower_bound:
+        target = spec.interval_series or spec.y[0]
+        if any((row.get(spec.lower_bound) is not None or row.get(spec.upper_bound) is not None) and row.get(target) is None for row in rows):
+            raise ValueError("Interval bounds must be attached to saved values of their target series.")
 
     if spec.error_y and any(
         _is_number(row.get(spec.error_y)) and row[spec.error_y] < 0 for row in rows

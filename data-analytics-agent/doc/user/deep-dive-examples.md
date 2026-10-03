@@ -1,6 +1,6 @@
 # Example questions: simple answers to complex reports
 
-Historical live-test claims whose receipts are unavailable in this checkout are unverified. Current repeatable checks are recorded in the [30 September release verification](../reviews/release-verification-2026-09-30.md).
+Historical live-test claims whose receipts are unavailable in this checkout are unverified. Current repeatable checks are recorded in the [extended local verification](../reviews/priority-followup-tests-2026-10-02.md).
 
 Updated 30 September 2026. Copy a question into the app after selecting its data
 source. Start with the simple questions below; then try an investigation or a
@@ -94,7 +94,7 @@ For a first complex report, try **01**, **04** or **09**. For iterative analysis
 run **01 → 02 → 03 → 10** in one conversation. Run **05 → 06** in a separate
 conversation; the other examples each start fresh.
 
-**Current verification:** see the [30 September release checks](../reviews/release-verification-2026-09-30.md). Earlier 26/27 September live-trial receipts are unavailable in this checkout, so their analytical outcomes are unverified here. A forecast refusal can be a valid outcome; a completed report alone is not a correctness guarantee.
+**Current verification:** see the [extended local checks](../reviews/priority-followup-tests-2026-10-02.md). Earlier 26/27 September live-trial receipts are unavailable in this checkout, so their analytical outcomes are unverified here. A forecast refusal can be a valid outcome; a completed report alone is not a correctness guarantee.
 
 For exact reruns, use the [testing guide](../development/testing.md). SQL wording,
 analytical method and report layout may vary across runs. These prompts were not

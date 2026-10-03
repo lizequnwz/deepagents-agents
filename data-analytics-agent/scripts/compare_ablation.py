@@ -21,14 +21,18 @@ METRICS = {
     "total_tokens",
     "model_calls",
     "tool_calls",
+    "active_ms_to_first_correct_snapshot",
 }
 
 
-def metric_value(run, name):
+def metric_value(run, name, outcome=None):
     if run.get("status") not in {"completed", "clarification_required"}:
         return None
     diagnostics = run.get("run_diagnostics") or {}
-    if name.endswith("tokens"):
+    if name == "active_ms_to_first_correct_snapshot":
+        measured = (outcome or {}).get("semantic_metrics") or {}
+        value = measured.get(name) if measured.get("snapshot_reviews_complete") else None
+    elif name.endswith("tokens"):
         if (
             "token_usage_partial" not in diagnostics
             or diagnostics["token_usage_partial"]
@@ -57,6 +61,9 @@ def reviewed(item):
 
 
 def compare_trials(study, folders):
+    gate_kind = study.get("gate_kind", "speed")
+    if gate_kind not in {"speed", "quality"}:
+        raise ValueError("Gate kind must be speed or quality")
     if study["target_metric"] not in METRICS:
         raise ValueError(
             "Unsupported target metric; missing cost telemetry is not zero cost"
@@ -177,7 +184,10 @@ def compare_trials(study, folders):
         changed_settings.update(setting_changes)
     if not changed_files and not changed_settings:
         raise ValueError("The candidate is identical to the baseline")
-    regressions, failures, unknown, rows = [], [], [], []
+    regressions, failures, unknown, rows, targeted_fixes = [], [], [], [], []
+    timed_ids = set(study["timed_case_ids"]) if "timed_case_ids" in study else {c["id"] for c in reference["corpus"]}
+    if not timed_ids <= {c["id"] for c in reference["corpus"]}:
+        raise ValueError("Timed cases must belong to the frozen study corpus")
     for (variant, repetition), trial in trials.items():
         observed = {
             name
@@ -185,7 +195,10 @@ def compare_trials(study, folders):
             for name, check in outcome.get("scenario_checks", {}).items()
             if reviewed(check) and check["status"] == "pass"
         }
-        for scenario in set(study["required_scenarios"]) - observed:
+        scenarios = set(study["required_scenarios"])
+        if variant == "candidate":
+            scenarios.update(study.get("required_candidate_scenarios", []))
+        for scenario in scenarios - observed:
             unknown.append(
                 {
                     "variant": variant,
@@ -204,6 +217,13 @@ def compare_trials(study, folders):
             )
             bg, cg = (trial["grades"]["cases"][case_id] for trial in (before, after))
             pair = {"case_id": case_id, "repetition": repetition}
+            for scenario in study.get("required_candidate_scenarios", []):
+                baseline_check = bg.get("scenario_checks", {}).get(scenario)
+                candidate_check = cg.get("scenario_checks", {}).get(scenario)
+                if reviewed(baseline_check) and reviewed(candidate_check) and baseline_check["status"] == "fail" and candidate_check["status"] == "pass":
+                    targeted_fixes.append({**pair, "scenario": scenario,
+                        "baseline_evidence": baseline_check["evidence"],
+                        "candidate_evidence": candidate_check["evidence"]})
             if bg["outcome"] == "pass" and cg["outcome"] == "fail":
                 regressions.append(pair)
             if cg["outcome"] == "fail":
@@ -235,14 +255,16 @@ def compare_trials(study, folders):
                     and cg["first_attempt"]["status"] == "fail"
                 ):
                     regressions.append({**pair, "reason": "first_attempt"})
-            before_value = metric_value(before["runs"][case_id], study["target_metric"])
-            after_value = metric_value(after["runs"][case_id], study["target_metric"])
-            if before_value is None or after_value is None or before_value == 0:
-                unknown.append({**pair, "reason": "target_telemetry"})
-            else:
-                before_values.append(before_value)
-                after_values.append(after_value)
-                paired_reductions.append((before_value - after_value) / before_value)
+            before_value, after_value = None, None
+            if gate_kind == "speed" and case_id in timed_ids:
+                before_value = metric_value(before["runs"][case_id], study["target_metric"], bg)
+                after_value = metric_value(after["runs"][case_id], study["target_metric"], cg)
+                if before_value is None or after_value is None or before_value == 0:
+                    unknown.append({**pair, "reason": "target_telemetry"})
+                else:
+                    before_values.append(before_value)
+                    after_values.append(after_value)
+                    paired_reductions.append((before_value - after_value) / before_value)
             pairs.append(
                 {
                     **pair,
@@ -267,6 +289,7 @@ def compare_trials(study, folders):
         rows.append(
             {
                 "case_id": case_id,
+                "timed": gate_kind == "speed" and case_id in timed_ids,
                 "conversation": case["conversation"],
                 "pairs": pairs,
                 "baseline_median": before_median,
@@ -282,17 +305,22 @@ def compare_trials(study, folders):
                 ),
             }
         )
+    for scenario in study.get("required_candidate_scenarios", []):
+        for repetition in baseline:
+            if not any(fix["scenario"] == scenario and fix["repetition"] == repetition for fix in targeted_fixes):
+                unknown.append({"repetition": repetition, "reason": f"target_not_resolved:{scenario}"})
     reductions = [
         row["relative_improvement"]
         for row in rows
         if row["relative_improvement"] is not None
     ]
+    timed_rows = [row for row in rows if row["timed"]]
     enough = (
-        len(rows) >= study["minimum_cases"]
+        len(timed_rows if gate_kind == "speed" else rows) >= study["minimum_cases"]
         and len(baseline) >= study["minimum_repetitions"]
     )
     median, interval = None, None
-    if enough and len(reductions) == len(rows):
+    if gate_kind == "speed" and enough and len(reductions) == len(timed_rows):
         median = float(np.median(reductions))
         groups = {}
         for row in rows:
@@ -331,6 +359,10 @@ def compare_trials(study, folders):
         "retain_baseline"
         if failures or regressions
         else "inconclusive"
+        if unknown or not enough
+        else "eligible_for_adoption"
+        if gate_kind == "quality"
+        else "inconclusive"
         if unknown or not enough or interval is None or interval[0] <= 0
         else "eligible_for_adoption"
         if improvement
@@ -349,6 +381,7 @@ def compare_trials(study, folders):
         "warehouse_query_count": None,
         "regressions": regressions,
         "candidate_failures": failures,
+        "targeted_fixes": targeted_fixes,
         "unknown": unknown,
         "cases": rows,
         "limitations": [

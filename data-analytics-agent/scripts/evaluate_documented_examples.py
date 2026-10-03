@@ -71,8 +71,11 @@ def save_receipts(client, call, folder, state):
     # erase a failed, partial, or successful model outcome.
     write_json(folder / "run.json", state)
     answer = state.get("answer") or state.get("findings") or {}
-    for ref in answer.get("results", []):
-        rid = ref["result_id"]
+    result_ids = list(dict.fromkeys([
+        *(ref["result_id"] for ref in answer.get("results", [])),
+        *(r["result_id"] for r in state.get("evaluation_receipts", []) if r.get("result_id")),
+    ]))
+    for rid in result_ids:
         for format in ("csv", "parquet"):
             response = client.get(
                 f"/api/results/{rid}/download", params={"format": format}
@@ -189,10 +192,19 @@ def run_case(case, cases, output, threads, client, call):
             raise RuntimeError("Receipt conversation does not match registry")
         run_id = request["run_id"]
     else:
+        message = {"message": case["question"]}
+        if selected_case := case.get("selected_dataset_from"):
+            parent = json.loads((output / selected_case / "run.json").read_text())
+            candidates = (parent.get("answer") or {}).get("results", [])
+            label = case.get("selected_dataset_label")
+            matches = [r for r in candidates if not label or r.get("short_label") == label]
+            if len(matches) != 1:
+                raise ValueError("Selected dataset fixture requires one exact saved label from the preceding receipt.")
+            message["selected_result_id"] = matches[0]["result_id"]
         created = call(
             "POST",
             f"/api/conversations/{thread}/messages",
-            json={"message": case["question"]},
+            json=message,
         )
         run_id = created["run_id"]
         write_json(request_file, {**case, "thread_id": thread, "run_id": run_id})

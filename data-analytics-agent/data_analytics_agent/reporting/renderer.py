@@ -311,6 +311,24 @@ def _infographic(block: ReportInfographicBlock) -> str:
     )
 
 
+def _forecast_evaluation(analysis: ResolvedDataAnalysis) -> str:
+    if analysis.forecast_evaluation is None:
+        return ""
+    rows = analysis.forecast_scores
+    columns = list(rows[0]) if rows else []
+    header = "".join(f'<th scope="col">{escape(column)}</th>' for column in columns)
+    body = "".join(
+        "<tr>" + "".join(f"<td>{escape(_value(row.get(column)))}</td>" for column in columns) + "</tr>"
+        for row in rows[:10]
+    )
+    return (
+        "<h3>Forecast evaluation</h3>"
+        + _rich_text(analysis.forecast_evaluation.description)
+        + '<div class="table-scroll"><table><caption>Holdout errors recomputed from saved actuals and predictions</caption>'
+        + f"<thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div>"
+    )
+
+
 def _statistical(
     block: ReportAnalysisBlock,
     analysis: ResolvedDataAnalysis,
@@ -390,6 +408,7 @@ def _statistical(
     return (
         '<section class="report-block statistical-block">'
         f"<h2>{escape(block.title)}</h2>{_rich_text(block.summary)}"
+        f"{_forecast_evaluation(analysis)}"
         f"{warnings}"
         + (
             '<details class="analysis-outputs"><summary>Analysis outputs and diagnostics</summary>'

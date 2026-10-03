@@ -34,6 +34,7 @@ from data_analytics_agent.ui.uploads import (
     render_uploaded_source,
     render_workbook_selection,
 )
+from data_analytics_agent.ui.scope import render_input_selector, render_scope_controls
 
 load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -71,6 +72,9 @@ def clear_conversation_state() -> None:
         "starter_question_",
         "chat_input_",
         "voice_",
+        "analytical_dataset_",
+        "scope_",
+        "show_scope_",
     )
     for key in list(st.session_state):
         if key.startswith(removable_prefixes):
@@ -247,8 +251,20 @@ def render_active_run(
                     answer = st.text_input(
                         "Your answer", key=f"clarification_answer_{run_id}"
                     )
+                    allow_expansion = (
+                        st.checkbox(
+                            "Allow broader or newer source retrieval", value=False
+                        )
+                        if clarification.get("source_expansion")
+                        else False
+                    )
                     if st.form_submit_button("Continue") and answer.strip():
-                        client.answer_clarification(run_id, answer)
+                        client.answer_clarification(
+                            run_id,
+                            answer,
+                            interrupt_id=clarification["interrupt_id"],
+                            allow_source_expansion=allow_expansion,
+                        )
                         st.rerun()
             if state == "approval_required":
                 decisions = render_approval(run)
@@ -377,14 +393,28 @@ if conversation is None:
     st.stop()
 
 if conversation["source_id"] not in sources_by_id:
-    saved_source = client.get_conversation_source(thread_id)
+    try:
+        saved_source = client.get_conversation_source(thread_id)
+    except APIError as exc:
+        render_page_header()
+        st.error(f"This conversation's source is unavailable. {exc}")
+        st.caption(
+            "Saved answers remain available. Restore the source configuration and refresh this page before starting new analysis."
+        )
+        for turn in conversation["turns"]:
+            render_turn(
+                client,
+                turn,
+                turn_key=turn["run_id"],
+                source_id=conversation["source_id"],
+            )
+        st.stop()
     sources_by_id[saved_source["source_id"]] = saved_source
     data_sources["sources"].append(saved_source)
 
 source = sources_by_id[conversation["source_id"]]
-active_run_id = conversation.get("active_run_id") or st.session_state.get(
-    "active_run_id"
-)
+active_run_id = conversation.get("active_run_id")
+st.session_state["active_run_id"] = active_run_id
 
 new_conversation, conversation_diagnostics_slot = render_sidebar(
     thread_id=thread_id,
@@ -513,6 +543,16 @@ for saved_run_id in conversation.get("run_ids") or []:
         render_active_run(client, saved_run_id, thread_id, conversation["source_id"])
 
 chat_input_key = f"chat_input_{thread_id}"
+selected_result_id, selected_scope = render_input_selector(
+    client, conversation, disabled=bool(active_run_id)
+)
+if not active_run_id:
+    render_scope_controls(
+        client,
+        conversation,
+        selected_result_id,
+        is_warehouse=source["backend_type"] != "upload",
+    )
 if not conversation["turns"] and not conversation.get("run_ids"):
     render_empty_state(
         thread_id,
@@ -543,7 +583,12 @@ if submission and not submission.files and submission.text.strip():
                 run = client.send_correction(active_run_id, typed_question)
                 st.session_state["conversation_notice"] = run["message"]
         else:
-            run = client.send_message(thread_id, typed_question)
+            run = client.send_message(
+                thread_id,
+                typed_question,
+                selected_result_id=selected_result_id,
+                scope=selected_scope,
+            )
         st.session_state["active_run_id"] = active_run_id or run["run_id"]
         st.rerun()
     except APIError as exc:

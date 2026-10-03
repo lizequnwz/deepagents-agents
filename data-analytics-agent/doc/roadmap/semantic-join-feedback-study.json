@@ -1,0 +1,33 @@
+{
+  "name": "semantic-join-feedback",
+  "hypothesis": "Expose exact physical relationship key pairs and structured actionable SQL repair feedback; retain all join, metric and fan-out guards.",
+  "changed_component": "Expose exact physical relationship key pairs and structured actionable SQL repair feedback; retain all join, metric and fan-out guards.",
+  "target_metric": "tool_calls",
+  "minimum_improvement": 0.15,
+  "minimum_cases": 20,
+  "minimum_repetitions": 3,
+  "confidence_level": 0.95,
+  "bootstrap_seed": 20260930,
+  "changed_files": [
+    "data_analytics_agent/semantic_context.py",
+    "data_analytics_agent/semantic_sql.py",
+    "data_analytics_agent/backends/validation.py",
+    "data_analytics_agent/agents/text_to_sql/tools.py"
+  ],
+  "changed_settings": [],
+  "required_scenarios": [
+    "descriptive",
+    "relationship_roles",
+    "date_roles",
+    "clarification",
+    "saved_population"
+  ],
+  "adoption_scope": "This quality change only. Preserve all hard boundaries and introduce no outcome or first-attempt regressions. Independently reviewed paired cases must show the targeted key-pair and repair-feedback failures resolved in every fresh repetition. No speed claim or provider/fixture authorization is implied.",
+  "statistic": "Median case-level relative improvement, taking the median paired (baseline minus candidate) / baseline over repetitions within each case. Bootstrap conversations, keeping follow-ups and repetitions together.",
+  "gate_kind": "quality",
+  "timed_case_ids": [],
+  "required_candidate_scenarios": [
+    "join_key_pairs",
+    "actionable_join_repairs"
+  ]
+}

@@ -20,6 +20,13 @@ review its schema, or select a configured warehouse. The included SQLite sources
 use `data_sources.yaml`; see [adding sources](doc/development/adding-data-sources.md)
 to connect your own data.
 
+The current API/storage contract is **19**. Restart both services together and
+choose fresh `ANALYTICS_STORAGE_DIR` storage for older incompatible history;
+preserve needed artifacts separately. No migrations are provided.
+
+For an existing checkout with older storage, start both services against a new
+directory: `ANALYTICS_STORAGE_DIR=.analytics-v19 ./scripts/start.sh`.
+
 Provider alternatives, execution limits, review settings, tracing, and development
 reload are documented in [configuration](doc/development/configuration.md).
 Try the [deep-dive test questions](doc/user/deep-dive-examples.md) for investigations,
@@ -39,6 +46,17 @@ saved-data follow-ups, a sample upload, and run-control checks.
   (default `whisper-1`), including when the analytics model uses Bedrock.
 - Ask follow-ups to refine charts or extend an investigation. Saved results are
   snapshots; ask for fresh/current data to execute source SQL again.
+- Use **Analyze** beside the composer to choose a complete saved snapshot,
+  reviewed upload or Python-derived dataset. The choice fixes the population;
+  missing detail requires an explicit source-expansion decision.
+- Use **Refine saved population** to apply categories or typed date ranges to
+  that dataset. This starts a new analytical turn with matching findings, chart,
+  HTML and downloads. **Refresh from warehouse** regenerates the current
+  question and scope from fresh source evidence, preserving the prior report if
+  it fails. A refreshed file requires a new upload and conversation.
+- Forecast evaluations save predictions, baseline/candidate MAE and RMSE,
+  training/holdout windows and measured interval coverage separately from
+  nominal coverage. Their tables and calculations are included in downloads.
 - Use **Edit chart** to change a title, axis label, colors, or compatible chart
   type directly. Saving creates matching chart/report versions using saved data.
 - Stop preserves committed artifacts. Resume continues interrupted work; after
@@ -114,3 +132,8 @@ Python with repair, saved-data SQL, report consistency and retry, lifecycle,
 provider configuration and UI components. Opt-in model evaluations are separate;
 they send the supplied fixture context to the configured provider and must be
 explicitly enabled. They assess correctness and methodology rather than exact SQL.
+The [extended verification record](doc/reviews/priority-followup-tests-2026-10-02.md)
+records 490 passing local tests, six skipped provider tests, refresh/grain/forecast
+repairs, local discovery observations and portable replay checks. The three paired
+semantic studies remain pending; verification stays local under the user's current
+instruction.

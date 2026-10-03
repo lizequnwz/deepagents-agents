@@ -127,21 +127,30 @@ class AgentAPIClient:
     def get_conversation(self, thread_id: str) -> dict[str, Any]:
         return self.request("GET", f"/api/conversations/{thread_id}")
 
-    def send_message(self, thread_id: str, message: str) -> dict[str, Any]:
+    def send_message(self, thread_id: str, message: str, *, selected_result_id=None, scope=None, previous_report_id=None) -> dict[str, Any]:
         return self.request(
             "POST",
             f"/api/conversations/{thread_id}/messages",
-            json={"message": message},
+            json={"message": message, "selected_result_id": selected_result_id, "scope": scope, "previous_report_id": previous_report_id},
         )
+
+    def list_datasets(self, thread_id):
+        return self.request("GET", f"/api/conversations/{thread_id}/datasets")["datasets"]
+
+    def scope_options(self, thread_id, result_id):
+        return self.request("GET", f"/api/conversations/{thread_id}/datasets/{result_id}/scope-options")
+
+    def refresh_warehouse(self, run_id, report_id):
+        return self.request("POST", f"/api/runs/{run_id}/refresh", json={"report_id": report_id})
 
     def send_correction(self, run_id: str, message: str):
         return self.request(
             "POST", f"/api/runs/{run_id}/corrections", json={"message": message}
         )
 
-    def answer_clarification(self, run_id: str, message: str):
+    def answer_clarification(self, run_id: str, message: str, *, interrupt_id=None, allow_source_expansion=False):
         return self.request(
-            "POST", f"/api/runs/{run_id}/clarification", json={"message": message}
+            "POST", f"/api/runs/{run_id}/clarification", json={"message": message, "interrupt_id": interrupt_id, "allow_source_expansion": allow_source_expansion}
         )
 
     def get_run(self, run_id: str, *, after_event_id: int = 0) -> dict[str, Any]:

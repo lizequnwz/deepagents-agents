@@ -27,6 +27,8 @@ def create_chart_tool(results, runs, *, source_id):
         reshape saved data. Never substitute an explicitly requested chart type.
         Bounds require interval kind and method. Declare nominal coverage only
         for prediction/confidence intervals, never for scenario/sensitivity ranges.
+        For actual/forecast line charts, set interval_series to the forecast y
+        column and forecast_start to its first future calendar period.
         """
         context = _runtime_context(runtime)
         if committed := runs.storage.committed(context.run_id, runtime.tool_call_id):
@@ -37,6 +39,9 @@ def create_chart_tool(results, runs, *, source_id):
                 source = results.get(
                     source.parent_result_ids[0], context.thread_id, source_id=source_id
                 )
+            from data_analytics_agent.analytical_scope import check_inputs
+
+            check_inputs(results, runs, context.run_id, [source.result_id])
             version = 1
             if spec.previous_chart_id:
                 previous = runs.storage.load("charts", dict).get(spec.previous_chart_id)

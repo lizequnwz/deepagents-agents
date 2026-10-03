@@ -1,0 +1,65 @@
+{
+  "evidence_level": "local_scripted_browser",
+  "date": "2026-10-01",
+  "provider_calls": false,
+  "source": "three synthetic Artist rows in local SQLite",
+  "thread_id": "f0083c85-731f-4df6-be56-20a7e42de898",
+  "completed_runs": [
+    {
+      "run_id": "385372c4-42aa-43e9-ac72-ca3355415f8c",
+      "population_rows": 3,
+      "scope": null,
+      "report_id": "894c1cdb-b286-41a2-bf91-2b728784d534"
+    },
+    {
+      "run_id": "0bbef3f4-8f75-4fb3-be28-c699fee3b83a",
+      "population_rows": 2,
+      "scope": {
+        "base_result_id": "884f67d8-0381-46ac-94cd-7ca756583b7f",
+        "categories": {
+          "Name": [
+            "Alpha"
+          ]
+        },
+        "dates": null
+      },
+      "report_id": "d31964bf-0c08-4ca1-97c7-85d4747d827c"
+    },
+    {
+      "run_id": "f38d77c8-b044-4e51-8ce0-868a56cceb4c",
+      "population_rows": 2,
+      "scope": {
+        "base_result_id": "884f67d8-0381-46ac-94cd-7ca756583b7f",
+        "categories": {
+          "Name": [
+            "Alpha"
+          ]
+        },
+        "dates": null
+      },
+      "report_id": "e53a6c03-92ff-4554-abab-c228494e78dd"
+    }
+  ],
+  "failed_runs": [
+    {
+      "run_id": "fd1861e4-2211-462e-9fe7-75845e250680",
+      "error": "'NoneType' object is not subscriptable"
+    },
+    {
+      "run_id": "522c4c2e-cae5-4ce5-8ae4-c8babbb442de",
+      "error": "Synthetic warehouse refresh failed; previous report is preserved."
+    }
+  ],
+  "checks": {
+    "complete_dataset_selected": true,
+    "scoped_population_is_two": true,
+    "report_contains_applied_scope": true,
+    "failed_refresh_keeps_report": true,
+    "stale_form_browser_feedback": "This report changed while the form was open. Review the latest answer before applying the population again."
+  },
+  "limitations": [
+    "Scripted agent; no live-model accuracy or performance claim.",
+    "Initial preview path/stub-resume setup failures are retained above; the fixture path was corrected before the positive flow.",
+    "Stale form feedback and selector/filter actions were observed through the native browser; remaining booleans above recompute through the local API."
+  ]
+}

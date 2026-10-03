@@ -1,0 +1,119 @@
+{
+  "observed_at_utc": "2026-10-02T03:56:49.821775+00:00",
+  "verification": "native browser and real local SQLite refresh with scripted agent",
+  "api_contract_version": 19,
+  "provider_calls": 0,
+  "source_fixture": "Synthetic artists: initial Alpha/Beta/Alpha; first refresh Beta; second refresh 101 distinct Beta labels.",
+  "thread_id": "2b855cd4-be93-4820-b95f-c440174d6d7f",
+  "turns": [
+    {
+      "run_id": "6f7e233c-1c44-43a5-b748-a5cb0e0a50ff",
+      "answer": "The selected population contains 2 records.",
+      "analytical_input": {
+        "selected_result_id": "c9c32399-0c21-4363-8331-96cb7f4120b8",
+        "input_result_id": "1bcde196-44de-48a1-a119-980dd53b4efe",
+        "label": "Complete artist snapshot",
+        "row_count": 2,
+        "snapshot_at": "2026-10-02T03:33:47.940186Z",
+        "grain": "Business grain must be checked against the saved question and calculation.",
+        "scope": {
+          "base_result_id": "c9c32399-0c21-4363-8331-96cb7f4120b8",
+          "categories": {
+            "Name": [
+              "Alpha"
+            ]
+          },
+          "dates": null
+        }
+      },
+      "report_id": "9c290e0f-c921-424f-94f1-8f7cb55ba5f8",
+      "report_version": 1,
+      "report_html_sha256": "3e512eb5105a930bf94a0a6fbc03b889d571ff1efd199f482b628a7446c15544"
+    },
+    {
+      "run_id": "dde15bc7-4457-4eba-aa52-563409ff5ddb",
+      "answer": "The selected population contains 0 records.",
+      "analytical_input": {
+        "selected_result_id": "fd13d87f-8ee3-4363-88bf-ca2c83f48a83",
+        "input_result_id": "6948a7ee-2348-4534-bc64-b3bb60818d16",
+        "label": "Fresh complete artists",
+        "row_count": 0,
+        "snapshot_at": "2026-10-02T03:37:45.858470Z",
+        "grain": "Business grain must be checked against the saved question and calculation.",
+        "scope": {
+          "base_result_id": "fd13d87f-8ee3-4363-88bf-ca2c83f48a83",
+          "categories": {
+            "Name": [
+              "Alpha"
+            ]
+          },
+          "dates": null
+        }
+      },
+      "report_id": "d49f1473-292c-41c2-9efa-bfdab89652d6",
+      "report_version": 2,
+      "report_html_sha256": "26edb952923e98408b2038fe9a971a03215e6aba534e9a26ecf69475575231ff"
+    },
+    {
+      "run_id": "b7bf1881-6aae-451c-9a56-bcba24f1312a",
+      "answer": "The selected population contains 0 records.",
+      "analytical_input": {
+        "selected_result_id": "55132ff5-10ad-44ef-b34a-be002c5b133d",
+        "input_result_id": "4f4ac838-58f5-443b-a14d-ecbea4abf3a0",
+        "label": "Fresh complete artists",
+        "row_count": 0,
+        "snapshot_at": "2026-10-02T03:52:07.692959Z",
+        "grain": "Business grain must be checked against the saved question and calculation.",
+        "scope": {
+          "base_result_id": "55132ff5-10ad-44ef-b34a-be002c5b133d",
+          "categories": {
+            "Name": [
+              "Alpha"
+            ]
+          },
+          "dates": null
+        }
+      },
+      "report_id": "73cde677-42db-4b07-bf22-d6768cc615d3",
+      "report_version": 3,
+      "report_html_sha256": "f65c03bef08d65826f2bf014accf4f1747fee48363b197f87abbca026a9a2584"
+    }
+  ],
+  "current_input": {
+    "selected_result_id": "55132ff5-10ad-44ef-b34a-be002c5b133d",
+    "input_result_id": "4f4ac838-58f5-443b-a14d-ecbea4abf3a0",
+    "label": "Fresh complete artists",
+    "row_count": 0,
+    "snapshot_at": "2026-10-02T03:52:07.692959Z",
+    "grain": "Business grain must be checked against the saved question and calculation.",
+    "scope": {
+      "base_result_id": "55132ff5-10ad-44ef-b34a-be002c5b133d",
+      "categories": {
+        "Name": [
+          "Alpha"
+        ]
+      },
+      "dates": null
+    }
+  },
+  "last_run_status": "completed",
+  "supported_category_controls": [],
+  "limitations": [
+    "The scripted agent does not measure live-model quality or human usability.",
+    "The source-recovery failure branches were checked by API and native-widget tests, not this browser run.",
+    "The browser control tool did not toggle the scope switch through mouse attempts; keyboard interaction succeeded."
+  ],
+  "native_form_checks": {
+    "scope_switch_keyboard": "opened with Space",
+    "unsupported_filter_warning_visible": true,
+    "apply_population_disabled": true,
+    "preserved_filter": "Name: Alpha",
+    "applied_rows": 0
+  },
+  "screenshot": {
+    "path": "doc/reviews/priority-scope-preserved-2026-10-01.jpg",
+    "sha256": "996f61c713c573c69023b5a67084f2b1e8fcb09fbe218b660de198d7d4b130ce"
+  },
+  "completed_at_utc": "2026-10-02T04:03:53.453351+00:00",
+  "temporary_services_closed": true
+}

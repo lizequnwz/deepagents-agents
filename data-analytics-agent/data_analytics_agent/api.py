@@ -65,6 +65,9 @@ from data_analytics_agent.schemas import (
     FinalAnswer,
     HealthResponse,
     MessageRequest,
+    AnalyticalMessageRequest,
+    ClarificationReply,
+    ReportRevisionRequest,
     SteeringResponse,
     ResultPage,
     RunResponse,
@@ -492,9 +495,15 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     @app.get("/api/conversations/{thread_id}/source", response_model=DataSourceSummary)
     async def conversation_source(thread_id: str):
-        return container.source_summary(
-            container.conversations.get(thread_id).source_id
-        )
+        source_id = container.conversations.get(thread_id).source_id
+        try:
+            return container.source_summary(source_id)
+        except StoreNotFound:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                503, f"Saved source configuration is unavailable: {exc}"
+            ) from exc
 
     @app.get("/api/conversations/{thread_id}/upload")
     async def uploaded_file(thread_id: str):
@@ -576,7 +585,7 @@ def create_app(services: Services | None = None) -> FastAPI:
     )
     async def post_message(
         thread_id: str,
-        request: MessageRequest,
+        request: AnalyticalMessageRequest,
         background_tasks: BackgroundTasks,
     ) -> CreateRunResponse:
         readiness_errors = container.settings.readiness_errors(include_sources=False)
@@ -599,12 +608,47 @@ def create_app(services: Services | None = None) -> FastAPI:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="A run is already active for this conversation.",
             )
+        if not request.message.strip():
+            raise HTTPException(422, "Question cannot be blank.")
+        if request.scope and not request.selected_result_id:
+            raise HTTPException(422, "Select the scope's base dataset.")
+        if request.previous_report_id:
+            require_current_report(conversation, request.previous_report_id)
+        analytical_input = None
+        if request.selected_result_id:
+            from data_analytics_agent.analytical_scope import prepare_input
+
+            current = conversation.analytical_input
+            if (
+                current
+                and current.selected_result_id == request.selected_result_id
+                and current.scope == request.scope
+            ):
+                analytical_input = current
+            else:
+                try:
+                    analytical_input = await run_in_threadpool(
+                        prepare_input,
+                        container.results,
+                        thread_id,
+                        conversation.source_id,
+                        request.selected_result_id,
+                        request.scope,
+                    )
+                except ValueError as exc:
+                    raise HTTPException(422, str(exc)) from exc
+            if request.previous_report_id:
+                require_current_report(
+                    container.conversations.get(thread_id), request.previous_report_id
+                )
         manager = container.manager()
         run_id = container.runs.create(
             thread_id,
             conversation.source_id,
             request.message.strip(),
             model=container.settings.model,
+            analytical_input=analytical_input,
+            previous_report_id=request.previous_report_id,
         )
         try:
             container.conversations.begin_run(thread_id, run_id)
@@ -614,6 +658,91 @@ def create_app(services: Services | None = None) -> FastAPI:
             ) from exc
         background_tasks.add_task(manager.start, run_id)
         return CreateRunResponse(run_id=run_id, status=RunStatus.QUEUED)
+
+    def require_current_report(conversation, report_id):
+        if (
+            not conversation.turns
+            or not conversation.turns[-1].answer.report
+            or conversation.turns[-1].answer.report.report_id != report_id
+        ):
+            raise HTTPException(
+                409,
+                "The displayed report is stale. Reload before changing scope or refreshing.",
+            )
+
+    @app.get("/api/conversations/{thread_id}/datasets")
+    async def conversation_datasets(thread_id: str):
+        from data_analytics_agent.analytical_scope import dataset_summary, selectable
+
+        conversation = container.conversations.get(thread_id)
+        items = container.results.list_for_conversation(
+            thread_id, source_id=conversation.source_id
+        )
+        return {
+            "datasets": [
+                dataset_summary(item) for item in reversed(items) if selectable(item)
+            ]
+        }
+
+    @app.get("/api/conversations/{thread_id}/datasets/{result_id}/scope-options")
+    async def dataset_scope_options(thread_id: str, result_id: str):
+        from data_analytics_agent.analytical_scope import scope_options
+
+        conversation = container.conversations.get(thread_id)
+        result = container.results.get(
+            result_id, thread_id, source_id=conversation.source_id
+        )
+        try:
+            return await run_in_threadpool(scope_options, result)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post(
+        "/api/runs/{run_id}/refresh", response_model=CreateRunResponse, status_code=202
+    )
+    async def refresh_warehouse(
+        run_id: str, request: ReportRevisionRequest, background_tasks: BackgroundTasks
+    ):
+        previous = container.runs.get(run_id)
+        ensure_not_deleting(previous.thread_id)
+        conversation = container.conversations.get(previous.thread_id)
+        if container.source(previous.source_id).backend_type == "upload":
+            raise HTTPException(
+                422, "Refreshing a file requires a new upload and conversation."
+            )
+        if conversation.active_run_id is not None:
+            raise HTTPException(409, "An analytical run is already active.")
+        require_current_report(conversation, request.report_id)
+        if (
+            not conversation.turns
+            or conversation.turns[-1].run_id != run_id
+            or previous.status != RunStatus.COMPLETED
+        ):
+            raise HTTPException(409, "Refresh the latest completed analytical turn.")
+        try:
+            container.require_ready_source(previous.source_id)
+        except ValueError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        question = previous.question
+        if previous.corrections:
+            question += "\nAccepted corrections: " + "\n".join(
+                c.message for c in previous.corrections
+            )
+        new_id = container.runs.create(
+            previous.thread_id,
+            previous.source_id,
+            question,
+            model=container.settings.model,
+            analytical_input=previous.analytical_input,
+            fresh_source_required=True,
+            previous_report_id=request.report_id,
+        )
+        try:
+            container.conversations.begin_run(previous.thread_id, new_id)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        background_tasks.add_task(container.manager().start, new_id)
+        return CreateRunResponse(run_id=new_id, status=RunStatus.QUEUED)
 
     @app.post(
         "/api/runs/{run_id}/corrections",
@@ -676,7 +805,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         status_code=202,
     )
     async def answer_clarification(
-        run_id: str, request: MessageRequest, background_tasks: BackgroundTasks
+        run_id: str, request: ClarificationReply, background_tasks: BackgroundTasks
     ):
         from langgraph.types import Command
 
@@ -688,6 +817,23 @@ def create_app(services: Services | None = None) -> FastAPI:
             )
         if not request.message.strip():
             raise HTTPException(status_code=422, detail="Answer cannot be blank.")
+        if (
+            request.interrupt_id is not None
+            and request.interrupt_id != run.clarification.interrupt_id
+        ):
+            raise HTTPException(
+                409, "This clarification has changed. Reload before answering."
+            )
+        if request.allow_source_expansion:
+            if (
+                not run.clarification.source_expansion
+                or request.interrupt_id != run.clarification.interrupt_id
+            ):
+                raise HTTPException(
+                    409,
+                    "Explicit source expansion must answer the current scope clarification.",
+                )
+            container.runs.allow_source_expansion(run_id)
         container.runs.accept_correction(run_id, request.message)
         container.runs.resume(run_id)
         background_tasks.add_task(
@@ -722,7 +868,9 @@ def create_app(services: Services | None = None) -> FastAPI:
                 detail="This run is not awaiting a decision.",
             )
         if request.interrupt_id != run.approval.interrupt_id:
-            raise HTTPException(409, "This review has changed. Refresh before deciding.")
+            raise HTTPException(
+                409, "This review has changed. Refresh before deciding."
+            )
         try:
             command = decisions_to_command(
                 run.approval,

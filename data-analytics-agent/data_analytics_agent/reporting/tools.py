@@ -31,6 +31,15 @@ def generate_report(
     findings=None,
 ):
     if findings:
+        if findings.analytical_input:
+            from data_analytics_agent.analytical_scope import scope_description
+            from data_analytics_agent.reporting.schemas import ReportCalloutBlock
+
+            blocks = [b for b in spec.blocks if not (isinstance(b, ReportCalloutBlock) and b.title == "Analytical population")]
+            population = scope_description(findings.analytical_input)
+            if findings.source_expansion_allowed:
+                population += " Additional source retrieval was authorized. The selected snapshot is the starting population; consult the attached evidence for the resulting populations."
+            spec = spec.model_copy(update={"blocks": [ReportCalloutBlock(title="Analytical population", body=population, variant="note"), *blocks]})
         selected_results = {r.result_id for r in findings.results}
         selected_analyses = {a.analysis_id for a in findings.analyses}
         selected_charts = {c.chart_id for c in findings.charts}
@@ -90,6 +99,11 @@ def generate_report(
         elif isinstance(block, ReportAnalysisBlock):
             saved = evidence.analysis(block.analysis_id)
             outputs = []
+            forecast_scores = []
+            if saved.forecast_evaluation:
+                forecast = saved.forecast_evaluation
+                scores = include(forecast.scores_result_id)
+                forecast_scores = scores.preview
             for execution in saved.executions:
                 if execution.error:
                     continue
@@ -106,8 +120,10 @@ def generate_report(
                 answer=saved.answer,
                 method=saved.method,
                 assumptions=saved.assumptions,
-                warnings=saved.warnings,
+                warnings=saved.warnings + (saved.forecast_evaluation.warnings if saved.forecast_evaluation else []),
                 outputs=outputs,
+                forecast_evaluation=saved.forecast_evaluation,
+                forecast_scores=forecast_scores,
             )
     if findings:
         from data_analytics_agent.reporting.schemas import ReportCalloutBlock
@@ -178,6 +194,9 @@ def create_create_report_tool(
             return json.loads(saved)
         try:
             spec = ReportSpec.model_validate_json(report_json)
+            previous = run_store.get(context.run_id).previous_report_id
+            if previous:
+                spec = spec.model_copy(update={"previous_report_id": previous})
             if semantic_catalog is not None:
                 for block in spec.blocks:
                     if isinstance(block, ReportMetricsBlock):

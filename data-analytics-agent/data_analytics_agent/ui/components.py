@@ -1399,6 +1399,14 @@ def render_turn(
 def render_answer(
     client, answer, *, turn_key, source_id, analysis_download_available=True
 ):
+    if answer.get("analytical_input"):
+        from data_analytics_agent.analytical_scope import AnalyticalInput, scope_description
+
+        st.caption(scope_description(AnalyticalInput.model_validate(answer["analytical_input"])))
+        if answer.get("source_expansion_allowed"):
+            st.caption("Additional source retrieval was authorized. The selected snapshot is the starting population; see the attached evidence for the resulting populations.")
+    if answer.get("refreshed_from_report_id"):
+        st.caption("Refreshed from the warehouse. This answer uses a new source snapshot.")
     st.markdown(prose_markdown(answer["answer"]))
     executions = {
         execution["execution_id"]: execution
@@ -1579,6 +1587,15 @@ def _render_data_analysis(
         str(analysis.get("outcome", "analysis")).replace("_", " "),
         icon=":material/functions:",
     )
+    if analysis.get("forecast_evaluation"):
+        from data_analytics_agent.forecasting import ForecastEvaluation
+
+        forecast = ForecastEvaluation.model_validate(analysis["forecast_evaluation"])
+        st.caption(forecast.description)
+        for note in forecast.warnings:
+            st.caption(note)
+        scores = client.get_result(forecast.scores_result_id, limit=10)
+        st.dataframe(scores["rows"], hide_index=True, key=f"forecast_scores_{widget_key}")
     with st.expander("Analysis methods, outputs, and executed Python", expanded=False):
         st.markdown(prose_markdown(analysis.get("method") or ""))
         for note in (analysis.get("assumptions") or []) + (

@@ -10,7 +10,27 @@
       "descriptive",
       "scope",
       "units"
-    ]
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "metric:observation_count"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": null,
+      "grain": "scalar",
+      "expected_values": {
+        "total_revenue": 26280,
+        "observation_count": 120
+      },
+      "dimensions": [],
+      "filters": {},
+      "relationship_routes": [],
+      "clarification": "none"
+    }
   },
   {
     "id": "02-total-paraphrase",
@@ -23,7 +43,27 @@
       "descriptive",
       "scope",
       "units"
-    ]
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "metric:observation_count"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": null,
+      "grain": "scalar",
+      "expected_values": {
+        "total_revenue": 26280,
+        "observation_count": 120
+      },
+      "dimensions": [],
+      "filters": {},
+      "relationship_routes": [],
+      "clarification": "none"
+    }
   },
   {
     "id": "03-monthly",
@@ -35,7 +75,22 @@
     "scenarios": [
       "date_roles",
       "descriptive"
-    ]
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "field:facts.month"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": "monthly observation date",
+      "grain": "month",
+      "dimensions": [],
+      "filters": {},
+      "relationship_routes": [],
+      "clarification": "none"
+    }
   },
   {
     "id": "04-yearly",
@@ -47,7 +102,24 @@
     "scenarios": [
       "scope",
       "date_roles"
-    ]
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "metric:observation_count",
+        "field:facts.month"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": "monthly observation date",
+      "grain": "year",
+      "dimensions": [],
+      "filters": {},
+      "relationship_routes": [],
+      "clarification": "none"
+    }
   },
   {
     "id": "05-regions",
@@ -58,7 +130,28 @@
     "held_out": false,
     "scenarios": [
       "relationship_roles"
-    ]
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "field:regions.name",
+        "relationship:facts_to_regions"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": null,
+      "grain": "region",
+      "dimensions": [
+        "regions.name"
+      ],
+      "filters": {},
+      "relationship_routes": [
+        "facts_to_regions"
+      ],
+      "clarification": "none"
+    }
   },
   {
     "id": "06-categories",
@@ -69,7 +162,30 @@
     "held_out": false,
     "scenarios": [
       "category_lookup"
-    ]
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "field:facts.month",
+        "field:regions.name",
+        "relationship:facts_to_regions"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": "monthly observation date",
+      "grain": "month for West",
+      "dimensions": [],
+      "filters": {
+        "regions.name": [
+          "West"
+        ]
+      },
+      "relationship_routes": [
+        "facts_to_regions"
+      ],
+      "clarification": "none"
+    }
   },
   {
     "id": "07-date-paraphrase",
@@ -80,7 +196,27 @@
     "held_out": true,
     "scenarios": [
       "date_roles"
-    ]
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "field:facts.month"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": "monthly observation date",
+      "grain": "month in 2017",
+      "dimensions": [],
+      "filters": {
+        "facts.month": [
+          "2017-01-01",
+          "2017-12-31"
+        ]
+      },
+      "relationship_routes": [],
+      "clarification": "none"
+    }
   },
   {
     "id": "08-multiple-inputs",
@@ -197,7 +333,17 @@
     "held_out": false,
     "scenarios": [
       "clarification"
-    ]
+    ],
+    "semantic_expectations": {
+      "required_entities": [],
+      "measures": [],
+      "dimensions": [],
+      "filters": {},
+      "date_role": null,
+      "relationship_routes": [],
+      "grain": "unresolved",
+      "clarification": "business meaning changes the population"
+    }
   },
   {
     "id": "16-ambiguity-paraphrase",
@@ -281,7 +427,7 @@
     "id": "20-ranking",
     "source": "fixture",
     "conversation": "20-ranking",
-    "question": "Rank all regions by recorded revenue and show each region’s share of the full total. Keep complete denominators and produce a compact report.",
+    "question": "Rank all regions by recorded revenue and show each region\u2019s share of the full total. Keep complete denominators and produce a compact report.",
     "expected_outcome": "complete",
     "held_out": false,
     "scenarios": [
@@ -345,6 +491,472 @@
     "scenarios": [
       "incomplete_data",
       "partial"
+    ]
+  },
+  {
+    "id": "semantic-large-01-total",
+    "source": "wide_fixture",
+    "conversation": "semantic-large-01-total",
+    "question": "What is total recorded revenue and the count of monthly observations? Use declared source units and include a compact report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "descriptive",
+      "scope",
+      "units"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "metric:observation_count"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": null,
+      "grain": "scalar",
+      "expected_values": {
+        "total_revenue": 26280,
+        "observation_count": 120
+      },
+      "dimensions": [],
+      "filters": {},
+      "relationship_routes": [],
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-large-02-total-paraphrase",
+    "source": "wide_fixture",
+    "conversation": "semantic-large-02-total-paraphrase",
+    "question": "Across the entire recorded history, add up the revenue index and count its observations. State the population and units and give me the report.",
+    "expected_outcome": "complete",
+    "held_out": true,
+    "scenarios": [
+      "descriptive",
+      "scope",
+      "units"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "metric:observation_count"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": null,
+      "grain": "scalar",
+      "expected_values": {
+        "total_revenue": 26280,
+        "observation_count": 120
+      },
+      "dimensions": [],
+      "filters": {},
+      "relationship_routes": [],
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-large-03-monthly",
+    "source": "wide_fixture",
+    "conversation": "semantic-large-03-monthly",
+    "question": "Show all monthly revenue observations as a line chart. Keep the complete requested history and include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "date_roles",
+      "descriptive"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "field:facts.month"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": "monthly observation date",
+      "grain": "month",
+      "dimensions": [],
+      "filters": {},
+      "relationship_routes": [],
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-large-04-yearly",
+    "source": "wide_fixture",
+    "conversation": "semantic-large-04-yearly",
+    "question": "Show recorded revenue and observation count by calendar year. Reconcile the years to the full recorded total and include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "scope",
+      "date_roles"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "metric:observation_count",
+        "field:facts.month"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": "monthly observation date",
+      "grain": "year",
+      "dimensions": [],
+      "filters": {},
+      "relationship_routes": [],
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-large-05-regions",
+    "source": "wide_fixture",
+    "conversation": "semantic-large-05-regions",
+    "question": "Compare revenue by named region over the full history. Use the declared relationship without multiplying observations; reconcile the groups to the total and report the results.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "relationship_roles"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "field:regions.name",
+        "relationship:facts_to_regions"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": null,
+      "grain": "region",
+      "dimensions": [
+        "regions.name"
+      ],
+      "filters": {},
+      "relationship_routes": [
+        "facts_to_regions"
+      ],
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-large-06-categories",
+    "source": "wide_fixture",
+    "conversation": "semantic-large-06-categories",
+    "question": "Find the actual region spellings, then report the recorded monthly revenue for the region named West. Do not guess a category value.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "category_lookup"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "field:facts.month",
+        "field:regions.name",
+        "relationship:facts_to_regions"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": "monthly observation date",
+      "grain": "month for West",
+      "dimensions": [],
+      "filters": {
+        "regions.name": [
+          "West"
+        ]
+      },
+      "relationship_routes": [
+        "facts_to_regions"
+      ],
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-large-07-date-paraphrase",
+    "source": "wide_fixture",
+    "conversation": "semantic-large-07-date-paraphrase",
+    "question": "Break the revenue index into calendar-month buckets for 2017 and show each bucket chronologically. Include every requested month and report the scope.",
+    "expected_outcome": "complete",
+    "held_out": true,
+    "scenarios": [
+      "date_roles"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "field:facts.month"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "date_role": "monthly observation date",
+      "grain": "month in 2017",
+      "dimensions": [],
+      "filters": {
+        "facts.month": [
+          "2017-01-01",
+          "2017-12-31"
+        ]
+      },
+      "relationship_routes": [],
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-west-total",
+    "source": "wide_fixture",
+    "conversation": "semantic-west-total",
+    "question": "What is total revenue and observation count for West over the complete saved history? Use the named region relationship and retain source units. Include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "descriptive",
+      "semantic_roles",
+      "date_roles",
+      "relationship_roles"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "metric:observation_count",
+        "field:regions.name",
+        "relationship:facts_to_regions"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "dimensions": [],
+      "filters": {
+        "regions.name": [
+          "West"
+        ]
+      },
+      "date_role": null,
+      "relationship_routes": [
+        "facts_to_regions"
+      ],
+      "grain": "scalar for West",
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-year-filter",
+    "source": "wide_fixture",
+    "conversation": "semantic-year-filter",
+    "question": "Sum recorded revenue for calendar year 2017 and count its monthly observations. Do not use the archived event dates. Include the report.",
+    "expected_outcome": "complete",
+    "held_out": true,
+    "scenarios": [
+      "descriptive",
+      "semantic_roles",
+      "date_roles"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "metric:observation_count",
+        "field:facts.month"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "dimensions": [],
+      "filters": {
+        "facts.month": [
+          "2017-01-01",
+          "2017-12-31"
+        ]
+      },
+      "date_role": "monthly observation date",
+      "relationship_routes": [],
+      "grain": "scalar in 2017",
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-measure-competition",
+    "source": "wide_fixture",
+    "conversation": "semantic-measure-competition",
+    "question": "Add up the monthly revenue index, not predictor, target, or archived fees. Count the monthly observations as well. Include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "descriptive",
+      "semantic_roles",
+      "date_roles"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "metric:observation_count"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "dimensions": [],
+      "filters": {},
+      "date_role": null,
+      "relationship_routes": [],
+      "grain": "scalar",
+      "clarification": "none",
+      "expected_values": {
+        "total_revenue": 26280,
+        "observation_count": 120
+      }
+    }
+  },
+  {
+    "id": "semantic-date-competition",
+    "source": "wide_fixture",
+    "conversation": "semantic-date-competition",
+    "question": "List revenue for each observation month during 2017, ordered by that monthly date. Archive event dates describe a different population. Include the report.",
+    "expected_outcome": "complete",
+    "held_out": true,
+    "scenarios": [
+      "descriptive",
+      "semantic_roles",
+      "date_roles"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "field:facts.month"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "dimensions": [],
+      "filters": {
+        "facts.month": [
+          "2017-01-01",
+          "2017-12-31"
+        ]
+      },
+      "date_role": "monthly observation date",
+      "relationship_routes": [],
+      "grain": "month in 2017",
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-region-paraphrase",
+    "source": "wide_fixture",
+    "conversation": "semantic-region-paraphrase",
+    "question": "Compare the complete revenue index totals for North, South and West using their region names. Check that joining the region definition preserves the monthly population. Include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "descriptive",
+      "semantic_roles",
+      "date_roles",
+      "relationship_roles"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "metric:total_revenue",
+        "field:regions.name",
+        "relationship:facts_to_regions"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "dimensions": [
+        "regions.name"
+      ],
+      "filters": {
+        "regions.name": [
+          "North",
+          "South",
+          "West"
+        ]
+      },
+      "date_role": null,
+      "relationship_routes": [
+        "facts_to_regions"
+      ],
+      "grain": "region",
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "semantic-role-batch",
+    "source": "wide_fixture",
+    "conversation": "semantic-role-batch",
+    "question": "For West, show each 2017 monthly revenue observation. Ground the measure, region filter, observation date and region relationship together. Include the report.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "descriptive",
+      "semantic_roles",
+      "date_roles",
+      "relationship_roles"
+    ],
+    "semantic_expectations": {
+      "required_entities": [
+        "field:facts.revenue",
+        "field:facts.month",
+        "field:regions.name",
+        "relationship:facts_to_regions"
+      ],
+      "measures": [
+        "revenue"
+      ],
+      "dimensions": [],
+      "filters": {
+        "regions.name": [
+          "West"
+        ],
+        "facts.month": [
+          "2017-01-01",
+          "2017-12-31"
+        ]
+      },
+      "date_role": "monthly observation date",
+      "relationship_routes": [
+        "facts_to_regions"
+      ],
+      "grain": "month for West in 2017",
+      "clarification": "none"
+    }
+  },
+  {
+    "id": "saved-population-base",
+    "source": "fixture",
+    "conversation": "saved-population",
+    "question": "Save one complete dataset of all monthly observations with month, revenue, and the named region, at one row per observation. Use the exact short label Complete monthly population. Give the population and a report; no chart is needed.",
+    "expected_outcome": "complete",
+    "held_out": false,
+    "scenarios": [
+      "descriptive",
+      "relationship_roles"
+    ]
+  },
+  {
+    "id": "saved-population-follow-up",
+    "source": "fixture",
+    "conversation": "saved-population",
+    "question": "Using only this selected population, compare recorded revenue for West with the other regions. Keep its saved scope and units and provide the report.",
+    "selected_dataset_from": "saved-population-base",
+    "selected_dataset_label": "Complete monthly population",
+    "expected_outcome": "complete",
+    "held_out": true,
+    "scenarios": [
+      "saved_population",
+      "scope"
     ]
   }
 ]

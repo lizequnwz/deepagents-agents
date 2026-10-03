@@ -1,10 +1,13 @@
-# Ablation execution
+# Evaluation and paired comparisons
 
-Updated 1 October 2026. Continue the interrupted working tree rather than resetting to
-HEAD: Excel, export and cleanup work in that tree is part of the baseline.
-The [ablation plan](simplification-and-ablation.md) still governs adoption.
+Updated 3 October 2026. This is an operational guide, not the active product plan.
+Use the [handoff](../../HANDOFF.md) for the selected analytics workspace direction
+and acceptance gates. Preserve the current working tree when preparing a baseline;
+uncommitted implementation changes are part of the product being evaluated.
+The current API/storage contract is **19**. Keep verification local until the user
+authorizes the configured provider and fixture contents.
 
-## Current step
+## Current evaluation capabilities
 
 The existing runner/grader now retain failed and partial outcomes, account for
 unreviewed cases, bind reviews to exact receipts, and support explicit CSV/Excel
@@ -13,7 +16,8 @@ code, instructions, installed versions, execution settings and requested local
 source snapshots. Checks before and after a batch detect changes. No credentials
 or environment files are returned. Remote warehouse contents remain unfrozen.
 
-[25 frozen synthetic cases](../../tests/fixtures/ablation_cases.json) cover totals,
+[The current 40-case synthetic corpus](../../tests/fixtures/ablation_cases.json) includes
+20 timed semantic cases over small and competing catalogs, plus totals,
 rankings, monthly series, declared relationships, date roles, held-out paraphrases,
 metadata-only questions, unanswered clarification, multiple inputs, nullable
 screening decisions, prediction, forecasts, reviewed Excel, unknown completeness,
@@ -21,12 +25,16 @@ partial findings over capped retrieval and evidence reuse. Preparation creates a
 deterministic 120-month SQLite source and a separate capped source over the same
 synthetic data. No user warehouse is needed.
 
-[Prompt ownership candidate](prompt-ownership.patch) attempted to remove coordinator
+## Historical rejected prompt study
+
+The original study used 25 cases, two variants, and three repetitions: 150 slots.
+Its preserved fixtures are distinct from the expanded current corpus.
+[The prompt ownership candidate](../roadmap/prompt-ownership.patch) attempted to remove coordinator
 policy repetition and move analytical guidance into the analysis skill. It also
 removed a unique terminal-response instruction and is **rejected, not adopted**:
 metadata-only answers failed in all three candidate repetitions while all baseline
 repetitions passed. The patch is retained for reproduction. Its
-[predeclared study](prompt-ownership-study.json) targets model input tokens, with
+[predeclared study](../roadmap/prompt-ownership-study.json) targets model input tokens, with
 20 or more cases, at least three independent repetitions, a 15% median paired
 improvement, positive lower confidence bound and no correctness/boundary regression.
 The authorized live batch recorded 138 of 150 slots and ended early after that
@@ -37,6 +45,12 @@ See [outcomes, evidence and limitations](../reviews/ablation-outcomes-2026-10-01
 No performance improvement or whole-corpus accuracy is claimed.
 
 ## Reproduce a comparison
+
+The commands below use the retained prompt-study protocol as an example. They do
+not authorize another provider run or adoption of its rejected patch. Reproduce
+historical results with their original frozen copies; use a reviewed protocol and
+fresh complete corpus for a new comparison. Current shared features must be
+identical in both variants.
 
 Use two isolated copies of the validated working tree, including its uncommitted
 files. Keep the same lock file, provider/model, evaluation scripts and execution
@@ -155,7 +169,10 @@ repeated evidence. The evaluation follows established
 and [SciPy bootstrap](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html)
 patterns without adding an evaluation service.
 
-## Subsequent steps
+## Optional targeted comparisons
+
+These retained candidates describe narrower experiments and historical lessons.
+They are not mandatory steps before the workspace capabilities in the handoff.
 
 | Candidate | Current decision / next evidence |
 |---|---|
@@ -167,5 +184,24 @@ patterns without adding an evaluation service.
 | Presentation guidance/arguments | The partial study showed SQL/approval failures and no chart/report argument failures. No schema narrowing is justified by this evidence. |
 | Hybrid retrieval | Conditional on observed lexical misses; no vector service or new retrieval path added. |
 
-Planning persistence, the two specialists and mandatory agent-composed HTML remain.
+Planning persistence, the two specialists and mandatory agent-composed HTML remain
+in the current analytical path. General workspace tasks use the output appropriate
+to their work, as described in the handoff.
 No behavioral component is declared unnecessary by deterministic checks alone.
+
+## Current semantic studies
+
+The retained [routing](../roadmap/semantic-routing-study.json),
+[role-batching](../roadmap/semantic-role-batching-study.json), and
+[join-feedback](../roadmap/semantic-join-feedback-study.json) protocols isolate
+specific semantic hypotheses over the expanded 40-case corpus. Use three fresh
+baseline/candidate repetitions. Independently review semantic roles, every complete
+SQL snapshot, exact values and untimed controls. Preserve shared behavior in both
+variants. Quality changes need their paired target failures resolved without new
+first-attempt, outcome or boundary regressions. Speed changes additionally require
+at least 15% lower median paired active time to the first correct snapshot.
+
+These studies remain incomplete. Warmed tool timings, report completion and skipped
+provider tests cannot satisfy their gates. See [testing](testing.md#semantic-priority-studies)
+for receipt requirements and [the handoff](../../HANDOFF.md#verification-and-acceptance-gates)
+for current authorization and priorities.

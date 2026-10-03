@@ -1,0 +1,9 @@
+{
+  "fixture": "twelve levels with two derivations per level and one selected source",
+  "saved_nodes": 25,
+  "before_lookup_count": 12286,
+  "after_lookup_count": 25,
+  "unique_reads": 25,
+  "validation": "Both terminal inputs accepted; separate regressions reject mixed populations.",
+  "provider_calls": 0
+}

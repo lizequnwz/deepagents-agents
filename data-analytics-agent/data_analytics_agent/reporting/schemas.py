@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
+from data_analytics_agent.forecasting import ForecastEvaluation
+
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -263,3 +265,5 @@ class ResolvedDataAnalysis(ReportingModel):
     assumptions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     outputs: list[dict[str, Any]] = Field(default_factory=list)
+    forecast_evaluation: ForecastEvaluation | None = None
+    forecast_scores: list[dict[str, Any]] = Field(default_factory=list)

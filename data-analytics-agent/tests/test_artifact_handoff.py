@@ -14,7 +14,7 @@ from data_analytics_agent.reporting.tools import (
 
 def test_investigation_has_no_artifact_arguments(workspace):
     w = workspace
-    _, tool = create_presentation_tools(
+    _, tool, _ = create_presentation_tools(
         w.results, w.analyses, w.runs, w.conversations, source_id="test"
     )
     assert "artifact_ids" not in tool.args
@@ -212,7 +212,7 @@ def test_report_cannot_change_published_evidence(workspace):
     w = workspace
     selected = save(w, [{"amount": 4}])
     unrelated = save(w, [{"amount": 100}])
-    publish, _ = create_presentation_tools(
+    publish, _, _ = create_presentation_tools(
         w.results, w.analyses, w.runs, w.conversations, source_id="test"
     )
     publish.func(

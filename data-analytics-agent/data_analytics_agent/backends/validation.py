@@ -9,6 +9,13 @@ from sqlglot.errors import ParseError
 class SQLValidationError(ValueError):
     """Raised when SQL is not exactly one safe read-only query."""
 
+    def __init__(self, message, *, code="invalid_sql", details=None, repair=""):
+        super().__init__(message)
+        self.code, self.details, self.repair = code, details or {}, repair
+
+    def receipt(self):
+        return {"ok": False, "code": self.code, "error": str(self), "details": self.details, "repair": self.repair}
+
 
 FORBIDDEN_NODE_NAMES = {
     "Alter",

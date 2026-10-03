@@ -1,0 +1,476 @@
+{
+  "date": "2026-10-01",
+  "timezone": "America/New_York",
+  "api_contract_version": 19,
+  "provider_calls": 0,
+  "authorization": "Keep verification local for now; test thoroughly and fix confirmed issues.",
+  "limitations": [
+    "Local synthetic regressions and scripted/native UI checks do not establish live-model accuracy, the paired SQL speed gate, or human usability.",
+    "Raw XML lives in temporary storage; this compact record preserves counts, failure messages, classifications and receipt hashes."
+  ],
+  "harness_corrections": [
+    "Used Arrow slice(0, 0) for the empty refresh fixture.",
+    "Used the existing selected_relationships receipt field.",
+    "Corrected the local probe factory import.",
+    "Moved the temporary browser catalog under its required semantic directory."
+  ],
+  "trials": [
+    {
+      "receipt_name": "analytics-extended-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 55,
+        "failures": 6,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 49
+      },
+      "elapsed_seconds": 5.755,
+      "xml_sha256": "fcd45b240434be6871cf3f641ecb96e7dd959c7dc414f00aa7fb3d6faed97b11",
+      "failures": [
+        {
+          "case": "tests.test_saved_scope.test_vanished_refresh_category_is_a_saved_empty_population",
+          "classification": "product_regression",
+          "message": "AssertionError: assert ([] == ['region', 'amount']\n  \n  Right contains 2 more items, first extra item: 'region'\n  Use -v to get more diff)"
+        },
+        {
+          "case": "tests.test_forecast_evaluation.test_weekly_origin_between_periods_keeps_training_calendar",
+          "classification": "product_regression",
+          "message": "ValueError: Future series has missing, duplicate, or unaligned periods. Save an explicit regular series; do not silently discard periods."
+        },
+        {
+          "case": "tests.test_forecast_evaluation.test_weekly_holdout_cannot_change_the_training_calendar",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ValueError"
+        },
+        {
+          "case": "tests.test_forecast_evaluation.test_interval_columns_cannot_alias_other_prediction_roles[lower_bound-forecast]",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ValidationError"
+        },
+        {
+          "case": "tests.test_forecast_evaluation.test_interval_columns_cannot_alias_other_prediction_roles[upper_bound-low]",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ValidationError"
+        },
+        {
+          "case": "tests.test_forecast_evaluation.test_interval_columns_cannot_alias_other_prediction_roles[lower_bound-actual]",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ValidationError"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-semantic-extended-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 15,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 13
+      },
+      "elapsed_seconds": 1.409,
+      "xml_sha256": "028b51ae7ea87dadea0913a7e23afcd9bae6da19f8b0b6c27d70a7a90e99c20d",
+      "failures": [
+        {
+          "case": "tests.test_semantic_priority.test_validation_error_callback_retains_code_and_counts_one_attempt",
+          "classification": "product_regression",
+          "message": "AssertionError: assert None == 'undeclared_relationship'"
+        },
+        {
+          "case": "tests.test_semantic_priority.test_composite_physical_feedback_does_not_drop_key_pairs",
+          "classification": "incorrect_test_field_name",
+          "message": "KeyError: 'declared_relationships'"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-extended-after.xml",
+      "phase": "repair_check",
+      "counts": {
+        "tests": 70,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 70
+      },
+      "elapsed_seconds": 6.445,
+      "xml_sha256": "e765a02b9a4a6d761d9a2a6841bee79ed47008fefb0cd43646d056654229e5ac",
+      "failures": []
+    },
+    {
+      "receipt_name": "analytics-boundaries-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 12,
+        "failures": 4,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 8
+      },
+      "elapsed_seconds": 2.465,
+      "xml_sha256": "e18928ea17bf7de2db9ccc54a6851571fc7bcac2486ec3ecb1971497a5cd19e0",
+      "failures": [
+        {
+          "case": "tests.test_saved_scope.test_cte_aggregate_periods_keep_whole_month_boundaries",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ValueError"
+        },
+        {
+          "case": "tests.test_saved_scope.test_scoping_a_scoped_aggregate_preserves_original_period_boundaries",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ValueError"
+        },
+        {
+          "case": "tests.test_saved_scope.test_refresh_compares_stored_types_and_accepts_typed_empty_inputs[empty]",
+          "classification": "incorrect_test_slice",
+          "message": "assert 3 == 0"
+        },
+        {
+          "case": "tests.test_saved_scope.test_refresh_compares_stored_types_and_accepts_typed_empty_inputs[timestamp]",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ToolException"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-types-corrected-before.xml",
+      "phase": "before_with_corrected_fixture",
+      "counts": {
+        "tests": 3,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 1
+      },
+      "elapsed_seconds": 0.432,
+      "xml_sha256": "576bc9df94b49567adc3376b154ba877ad7e89b0c57ddf11feffa417da2d32cc",
+      "failures": [
+        {
+          "case": "tests.test_saved_scope.test_refresh_compares_stored_types_and_accepts_typed_empty_inputs[empty]",
+          "classification": "product_regression",
+          "message": "langchain_core.tools.base.ToolException: Refresh must regenerate the selected dataset's fields and types at the same grain; reshape the fresh data before binding."
+        },
+        {
+          "case": "tests.test_saved_scope.test_refresh_compares_stored_types_and_accepts_typed_empty_inputs[timestamp]",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ToolException"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-empty-refresh-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 0
+      },
+      "elapsed_seconds": 0.999,
+      "xml_sha256": "30e1ffb4c57615fcb821d0dd9e497bbb69c087ef6dd454ade94524ecc912a889",
+      "failures": [
+        {
+          "case": "tests.test_priority_workflow.test_vanished_category_refresh_keeps_empty_scope_and_exact_followup_input",
+          "classification": "product_regression",
+          "message": "AssertionError: {\"detail\":\"A selected category is absent from this snapshot. Reload the scope controls.\"}\nassert 422 == 202\n +  where 422 = <Response [422 Unprocessable Entity]>.status_code"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-extended-boundaries-after.xml",
+      "phase": "repair_check",
+      "counts": {
+        "tests": 82,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 82
+      },
+      "elapsed_seconds": 12.68,
+      "xml_sha256": "ca9969a7772be237969b32515c7fb8b6153c24f84cb9393313e8dd13eecfe4e3",
+      "failures": []
+    },
+    {
+      "receipt_name": "analytics-shared-lineage-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 5,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 4
+      },
+      "elapsed_seconds": 0.608,
+      "xml_sha256": "9f5043bf3fd474051ec745b4ccc7fd1fd79c42ef39326f186174c05e0aee9bc4",
+      "failures": [
+        {
+          "case": "tests.test_saved_scope.test_shared_lineage_checks_do_not_repeat_exponentially",
+          "classification": "product_regression",
+          "message": "AssertionError: Shared evidence caused 12286 repeated lookups\nassert 12286 < 500\n +  where 12286 = len(['e4acd321-7794-4460-81ef-1a0bb75e44c7', '8626beac-8622-40fa-b1c7-8149ffaa3f9f', '8285c063-3e68-4603-9279-1249ce2928d8...9fcf-9285-487b-8b31-61bd238ccb62', 'b2f4cfed-b08f-4b2c-a07f-ca20bc2d725a', 'adcc99a7-af38-47bc-93bd-fbd90bcd96e7', ...])"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-cardinality-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 2,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 1
+      },
+      "elapsed_seconds": 1.723,
+      "xml_sha256": "2656f59b8b49d12f2eea200ff6476bc36225cdc06945e143c2ca5da8bae49689",
+      "failures": [
+        {
+          "case": "tests.test_priority_workflow.test_vanished_category_refresh_keeps_empty_scope_and_exact_followup_input[101]",
+          "classification": "product_regression",
+          "message": "AssertionError: 'Name' is not a supported categorical filter. Ask for a saved-data analysis instead.\nassert 'failed' == 'completed'\n  \n  - completed\n  + failed"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-extended-focused-final.xml",
+      "phase": "repair_check",
+      "counts": {
+        "tests": 88,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 88
+      },
+      "elapsed_seconds": 12.622,
+      "xml_sha256": "4d7b7b7ca27200a401330bcb06bb4a945e67bee03bd4cfe0ced7068958c3446d",
+      "failures": []
+    },
+    {
+      "receipt_name": "analytics-numerical-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 16,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 15
+      },
+      "elapsed_seconds": 1.345,
+      "xml_sha256": "dd4783c6ef086e94e8dacf582f8788639bac442c9b043ef3da86caac2aa21c74",
+      "failures": [
+        {
+          "case": "tests.test_forecast_evaluation.test_overflowing_error_scores_are_repairable_before_saving",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ValueError"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-exact-date-binding-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 0
+      },
+      "elapsed_seconds": 0.295,
+      "xml_sha256": "5a4e6f3403044f4f4644beb68f3a51a2120c94e39127d864bcdb0fce5dda9c4c",
+      "failures": [
+        {
+          "case": "tests.test_saved_scope.test_saved_join_follows_the_selected_date_binding_only",
+          "classification": "product_regression",
+          "message": "ValueError: This saved dataset contains month aggregates. Select whole month periods; finer date boundaries need a dataset with finer grain."
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-alias-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 0
+      },
+      "elapsed_seconds": 0.274,
+      "xml_sha256": "fbace5badf452e5289fcb245094166d6b8ba3007c3c6689fc93ade65d174f66e",
+      "failures": [
+        {
+          "case": "tests.test_saved_scope.test_saved_sql_rejects_aliases_that_only_differ_by_case",
+          "classification": "product_regression",
+          "message": "Failed: DID NOT RAISE ToolException"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-expanded-regressions.xml",
+      "phase": "environment_limited",
+      "counts": {
+        "tests": 127,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 126
+      },
+      "elapsed_seconds": 45.957,
+      "xml_sha256": "485e8b3dc7c6182a62f06d32691a37786273daa4e7c77ff5eaffe860c0e01838",
+      "failures": [
+        {
+          "case": "tests.test_exports.test_notebook_keeps_code_figures_and_executes_fresh_kernel",
+          "classification": "sandbox_kernel_port_restriction",
+          "message": "PermissionError: [Errno 1] Operation not permitted"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-followup-core.xml",
+      "phase": "verification",
+      "counts": {
+        "tests": 106,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 106
+      },
+      "elapsed_seconds": 14.444,
+      "xml_sha256": "91cf8a58878001be30e5e5cb9fb274a2e1ba9c5d4a950500d1a7b20229d7ca38",
+      "failures": []
+    },
+    {
+      "receipt_name": "analytics-followup-full.xml",
+      "phase": "verification_before_reader_cleanup",
+      "counts": {
+        "tests": 494,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 6,
+        "passed": 488
+      },
+      "elapsed_seconds": 120.527,
+      "xml_sha256": "a7cfaf78db21284953539fb3b520afc8efaaec2b1875d5a4553a6d658809c36a",
+      "failures": []
+    },
+    {
+      "receipt_name": "analytics-followup-final.xml",
+      "phase": "verification_after_reader_cleanup",
+      "counts": {
+        "tests": 494,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 6,
+        "passed": 488
+      },
+      "elapsed_seconds": 124.264,
+      "xml_sha256": "56f874d3f7bb3b19e45c25fb5fa08445f260de17902e0fd5ec604932f3119a08",
+      "failures": []
+    },
+    {
+      "receipt_name": "analytics-source-recovery-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 2,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 0
+      },
+      "elapsed_seconds": 1.199,
+      "xml_sha256": "658b07f2a1500d5a7bf46d16ec9cc9e177eeffbda79d768e1c17bce593d35034",
+      "failures": [
+        {
+          "case": "tests.test_priority_workflow.test_reopened_history_preserves_answer_when_source_configuration_fails[invalid_registry]",
+          "classification": "product_regression",
+          "message": "AssertionError: Internal Server Error\nassert 500 == 503\n +  where 500 = <Response [500 Internal Server Error]>.status_code"
+        },
+        {
+          "case": "tests.test_priority_workflow.test_reopened_history_preserves_answer_when_source_configuration_fails[removed_source]",
+          "classification": "product_regression",
+          "message": "assert not ElementList(_list=[Exception(message='Resource not found.', stack_trace=['File \"/Users/charlie/Repos/deepagents-agents... request\\n    raise APIError(\\n        str(response.json().get(\"detail\")), status_code=response.status_code\\n    )'])])\n +  where ElementList(_list=[Exception(message='Resource not found.', stack_trace=['File \"/Users/charlie/Repos/deepagents-agents... request\\n    raise APIError(\\n        str(response.json().get(\"det"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-source-recovery-after.xml",
+      "phase": "repair_check",
+      "counts": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 2
+      },
+      "elapsed_seconds": 1.566,
+      "xml_sha256": "7fa5f8a582ce542caa7ab6d9861b8123a1f915c31a060813c90c8373e20df9f2",
+      "failures": []
+    },
+    {
+      "receipt_name": "analytics-followup-verified.xml",
+      "phase": "verification_before_final_scope_guard",
+      "counts": {
+        "tests": 496,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 6,
+        "passed": 490
+      },
+      "elapsed_seconds": 128.1,
+      "xml_sha256": "d65879c0e428c53c6861158589ccd7ddff7577aa323405827f98153096537794",
+      "failures": []
+    },
+    {
+      "receipt_name": "analytics-unsupported-scope-before.xml",
+      "phase": "before",
+      "counts": {
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 0
+      },
+      "elapsed_seconds": 1.495,
+      "xml_sha256": "6719473006eecf1c159e3eb123e39506864ef9fb2d8cdb4494fe066d7e0b173c",
+      "failures": [
+        {
+          "case": "tests.test_priority_workflow.test_vanished_category_refresh_keeps_empty_scope_and_exact_followup_input[101]",
+          "classification": "product_regression",
+          "message": "AssertionError: assert False\n +  where False = Button(key='FormSubmitter:scope_form_a9c90375-c869-48d8-a2b6-60fbfcdce617_6a691e4d-ba97-4fa7-bf31-c4f3b59fca6c-Apply p...bel='Apply population', form_id='scope_form_a9c90375-c869-48d8-a2b6-60fbfcdce617_6a691e4d-ba97-4fa7-bf31-c4f3b59fca6c').disabled\n +    where Button(key='FormSubmitter:scope_form_a9c90375-c869-48d8-a2b6-60fbfcdce617_6a691e4d-ba97-4fa7-bf31-c4f3b59fca6c-Apply p...bel='Apply populatio"
+        }
+      ]
+    },
+    {
+      "receipt_name": "analytics-followup-core-final.xml",
+      "phase": "verification",
+      "counts": {
+        "tests": 108,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 108
+      },
+      "elapsed_seconds": 16.51,
+      "xml_sha256": "8fe0668a37d820a85ea56cc3e7fd58346f20b2d4a71517e8d2a3da20d5b576bf",
+      "failures": []
+    },
+    {
+      "receipt_name": "analytics-followup-final-app.xml",
+      "phase": "final_verification",
+      "counts": {
+        "tests": 496,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 6,
+        "passed": 490
+      },
+      "elapsed_seconds": 125.13,
+      "xml_sha256": "08a63009f331aab1cdb6df4b993dc365d901ce88f1b06b7a9ec7921046537def",
+      "failures": []
+    }
+  ],
+  "completed_at_utc": "2026-10-02T04:03:53.453078+00:00",
+  "temporary_services_closed": true
+}

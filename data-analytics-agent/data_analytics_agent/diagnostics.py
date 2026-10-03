@@ -15,6 +15,7 @@ from typing import Any
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
+from langchain_core.tools import ToolException
 from pydantic import BaseModel
 
 from data_analytics_agent.schemas import ActivityTool
@@ -181,6 +182,7 @@ class RunDiagnosticsCallback(BaseCallbackHandler):
         self.runs = runs
         self.run_id = run_id
         self._tools: dict[str, tuple[str, str, str]] = {}
+        self._inline_context_recorded = False
 
     def on_tool_start(
         self, serialized, input_str, *, run_id, metadata=None, inputs=None, **kwargs
@@ -212,6 +214,21 @@ class RunDiagnosticsCallback(BaseCallbackHandler):
         duration = self.runs.finish_tool_call(
             self.run_id, str(run_id), agent=agent, failed=failed
         )
+        from data_analytics_agent.evaluation import tool_observation
+
+        observation = tool_observation(name, output)
+        if observation is not None:
+            diagnostics = self.runs.diagnostics(self.run_id)
+            observation.update(
+                agent=agent,
+                duration_ms=duration,
+                active_ms=diagnostics.active_ms,
+                model_ms=diagnostics.model_ms,
+                input_tokens=diagnostics.tokens.input_tokens
+                if not diagnostics.token_usage_partial
+                else None,
+            )
+            self.runs.record_evaluation(self.run_id, observation)
         self.runs.add_event(
             self.run_id,
             "tool",
@@ -238,9 +255,19 @@ class RunDiagnosticsCallback(BaseCallbackHandler):
             if isinstance(error, (asyncio.CancelledError, InterruptedError))
             else "failed"
         )
-        self._finish_tool(
-            run_id, {"error": str(error)}, failed=phase == "failed", phase=phase
-        )
+        output = {"error": str(error)}
+        if isinstance(error, ToolException):
+            try:
+                receipt = json.loads(str(error))
+            except ValueError:
+                receipt = None
+            if isinstance(receipt, dict) and receipt.get("ok") is False:
+                output = {
+                    key: receipt[key]
+                    for key in ("ok", "error", "code", "details", "repair")
+                    if key in receipt
+                }
+        self._finish_tool(run_id, output, failed=phase == "failed", phase=phase)
 
     def on_chat_model_start(
         self,
@@ -251,7 +278,16 @@ class RunDiagnosticsCallback(BaseCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        del serialized, messages, kwargs
+        del serialized, kwargs
+        if not self._inline_context_recorded:
+            from data_analytics_agent.evaluation import inline_observation
+
+            observation = inline_observation(
+                messages, self.runs.get(self.run_id).source_id
+            )
+            if observation:
+                self.runs.record_evaluation(self.run_id, observation)
+                self._inline_context_recorded = True
         self.runs.start_model_call(
             self.run_id,
             str(run_id),

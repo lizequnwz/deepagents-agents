@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from datetime import date
 from typing import Literal
 
 from pydantic import (
@@ -93,6 +94,8 @@ class ChartRequest(VisualizationModel):
     lower_bound: str | None = None
     upper_bound: str | None = None
     interval: ChartInterval | None = None
+    interval_series: str | None = None
+    forecast_start: date | None = None
     error_y: str | None = None
     chart_type: ChartType
     title: str
@@ -309,10 +312,14 @@ class ChartRequest(VisualizationModel):
             raise ValueError(
                 "Bounds require interval kind and method; interval metadata requires bounds."
             )
-        if self.lower_bound and (
-            chart_type is not ChartType.LINE or self.color or len(self.y) != 1
-        ):
-            raise ValueError("Uncertainty bands require a single-series line chart.")
+        if self.lower_bound and (chart_type is not ChartType.LINE or self.color):
+            raise ValueError("Uncertainty bands require an ungrouped line chart.")
+        if self.interval_series is not None and (not self.interval or self.interval_series not in self.y):
+            raise ValueError("interval_series must name a y series with declared bounds.")
+        if self.lower_bound and len(self.y) > 1 and self.interval_series is None:
+            raise ValueError("Multi-series bounds require an explicit interval_series.")
+        if self.forecast_start and chart_type is not ChartType.LINE:
+            raise ValueError("A forecast-start marker requires a temporal line chart.")
         if self.error_y and (
             chart_type not in {ChartType.BAR, ChartType.SCATTER}
             or self.color

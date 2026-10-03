@@ -32,6 +32,7 @@ class AnalyticsAgentState(DeepAgentState):
     run_id: str
     source_id: str
     question: str
+    analytical_input: dict | None
 
 
 def _runtime_context(runtime):
@@ -106,6 +107,10 @@ def create_execute_sql_tool(source, backend, result_store, run_store, *, catalog
             return json.loads(saved)
         if reason := run_store.analysis_stop_reason(context.run_id):
             return {"ok": False, "error": reason}
+        try:
+            run_store.require_source_access(context.run_id)
+        except ValueError as exc:
+            raise ToolException(str(exc)) from exc
         run_store.set_phase(context.run_id, "retrieving_data")
         with run_store.source_worker(context.run_id):
             try:
@@ -134,9 +139,14 @@ def create_execute_sql_tool(source, backend, result_store, run_store, *, catalog
                 TimeoutError,
                 ValueError,
             ) as exc:
-                raise ToolException(str(exc)) from exc
+                raise ToolException(
+                    json.dumps(exc.receipt())
+                    if isinstance(exc, SQLValidationError)
+                    else str(exc)
+                ) from exc
         payload = result.model_dump(mode="json")
         payload["semantic_grounding"] = grounding
+        run_store.record_fresh_result(context.run_id, result.result_id)
         record_dataset(run_store, runtime, payload, purpose)
         run_store.storage.commit(
             context.run_id, assignment_call_id(runtime), json.dumps(payload)
@@ -162,6 +172,10 @@ def create_query_saved_results_tool(results, runs, *, source_id):
             return json.loads(saved)
         if reason := runs.analysis_stop_reason(context.run_id):
             return {"ok": False, "error": reason}
+        if len({name.casefold() for name in bindings}) != len(bindings):
+            raise ToolException(
+                "Saved dataset aliases must be unique without regard to case."
+            )
         parsed = validate_readonly_sql(query, dialect="duckdb")
         from sqlglot import exp
 
@@ -189,6 +203,12 @@ def create_query_saved_results_tool(results, runs, *, source_id):
             raise ToolException(
                 "Bind the complete parent dataset instead of a chart presentation artifact."
             )
+        from data_analytics_agent.analytical_scope import check_inputs
+
+        try:
+            check_inputs(results, runs, context.run_id, bindings.values())
+        except ValueError as exc:
+            raise ToolException(str(exc)) from exc
         try:
             with (
                 runs.worker(context.run_id),
@@ -199,7 +219,7 @@ def create_query_saved_results_tool(results, runs, *, source_id):
 
                 for name, result in selected.items():
                     db.register(name, pq.read_table(result.parquet_path))
-                reader = db.execute(query).fetch_record_batch(8192)
+                reader = db.execute(query).to_arrow_reader(8192)
                 output = results.save_batches(
                     reader,
                     thread_id=context.thread_id,
@@ -209,6 +229,7 @@ def create_query_saved_results_tool(results, runs, *, source_id):
                     purpose=purpose,
                     kind="saved_sql",
                     parent_result_ids=list(bindings.values()),
+                    sql_bindings=bindings,
                     truncated=any(r.truncated for r in selected.values()),
                 )
         except duckdb.Error as exc:

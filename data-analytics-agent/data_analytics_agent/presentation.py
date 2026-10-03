@@ -58,6 +58,24 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
         """
         context = _runtime_context(runtime)
         try:
+            from data_analytics_agent.analytical_scope import (
+                check_inputs,
+                require_refreshed_input,
+            )
+
+            require_refreshed_input(runs, context.run_id)
+            keys = list(findings.result_ids)
+            for chart_id in findings.chart_ids:
+                chart = runs.storage.get("charts", chart_id, dict)
+                if chart is None:
+                    raise StoreNotFound(chart_id)
+                keys.append(chart["spec"]["result_id"])
+            for analysis_id in findings.analysis_ids:
+                analysis = analyses.get(
+                    analysis_id, context.thread_id, source_id=source_id
+                ).analysis
+                keys.extend(analysis.input_result_ids)
+            check_inputs(results, runs, context.run_id, keys)
             answer = resolve_answer(
                 findings,
                 thread_id=context.thread_id,
@@ -66,6 +84,25 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
                 analyses=analyses,
                 runs=runs,
             )
+            run = runs.get(context.run_id)
+            if run.analytical_input and not run.source_expansion_allowed:
+                material = []
+                for reference in answer.results:
+                    try:
+                        check_inputs(
+                            results, runs, context.run_id, [reference.result_id]
+                        )
+                    except ValueError:
+                        continue
+                    material.append(reference)
+                answer = answer.model_copy(
+                    update={
+                        "results": material,
+                        "primary_result_id": material[0].result_id
+                        if material
+                        else None,
+                    }
+                )
         except (StoreNotFound, ValueError) as exc:
             raise ToolException(
                 "Findings were not published: a referenced artifact is unknown, "
@@ -89,7 +126,7 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
             )
         try:
             runs.publish(context.run_id, answer)
-        except PendingCorrections as exc:
+        except (PendingCorrections, ValueError) as exc:
             raise ToolException(str(exc)) from exc
         return {
             "ok": True,
@@ -119,8 +156,60 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
         )
         return {"ok": True}
 
+    @tool
+    def bind_refreshed_input(result_id: str, runtime: ToolRuntime) -> dict:
+        """Bind the regenerated equivalent of a refresh's selected base dataset.
+
+        Required for refreshes with a selected input. First retrieve fresh source
+        rows and recompute any saved derivation at the same grain and fields.
+        This reapplies the previous categorical/date scope and returns its exact
+        new input ID. Analyze that input or descendants before publishing.
+        """
+        from data_analytics_agent.analytical_scope import check_inputs, prepare_input
+
+        context = _runtime_context(runtime)
+        run = runs.get(context.run_id)
+        if not run.fresh_source_required or not run.analytical_input:
+            raise ToolException(
+                "Only a refresh with a selected dataset requires this binding."
+            )
+        try:
+            old = results.get(
+                run.analytical_input.selected_result_id,
+                context.thread_id,
+                source_id=source_id,
+            )
+            new = results.get(result_id, context.thread_id, source_id=source_id)
+            check_inputs(results, runs, context.run_id, [result_id])
+            import pyarrow.parquet as pq
+
+            old_types = {
+                field.name: field.type for field in pq.read_schema(old.parquet_path)
+            }
+            new_types = {
+                field.name: field.type for field in pq.read_schema(new.parquet_path)
+            }
+            if set(new.columns) != set(old.columns) or any(
+                new_types[column] != old_types[column] for column in old.columns
+            ):
+                raise ValueError(
+                    "Refresh must regenerate the selected dataset's fields and types at the same grain; reshape the fresh data before binding."
+                )
+            scope = run.analytical_input.scope
+            if scope:
+                scope = scope.model_copy(update={"base_result_id": result_id})
+            updated = prepare_input(
+                results, context.thread_id, source_id, result_id, scope, refreshed=True
+            )
+            updated = updated.model_copy(update={"grain": run.analytical_input.grain})
+            runs.bind_refreshed_input(context.run_id, updated)
+        except (StoreNotFound, ValueError) as exc:
+            raise ToolException(str(exc)) from exc
+        return {"ok": True, "analytical_input": updated.model_dump(mode="json")}
+
     publish_findings.handle_tool_error = True
-    return [publish_findings, save_investigation]
+    bind_refreshed_input.handle_tool_error = True
+    return [publish_findings, save_investigation, bind_refreshed_input]
 
 
 def create_list_conversation_charts_tool(runs, *, source_id):

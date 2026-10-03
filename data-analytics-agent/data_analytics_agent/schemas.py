@@ -13,8 +13,9 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 )
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
+from data_analytics_agent.analytical_scope import AnalyticalInput, SavedScope
 
-API_CONTRACT_VERSION = 17
+API_CONTRACT_VERSION = 19
 
 
 class StrictModel(BaseModel):
@@ -133,6 +134,9 @@ class ResultReference(StrictModel):
 
 
 class FinalAnswer(StrictModel):
+    analytical_input: AnalyticalInput | None = None
+    refreshed_from_report_id: str | None = None
+    source_expansion_allowed: bool = False
     answer: str
     primary_result_id: str | None = None
     results: list[ResultReference] = Field(default_factory=list)
@@ -186,6 +190,7 @@ class SavedResult(StrictModel):
     parquet_path: str
     preview: list[dict[str, Any]] = Field(default_factory=list)
     parent_result_ids: list[str] = Field(default_factory=list)
+    sql_bindings: dict[str, str]
     kind: Literal["source_sql", "saved_sql", "python", "presentation", "upload"] = (
         "source_sql"
     )
@@ -226,6 +231,7 @@ class ResultPage(StrictModel):
     short_label: str
     originating_question: str
     parent_result_ids: list[str]
+    sql_bindings: dict[str, str]
     execution_id: str | None
     chart_preparation: ChartDataPreparation | None = None
     executed_sql: str
@@ -404,6 +410,7 @@ class ClarificationRequest(StrictModel):
     interrupt_id: str
     question: str
     choices: list[str] = Field(default_factory=list)
+    source_expansion: bool = False
 
 
 class SteeringResponse(StrictModel):
@@ -414,6 +421,7 @@ class SteeringResponse(StrictModel):
 
 
 class ChatTurn(StrictModel):
+    analytical_input: AnalyticalInput | None = None
     run_id: str = ""
     corrections: list[Correction] = Field(default_factory=list)
     user_message: str
@@ -425,6 +433,7 @@ class ChatTurn(StrictModel):
 
 
 class ConversationResponse(StrictModel):
+    analytical_input: AnalyticalInput | None = None
     thread_id: str
     source_id: str
     turns: list[ChatTurn]
@@ -448,12 +457,32 @@ class MessageRequest(StrictModel):
     message: str = Field(min_length=1, max_length=20_000)
 
 
+class AnalyticalMessageRequest(MessageRequest):
+    selected_result_id: str | None = None
+    scope: SavedScope | None = None
+    previous_report_id: str | None = None
+
+
+class ClarificationReply(MessageRequest):
+    allow_source_expansion: bool = False
+    interrupt_id: str | None = None
+
+
+class ReportRevisionRequest(StrictModel):
+    report_id: str
+
+
 class CreateRunResponse(StrictModel):
     run_id: str
     status: RunStatus
 
 
 class RunResponse(StrictModel):
+    analytical_input: AnalyticalInput | None = None
+    source_expansion_allowed: bool = False
+    fresh_source_required: bool = False
+    previous_report_id: str | None = None
+    evaluation_receipts: list[dict[str, Any]] = Field(default_factory=list)
     active_model_agent: str | None = None
     report_ready: bool = False
     corrections: list[Correction] = Field(default_factory=list)

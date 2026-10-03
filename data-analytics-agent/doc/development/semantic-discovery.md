@@ -19,10 +19,20 @@ text-to-SQL owns detailed grounding and source execution for data-bearing work.
   `definitions_complete` describes only those selections;
   `question_coverage="not_assessed"` never asserts natural-language coverage.
 
+SQL-specialist relationship definitions include `physical_key_pairs`, derived
+from the same immutable bindings as validation. Every composite pair must appear
+in the join. Metadata-only coordinator responses keep logical definitions.
+
 The specialist checks every requested measure, dimension, filter, time role,
 population, and output grain. It resolves business ambiguity from the question
 and catalog or returns it through the coordinator's clarification workflow.
 Several explicitly requested metrics do not inherently imply ambiguity.
+
+`role_queries` batches unresolved `measure`, `dimension`, `filter` and `time`
+searches in the same discovery request. Each role retains its own candidates and
+quotas. `candidate_dataset_names` narrows field/date candidates to known logical
+datasets. An empty time query lists declared time fields. These inputs are valid
+only for discovery; exact selections remain a separate definition request.
 
 A request for a dataset alone returns its instructions and keys, not every field.
 Specify `field_names` for grouping, filtering, dates, or additional observations.
@@ -93,6 +103,9 @@ rather than a partial SQL expression. Candidate descriptions may be shortened,
 because exact definitions must be fetched before use.
 
 Small complete catalogs still fit directly in the SQL specialist's prompt.
+Evaluation records those exact definitions as available when the specialist's
+system prompt contains them. This does not count as a discovery call or query
+grounding, and user messages cannot create an inline-definition receipt.
 Context caching is bounded and keyed by source, model hash, dialect, projection,
 and exact request. Catalog changes require a restart. Character budgets are not
 model-token guarantees, and repeated tool responses can accumulate; evaluation
@@ -153,6 +166,11 @@ execution does not fall back to an ungrounded query.
 
 The validator inspects a normalized copy and **does not rewrite the executed SQL**.
 Receipts include the selected metrics, matched relationships, and grain warnings.
+They also record selected logical entity identities for independent grounding
+review. Validation errors have a stable code, exact relevant details and repair
+guidance; unknown routes, missing ON predicates, fan-out and canonical metric
+mismatches retain their enforcement. A repair receipt is not permission to relax
+the catalog or question scope.
 It does not prove natural-language correctness, infer missing business meaning,
 verify declared uniqueness against source values, or detect every possible
 aggregation error. Canonical expression checks require the specialist to name
@@ -172,10 +190,35 @@ before execution. A small SQLite population verifies a line-revenue result at th
 requested grain. Existing tests cover large catalogs, source isolation, caching,
 approval replay, and the complete agent/report workflow.
 
-The next evidence-driven retrieval experiment is a held-out question corpus with
-expected semantic roles, required dependencies, reviewed SQL/results, and expected
-clarifications. Measure necessary-entity recall, false readiness, final result
-accuracy, cumulative tokens, calls, and latency. Compare lexical retrieval and
-reformulation with hybrid embeddings under equal budgets. Add a vector index or
-verified-query corpus only when curated examples and measured improvements
-justify them; no new infrastructure is required by this implementation.
+The [40-case synthetic corpus](../../tests/fixtures/ablation_cases.json) now includes
+expected measures, dimensions, filters, date roles, routes, output grain and
+clarification outcomes. Twenty complete semantic cases are timed; clarification,
+file, statistical and lifecycle cases remain independently graded controls.
+The fixture builder supplies small inline and 102-dataset competing catalogs.
+All complete SQL snapshots are retained even when the final answer does not select
+them. Independent reviews of every snapshot determine first-attempt correctness,
+repair counts and active time to the first correct snapshot. Discovery, model and
+source time are separate; source lookup time is included and approval waits excluded.
+Incomplete snapshot reviews leave first-correct telemetry unknown.
+
+Definition recall and actual query grounding recall remain distinct. Scalar
+expectations recompute from reviewed exact typed-snapshot bindings; semantic roles
+and question grain still need independent review. Three separate
+[study protocols](ablation-evaluation.md#current-semantic-studies) isolate
+routing, role batching and physical keys/repair feedback. Complete paired speed
+studies need at least 15% lower median target time; quality studies must resolve
+their reviewed paired failures without new failures or boundary regressions.
+No new provider study is authorized; the user requested local verification.
+
+The [extended local probe](../reviews/priority-followup-tests-2026-10-02.md#semantic-discovery-observations)
+retains three small/large catalog repetitions. All expected role candidates appear
+with dataset hints; broad date browsing in the competing catalog needs narrowing
+to find the intended monthly field. Batching reduces metadata response size in
+that fixture. Warmed in-process timings and hand-authored SQL verification do not
+grade model-generated SQL or satisfy the paired adoption gates.
+
+Curate missing meanings/synonyms through reviewed catalog edits, following
+[dbt's entity, time-dimension and metric conventions](https://docs.getdbt.com/docs/build/semantic-models).
+No reviewed lexical miss justifies a new index in this release. Hybrid retrieval
+and verified-query retrieval stay deferred; keep a future reviewed question/SQL
+library separate from held-out evaluation questions.

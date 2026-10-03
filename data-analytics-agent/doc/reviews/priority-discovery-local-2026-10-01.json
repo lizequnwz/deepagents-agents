@@ -1,0 +1,443 @@
+{
+  "verification": "local synthetic metadata and hand-authored SQL only",
+  "provider_calls": 0,
+  "limitations": [
+    "Three fresh catalog instances in one process; caches are warmed before timed samples.",
+    "These timings exclude model work and do not establish the live 15% completion gate.",
+    "Candidate recall for declared role phrases is not independently graded question coverage or SQL-generation accuracy."
+  ],
+  "fixture": {
+    "prepared_at": "2026-10-02T03:27:29.919918+00:00",
+    "origin": "generated synthetic observations; deterministic formula, no random sampling",
+    "population": "120 complete months, 2015-01 through 2024-12",
+    "independent_checks": {
+      "row_count": 120,
+      "total_revenue": 26280,
+      "seasonal_period": 12
+    },
+    "files": {
+      "db/fixture.sqlite": "bb4243beaad9214d3b27065c1bd5e8624be652ff8a05a561dbe361896af308fc",
+      "semantic/fixture.osi.yaml": "a35af5416e80e9c9212560bb1e6be4a58564b65138def5af5f3b46a3c4fd7a3b",
+      "semantic/wide.osi.yaml": "fa92ba2cf169f063b246dff09e5951c6d4f133d1d8f7aaa1c567f232416a39b4",
+      "data_sources.yaml": "dea3e67c789dae5f081184b01f5a12db0fee2e6e2791de1252a3fd983c2f33b3"
+    }
+  },
+  "code_hashes": {
+    "/Users/charlie/Repos/deepagents-agents/data-analytics-agent/scripts/probe_discovery_local.py": "3122852b6f9182ef743e8de55ff0127e3ce201fd6d5743cfb4a9729c5933ede6",
+    "data_analytics_agent/semantic_context.py": "bff619085aa7fe36959df3560a70f31e15ef24d68333651f154d8b7e65bed86c",
+    "data_analytics_agent/semantic_tools.py": "3ad67584723cd4ddafbe67627842202d104528cbe218c60ed0dfe9cbd36cfc9e"
+  },
+  "observations": [
+    {
+      "catalog_datasets": 2,
+      "repetition": 1,
+      "variant": "separate_roles",
+      "requests_per_lookup": 4,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 4000,
+      "warmed_metadata_ms": [
+        0.04004099901067093,
+        0.03312499757157639,
+        0.030082999728620052,
+        0.02995900285895914,
+        0.029417002224363387,
+        0.029582995921373367,
+        0.029041999368928373,
+        0.028957998438272625,
+        0.029000002541579306,
+        0.02904100256273523
+      ],
+      "median_warmed_metadata_ms": 0.029499999072868377
+    },
+    {
+      "catalog_datasets": 2,
+      "repetition": 1,
+      "variant": "batched_roles",
+      "requests_per_lookup": 1,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 1912,
+      "warmed_metadata_ms": [
+        0.014917000953573734,
+        0.012459000572562218,
+        0.011832999007310718,
+        0.011499992979224771,
+        0.011334006558172405,
+        0.011208001524209976,
+        0.011249998351559043,
+        0.011124997399747372,
+        0.01108299329644069,
+        0.011084004654549062
+      ],
+      "median_warmed_metadata_ms": 0.011292002454865724
+    },
+    {
+      "catalog_datasets": 102,
+      "repetition": 1,
+      "variant": "separate_roles",
+      "requests_per_lookup": 4,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 4007,
+      "warmed_metadata_ms": [
+        0.04191599873593077,
+        0.03749999450519681,
+        0.03570900298655033,
+        0.035832999856211245,
+        0.034916003642138094,
+        0.03483399632386863,
+        0.03470800584182143,
+        0.03458299761405215,
+        0.03391700010979548,
+        0.034167002013418823
+      ],
+      "median_warmed_metadata_ms": 0.03487499998300336
+    },
+    {
+      "catalog_datasets": 102,
+      "repetition": 1,
+      "variant": "batched_roles",
+      "requests_per_lookup": 1,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 1913,
+      "warmed_metadata_ms": [
+        0.017250000382773578,
+        0.014583005395252258,
+        0.013333999959286302,
+        0.013582997780758888,
+        0.013040997146163136,
+        0.012959004379808903,
+        0.012707998394034803,
+        0.012999997125007212,
+        0.012624994269572198,
+        0.012791002518497407
+      ],
+      "median_warmed_metadata_ms": 0.013020497135585174
+    },
+    {
+      "catalog_datasets": 2,
+      "repetition": 2,
+      "variant": "separate_roles",
+      "requests_per_lookup": 4,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 4000,
+      "warmed_metadata_ms": [
+        0.03570800618035719,
+        0.03275000199209899,
+        0.0301670006592758,
+        0.03012499655596912,
+        0.029374998121056706,
+        0.030000002880115062,
+        0.02895800571423024,
+        0.029625000024680048,
+        0.028833004762418568,
+        0.029625000024680048
+      ],
+      "median_warmed_metadata_ms": 0.029812501452397555
+    },
+    {
+      "catalog_datasets": 2,
+      "repetition": 2,
+      "variant": "batched_roles",
+      "requests_per_lookup": 1,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 1912,
+      "warmed_metadata_ms": [
+        0.015666999388486147,
+        0.013582997780758888,
+        0.013124998076818883,
+        0.012250005966052413,
+        0.012458003766369075,
+        0.012042000889778137,
+        0.011916999937966466,
+        0.011417003406677395,
+        0.011707998055499047,
+        0.011625001206994057
+      ],
+      "median_warmed_metadata_ms": 0.012146003427915275
+    },
+    {
+      "catalog_datasets": 102,
+      "repetition": 2,
+      "variant": "separate_roles",
+      "requests_per_lookup": 4,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 4007,
+      "warmed_metadata_ms": [
+        0.04183300188742578,
+        0.03733400080818683,
+        0.036416997318156064,
+        0.03595899761421606,
+        0.03562500205589458,
+        0.03562499477993697,
+        0.03554200520738959,
+        0.03545799700077623,
+        0.035208999179303646,
+        0.03491599636618048
+      ],
+      "median_warmed_metadata_ms": 0.035624998417915776
+    },
+    {
+      "catalog_datasets": 102,
+      "repetition": 2,
+      "variant": "batched_roles",
+      "requests_per_lookup": 1,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 1913,
+      "warmed_metadata_ms": [
+        0.017042002582456917,
+        0.014666999049950391,
+        0.013500000932253897,
+        0.013374999980442226,
+        0.013417004083748907,
+        0.012958997103851289,
+        0.012917000276502222,
+        0.013000004400964826,
+        0.012917000276502222,
+        0.012750002497341484
+      ],
+      "median_warmed_metadata_ms": 0.013187502190703526
+    },
+    {
+      "catalog_datasets": 2,
+      "repetition": 3,
+      "variant": "separate_roles",
+      "requests_per_lookup": 4,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 4000,
+      "warmed_metadata_ms": [
+        0.03599999763537198,
+        0.03204200038453564,
+        0.030916999094188213,
+        0.030250004783738405,
+        0.03037499845959246,
+        0.03024999750778079,
+        0.0297920050797984,
+        0.030208997486624867,
+        0.030082999728620052,
+        0.029916001949459314
+      ],
+      "median_warmed_metadata_ms": 0.030250001145759597
+    },
+    {
+      "catalog_datasets": 2,
+      "repetition": 3,
+      "variant": "batched_roles",
+      "requests_per_lookup": 1,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 1912,
+      "warmed_metadata_ms": [
+        0.015541001630481333,
+        0.013166005373932421,
+        0.012415999663062394,
+        0.01208300091093406,
+        0.01170899486169219,
+        0.011750002158805728,
+        0.011542004358489066,
+        0.011667005310300738,
+        0.011541997082531452,
+        0.011541997082531452
+      ],
+      "median_warmed_metadata_ms": 0.011729498510248959
+    },
+    {
+      "catalog_datasets": 102,
+      "repetition": 3,
+      "variant": "separate_roles",
+      "requests_per_lookup": 4,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 4007,
+      "warmed_metadata_ms": [
+        0.04129199805902317,
+        0.03679099609144032,
+        0.03554199793143198,
+        0.03491700044833124,
+        0.03487500362098217,
+        0.0347500026691705,
+        0.03524999920045957,
+        0.03462500171735883,
+        0.034167002013418823,
+        0.03483299951767549
+      ],
+      "median_warmed_metadata_ms": 0.034896002034656703
+    },
+    {
+      "catalog_datasets": 102,
+      "repetition": 3,
+      "variant": "batched_roles",
+      "requests_per_lookup": 1,
+      "role_hits": {
+        "measure": true,
+        "dimension": true,
+        "filter": true,
+        "time": true
+      },
+      "role_candidate_recall": 1.0,
+      "response_characters": 1913,
+      "warmed_metadata_ms": [
+        0.017250000382773578,
+        0.014582998119294643,
+        0.013457996828947216,
+        0.013167002180125564,
+        0.013042001228313893,
+        0.012750002497341484,
+        0.012666001566685736,
+        0.012541997421067208,
+        0.012542004697024822,
+        0.012624994269572198
+      ],
+      "median_warmed_metadata_ms": 0.012896001862827688
+    }
+  ],
+  "date_choices": [
+    {
+      "catalog_datasets": 2,
+      "repetition": 1,
+      "broad": [
+        "facts.month"
+      ],
+      "narrow": [
+        "facts.month"
+      ]
+    },
+    {
+      "catalog_datasets": 102,
+      "repetition": 1,
+      "broad": [
+        "archive_000.event_date",
+        "archive_001.event_date",
+        "archive_002.event_date",
+        "archive_003.event_date",
+        "archive_004.event_date"
+      ],
+      "narrow": [
+        "facts.month"
+      ]
+    },
+    {
+      "catalog_datasets": 2,
+      "repetition": 2,
+      "broad": [
+        "facts.month"
+      ],
+      "narrow": [
+        "facts.month"
+      ]
+    },
+    {
+      "catalog_datasets": 102,
+      "repetition": 2,
+      "broad": [
+        "archive_000.event_date",
+        "archive_001.event_date",
+        "archive_002.event_date",
+        "archive_003.event_date",
+        "archive_004.event_date"
+      ],
+      "narrow": [
+        "facts.month"
+      ]
+    },
+    {
+      "catalog_datasets": 2,
+      "repetition": 3,
+      "broad": [
+        "facts.month"
+      ],
+      "narrow": [
+        "facts.month"
+      ]
+    },
+    {
+      "catalog_datasets": 102,
+      "repetition": 3,
+      "broad": [
+        "archive_000.event_date",
+        "archive_001.event_date",
+        "archive_002.event_date",
+        "archive_003.event_date",
+        "archive_004.event_date"
+      ],
+      "narrow": [
+        "facts.month"
+      ]
+    }
+  ],
+  "manual_sql_reference": {
+    "query": "SELECT r.name, SUM(f.revenue) AS revenue FROM facts f JOIN regions r ON f.region_id=r.region_id GROUP BY r.name",
+    "actual": {
+      "North": 8680.0,
+      "South": 8760.0,
+      "West": 8840.0
+    },
+    "independent_formula": {
+      "North": 8680.0,
+      "South": 8760.0,
+      "West": 8840.0
+    }
+  }
+}

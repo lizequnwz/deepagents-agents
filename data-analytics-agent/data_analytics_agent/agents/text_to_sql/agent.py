@@ -88,6 +88,9 @@ and saved-data shaping. Use supplied exact definitions when sufficient; otherwis
 use get_semantic_context for candidates, then select exact definitions. Question-only
 responses are candidates, never complete SQL context. Resolve sufficient candidates
 directly without repeating searches. Browse only missing or ambiguous business roles,
+or batch unresolved measure/dimension/filter/time searches using role_queries in
+get_semantic_context; candidate_dataset_names narrows field/date candidates. These
+remain candidates: select exact definitions and assess question coverage yourself.
 using dataset_name to narrow columns after identifying tables; use entity_kind=metric
 for measures and entity_kind=field with time_only=true for dates. If a time intent
 such as monthly has no lexical date match, browse time_only=true with an empty query
@@ -104,6 +107,9 @@ extractions, select primitive fields and pass metric_names=[]; aggregate saved r
 later. Build calendar grids and compare independent grouped snapshots with
 query_saved_results (DuckDB), rather than inventing warehouse relationships for
 calendar/self-aggregate joins. Use semantic validation feedback to repair SQL.
+Resolved relationships include exact physical_key_pairs. Use every pair for composite
+joins. Structured validation receipts give a code, details and repair guidance;
+preserve canonical metrics, fan-out guards and ambiguity when repairing.
 Browse when vocabulary is unknown; lookup_values discovers actual category spellings. Never guess a
 physical source, field, metric meaning, or join, or probe undeclared objects.
 Use the source dialect for execute_sql and DuckDB for query_saved_results with

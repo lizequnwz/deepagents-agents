@@ -77,6 +77,7 @@ class ResultStore:
         originating_question: str = "",
         purpose: str = "",
         parent_result_ids: list[str] | None = None,
+        sql_bindings: dict[str, str] | None = None,
         kind: str = "source_sql",
         execution_id: str | None = None,
         chart_preparation: ChartDataPreparation | None = None,
@@ -85,11 +86,21 @@ class ResultStore:
         max_rows: int | None = None,
     ) -> SavedResult:
         started = perf_counter()
+        if sql_bindings and (
+            kind != "saved_sql"
+            or set(sql_bindings.values()) != set(parent_result_ids or [])
+        ):
+            raise ValueError(
+                "Saved SQL bindings must name exactly its parent datasets."
+            )
         result_id = str(uuid4())
         path = self.storage.artifacts / f"{result_id}.parquet"
         temporary = path.with_suffix(".partial")
         count = size = 0
         preview = []
+        reader_schema = (
+            batches.schema if isinstance(batches, pa.RecordBatchReader) else None
+        )
         cap = min(max_rows or self.max_rows, self.max_rows)
         # Spool typed batches, then unify their schemas before the final write.
         # Null-first columns and later Decimal scales must not lose their types.
@@ -97,7 +108,10 @@ class ResultStore:
             with TemporaryDirectory(
                 dir=self.storage.artifacts, prefix="extract-"
             ) as directory:
-                parts, schemas = [], []
+                parts, schemas = (
+                    [],
+                    [reader_schema] if reader_schema is not None else [],
+                )
                 for batch in batches:
                     if len(set(batch.schema.names)) != len(batch.schema.names):
                         raise ValueError("Result columns must have unique aliases.")
@@ -125,6 +139,9 @@ class ResultStore:
                     if schemas
                     else pa.schema([(name, pa.string()) for name in columns or []])
                 )
+                if len(set(schema.names)) != len(schema.names):
+                    raise ValueError("Result columns must have unique aliases.")
+                columns = schema.names
                 with pq.ParquetWriter(temporary, schema) as writer:
                     for part in parts:
                         for batch in pq.ParquetFile(part).iter_batches(batch_size=8192):
@@ -207,6 +224,7 @@ class ResultStore:
             parquet_path=str(path),
             preview=preview,
             parent_result_ids=parent_result_ids or [],
+            sql_bindings=sql_bindings or {},
             kind=kind,
             execution_id=execution_id,
             chart_preparation=chart_preparation,
@@ -298,6 +316,7 @@ class ResultStore:
             short_label=result.short_label,
             originating_question=result.originating_question,
             parent_result_ids=result.parent_result_ids,
+            sql_bindings=result.sql_bindings,
             execution_id=result.execution_id,
             chart_preparation=result.chart_preparation,
             upload_provenance=result.upload_provenance,

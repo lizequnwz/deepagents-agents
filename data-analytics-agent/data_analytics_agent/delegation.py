@@ -58,7 +58,7 @@ class DelegationMiddleware(AgentMiddleware):
                 update={
                     k: v
                     for k, v in result.update.items()
-                    if k not in {"thread_id", "run_id", "source_id", "question"}
+                    if k not in {"thread_id", "run_id", "source_id", "question", "analytical_input"}
                 },
             )
         return result

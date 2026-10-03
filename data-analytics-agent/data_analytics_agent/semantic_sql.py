@@ -221,7 +221,9 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
                 continue
             if predicate is None:
                 raise SQLValidationError(
-                    "Join needs an explicit ON predicate over declared relationship keys."
+                    "Join needs an explicit ON predicate over declared relationship keys.",
+                    code="missing_join_keys", details={"right_alias": right},
+                    repair="Retrieve the selected relationships and use every physical key pair in ON. Build calendar grids and cross-products of non-scalar populations over named saved data, not warehouse joins.",
                 )
             pairs = {}
             for condition in (
@@ -282,7 +284,9 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
                         break
                 else:
                     raise SQLValidationError(
-                        "Join is not grounded in the selected declared relationships. Retrieve/select the correct relationship and all composite keys; computed join keys are unsupported."
+                        "Join is not grounded in the selected declared relationships. Retrieve/select the correct relationship and all composite keys; computed join keys are unsupported.",
+                        code="ungrounded_join", details={"right_alias": right, "selected_relationships": sorted(allowed)[:20]},
+                        repair="Resolve exact relationship definitions; use all key pairs without computed transformations. Select an explicit route if alternatives exist.",
                     )
             for aliases, relation, reverse in matched:
                 used.add(relation.name)
@@ -318,7 +322,9 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
                             continue
                         if not unique:
                             raise SQLValidationError(
-                                "Aggregate can fan out across a join whose opposite keys are not declared unique. Aggregate at the required grain before joining, or use the appropriate line-level metric."
+                                "Aggregate can fan out across a join whose opposite keys are not declared unique. Aggregate at the required grain before joining, or use the appropriate line-level metric.",
+                                code="fanout_risk", details={"aggregate_alias": alias, "opposite_alias": other},
+                                repair="Choose the canonical line-level metric or preaggregate the population at its business grain before joining. Unknown key uniqueness is not permission to sum duplicated rows.",
                             )
                         pending.append(other)
         if any(
@@ -412,7 +418,8 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
         )
         if not found:
             raise SQLValidationError(
-                f"Selected metric {name!r} does not match its canonical expression. Retrieve its definition and preserve its aggregation and filters."
+                f"Selected metric {name!r} does not match its canonical expression. Retrieve its definition and preserve its aggregation and filters.",
+                code="metric_mismatch", details={"metric": name}, repair="Retrieve this metric's exact expression and preserve its filters, aggregation and operands.",
             )
 
     def output_expression(scope, node, seen=frozenset()):
@@ -447,4 +454,17 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
         "metric_columns": metric_columns,
         "relationship_names": sorted(used),
         "warnings": sorted(warnings),
+        "selected_entities": sorted(
+            {"metric:" + name for name in metrics}
+            | {"relationship:" + name for name in used}
+            | {
+                "field:" + parent + "." + field
+                for scope in active for column in scope.columns
+                if (resolved := origin(scope, column))
+                for parent, physical in [resolved]
+                for field in catalog.datasets[parent].fields
+                if isinstance((node := parse_expression(bindings.fields[parent, field], catalog.dialect)), exp.Column)
+                and node.name.casefold() == physical
+            }
+        ),
     }

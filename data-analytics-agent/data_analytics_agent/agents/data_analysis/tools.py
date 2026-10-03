@@ -14,6 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
     DataAnalysisOutcome,
     PythonExecutionResult,
 )
+from data_analytics_agent.forecasting import ForecastEvaluationRequest, evaluate_forecast
 
 
 def create_analysis_tools(results, runs, analyses, *, source_id, limits):
@@ -64,6 +65,11 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
                 "error": "An input is incomplete. Request a complete suitable dataset through the coordinator.",
                 "needs_sql_reshape": True,
             }
+        from data_analytics_agent.analytical_scope import check_inputs
+        try:
+            check_inputs(results, runs, context.run_id, inputs.values())
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
         attempt = runs.reserve_python_execution_attempt(context.run_id)
         runs.set_phase(context.run_id, "analyzing")
         with runs.worker(context.run_id):
@@ -121,6 +127,7 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
         assumptions: list[str] | None = None,
         warnings: list[str] | None = None,
         requested_data: str = "",
+        forecast_evaluation: ForecastEvaluationRequest | None = None,
     ) -> dict:
         """Finish this analytical assignment, or request more SQL data with a complete brief.
 
@@ -131,6 +138,10 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
         Before finishing, verify the saved flag column matches your final method;
         a degenerate-scale fallback requires recomputing and saving that column.
         Keep declared units and unknown completeness consistent in ALL outputs.
+        For a forecast, save actuals, holdout predictions, baseline and future
+        predictions as a named dataset and provide forecast_evaluation. Its scores
+        are recomputed by application code; both training and holdout must precede
+        the future horizon. Declare preparation and interval meaning explicitly.
         """
         context = _runtime_context(runtime)
         assignment_id = runtime.state["assignment_id"]
@@ -154,6 +165,15 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
                 "ok": False,
                 "error": "Completed analysis requires a successful execution. Continue analysis or report a partial outcome.",
             }
+        evaluation = None
+        if forecast_evaluation:
+            available_outputs = {key for execution in executions if execution.error is None for key in execution.output_datasets.values()}
+            if forecast_evaluation.predictions_result_id not in available_outputs:
+                return {"ok": False, "error": "Save the complete prediction table in this assignment's output_datasets before evaluating it."}
+            try:
+                evaluation = evaluate_forecast(forecast_evaluation, results=results, thread_id=context.thread_id, source_id=source_id)
+            except (ValueError, TypeError, KeyError) as exc:
+                return {"ok": False, "error": str(exc)}
         result = DataAnalysisResult(
             outcome=outcome,
             input_result_ids=input_result_ids,
@@ -163,6 +183,7 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
             assumptions=assumptions or [],
             warnings=warnings or [],
             requested_data=requested_data,
+            forecast_evaluation=evaluation,
         )
         saved = analyses.save(
             thread_id=context.thread_id, source_id=source_id, analysis=result

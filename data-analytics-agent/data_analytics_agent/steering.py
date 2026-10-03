@@ -87,7 +87,7 @@ class SteeringMiddleware(AgentMiddleware):
 
 
 @tool
-def request_clarification(question: str, choices: list[str] | None = None) -> str:
+def request_clarification(question: str, choices: list[str] | None = None, source_expansion: bool = False) -> str:
     """Ask a necessary business question and pause until the user answers.
 
     Use when ambiguity materially changes the analysis, including when a specialist
@@ -95,6 +95,6 @@ def request_clarification(question: str, choices: list[str] | None = None) -> st
     Do not publish empty findings or create a report for an unanswered question.
     """
     answer = interrupt(
-        {"kind": "clarification", "question": question, "choices": choices or []}
+        {"kind": "clarification", "question": question, "choices": choices or [], "source_expansion": source_expansion}
     )
     return str(answer)

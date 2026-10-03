@@ -11,6 +11,7 @@ import math
 from pathlib import Path
 import shutil
 import sqlite3
+from copy import deepcopy
 
 import yaml
 
@@ -144,6 +145,17 @@ def prepare_project(project, instructions_root=ROOT):
     (project / "semantic/fixture.osi.yaml").write_text(
         yaml.safe_dump(semantic, sort_keys=False)
     )
+    wide = deepcopy(semantic)
+    with sqlite3.connect(database) as db:
+        for index in range(100):
+            name = f"archive_{index:03d}"
+            db.execute(f'CREATE TABLE "{name}" (id INTEGER PRIMARY KEY, event_date TEXT, amount REAL, status TEXT)')
+            wide["semantic_model"][0]["datasets"].append({
+                "name": name, "source": name, "primary_key": ["id"],
+                "description": "Archived operational events; amount is a fee, never the recorded monthly revenue index.",
+                "fields": [field("id", "Archived event identifier"), field("event_date", "Archived event date, not observation month", True), field("amount", "Archived fee amount, not revenue"), field("status", "Archive status")],
+            })
+    (project / "semantic/wide.osi.yaml").write_text(yaml.safe_dump(wide, sort_keys=False))
     registry = {
         "version": 1,
         "default_source": "fixture",
@@ -165,6 +177,10 @@ def prepare_project(project, instructions_root=ROOT):
         "name": "Synthetic capped retrieval",
         "limits": {"max_result_rows": 12},
     }
+    registry["sources"]["wide_fixture"] = {
+        **registry["sources"]["fixture"], "name": "Large synthetic catalog",
+        "semantic_model": "semantic/wide.osi.yaml",
+    }
     (project / "data_sources.yaml").write_text(
         yaml.safe_dump(registry, sort_keys=False)
     )
@@ -184,6 +200,7 @@ def prepare_project(project, instructions_root=ROOT):
                     for path in [
                         database,
                         project / "semantic/fixture.osi.yaml",
+                        project / "semantic/wide.osi.yaml",
                         project / "data_sources.yaml",
                     ]
                 },

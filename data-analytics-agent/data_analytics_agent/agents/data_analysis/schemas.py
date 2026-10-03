@@ -4,6 +4,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
+from data_analytics_agent.forecasting import ForecastEvaluation
 
 
 class StrictModel(BaseModel):
@@ -86,6 +87,7 @@ class DataAnalysisResult(StrictModel):
     assumptions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     requested_data: str = ""
+    forecast_evaluation: ForecastEvaluation | None = None
 
     def model_facing(self):
         """Compact synthesis view; exact code and logs remain in saved executions."""

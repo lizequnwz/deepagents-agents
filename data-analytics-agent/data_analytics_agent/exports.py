@@ -104,11 +104,33 @@ def prepare_export(services, run_id, report_id):
     for result_id in selected:
         add_dataset(result_id)
     for analysis in analyses.values():
+        if analysis.forecast_evaluation:
+            for key in (
+                analysis.forecast_evaluation.predictions_result_id,
+                analysis.forecast_evaluation.scores_result_id,
+            ):
+                add_dataset(key)
+                if key not in selected:
+                    selected.append(key)
         for result_id in analysis.input_result_ids:
             add_dataset(result_id)
         for execution in analysis.executions:
             if execution.error is None:
                 add_step(execution)
+    if answer.analytical_input and not answer.source_expansion_allowed:
+        from data_analytics_agent.analytical_scope import descends_from
+
+        selected = [
+            key
+            for key in selected
+            if descends_from(
+                services.results,
+                key,
+                answer.analytical_input.input_result_id,
+                run.thread_id,
+                run.source_id,
+            )
+        ]
     return (
         run,
         answer,
@@ -127,8 +149,18 @@ def write_bundle(services, run_id, report_id, target):
     )
     files = {}
     manifest = {
-        "format_version": 1,
+        "format_version": 2,
         "question": run.question,
+        "analytical_input": answer.analytical_input.model_dump(mode="json")
+        if answer.analytical_input
+        else None,
+        "source_expansion_allowed": answer.source_expansion_allowed,
+        "refreshed_from_report_id": answer.refreshed_from_report_id,
+        "forecast_evaluations": [
+            a.forecast_evaluation.model_dump(mode="json")
+            for a in analyses
+            if a.forecast_evaluation
+        ],
         "source_id": run.source_id,
         "partial": answer.partial,
         "unresolved_questions": answer.unresolved_questions,
@@ -137,6 +169,7 @@ def write_bundle(services, run_id, report_id, target):
         "sql_replay": "Saved snapshots; no warehouse refresh or SQL re-execution.",
         "limits": asdict(services.settings.python_execution_limits()),
         "selected_result_ids": selected,
+        "lineage_result_ids": [key for key in datasets if key not in selected],
         "datasets": {},
         "steps": [],
         "files": files,
@@ -174,6 +207,7 @@ def write_bundle(services, run_id, report_id, target):
             "label": d.short_label,
             "snapshot_path": f"data/{d.result_id}.parquet",
             "parent_result_ids": d.parent_result_ids,
+            "sql_bindings": d.sql_bindings,
             "question": d.originating_question,
         }
         for index, d in enumerate(
@@ -201,12 +235,23 @@ Exact executed SQL is included for inspection; this package does not refresh war
 Chart presentation snapshots may be sampled; their complete parents remain in data/ and the manifest.
 
 """
+    if answer.analytical_input:
+        from data_analytics_agent.analytical_scope import scope_description
+
+        readme += scope_description(answer.analytical_input) + "\n\n"
+        if answer.source_expansion_allowed:
+            readme += "Additional source retrieval was explicitly authorized. The selected snapshot describes the starting population; consult the resulting evidence for expanded populations.\n\n"
     readme += "\n".join("- " + x for x in answer.assumptions + warnings)
     for analysis in analyses:
         readme += (
             f"\n\n## Method\n\n{analysis.method}\n\n{analysis.answer}\n"
             + "\n".join("- " + x for x in analysis.assumptions)
         )
+        if analysis.forecast_evaluation:
+            evaluation = analysis.forecast_evaluation
+            readme += "\n\n## Forecast evaluation\n\n" + evaluation.description + "\n\n"
+            readme += "\n".join("- " + warning for warning in evaluation.warnings)
+            readme += f"\n\nPredictions: `data/{evaluation.predictions_result_id}.parquet`. Scores: `data/{evaluation.scores_result_id}.parquet`.\n"
     readme += "\n\n## SQL queries\n\n"
     if sql_queries:
         readme += (
@@ -368,6 +413,30 @@ def build_notebook(manifest, readme, executions, datasets):
                     for key in manifest["selected_result_ids"]
                 ],
             )
+        )
+    if manifest["forecast_evaluations"]:
+        from data_analytics_agent.forecasting import ForecastEvaluation
+
+        descriptions = [
+            ForecastEvaluation.model_validate(value)
+            for value in manifest["forecast_evaluations"]
+        ]
+        cells.extend(
+            [
+                nbf.v4.new_markdown_cell(
+                    "## Forecast evaluation\n\n"
+                    + "\n\n".join(
+                        value.description
+                        + "\n\n"
+                        + "\n".join("- " + warning for warning in value.warnings)
+                        for value in descriptions
+                    )
+                    + "\n\nRecompute MAE, RMSE and measured coverage from the saved or replayed predictions; compare them with the saved scores."
+                ),
+                nbf.v4.new_code_cell(
+                    "from replay import evaluate_forecasts\nforecast_scores = evaluate_forecasts(ROOT)\nfor score in forecast_scores:\n    display(score)"
+                ),
+            ]
         )
     cells.append(
         nbf.v4.new_markdown_cell(

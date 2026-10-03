@@ -3,10 +3,13 @@
 Historical live-test claims whose receipts are unavailable in this checkout are
 unverified. Current review/comparator checks and the early-terminated synthetic
 study are recorded in the [1 October outcome](../reviews/ablation-outcomes-2026-10-01.md).
-The [30 September release verification](../reviews/release-verification-2026-09-30.md)
-records the earlier Excel/export release checks.
-The [business usability verification](../reviews/business-usability-2026-10-01.md)
-records subsequent native-widget/API interaction checks and their browser limits.
+The [historical implementation checks](../reviews/README.md#earlier-implementation-checks)
+retain the earlier Excel/export and native-widget/API checks and their limits.
+The [extended priority verification](../reviews/priority-followup-tests-2026-10-02.md)
+records 490 passing local tests, six skipped provider tests, retained defect/repair
+receipts, population and forecast boundaries, browser checks and portable replay.
+The user's current instruction is to keep verification local; no new provider
+trials are authorized.
 
 Use three distinct evidence levels: deterministic regression tests, live model
 runs through the API, and browser interaction checks. None substitutes for the
@@ -23,6 +26,13 @@ Normal pytest runs isolate storage before importing `api.app`. Six provider test
 are opt-in; a skipped test is not a pass. `RUN_LIVE_SMOKE=1` only builds a configured
 graph—it does not ask a model a question. `RUN_LIVE_EVALUATIONS=1` invokes the model
 on generated fixtures in `tests/test_live_evaluations.py`.
+
+`scripts/probe_discovery_local.py` prepares frozen synthetic small/large catalogs
+and compares four separate role lookups with one batch, using three fresh catalog
+instances and warmed samples. It records role candidates, bounded broad/narrow
+date browsing and an independently recomputed manual SQL reference. Redirect its
+JSON output to an observation file. It never invokes a provider; its timings
+cannot establish the end-to-end SQL performance gate.
 
 ## Documented examples against a live application
 
@@ -90,7 +100,7 @@ Store compact, dated outcomes and issues under `doc/reviews/`. Keep bulky raw ru
 Parquet, and HTML in the isolated receipt/workspace directories unless a particular
 artifact is needed to explain a finding. Record model, source hashes, prompt IDs,
 run IDs, settings, elapsed time, grading method, and limitations. Never commit keys.
-See the [latest release verification](../reviews/release-verification-2026-09-30.md)
+See the [latest local verification](../reviews/priority-followup-tests-2026-10-02.md)
 for available local checks and their limitations.
 
 ## Reproducible grading and held-out cases
@@ -129,7 +139,7 @@ current deterministic checks do not replace provider evaluation.
 
 ## Paired ablations
 
-Use the [ablation execution guide](../roadmap/ablation-execution.md) for the
+Use the [paired evaluation guide](ablation-evaluation.md) for the
 predeclared prompt study, frozen synthetic sources, explicit workbook/schema
 fixtures and paired reducer. `scripts/compare_ablation.py` requires independent
 per-case grading bound to exact manifests/receipts, fresh repetitions and
@@ -141,3 +151,63 @@ the mixed study ended early. See the
 [1 October outcome and batch-review checks](../reviews/ablation-outcomes-2026-10-01.md).
 Deterministic/scripted checks and operator-reviewed smoke runs are not
 first-attempt live-model quality evidence.
+
+## Semantic priority studies
+
+The [handoff](../../HANDOFF.md#verification-and-acceptance-gates) links separate routing, role-batching
+and join-feedback protocols. Prepare the existing synthetic project locally with
+`scripts/prepare_ablation_fixtures.py --output /tmp/a-fresh-project`; preparation
+does not invoke a provider. Starting the local server also makes no model call.
+Submitting analytical questions uses the configured model and requires separate
+provider/fixture authorization.
+
+The corpus now contains 40 cases, including 20 timed semantic cases and an
+unanswered semantic clarification. Review expected measures, dimensions, filters,
+date roles, relationship routes, grain and clarification outcome. Each complete
+semantic case needs independently evidenced role checks, `snapshot_reviews` for
+every complete SQL snapshot, and `value_bindings` for declared scalar expectations.
+A snapshot review has `status` (pass/fail) and evidence; value bindings name an
+exact result_id, column and optional row_index. Scores cannot come from report
+completion or model narrative alone.
+
+Three fresh repetitions per baseline/candidate must use identical frozen fixtures,
+corpus, provider/settings and dependencies. Keep all shared product changes in both
+variants; review that each semantic variant changes one declared component. The
+comparator grades untimed controls, requires paired baseline-fail/candidate-pass
+evidence for targeted quality scenarios, and rejects new first-attempt or boundary
+regressions. Speed adoption additionally requires at least 15% median improvement
+in independently graded active time to the first correct SQL snapshot. An incomplete
+or unreviewed study stays inconclusive. The comparator never changes production code.
+
+## Portable replay
+
+Export checks move the extracted bundle before replaying its script and notebook.
+Each execution starts a fresh process; notebook checks use fresh kernels. Keep
+typed inputs, exact reviewed code, necessary producers, hashes, dependency versions,
+and the selected report consistent. SQL remains snapshot provenance, not a source
+refresh during replay. Failed attempts and unrelated evidence are excluded from
+runnable replay, while required derivation steps remain inspectable.
+
+Dataset and scalar/table numerical checks use `rtol=1e-7` and `atol=1e-10`.
+Figure pixel equality is not asserted. External paths/services, dynamic imports,
+or missing original random seeds can require extra setup; successful replay does
+not establish analytical correctness. Notebook kernels need local loopback access.
+
+## Controlled improvements
+
+Remove provably unused paths and duplicate documentation directly. Changes to
+instructions, routing, delegation or recovery need independently checked outcomes.
+Use the existing runner and isolated variants; do not introduce production
+experiment switches, compatibility readers or duplicate execution/evidence layers.
+
+Declare the changed component, target metric and acceptance gate before collecting
+results. Preserve source ownership, upload review, population, units, exact approved
+edits, immutable evidence and reporting throughout a comparison. Include ambiguous
+questions, partial data, interruption/restart, report retry and failed outcomes.
+Repeat inconclusive studies rather than infer equivalent behavior. A small study
+does not establish broad non-inferiority for removing a major component.
+
+Measure first correct results, repairs, latency, memory and cost where known.
+Observe users finding scope and completing the task; visual preference or scripted
+browser success is insufficient. Fewer lines can improve maintenance without
+establishing a runtime speed gain. The handoff owns current product priorities.

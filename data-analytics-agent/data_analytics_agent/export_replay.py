@@ -17,6 +17,8 @@ import pyarrow.parquet as pq
 def load_manifest(root):
     root = Path(root)
     manifest = json.loads((root / "manifest.json").read_text())
+    if manifest["format_version"] != 2:
+        raise ValueError("Unsupported analysis bundle version.")
     for relative, expected in manifest["files"].items():
         # Notebook cells and step files are editable; verify immutable evidence.
         if not (
@@ -175,11 +177,40 @@ def run_step(root, index):
         return payload
 
 
+def evaluate_forecasts(root):
+    """Independent arithmetic checks using portable prediction/score snapshots."""
+    import numpy as np
+
+    root = Path(root)
+    manifest = load_manifest(root)
+    frames = []
+    for evaluation in manifest["forecast_evaluations"]:
+        key = evaluation["predictions_result_id"]
+        replayed = root / "replayed" / f"{key}.parquet"
+        frame = pd.read_parquet(replayed if replayed.exists() else root / manifest["datasets"][key]["path"])
+        times = pd.to_datetime(frame[evaluation["time_column"]])
+        test = frame[times.between(evaluation["holdout_start"], evaluation["holdout_end"])]
+        scores = []
+        for column, method in [(evaluation["candidate_column"], evaluation["candidate_method"]), (evaluation["baseline_column"], evaluation["baseline_method"])]:
+            error = test[column] - test[evaluation["actual_column"]]
+            row = {"method": method, "sample_size": len(test), "mae": float(np.abs(error).mean()), "rmse": float(np.sqrt(np.square(error).mean())), "measured_interval_coverage": None, "nominal_coverage": None}
+            if column == evaluation["candidate_column"] and evaluation["interval"]:
+                row["measured_interval_coverage"] = float(test[evaluation["actual_column"]].between(test[evaluation["lower_bound"]], test[evaluation["upper_bound"]]).mean())
+                row["nominal_coverage"] = evaluation["interval"]["nominal_coverage"]
+            scores.append(row)
+        computed = pd.DataFrame(scores)
+        stored = pd.read_parquet(root / manifest["datasets"][evaluation["scores_result_id"]]["path"])
+        pd.testing.assert_frame_equal(computed, stored, check_dtype=False, check_exact=False, rtol=1e-7, atol=1e-10)
+        frames.append(computed)
+    return frames
+
+
 def replay_all(root):
     root = Path(root).resolve()
     manifest = load_manifest(root)
     for index in range(len(manifest["steps"])):
         run_step(root, index)
+    evaluate_forecasts(root)
     if not manifest["steps"]:
         for result_id in manifest["selected_result_ids"]:
             frame = pd.read_parquet(root / manifest["datasets"][result_id]["path"])

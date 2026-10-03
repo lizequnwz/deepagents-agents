@@ -16,10 +16,12 @@ from data_analytics_agent.semantic import (
     SemanticField,
     SemanticMetric,
     SemanticRelationship,
+    SemanticMatch,
     render_semantic_overview,
 )
 
 CONTEXT_BUDGET = 12_000
+INLINE_CONTEXT_HEADER = "Complete exact catalog definitions (no discovery needed):\n"
 MAX_AVAILABLE_FIELD_NAMES = 25
 _CACHE: OrderedDict[tuple, str] = OrderedDict()
 _LOCK = RLock()
@@ -108,8 +110,10 @@ def _metric_payload(
 def _relationship_payload(
     relationship: SemanticRelationship,
     catalog: SemanticCatalog,
+    *,
+    include_physical: bool = False,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "name": relationship.name,
         "from_dataset": relationship.from_dataset,
         "to_dataset": relationship.to_dataset,
@@ -124,6 +128,16 @@ def _relationship_payload(
         <= set(relationship.to_columns),
         "uniqueness_basis": "declared primary keys only; false means unknown, not verified nonunique",
     }
+    if include_physical:
+        payload["physical_key_pairs"] = [
+            {
+                "from_expression": catalog.bindings.fields[relationship.from_dataset, left],
+                "to_expression": catalog.bindings.fields[relationship.to_dataset, right],
+            }
+            for left, right in zip(relationship.from_columns, relationship.to_columns, strict=True)
+        ]
+        payload["join_guidance"] = "Use every key pair in an explicit equality ON predicate. Preserve endpoint roles for self joins. Uniqueness is declared, not verified against source values."
+    return payload
 
 
 def _serialize(value):
@@ -147,20 +161,35 @@ def _paths(catalog, start, target):
     return found, bool(queue) and steps >= 2000
 
 
-def discovery_candidates(catalog, question):
+def discovery_candidates(catalog, question, *, role_queries=None, candidate_dataset_names=None):
     """Independent quotas prevent fields from starving measures and time roles."""
     candidates = {}
     from data_analytics_agent.semantic import _normalize_search_text
 
-    if not _normalize_search_text(question):
+    if not _normalize_search_text(question) and not role_queries:
         return candidates
-    ranked = catalog.search_index.search(question)
-    for kind in ("metric", "dataset", "field", "time"):
+    roles = {"measure": "metric", "dimension": "field", "filter": "field", "time": "time"}
+    searches = (
+        [(role, roles[role], query) for role, query in role_queries.items()]
+        if role_queries else [(kind, kind, question) for kind in ("metric", "dataset", "field", "time")]
+    )
+    for role, kind, query in searches:
+        if kind == "time" and not query.strip():
+            ranked = [
+                SemanticMatch("field", f.name, d.name, f.description, f.name, "declared_time_field", 0.0)
+                for d in catalog.datasets.values() for f in d.fields.values() if f.is_time
+            ]
+        else:
+            ranked = catalog.search_index.search(query)
         matches, counts = [], {}
         for match in ranked:
             if match.kind != ("field" if kind == "time" else kind):
                 continue
             parent = match.parent_dataset
+            identity = match.name if kind == "dataset" else parent
+            if candidate_dataset_names and identity not in candidate_dataset_names:
+                if kind != "metric" or not any(d in candidate_dataset_names for d, _ in catalog.bindings.metrics[match.name].dependencies):
+                    continue
             if (
                 kind == "time"
                 and not catalog.datasets[parent].fields[match.name].is_time
@@ -173,7 +202,7 @@ def discovery_candidates(catalog, question):
             matches.append(match)
             if len(matches) == 6:
                 break
-        candidates[kind] = [
+        candidates[role] = [
             {
                 "name": m.name,
                 "dataset": m.parent_dataset,
@@ -197,6 +226,8 @@ def build_semantic_context(
     metric_names=None,
     field_names=None,
     relationship_names=None,
+    role_queries=None,
+    candidate_dataset_names=None,
     budget: int = CONTEXT_BUDGET,
     full: bool = False,
 ):
@@ -214,6 +245,8 @@ def build_semantic_context(
         _serialize(relationship_names),
         budget,
         full,
+        _serialize(role_queries),
+        tuple(candidate_dataset_names or ()),
     )
     with _LOCK:
         if key in _CACHE:
@@ -242,7 +275,8 @@ def build_semantic_context(
     if not full and not (datasets or metrics or relationship_names):
         result.update(mode="discovery", question_coverage="requires_selection")
         result["candidates"] = (
-            discovery_candidates(catalog, question) if question.strip() else {}
+            discovery_candidates(catalog, question, role_queries=role_queries,
+                candidate_dataset_names=candidate_dataset_names)
         )
         result["refinement"] = (
             "Use these candidates directly when sufficient; browse only missing or ambiguous roles. "
@@ -365,7 +399,7 @@ def build_semantic_context(
                         }
                 result["metrics"].append(payload)
             result["relationships"] = [
-                _relationship_payload(e, catalog) for e in edges.values()
+                _relationship_payload(e, catalog, include_physical=include_physical) for e in edges.values()
             ]
             result["instructions"] = catalog.instructions
             result["definitions_complete"] = not result["blocking_issues"]
@@ -418,7 +452,7 @@ def render_sql_context(catalog, *, source_id, dialect):
     )
     if context["definitions_complete"]:
         return (
-            "Complete exact catalog definitions (no discovery needed):\n"
+            INLINE_CONTEXT_HEADER
             + _serialize(context)
         )
     return (
