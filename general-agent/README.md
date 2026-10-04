@@ -8,13 +8,96 @@ run Python or shell commands, and preserve downloadable versions of every file
 changed by a turn.
 
 > [!CAUTION]
-> Command execution is intentionally automatic and is **not sandboxed**.
+> The **General assistant** executes commands automatically on the host and is
+> **not sandboxed**. The **Coding workbench** executes only in its configured
+> constrained Docker runtime, with no host-execution fallback.
 > DeepAgents' built-in file tools are virtual-rooted to `workspace/`, but shell
 > commands run with the current local user's host permissions. The services bind
 > only to loopback and must not be exposed to a network or untrusted users.
 
 To replace the general-purpose behavior with a domain-specific workflow, see
 [Specializing General Agent](docs/SPECIALIZING_GENERAL_AGENT.md).
+
+## Local repository coding
+
+Select **Coding workbench** in the sidebar. Open an exact absolute repository
+folder, approve named check commands, and create a session. The session begins
+with a filtered copy of the current source, including allowed dirty/untracked
+files. Opening a project does not edit its original or Git index. Credentials,
+links, dependency/build caches and this application's physical runtime storage
+are excluded. Onboarding reports exclusions and source limits.
+
+**Plan** and **Review** permit inspection only, including delegated work.
+**Implement** edits the copy and runs bounded offline commands. `run_check`
+records approved check commands, source revisions, runtime identity and output.
+Missing, failing or stale checks cannot become verified from an assistant's
+answer. Image reads use DeepAgents' model-capability handling and bounded image
+inspection; binary documents retain their document-skill workflows.
+
+Navigation provides Python AST inspection and container-based JavaScript/
+TypeScript symbols, definitions, references and diagnostics. The fixed compiler
+reads approved snapshots without running repository code or plugins. Its
+bounded snapshot does not load project packages or `tsconfig.json`; the results
+state these limits. Python navigation is approximate lexical analysis.
+
+Prepare hash-pinned Python or locked public Node packages in **Dependencies**
+before checks that need them. Acquisition uses a separate source-free helper;
+installation and project commands stay offline. Baseline checks record existing
+failures separately. Questions pause durably; answering resumes the same task
+with its remaining budget and source revalidation.
+
+Implement tasks can start private preview processes, read incremental logs,
+stop them, and capture browser checks with the optional Playwright image. Each
+preview expires with its attempt and discards source writes. Screenshots bind
+to source and dependency identities and cannot replace approved tests. The
+browser has access only to the preview's local origin, with no host ports.
+
+Project-approved public documentation websites enable bounded fetches; an
+optional Brave key enables search within those domains. Explicitly connected
+GitHub repositories permit issue/PR reads and a separate immutable draft-PR
+delivery review. Snowflake profiles permit scoped schema and bounded table
+reads after the user enables the displayed account/role/warehouse/table scope.
+See [connector setup](docs/CODING_CONNECTORS.md),
+[ACP editor tasks](docs/ACP_EDITOR.md), and
+[inline editor suggestions](docs/INLINE_EDITOR.md).
+
+Review the immutable diff, including deleted, binary and executable files.
+**Apply selected files** checks the original preimages before and during each
+write. It preserves unrelated changes and journals recovery copies. Keep the
+original checkout stable during apply: a separate editor can still race the
+last filesystem check. Observed conflicts block apply/revert/compensation rather
+than overwrite a newer edit. Applied-repository verification is marked stale
+until the merged original is checked. Applying does not commit, push or publish.
+**Reject change proposal** restores an unapplied proposal in the isolated copy.
+
+Sessions, decisions, changes, checks and event cursors are corporation-scoped.
+A durable local queue allows separate session writers within
+`MAX_CODING_WORKERS`; one writer owns a session. **Continue** creates a linked
+new attempt. Executing attempts abandoned by a restart fail; shell side effects
+are never replayed automatically. Follow-up instructions queue at the next
+writer boundary.
+
+Coding execution requires Docker and a locally built image:
+
+```bash
+docker build -f docker/coding/Dockerfile -t general-agent-coding:local .
+```
+
+This explicit build downloads the image's Python/Node/uv dependencies. Coding
+readiness never pulls an image or installs Docker. The runtime uses an immutable
+image ID, nonroot execution, a read-only root filesystem, disabled networking,
+dropped capabilities, CPU/memory/PID bounds and finite tmpfs storage. It transfers
+only bounded, validated session source; it mounts no original checkout, home,
+application secrets or Docker socket into the container. Docker engine logs are
+disabled and command output is bounded by the controller.
+
+Docker is unavailable in the development environment used for the initial
+implementation. Deterministic runtime/controller tests and fixture-backed API
+checks pass; an actual image build, resource/egress checks and daemon recovery
+still need validation before claiming Docker-supported execution here. The
+implementation and remaining release gates are tracked in
+[the implementation ledger](docs/CODING_AGENT_IMPLEMENTATION.md), alongside
+[the reviewed roadmap](docs/CODING_AGENT_REVIEW_AND_PLAN.md).
 
 ## Quick start
 
@@ -67,8 +150,8 @@ health, and the single-worker process model. `Ctrl-C` stops both services.
   Stop, compact conversation/run diagnostics, and file downloads. There is no
   conversation picker; **New chat** replaces the one chat shown in the browser.
 
-The v1 application intentionally has no built-in web search, webpage reader,
-Microsoft 365, email, calendar, image understanding, audio understanding, or
+The general-assistant workflow has no built-in web search, webpage reader,
+Microsoft 365, email, calendar, audio understanding, or
 conversation export. OCR is a local optional dependency, not a hosted tool.
 
 ## Storage and file behavior
@@ -82,6 +165,8 @@ conversation export. OCR is a local optional dependency, not a hosted tool.
 | `workspace/.app/skills/` | Application-managed read-only agent skills | No |
 | `.data/application.sqlite3` | Chats, runs, events, usage, and file records | No |
 | `.data/checkpoints.sqlite3` | LangGraph checkpoints | No |
+| `.data/coding.sqlite3` | Projects, sessions, coding attempts, decisions and events | No |
+| `.data/coding/<opaque-id>/<session-id>/` | Isolated source, immutable versions and apply/reject journals | Coding workbench |
 | `.data/users/<opaque-id>/attachments/` | Immutable original uploads | No |
 | `.data/users/<opaque-id>/artifacts/` | Immutable per-turn file versions | No |
 
@@ -149,6 +234,14 @@ provider metadata or a provider-qualified model identifier.
 | `MAX_INSPECT_PAGES` / `MAX_INSPECT_SHEETS` | `20` / `20` |
 | `MAX_INSPECT_ROWS` / `MAX_INSPECT_COLUMNS` | `50` / `20` |
 | `MAX_INSPECT_CHARS` | `50000` |
+| `CODING_IMAGE` | `general-agent-coding:local` |
+| `CODING_BROWSER_IMAGE` | `general-agent-coding-browser:local` |
+| `CODING_MEMORY_MB` / `CODING_PIDS` / `CODING_STORAGE_MB` | `1024` / `128` / `512` |
+| `MAX_REPOSITORY_MB` / `MAX_REPOSITORY_FILES` | `50` / `5000` |
+| `MAX_CODING_WORKERS` | `2` |
+| `BRAVE_SEARCH_API_KEY` | empty; documentation search disabled |
+| `GITHUB_TOKENS_JSON` / `SNOWFLAKE_CONNECTIONS_JSON` | `{}`; connectors disabled |
+| `INLINE_MODEL_NAME` / `INLINE_MODEL_KWARGS_JSON` | empty / `{}`; suggestions disabled |
 
 Only a deliberately small environment is passed to commands: the application
 Python path, `.packages`, workspace temp directory, and locale. API keys,
@@ -173,9 +266,27 @@ The loopback FastAPI service provides:
 - `POST /workspace/promote` and `DELETE /workspace/chats/{conversation_id}`
 - immutable downloads under `/attachments/{id}/download` and
   `/artifacts/{id}/download`
+- coding readiness at `GET /coding/readiness`
+- registered source projects at `/projects` and sessions at `/sessions`
+- tasks at `POST /sessions/{id}/tasks` with `plan`, `implement` or `review` mode
+- bounded coding status/events at `GET /coding/runs/{id}?after=N&limit=200`
+  and stop/follow-up actions at `/coding/runs/{id}/stop` and `/steer`
+- immutable changes/checks at `/runs/{id}/changes` and `/runs/{id}/checks`
+- diff/version downloads and explicit apply/revert/reject at `/changes/{id}`
+- version-bound plan responses at `POST /decisions/{id}/respond`
+- durable questions at `/decisions/{id}` and `POST /decisions/{id}/input`
+- reviewed dependency setup at `GET/POST /sessions/{id}/setup`
+- process/log/stop routes under `/coding/runs/{id}/processes`
+- immutable screenshots at `/coding/runs/{id}/browser/{check_id}/image`
+- GitHub connection/reads under `/projects/{id}/github`, delivery review at
+  `POST /changes/{id}/deliveries`, and explicit `POST /deliveries/{id}/publish`
+- Snowflake profile/read routes under `/projects/{id}/snowflake`
+- editor context at `/sessions/{id}/editor`, versioned inline documents under
+  `/sessions/{id}/documents`, and `/coding/inline/status` statistics
 
 Every request accepts the lightweight `X-Corp-ID` namespace header, defaulting
-to `A123456`. All workspace API paths must be relative. Absolute paths,
+to `A123456`. This header selects a trusted-local namespace; it is not user
+authentication. All workspace API paths must be relative. Absolute paths,
 traversal, hidden or protected paths, and symlinks are rejected. Only one
 top-level run may be active per corp ID; another submission for that user
 receives HTTP 409 while a different corp ID can run independently.

@@ -1,0 +1,5 @@
+from slug import slugify
+assert slugify("")==""
+assert slugify(" -- Hello__42! ")=="hello-42"
+assert slugify("a...b")=="a-b"
+assert slugify("!!!")==""

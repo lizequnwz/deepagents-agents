@@ -1,0 +1,23 @@
+{
+  "name": "general-agent-inline",
+  "displayName": "General Agent Inline",
+  "description": "Versioned inline suggestions from the local General Agent coding service.",
+  "version": "0.1.0",
+  "publisher": "general-agent-local",
+  "engines": {"vscode": "^1.95.0"},
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "scripts": {"test": "node --test test.js"},
+  "contributes": {
+    "commands": [{"command": "generalAgentInline.accepted", "title": "General Agent: Record accepted suggestion"}],
+    "configuration": {
+      "title": "General Agent Inline",
+      "properties": {
+        "generalAgentInline.enabled": {"type": "boolean", "default": false, "description": "Request billable inline suggestions from the configured local server."},
+        "generalAgentInline.apiUrl": {"type": "string", "default": "http://127.0.0.1:8001", "description": "Explicit loopback API URL."},
+        "generalAgentInline.corpId": {"type": "string", "default": "A123456"},
+        "generalAgentInline.sessionId": {"type": "string", "default": "", "description": "Existing coding workbench session ID for this repository."}
+      }
+    }
+  }
+}

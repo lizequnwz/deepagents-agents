@@ -1,0 +1,2 @@
+from increment import increment
+assert increment(1)==2

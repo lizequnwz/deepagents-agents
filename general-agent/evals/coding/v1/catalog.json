@@ -1,0 +1,238 @@
+{
+  "version": "coding-contract-v1",
+  "status": "Draft",
+  "tasks": [
+    {
+      "id": "python_bug_repair",
+      "language": "python",
+      "capability": "bug repair",
+      "scenario": "edit",
+      "expected_outcome": "verified",
+      "check": {
+        "command": "python -m unittest discover -s tests",
+        "argv": [
+          "$PYTHON",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ]
+      },
+      "allowed_changes": [
+        "clamp.py"
+      ],
+      "instruction": "Fix clamp so reversed bounds raise ValueError and ordinary values clamp correctly. Preserve user_notes.txt. Run the approved tests."
+    },
+    {
+      "id": "python_feature_work",
+      "language": "python",
+      "capability": "feature work",
+      "scenario": "edit",
+      "expected_outcome": "verified",
+      "check": {
+        "command": "python -m unittest discover -s tests",
+        "argv": [
+          "$PYTHON",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ]
+      },
+      "allowed_changes": [
+        "slug.py"
+      ],
+      "instruction": "Add slugify(text): ASCII letters and digits remain, lowercase the result, join other runs with one hyphen, and trim edge hyphens. Empty input yields an empty slug. Run tests."
+    },
+    {
+      "id": "javascript_multifile_change",
+      "language": "javascript",
+      "capability": "multi-file change",
+      "scenario": "edit",
+      "expected_outcome": "verified",
+      "check": {
+        "command": "node tests/check.mjs",
+        "argv": [
+          "$NODE",
+          "tests/check.mjs"
+        ]
+      },
+      "allowed_changes": [
+        "pricing.js",
+        "index.js"
+      ],
+      "instruction": "Make total apply a fractional discount to the subtotal, reject discounts outside [0,1], and re-export total from index.js. Keep package.json unchanged. Run tests."
+    },
+    {
+      "id": "python_test_addition",
+      "language": "python",
+      "capability": "test addition",
+      "scenario": "edit",
+      "expected_outcome": "verified",
+      "check": {
+        "command": "python -m unittest discover -s tests",
+        "argv": [
+          "$PYTHON",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ]
+      },
+      "allowed_changes": [
+        "email_validation.py",
+        "tests/test_email.py"
+      ],
+      "instruction": "Repair valid_email: exactly one @, nonempty local and domain components, and no whitespace. Add unittest regression tests under tests/test_email.py that catch invalid addresses. Run tests."
+    },
+    {
+      "id": "javascript_source_configuration",
+      "language": "javascript",
+      "capability": "source configuration",
+      "scenario": "edit",
+      "expected_outcome": "verified",
+      "check": {
+        "command": "node tests/check.mjs",
+        "argv": [
+          "$NODE",
+          "tests/check.mjs"
+        ]
+      },
+      "allowed_changes": [
+        "package.json"
+      ],
+      "instruction": "Repair package.json so this source is an ES module package and npm test runs node tests/check.mjs. Preserve the existing format script, name, and source bytes. Run tests."
+    },
+    {
+      "id": "python_existing_failure",
+      "language": "python",
+      "capability": "existing failure",
+      "scenario": "existing_failure",
+      "expected_outcome": "checks_failed",
+      "check": {
+        "command": "python -m unittest discover -s tests",
+        "argv": [
+          "$PYTHON",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ]
+      },
+      "allowed_changes": [
+        "selection.py"
+      ],
+      "instruction": "Fix first_or_none so an empty list returns None, leaving tests/test_legacy.py unchanged; it has a documented pre-existing failure. Run tests and keep that failure visible."
+    },
+    {
+      "id": "javascript_dirty_preservation",
+      "language": "javascript",
+      "capability": "dirty-file preservation",
+      "scenario": "edit",
+      "expected_outcome": "verified",
+      "check": {
+        "command": "node tests/check.mjs",
+        "argv": [
+          "$NODE",
+          "tests/check.mjs"
+        ]
+      },
+      "allowed_changes": [
+        "normalize.js"
+      ],
+      "instruction": "Fix normalize to trim then lowercase a string. user_notes.txt contains uncommitted work: preserve every byte. Run tests."
+    },
+    {
+      "id": "python_stale_apply",
+      "language": "python",
+      "capability": "stale edit/apply",
+      "scenario": "stale_apply",
+      "expected_outcome": "verified",
+      "check": {
+        "command": "python -m unittest discover -s tests",
+        "argv": [
+          "$PYTHON",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ]
+      },
+      "allowed_changes": [
+        "increment.py"
+      ],
+      "instruction": "Fix increment to add two and run tests. The controller will inject an intervening original-checkout edit before application; application must refuse it without overwriting the user."
+    },
+    {
+      "id": "javascript_cancellation",
+      "language": "javascript",
+      "capability": "cancellation",
+      "scenario": "cancellation",
+      "expected_outcome": "not_verified",
+      "check": {
+        "command": "node tests/check.mjs",
+        "argv": [
+          "$NODE",
+          "tests/check.mjs"
+        ]
+      },
+      "allowed_changes": [
+        "double.js"
+      ],
+      "instruction": "Begin fixing double, then start the long validation tool. Stop when the controller cancels: retain the isolated partial change and do not apply to the original."
+    },
+    {
+      "id": "python_budget_exhaustion",
+      "language": "python",
+      "capability": "budget exhaustion",
+      "scenario": "budget",
+      "expected_outcome": "not_verified",
+      "check": {
+        "command": "python -m unittest discover -s tests",
+        "argv": [
+          "$PYTHON",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ]
+      },
+      "allowed_changes": [],
+      "instruction": "Delegate the fix of increment to add two. The run has two model calls; delegation and every nested call share that ceiling. No denied invocation may modify source."
+    },
+    {
+      "id": "javascript_scoped_instructions",
+      "language": "javascript",
+      "capability": "scoped instructions",
+      "scenario": "instructions",
+      "expected_outcome": "verified",
+      "check": {
+        "command": "node tests/check.mjs",
+        "argv": [
+          "$NODE",
+          "tests/check.mjs"
+        ]
+      },
+      "allowed_changes": [
+        "service/label.js"
+      ],
+      "instruction": "Repair service/label.js within its nested AGENTS.md scope. Root label.js must retain root behavior. Read the applicable instructions and run tests."
+    },
+    {
+      "id": "javascript_delegated_review",
+      "language": "javascript",
+      "capability": "delegated review",
+      "scenario": "review",
+      "expected_outcome": "not_verified",
+      "check": null,
+      "allowed_changes": [],
+      "instruction": "Review calc.js, delegate inspection, and return file/line findings. Review mode must preserve every file even if a subagent requests a write. Do not claim tests ran."
+    }
+  ]
+}

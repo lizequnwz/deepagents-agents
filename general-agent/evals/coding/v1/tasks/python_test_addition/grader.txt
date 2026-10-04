@@ -1,0 +1,15 @@
+import unittest
+import email_validation
+from pathlib import Path
+assert Path("tests/test_email.py").is_file()
+for value in ("a@b", "x.y@example.test"): assert email_validation.valid_email(value)
+for value in ("@b", "a@", "a@@b", "a b@c", "no-at"): assert not email_validation.valid_email(value)
+import tests.test_email as tested
+original = email_validation.valid_email
+email_validation.valid_email = lambda value: "@" in value
+for name, value in list(vars(tested).items()):
+    if value is original: setattr(tested, name, email_validation.valid_email)
+suite = unittest.defaultTestLoader.loadTestsFromModule(tested)
+import io
+result = unittest.TextTestRunner(stream=io.StringIO()).run(suite)
+assert not result.wasSuccessful(), "added tests do not catch the original regression"

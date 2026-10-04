@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from pydantic import SecretStr
 
 
 def _positive_int(name: str, default: int) -> int:
@@ -23,15 +24,46 @@ def _positive_int(name: str, default: int) -> int:
     return value
 
 
-def _model_kwargs() -> dict[str, Any]:
-    raw = os.getenv("MODEL_KWARGS_JSON", "{}")
+def _model_kwargs(name: str = "MODEL_KWARGS_JSON") -> dict[str, Any]:
+    raw = os.getenv(name, "{}")
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError("MODEL_KWARGS_JSON must be valid JSON.") from exc
+        raise ValueError(f"{name} must be valid JSON.") from exc
     if not isinstance(value, dict):
-        raise ValueError("MODEL_KWARGS_JSON must decode to an object.")
+        raise ValueError(f"{name} must decode to an object.")
     return value
+
+
+def _github_tokens() -> dict[str, SecretStr]:
+    from general_agent.workspace import validate_corp_id
+
+    try:
+        value = json.loads(os.getenv("GITHUB_TOKENS_JSON", "{}"))
+        if not isinstance(value, dict):
+            raise ValueError
+        result = {}
+        for corp_id, token in value.items():
+            validate_corp_id(corp_id)
+            if not isinstance(token, str) or not token or len(token) > 1024 or any(ord(char) < 33 or ord(char) > 126 for char in token):
+                raise ValueError
+            result[corp_id] = SecretStr(token)
+        return result
+    except (ValueError, TypeError):
+        raise ValueError("GITHUB_TOKENS_JSON must map corporation IDs to bounded tokens without whitespace.") from None
+
+
+def _snowflake_connections() -> dict[str, Any]:
+    from general_agent.coding.snowflake import SnowflakeConnection
+    from general_agent.workspace import validate_corp_id
+
+    try:
+        value = json.loads(os.getenv("SNOWFLAKE_CONNECTIONS_JSON", "{}"))
+        if not isinstance(value, dict) or len(value) > 20:
+            raise ValueError
+        return {validate_corp_id(corp): SnowflakeConnection.model_validate(record) for corp, record in value.items()}
+    except (ValueError, TypeError):
+        raise ValueError("SNOWFLAKE_CONNECTIONS_JSON must map at most twenty corporation IDs to explicit bounded read profiles.") from None
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +133,38 @@ class Settings:
     max_inspect_chars: int = field(
         default_factory=lambda: _positive_int("MAX_INSPECT_CHARS", 50_000)
     )
+    coding_image: str = field(
+        default_factory=lambda: os.getenv("CODING_IMAGE", "general-agent-coding:local").strip()
+    )
+    coding_browser_image: str = field(
+        default_factory=lambda: os.getenv("CODING_BROWSER_IMAGE", "general-agent-coding-browser:local").strip()
+    )
+    brave_search_api_key: SecretStr = field(
+        default_factory=lambda: SecretStr(os.getenv("BRAVE_SEARCH_API_KEY", "")), repr=False
+    )
+    github_tokens: dict[str, SecretStr] = field(default_factory=_github_tokens, repr=False)
+    inline_model_name: str = field(default_factory=lambda: os.getenv("INLINE_MODEL_NAME", "").strip())
+    inline_model_kwargs: dict[str, Any] = field(default_factory=lambda: _model_kwargs("INLINE_MODEL_KWARGS_JSON"))
+    snowflake_connections: dict[str, Any] = field(default_factory=_snowflake_connections, repr=False)
+    coding_memory_mb: int = field(
+        default_factory=lambda: _positive_int("CODING_MEMORY_MB", 1024)
+    )
+    coding_pids: int = field(default_factory=lambda: _positive_int("CODING_PIDS", 128))
+    coding_storage_mb: int = field(
+        default_factory=lambda: _positive_int("CODING_STORAGE_MB", 512)
+    )
+    max_repository_mb: int = field(
+        default_factory=lambda: _positive_int("MAX_REPOSITORY_MB", 50)
+    )
+    max_repository_files: int = field(
+        default_factory=lambda: _positive_int("MAX_REPOSITORY_FILES", 5000)
+    )
+    max_coding_workers: int = field(
+        default_factory=lambda: _positive_int("MAX_CODING_WORKERS", 2)
+    )
+    max_corp_coding_workers: int = field(
+        default_factory=lambda: _positive_int("MAX_CORP_CODING_WORKERS", 1)
+    )
 
     @property
     def workspace_root(self) -> Path:
@@ -117,6 +181,14 @@ class Settings:
     @property
     def checkpoint_db(self) -> Path:
         return self.data_root / "checkpoints.sqlite3"
+
+    @property
+    def coding_db(self) -> Path:
+        return self.data_root / "coding.sqlite3"
+
+    @property
+    def coding_root(self) -> Path:
+        return self.data_root / "coding"
 
     @property
     def package_root(self) -> Path:
@@ -146,6 +218,7 @@ class Settings:
             self.temp_root,
             self.workspace_root / "users",
             self.app_root,
+            self.installed_skills_root,
             self.data_root / "attachments",
             self.data_root / "artifacts",
             self.data_root / "baselines",
@@ -169,6 +242,10 @@ class Settings:
             errors.append("APP_HOST must remain loopback-only for trusted execution.")
         if not self.default_corp_id:
             errors.append("DEFAULT_CORP_ID must not be empty.")
+        if not self.coding_image or any(char.isspace() for char in self.coding_image):
+            errors.append("CODING_IMAGE must be a nonempty image name without whitespace.")
+        if not self.coding_browser_image or any(char.isspace() for char in self.coding_browser_image):
+            errors.append("CODING_BROWSER_IMAGE must be a nonempty image name without whitespace.")
         return errors
 
 

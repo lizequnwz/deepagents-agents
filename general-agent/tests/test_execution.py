@@ -6,7 +6,7 @@ import os
 import pytest
 
 from general_agent.execution import CancellableLocalShellBackend
-from general_agent.workspace import Workspace
+from general_agent.workspace import Workspace, corp_storage_key
 
 
 def make_backend(settings, *, output_limit: int | None = None):
@@ -101,14 +101,16 @@ async def test_timeout_and_run_cancellation_terminate_process_group(settings) ->
 
     async def run_command():
         async with backend.run_scope("cancel-me", "A123456"):
-            return await backend.aexecute("python -c \"import time; time.sleep(30)\"")
+            return await backend.aexecute("python -c \"from pathlib import Path; import time; Path('started').touch(); time.sleep(30)\"")
 
     task = asyncio.create_task(run_command())
     for _ in range(100):
-        if backend._processes.get("cancel-me"):
+        if (settings.workspace_root / "users" / corp_storage_key("A123456") / "chats" / "cancel-me" / "started").exists():
             break
         await asyncio.sleep(0.01)
+    else:
+        pytest.fail("Owned command did not reach its startup marker.")
     await backend.cancel_run("cancel-me")
     result = await asyncio.wait_for(task, timeout=3)
     assert result.exit_code < 0
-    assert not backend._processes
+    assert not backend._supervisor._owners

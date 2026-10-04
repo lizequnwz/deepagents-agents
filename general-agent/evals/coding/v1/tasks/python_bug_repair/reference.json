@@ -1,0 +1,7 @@
+[
+  {
+    "path": "clamp.py",
+    "old": "    return min(high, max(low, value))",
+    "new": "    if low > high:\n        raise ValueError(\"reversed bounds\")\n    return min(high, max(low, value))"
+  }
+]

@@ -1,0 +1,8 @@
+import assert from 'node:assert/strict';
+import {total,version} from './index.js';
+assert.equal(version,1);
+assert.equal(total([],0.5),0);
+assert.equal(total([4,6],1),0);
+assert.equal(total([4,6],0),10);
+assert.throws(()=>total([1],-0.1),RangeError);
+assert.throws(()=>total([1],1.1),RangeError);

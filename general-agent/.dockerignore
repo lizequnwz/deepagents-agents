@@ -1,0 +1,15 @@
+**
+!docker/
+!docker/coding/
+!docker/coding/Dockerfile
+!docker/coding-browser/
+!docker/coding-browser/Dockerfile
+!docker/coding-polyglot/
+!docker/coding-polyglot/Dockerfile
+!general_agent/
+!general_agent/processes.py
+!general_agent/coding/
+!general_agent/coding/runtime_controller.py
+!general_agent/coding/setup_controller.py
+!general_agent/coding/browser_controller.py
+!general_agent/coding/typescript_controller.cjs

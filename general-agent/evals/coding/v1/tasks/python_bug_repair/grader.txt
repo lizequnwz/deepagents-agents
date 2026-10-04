@@ -1,0 +1,8 @@
+from clamp import clamp
+assert clamp(-8,-3,4)==-3
+assert clamp(0,-3,4)==0
+assert clamp(9,-3,4)==4
+assert clamp(2,2,2)==2
+try: clamp(1,4,-1)
+except ValueError: pass
+else: raise AssertionError("reversed bounds accepted")

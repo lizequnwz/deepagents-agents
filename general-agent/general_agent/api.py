@@ -16,6 +16,9 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from general_agent.agent import build_agent
 from general_agent.config import Settings, load_settings
+from general_agent.coding.service import CodingService
+from general_agent.coding.store import CodingStore
+from general_agent.coding_api import router as coding_router
 from general_agent.execution import CancellableLocalShellBackend
 from general_agent.file_inspector import inspect_path
 from general_agent.run_manager import RunManager
@@ -48,6 +51,8 @@ def create_app(
     *,
     settings: Settings | None = None,
     graph_override: Any | None = None,
+    coding_model: Any | None = None,
+    coding_runtime_factory: Any | None = None,
 ) -> FastAPI:
     configured_settings = settings
 
@@ -60,52 +65,58 @@ def create_app(
             active_settings.data_root,
             active_settings.default_corp_id,
         )
-        store = Store(
-            active_settings.application_db,
-            active_settings.data_root,
-            active_settings.default_corp_id,
-        )
-        backend = CancellableLocalShellBackend(
-            active_settings.workspace_root,
-            package_root=active_settings.package_root,
-            temp_root=active_settings.temp_root,
-            timeout=active_settings.command_timeout_seconds,
-            max_output_bytes=active_settings.max_command_output_bytes,
-            max_file_read_chars=active_settings.max_file_read_chars,
-        )
-        _migrate_checkpoint_threads(
-            active_settings.checkpoint_db, active_settings.default_corp_id
-        )
-        checkpoint_context = AsyncSqliteSaver.from_conn_string(
-            str(active_settings.checkpoint_db)
-        )
-        checkpointer = await checkpoint_context.__aenter__()
-        await checkpointer.setup()
-        graph = graph_override or build_agent(
-            active_settings,
-            workspace=workspace,
-            backend=backend,
-            checkpointer=checkpointer,
-        )
-        manager = RunManager(
-            settings=active_settings,
-            store=store,
-            workspace=workspace,
-            backend=backend,
-            graph=graph,
-        )
-        app.state.settings = active_settings
-        app.state.workspace = workspace
-        app.state.store = store
-        app.state.backend = backend
-        app.state.checkpointer = checkpointer
-        app.state.manager = manager
-        try:
+        async with contextlib.AsyncExitStack() as resources:
+            coding_store = CodingStore(active_settings.coding_db)
+            resources.callback(coding_store.close)
+            store = Store(
+                active_settings.application_db,
+                active_settings.data_root,
+                active_settings.default_corp_id,
+            )
+            resources.callback(store.close)
+            backend = CancellableLocalShellBackend(
+                active_settings.workspace_root,
+                package_root=active_settings.package_root,
+                temp_root=active_settings.temp_root,
+                timeout=active_settings.command_timeout_seconds,
+                max_output_bytes=active_settings.max_command_output_bytes,
+                max_file_read_chars=active_settings.max_file_read_chars,
+            )
+            _migrate_checkpoint_threads(
+                active_settings.checkpoint_db, active_settings.default_corp_id
+            )
+            checkpoint_context = AsyncSqliteSaver.from_conn_string(
+                str(active_settings.checkpoint_db)
+            )
+            checkpointer = await resources.enter_async_context(checkpoint_context)
+            await checkpointer.setup()
+            graph = graph_override or build_agent(
+                active_settings,
+                workspace=workspace,
+                backend=backend,
+                checkpointer=checkpointer,
+            )
+            manager = RunManager(
+                settings=active_settings,
+                store=store,
+                workspace=workspace,
+                backend=backend,
+                graph=graph,
+            )
+            resources.push_async_callback(manager.shutdown)
+            app.state.settings = active_settings
+            app.state.workspace = workspace
+            app.state.store = store
+            app.state.backend = backend
+            app.state.checkpointer = checkpointer
+            app.state.manager = manager
+            coding_options = {"runtime_factory": coding_runtime_factory} if coding_runtime_factory else {}
+            coding = CodingService(active_settings, coding_store, checkpointer,
+                                   model=coding_model, **coding_options)
+            app.state.coding = coding
+            resources.push_async_callback(coding.close)
+            await coding.start()
             yield
-        finally:
-            await manager.shutdown()
-            store.close()
-            await checkpoint_context.__aexit__(None, None, None)
 
     app = FastAPI(
         title="Deep Agent API",
@@ -114,6 +125,7 @@ def create_app(
         docs_url="/docs",
         redoc_url=None,
     )
+    app.include_router(coding_router)
 
     @app.exception_handler(WorkspacePathError)
     async def workspace_error(_request: Request, exc: WorkspacePathError):

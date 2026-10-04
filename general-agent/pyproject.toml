@@ -1,11 +1,13 @@
 [project]
 name = "general-agent"
 version = "0.1.0"
-description = "Trusted-local general-purpose Deep Agent with a Streamlit chat UI"
+description = "Trusted-local general assistant and isolated repository coding agent"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.15"
 dependencies = [
+    "agent-client-protocol>=0.12.1,<0.13",
     "aiosqlite>=0.21.0",
+    "certifi>=2024.2.2",
     "charset-normalizer>=3.4.0",
     "deepagents>=0.7.0,<0.8.0",
     "defusedxml>=0.7.1",
@@ -20,7 +22,9 @@ dependencies = [
     "matplotlib>=3.9.0",
     "numpy>=2.0.0",
     "openpyxl>=3.1.5",
+    "packaging>=25",
     "pandas>=2.2.0",
+    "pathspec>=0.12.1",
     "pdf2image>=1.17.0",
     "pdfplumber>=0.11.0",
     "pillow>=11.0.0",
@@ -41,6 +45,9 @@ dependencies = [
     "uvicorn[standard]>=0.35.0",
     "xlrd>=2.0.1",
 ]
+
+[project.scripts]
+general-agent-acp = "general_agent.coding.acp:main"
 
 [dependency-groups]
 dev = [

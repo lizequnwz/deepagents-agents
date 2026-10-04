@@ -34,6 +34,35 @@ def test_paths_are_virtual_rooted_and_protected(settings, tmp_path: Path) -> Non
     )
 
 
+def test_public_operations_reject_links_inside_the_workspace(settings) -> None:
+    workspace = Workspace(settings.workspace_root, settings.data_root)
+    own = workspace.ensure_chat("CORP_A", "chat")
+    foreign = workspace.ensure_chat("CORP_B", "chat")
+    (foreign / "target.txt").write_text("foreign bytes", encoding="utf-8")
+    (own / "alias").symlink_to(foreign, target_is_directory=True)
+    path = "chats/chat/alias/target.txt"
+    for action in (
+        lambda: workspace.resolve_user("CORP_A", path),
+        lambda: workspace.rename("CORP_A", path, "changed.txt"),
+        lambda: workspace.delete("CORP_A", path),
+        lambda: workspace.promote("CORP_A", path, "chat"),
+        lambda: workspace.list_scope(corp_id="CORP_A", scope="chat", conversation_id="chat", relative_path="alias"),
+    ):
+        with pytest.raises(WorkspacePathError):
+            action()
+    assert workspace.list_scope(corp_id="CORP_A", scope="chat", conversation_id="chat") == []
+    assert (foreign / "target.txt").read_text() == "foreign bytes"
+
+
+def test_user_root_links_cannot_change_corporation_identity(settings) -> None:
+    workspace = Workspace(settings.workspace_root, settings.data_root)
+    foreign = workspace.ensure_user("CORP_B")
+    own = workspace.user_root("CORP_A")
+    own.symlink_to(foreign, target_is_directory=True)
+    with pytest.raises(WorkspacePathError):
+        workspace.ensure_user("CORP_A")
+
+
 def test_upload_collisions_and_immutable_snapshots(settings) -> None:
     workspace = Workspace(settings.workspace_root, settings.data_root)
     first, protected_first = workspace.upload(

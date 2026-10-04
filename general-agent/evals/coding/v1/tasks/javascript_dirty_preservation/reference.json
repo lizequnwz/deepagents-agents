@@ -1,0 +1,7 @@
+[
+  {
+    "path": "normalize.js",
+    "old": "value.toLowerCase()",
+    "new": "value.trim().toLowerCase()"
+  }
+]

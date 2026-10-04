@@ -4,7 +4,7 @@
 
 - This project is a trusted-local DeepAgents application built with LangChain,
   FastAPI, Streamlit, and SQLite.
-- The agent's `execute` tool runs directly on the host with the current user's
+- The general assistant's `execute` runs directly on the host with the user's
   permissions. It is not sandboxed and has no approval step.
 - Keep both services loopback-only. Do not weaken the `API_HOST` or `APP_HOST`
   readiness checks or present this application as safe for untrusted users.
@@ -23,7 +23,14 @@
   accounting, cancellation, and snapshot orchestration.
 - `general_agent/store.py`: application persistence and recovery.
 - `general_agent/api.py`: loopback API and corporation-scoped request handling.
-- `streamlit_app.py` and `general_agent/ui/`: the single-current-chat UI.
+- `streamlit_app.py`, `app_pages/`, and `general_agent/ui/`: assistant and coding UI.
+- `general_agent/coding/`: scoped project/session copies, constrained runtime,
+  immutable source evidence, change review/application and durable coding queue.
+- `general_agent/coding/github_service.py`, `snowflake.py`: application-owned
+  connector authority and receipts; publishing is a separate reviewed action.
+- `general_agent/coding/inline.py`, `acp.py`, `editors/vscode/`: separate inline
+  inference and shared-service editor task clients.
+- `general_agent/coding_api.py`: corporation-scoped coding routes.
 - `skills/`: source skills copied into application-managed `workspace/.app/skills/`.
 - `README.md`: use it for product behavior, storage layout, API routes, and
   operator setup; do not duplicate that general documentation here.
@@ -41,6 +48,11 @@
 - Keep `inherit_env=False`. Do not expose application secrets or the ambient
   host environment to agent-run commands. Add environment variables only when
   they are narrowly required and safe for model-generated shell commands.
+- Coding commands require the configured container. Never fall back to host
+  execution. Plan/Review repository tools and delegated work remain read-only.
+- Original coding changes require a reviewed immutable revision and registered
+  root identity. Keep application runtime roots excluded at broker mutation
+  time, including paths newly created by the model in the isolated copy.
 - Preserve command timeout, output truncation, process-group cancellation, model
   and tool-call limits, and provider-reported token limits.
 - Keep abandoned active runs marked failed after restart. Only completed
@@ -50,7 +62,8 @@
 
 ## Agent prompt and skills
 
-- `SYSTEM_PROMPT` in `general_agent/agent.py` is the canonical application prompt.
+- `SYSTEM_PROMPT` in `general_agent/agent.py` is the general-assistant prompt;
+  `CODING_SYSTEM_PROMPT` in `general_agent/coding/agent.py` owns coding policy.
   Keep its authority and workspace policies synchronized with the backend.
 - DeepAgents `SkillsMiddleware` owns generic skill discovery from `/skills/`.
   Do not hard-code the current skill catalog in `SYSTEM_PROMPT`; put trigger and
@@ -110,6 +123,10 @@ uv run pytest
 - Skills and document tooling: `tests/test_skills.py` plus the applicable live
   skill test when environment-dependent behavior changes.
 - UI state reduction and helpers: `tests/test_ui_helpers.py`.
+- Coding workflows: `tests/test_coding_*.py`; real Docker and billable model
+  evaluation require their explicitly configured environment/budget.
+- Editor JavaScript: `node --test editors/vscode/test.js`; compiler navigation:
+  `tests/typescript_navigation.cjs` requires the exact pinned SDK package.
 - Before handoff, inspect the diff, run `git diff --check`, and report exactly
   which checks ran and any that could not run.
 

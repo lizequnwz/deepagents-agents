@@ -1,0 +1,5 @@
+import assert from 'node:assert/strict';
+import {label as root} from './label.js';
+import {label as nested} from './service/label.js';
+assert.equal(root('x'),'root:x');
+assert.equal(nested('x'),'nested:x');

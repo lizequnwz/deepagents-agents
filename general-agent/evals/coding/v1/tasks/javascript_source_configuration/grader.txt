@@ -1,0 +1,9 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const p=JSON.parse(fs.readFileSync('package.json','utf8'));
+assert.equal(p.name,'fixture');
+assert.equal(p.type,'module');
+assert.equal(p.scripts.format,'echo retain');
+assert.equal(p.scripts.test,'node tests/check.mjs');
+const {double}=await import('./math.js');
+assert.equal(double(-2),-4);

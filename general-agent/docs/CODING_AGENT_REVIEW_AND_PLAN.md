@@ -2,7 +2,10 @@
 
 **Date:** October 3, 2026
 
-**Status:** Proposed for review; implementation has not started.
+**Status:** Approved by the user for implementation of all stages, step by step.
+The review below records the original baseline. Current implementation, tests,
+scope decisions and remaining release gates are tracked in
+[CODING_AGENT_IMPLEMENTATION.md](CODING_AGENT_IMPLEMENTATION.md).
 
 **First-release priority confirmed by the user:** Local repositories, code editing, tests, and diff review.
 

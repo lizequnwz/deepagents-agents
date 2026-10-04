@@ -52,7 +52,8 @@ def test_agent_construction_configures_harness_and_budgets(settings) -> None:
     assert middleware_names.count("FilesystemMiddleware") == 1
     assert middleware_names.count("SkillsMiddleware") == 0
     assert middleware_names.count("TodoListMiddleware") == 1
-    assert middleware_names.count("ToolCallLimitMiddleware") == 2
+    assert "ToolCallLimitMiddleware" not in middleware_names
+    assert "ModelCallLimitMiddleware" not in middleware_names
     filesystem = next(
         item
         for item in kwargs["middleware"]

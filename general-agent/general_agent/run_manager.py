@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time
+import threading
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -16,6 +17,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
+from general_agent.budgets import RunBudget, RunBudgetCallback, run_budget_scope
 from general_agent.config import Settings
 from general_agent.execution import CancellableLocalShellBackend
 from general_agent.schemas import Attachment, RunStatus
@@ -37,6 +39,7 @@ class RunUsageCallback(BaseCallbackHandler):
         self.corp_id = corp_id
         self.active: dict[str, str] = {}
         self.reported_tokens = 0
+        self._usage_lock = threading.RLock()
 
     def on_chat_model_start(
         self,
@@ -48,7 +51,8 @@ class RunUsageCallback(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         del serialized, messages, kwargs
-        self.active[str(run_id)] = _agent_from_model_metadata(metadata)
+        with self._usage_lock:
+            self.active[str(run_id)] = _agent_from_model_metadata(metadata)
 
     def on_llm_end(
         self, response: LLMResult, *, run_id: Any, **kwargs: Any
@@ -72,18 +76,22 @@ class RunUsageCallback(BaseCallbackHandler):
         self._finish(str(run_id), None)
 
     def finalize_incomplete(self) -> None:
-        for call_id in list(self.active):
-            self._finish(call_id, None)
+        with self._usage_lock:
+            for call_id in list(self.active):
+                self._finish(call_id, None)
 
     def _finish(
         self, call_id: str, usage: Mapping[str, Any] | None
     ) -> None:
-        agent = self.active.pop(call_id, "general-agent")
-        self.store.record_model_call(
-            self.run_id, agent, usage, corp_id=self.corp_id
-        )
-        if usage and isinstance(usage.get("total_tokens"), int):
-            self.reported_tokens += int(usage["total_tokens"])
+        with self._usage_lock:
+            agent = self.active.pop(call_id, None)
+            if agent is None:
+                return
+            self.store.record_model_call(
+                self.run_id, agent, usage, corp_id=self.corp_id
+            )
+            if usage and isinstance(usage.get("total_tokens"), int):
+                self.reported_tokens += int(usage["total_tokens"])
         self.store.add_event(
             self.run_id,
             "usage_updated",
@@ -231,10 +239,17 @@ class RunManager:
             async with self.backend.run_scope(
                 run_id, corp_id, run.conversation_id
             ):
-                async with asyncio.timeout(self.settings.run_timeout_seconds):
-                    output = await self._consume_stream(
-                        run_id, corp_id, agent_input
-                    )
+                budget = RunBudget(
+                    max_model_calls=self.settings.max_model_calls,
+                    max_tool_calls=self.settings.max_tool_calls,
+                    max_task_calls=self.settings.max_task_calls,
+                )
+                with run_budget_scope(budget):
+                    async with asyncio.timeout(self.settings.run_timeout_seconds):
+                        output = await self._consume_stream(
+                            run_id, corp_id, agent_input
+                        )
+                    budget.raise_if_exceeded()
             final_text = _final_text(output)
             final_status = RunStatus.COMPLETED
         except asyncio.CancelledError:
@@ -313,7 +328,7 @@ class RunManager:
             agent_input,
             config={
                 "configurable": {"thread_id": f"{corp_id}:{run_id}"},
-                "callbacks": [usage_callback],
+                "callbacks": [RunBudgetCallback(), usage_callback],
             },
             version="v3",
         )

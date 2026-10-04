@@ -9,11 +9,13 @@ import json
 import os
 import re
 import shutil
+import stat
 import threading
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
+from collections.abc import Iterator
 from typing import Any, BinaryIO, Literal
 
 from general_agent.schemas import Artifact, Attachment, WorkspaceEntry, utc_now
@@ -69,10 +71,10 @@ def corp_storage_key(corp_id: str) -> str:
 def set_current_workspace(
     corp_id: str, conversation_id: str
 ) -> tuple[contextvars.Token[str | None], contextvars.Token[str | None]]:
-    corp_token = _CURRENT_CORP_ID.set(validate_corp_id(corp_id))
-    conversation_token = _CURRENT_CONVERSATION_ID.set(
-        _safe_conversation_id(conversation_id)
-    )
+    corp_id = validate_corp_id(corp_id)
+    conversation_id = _safe_conversation_id(conversation_id)
+    corp_token = _CURRENT_CORP_ID.set(corp_id)
+    conversation_token = _CURRENT_CONVERSATION_ID.set(conversation_id)
     return corp_token, conversation_token
 
 
@@ -82,16 +84,6 @@ def reset_current_workspace(
     corp_token, conversation_token = tokens
     _CURRENT_CONVERSATION_ID.reset(conversation_token)
     _CURRENT_CORP_ID.reset(corp_token)
-
-
-def set_current_conversation(conversation_id: str) -> contextvars.Token[str | None]:
-    """Compatibility helper for tests that set only the current chat."""
-
-    return _CURRENT_CONVERSATION_ID.set(_safe_conversation_id(conversation_id))
-
-
-def reset_current_conversation(token: contextvars.Token[str | None]) -> None:
-    _CURRENT_CONVERSATION_ID.reset(token)
 
 
 def current_conversation_id() -> str | None:
@@ -118,22 +110,20 @@ def agent_physical_path(
     active_conversation = conversation_id or current_conversation_id()
 
     if parts and parts[0] == "skills":
-        if any(part.startswith(".") for part in parts[1:]):
+        if not visible_workspace_parts(parts[1:]):
             raise WorkspacePathError("Protected skill paths are not exposed.")
         return PurePosixPath(".app", *parts).as_posix()
 
-    if any(part in _PROTECTED_PARTS or part.startswith(".") for part in parts):
+    if not visible_workspace_parts(parts):
         raise WorkspacePathError("Protected workspace paths are not exposed.")
-    if not active_corp:
-        return PurePosixPath(*parts).as_posix() if parts else ""
+    if not active_corp or not active_conversation:
+        raise WorkspacePathError("A corporation and current conversation are required.")
 
     user_prefix = PurePosixPath("users", corp_storage_key(active_corp))
     if parts and parts[0] in _LAYOUT_NAMES:
         return (user_prefix / PurePosixPath(*parts)).as_posix()
     if parts and parts[0] == "tmp":
         return (user_prefix / ".tmp" / PurePosixPath(*parts[1:])).as_posix()
-    if not active_conversation:
-        raise WorkspacePathError("A current conversation is required for this path.")
     return (
         user_prefix
         / "chats"
@@ -151,18 +141,28 @@ def agent_virtual_path(
 
     normalized = PurePosixPath(str(relative_path).replace("\\", "/").lstrip("/"))
     parts = normalized.parts
+    if any(part in {"..", "~"} for part in parts):
+        raise WorkspacePathError("Path traversal is not allowed.")
     if len(parts) >= 2 and parts[:2] == (".app", "skills"):
+        if not visible_workspace_parts(parts[2:]):
+            raise WorkspacePathError("Protected skill paths are not exposed.")
         return "/" + PurePosixPath("skills", *parts[2:]).as_posix()
     active_corp = corp_id or current_corp_id()
     active_conversation = conversation_id or current_conversation_id()
-    if not active_corp:
-        return "/" + normalized.as_posix()
+    if not active_corp or not active_conversation:
+        raise WorkspacePathError("A corporation and current conversation are required.")
     prefix = ("users", corp_storage_key(active_corp))
     if parts[:2] != prefix:
-        return "/" + normalized.as_posix()
+        raise WorkspacePathError("The path is outside the current corporation's workspace.")
     user_parts = parts[2:]
     if user_parts and user_parts[0] == ".tmp":
+        if not visible_workspace_parts(user_parts[1:]):
+            raise WorkspacePathError("Protected temporary paths are not exposed.")
         return "/" + PurePosixPath("tmp", *user_parts[1:]).as_posix()
+    if not visible_workspace_parts(user_parts):
+        raise WorkspacePathError("Protected workspace paths are not exposed.")
+    if not user_parts or user_parts[0] not in _LAYOUT_NAMES:
+        raise WorkspacePathError("The path is outside the exposed workspace scopes.")
     if (
         active_conversation
         and len(user_parts) >= 2
@@ -171,6 +171,113 @@ def agent_virtual_path(
         remainder = user_parts[2:]
         return "/" + PurePosixPath(*remainder).as_posix() if remainder else "/"
     return "/" + PurePosixPath(*user_parts).as_posix()
+
+
+def visible_workspace_parts(parts: tuple[str, ...]) -> bool:
+    """The shared public/file-tool policy for individual path components."""
+
+    return all(
+        part not in _PROTECTED_PARTS and not part.startswith(".")
+        and part not in {"..", "~", "users"}
+        for part in parts
+    )
+
+
+def validate_workspace_path(root: Path, path: Path, *, must_exist: bool = False) -> Path:
+    """Check lexical containment and reject every symlink component."""
+
+    try:
+        parts = path.relative_to(root).parts
+    except ValueError as exc:
+        raise WorkspacePathError("The path escapes its workspace root.") from exc
+    if any(part in {"..", "~"} for part in parts):
+        raise WorkspacePathError("Path traversal is not allowed.")
+    current = root
+    for part in parts:
+        current /= part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            if must_exist:
+                raise FileNotFoundError("The workspace path does not exist.") from None
+            break
+        if stat.S_ISLNK(info.st_mode):
+            raise WorkspacePathError("Symlinks are not allowed in workspace paths.")
+    return path
+
+
+@contextlib.contextmanager
+def workspace_directory(root: Path, path: Path, *, create: bool = False) -> Iterator[int]:
+    """Open each directory relative to a pinned parent without following links."""
+
+    validate_workspace_path(root, path)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    descriptor = os.open(root.anchor, flags)
+    try:
+        root_parts = root.parts[1:]
+        for index, part in enumerate((*root_parts, *path.relative_to(root).parts)):
+            if create and index >= len(root_parts):
+                try:
+                    os.mkdir(part, dir_fd=descriptor)
+                except FileExistsError:
+                    pass
+            child = os.open(part, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+@contextlib.contextmanager
+def workspace_file(
+    root: Path, path: Path, flags: int, *, create_parents: bool = False
+) -> Iterator[int]:
+    """Open a regular, unaliased file through no-follow directory descriptors."""
+
+    validate_workspace_path(root, path)
+    with workspace_directory(root, path.parent, create=create_parents) as parent:
+        # Validate type/aliases before truncation so a hard link cannot mutate
+        # protected bytes. Nonblocking open also prevents FIFO/device hangs.
+        descriptor = os.open(
+            path.name, (flags & ~os.O_TRUNC) | os.O_NOFOLLOW | os.O_NONBLOCK,
+            0o644, dir_fd=parent,
+        )
+        try:
+            info = os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise WorkspacePathError("Only regular files without hard-link aliases are exposed.")
+            if flags & os.O_TRUNC:
+                os.ftruncate(descriptor, 0)
+            yield descriptor
+        finally:
+            os.close(descriptor)
+
+
+def copy_workspace_file(source_root: Path, source: Path, destination_root: Path, destination: Path) -> None:
+    """Copy approved bytes and metadata without reopening either path by name."""
+
+    with workspace_file(source_root, source, os.O_RDONLY) as source_fd:
+        with workspace_file(
+            destination_root, destination, os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            create_parents=True,
+        ) as destination_fd:
+            info = os.fstat(source_fd)
+            with os.fdopen(os.dup(source_fd), "rb") as reader:
+                with os.fdopen(os.dup(destination_fd), "wb") as writer:
+                    shutil.copyfileobj(reader, writer)
+            os.fchmod(destination_fd, stat.S_IMODE(info.st_mode))
+            os.utime(destination_fd, ns=(info.st_atime_ns, info.st_mtime_ns))
+
+
+def remove_workspace_tree(root: Path, path: Path) -> None:
+    """Use the standard descriptor-safe tree remover within a pinned parent."""
+
+    validate_workspace_path(root, path)
+    if not shutil.rmtree.avoids_symlink_attacks:
+        raise WorkspacePathError("This platform lacks safe directory deletion.")
+    with workspace_directory(root, path.parent) as parent:
+        shutil.rmtree(path.name, dir_fd=parent)
 
 
 def safe_filename(name: str) -> str:
@@ -224,7 +331,9 @@ class Workspace:
             self.user_data_root(corp_id) / "artifacts",
             self.user_data_root(corp_id) / "baselines",
         ):
-            path.mkdir(parents=True, exist_ok=True)
+            anchor = self.root if path.is_relative_to(self.root) else self.data_root
+            with workspace_directory(anchor, path, create=True):
+                pass
         return root
 
     def initialize_layout(self) -> None:
@@ -284,7 +393,8 @@ class Workspace:
     def ensure_chat(self, corp_id: str, conversation_id: str) -> Path:
         self.ensure_user(corp_id)
         root = self.chat_root(corp_id, conversation_id)
-        root.mkdir(parents=True, exist_ok=True)
+        with workspace_directory(self.root, root, create=True):
+            pass
         return root
 
     def resolve(
@@ -309,14 +419,7 @@ class Workspace:
         ):
             raise WorkspacePathError("Protected workspace paths are not exposed.")
         candidate = self.root.joinpath(*parts)
-        resolved = candidate.resolve(strict=False)
-        if not resolved.is_relative_to(self.root):
-            raise WorkspacePathError("The path escapes the workspace.")
-        if must_exist and not candidate.exists():
-            raise FileNotFoundError(relative_path)
-        if candidate.exists() and not candidate.resolve().is_relative_to(self.root):
-            raise WorkspacePathError("Symlinks outside the workspace are not allowed.")
-        return candidate
+        return validate_workspace_path(self.root, candidate, must_exist=must_exist)
 
     def resolve_user(
         self,
@@ -328,35 +431,22 @@ class Workspace:
     ) -> Path:
         """Resolve a public path inside one user's workspace."""
 
-        base = self.ensure_user(corp_id).resolve()
+        base = self.ensure_user(corp_id)
         subpath = _safe_subpath(relative_path, allow_empty=allow_root)
         candidate = base.joinpath(*subpath.parts)
-        resolved = candidate.resolve(strict=False)
-        if not resolved.is_relative_to(base):
-            raise WorkspacePathError("The path escapes the current user's workspace.")
-        if must_exist and not candidate.exists():
-            raise FileNotFoundError(relative_path)
-        if candidate.exists() and (
-            candidate.is_symlink() or not candidate.resolve().is_relative_to(base)
-        ):
-            raise WorkspacePathError("Symlinks are not exposed through the workspace API.")
-        return candidate
+        validate_workspace_path(self.root, candidate, must_exist=must_exist)
+        return validate_workspace_path(base, candidate, must_exist=must_exist)
 
     def resolve_agent(self, path: str, *, must_exist: bool = False) -> Path:
         return self.resolve(agent_physical_path(path), must_exist=must_exist)
 
     def relative(self, path: Path) -> str:
-        resolved = path.resolve(strict=False)
-        if not resolved.is_relative_to(self.root):
-            raise WorkspacePathError("The path is outside the workspace.")
-        return resolved.relative_to(self.root).as_posix()
+        return validate_workspace_path(self.root, path).relative_to(self.root).as_posix()
 
     def user_relative(self, corp_id: str, path: Path) -> str:
-        resolved = path.resolve(strict=False)
-        base = self.user_root(corp_id).resolve()
-        if not resolved.is_relative_to(base):
-            raise WorkspacePathError("The path is outside the current user's workspace.")
-        return resolved.relative_to(base).as_posix()
+        validate_workspace_path(self.root, path)
+        base = self.user_root(corp_id)
+        return validate_workspace_path(base, path).relative_to(base).as_posix()
 
     def list_entries(self, corp_id: str, relative_path: str = "") -> list[WorkspaceEntry]:
         directory = self.resolve_user(
@@ -375,10 +465,8 @@ class Workspace:
         base = self._scope_root(corp_id, scope, conversation_id)
         subpath = _safe_subpath(relative_path, allow_empty=True)
         directory = base.joinpath(*subpath.parts)
-        if not directory.resolve(strict=False).is_relative_to(base.resolve()):
-            raise WorkspacePathError("The path escapes the selected workspace scope.")
-        if not directory.exists():
-            raise FileNotFoundError(relative_path)
+        validate_workspace_path(self.root, directory, must_exist=True)
+        validate_workspace_path(base, directory, must_exist=True)
         return self._entries(corp_id, directory)
 
     def upload(
@@ -410,8 +498,7 @@ class Workspace:
         protected = (
             self.user_data_root(corp_id) / "attachments" / attachment_id / name
         )
-        protected.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(destination, protected)
+        copy_workspace_file(self.root, destination, self.data_root, protected)
         return (
             Attachment(
                 attachment_id=attachment_id,
@@ -464,15 +551,16 @@ class Workspace:
     ) -> WorkspaceEntry:
         conversation_id = _safe_conversation_id(conversation_id)
         source = self.resolve_user(corp_id, relative_path, must_exist=True)
-        chat_root = self.chat_root(corp_id, conversation_id).resolve()
-        if not source.resolve().is_relative_to(chat_root):
+        chat_root = self.chat_root(corp_id, conversation_id)
+        if not source.is_relative_to(chat_root):
             raise WorkspacePathError(
                 "Only files from the current chat can be kept in shared workspace."
             )
         destination = _unique_path(self.shared_root(corp_id) / source.name)
-        destination.parent.mkdir(parents=True, exist_ok=True)
         old_relative = self.user_relative(corp_id, source)
-        shutil.move(str(source), str(destination))
+        with workspace_directory(self.root, source.parent) as source_parent:
+            with workspace_directory(self.root, destination.parent, create=True) as destination_parent:
+                os.rename(source.name, destination.name, src_dir_fd=source_parent, dst_dir_fd=destination_parent)
         new_relative = self.user_relative(corp_id, destination)
         self._move_metadata_prefix(
             corp_id, old_relative, new_relative, retention="shared"
@@ -484,12 +572,10 @@ class Workspace:
         destination = source.with_name(safe_filename(new_name))
         if destination.exists():
             raise FileExistsError(destination.name)
-        if not destination.resolve(strict=False).is_relative_to(
-            self.user_root(corp_id).resolve()
-        ):
-            raise WorkspacePathError("The destination escapes the workspace.")
+        validate_workspace_path(self.root, destination)
         old_relative = self.user_relative(corp_id, source)
-        source.rename(destination)
+        with workspace_directory(self.root, source.parent) as parent:
+            os.rename(source.name, destination.name, src_dir_fd=parent, dst_dir_fd=parent)
         new_relative = self.user_relative(corp_id, destination)
         self._move_metadata_prefix(corp_id, old_relative, new_relative)
         return new_relative
@@ -499,36 +585,48 @@ class Workspace:
         relative = self.user_relative(corp_id, target)
         if relative in _LAYOUT_NAMES:
             raise WorkspacePathError("This workspace entry is protected.")
-        if target.is_dir():
-            shutil.rmtree(target)
-        else:
-            target.unlink()
+        with workspace_directory(self.root, target.parent) as parent:
+            info = os.stat(target.name, dir_fd=parent, follow_symlinks=False)
+            if stat.S_ISLNK(info.st_mode):
+                raise WorkspacePathError("Symlinks are not allowed in workspace paths.")
+            if stat.S_ISDIR(info.st_mode):
+                if not shutil.rmtree.avoids_symlink_attacks:
+                    raise WorkspacePathError("This platform lacks safe directory deletion.")
+                shutil.rmtree(target.name, dir_fd=parent)
+            else:
+                os.unlink(target.name, dir_fd=parent)
         self._remove_metadata_prefix(corp_id, relative)
 
     def cleanup_chat(self, corp_id: str, conversation_id: str) -> None:
         conversation_id = _safe_conversation_id(conversation_id)
         root = self.chat_root(corp_id, conversation_id)
         if root.exists():
-            shutil.rmtree(root)
+            remove_workspace_tree(self.root, root)
         self._remove_metadata_prefix(corp_id, f"chats/{conversation_id}")
-        root.mkdir(parents=True, exist_ok=True)
+        with workspace_directory(self.root, root, create=True):
+            pass
 
     def cleanup_temporary(self, corp_id: str, conversation_id: str | None = None) -> None:
         temp_root = self.temp_root(corp_id)
+        validate_workspace_path(self.root, temp_root)
         if temp_root.exists():
             for child in temp_root.iterdir():
                 if child.is_dir() and not child.is_symlink():
-                    shutil.rmtree(child)
+                    remove_workspace_tree(self.root, child)
                 else:
-                    child.unlink(missing_ok=True)
+                    with workspace_directory(self.root, temp_root) as parent:
+                        with contextlib.suppress(FileNotFoundError):
+                            os.unlink(child.name, dir_fd=parent)
         roots = [self.chat_root(corp_id, conversation_id)] if conversation_id else [self.user_root(corp_id)]
         for root in roots:
+            validate_workspace_path(self.root, root)
             if not root.exists():
                 continue
             for name in ("large_tool_results", "__pycache__", ".pytest_cache"):
                 for cache in root.rglob(name):
                     if cache.is_dir() and not cache.is_symlink():
-                        shutil.rmtree(cache, ignore_errors=True)
+                        with contextlib.suppress(OSError, WorkspacePathError):
+                            remove_workspace_tree(self.root, cache)
 
     def manifest(self, corp_id: str) -> dict[str, FileStamp]:
         result: dict[str, FileStamp] = {}
@@ -543,7 +641,10 @@ class Workspace:
             if not path.is_file() or path.is_symlink():
                 continue
             relative = path.relative_to(root).as_posix()
-            result[relative] = FileStamp(size=path.stat().st_size, sha256=_sha256(path))
+            validate_workspace_path(self.root, path)
+            with workspace_file(self.root, path, os.O_RDONLY) as descriptor:
+                info = os.fstat(descriptor)
+                result[relative] = FileStamp(size=info.st_size, sha256=_sha256(descriptor))
         return result
 
     def stage_baseline(
@@ -552,12 +653,11 @@ class Workspace:
         manifest = self.manifest(corp_id)
         baseline = self.user_data_root(corp_id) / "baselines" / run_id
         if baseline.exists():
-            shutil.rmtree(baseline)
+            remove_workspace_tree(self.data_root, baseline)
         for relative in manifest:
             source = self.resolve_user(corp_id, relative, must_exist=True)
             destination = baseline / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
+            copy_workspace_file(self.root, source, self.data_root, destination)
         return manifest, baseline
 
     def snapshot_changes(
@@ -588,8 +688,11 @@ class Workspace:
             )
             artifact_id = uuid.uuid4().hex
             destination = artifact_root / artifact_id / Path(relative).name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
+            source_root = self.data_root if change_type == "deleted" else self.root
+            copy_workspace_file(source_root, source, self.data_root, destination)
+            with workspace_file(self.data_root, destination, os.O_RDONLY) as descriptor:
+                size_bytes = os.fstat(descriptor).st_size
+                sha256 = _sha256(descriptor)
             artifacts.append(
                 (
                     Artifact(
@@ -597,8 +700,8 @@ class Workspace:
                         run_id=run_id,
                         relative_path=relative,
                         change_type=change_type,  # type: ignore[arg-type]
-                        size_bytes=source.stat().st_size,
-                        sha256=_sha256(source),
+                        size_bytes=size_bytes,
+                        sha256=sha256,
                         created_at=utc_now(),
                     ),
                     destination,
@@ -619,7 +722,7 @@ class Workspace:
                     preserve_origin=change_type == "modified",
                 )
         if baseline.exists():
-            shutil.rmtree(baseline)
+            remove_workspace_tree(self.data_root, baseline)
         return artifacts
 
     def _scope_root(
@@ -635,32 +738,34 @@ class Workspace:
         return self.ensure_chat(corp_id, conversation_id)
 
     def _entries(self, corp_id: str, directory: Path) -> list[WorkspaceEntry]:
-        if not directory.is_dir():
-            raise WorkspacePathError("The requested workspace path is not a directory.")
         entries: list[WorkspaceEntry] = []
-        for child in sorted(
-            directory.iterdir(), key=lambda item: (item.is_file(), item.name.lower())
-        ):
-            if (
-                child.name.startswith(".")
-                or child.name in _PROTECTED_PARTS
-                or child.is_symlink()
-            ):
-                continue
-            entries.append(self._entry(corp_id, child))
-        return entries
+        with workspace_directory(self.root, directory) as descriptor:
+            with os.scandir(descriptor) as children:
+                for child in children:
+                    if not visible_workspace_parts((child.name,)):
+                        continue
+                    try:
+                        entries.append(self._entry(corp_id, directory / child.name))
+                    except (OSError, WorkspacePathError):
+                        continue
+        return sorted(entries, key=lambda entry: (entry.kind == "file", entry.name.lower()))
 
     def _entry(self, corp_id: str, path: Path) -> WorkspaceEntry:
-        stat = path.stat()
         relative = self.user_relative(corp_id, path)
+        with workspace_directory(self.root, path.parent) as parent:
+            info = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        directory = stat.S_ISDIR(info.st_mode)
+        opener = workspace_directory(self.root, path) if directory else workspace_file(self.root, path, os.O_RDONLY)
+        with opener as descriptor:
+            info = os.fstat(descriptor)
         metadata = self._metadata_for(corp_id, relative)
         scope, owner = _scope_for_path(relative)
         return WorkspaceEntry(
             path=relative,
             name=path.name,
-            kind="directory" if path.is_dir() else "file",
-            size_bytes=stat.st_size if path.is_file() else 0,
-            modified_at=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
+            kind="directory" if directory else "file",
+            size_bytes=0 if directory else info.st_size,
+            modified_at=datetime.fromtimestamp(info.st_mtime, tz=UTC),
             scope=scope,
             origin=str(metadata.get("origin") or "unknown"),
             retention=str(metadata.get("retention") or scope),
@@ -675,21 +780,21 @@ class Workspace:
     def _copy_upload(
         self, source: BinaryIO, destination: Path, max_bytes: int, original_name: str
     ) -> int:
-        destination.parent.mkdir(parents=True, exist_ok=True)
         temp = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.uploading")
         size = 0
-        try:
-            with temp.open("wb") as handle:
-                while chunk := source.read(1024 * 1024):
-                    size += len(chunk)
-                    if size > max_bytes:
-                        raise ValueError(
-                            f"{original_name!r} exceeds the {max_bytes} byte upload limit."
-                        )
-                    handle.write(chunk)
-            os.replace(temp, destination)
-        finally:
-            temp.unlink(missing_ok=True)
+        with workspace_directory(self.root, destination.parent, create=True) as parent:
+            try:
+                descriptor = os.open(temp.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=parent)
+                with os.fdopen(descriptor, "wb") as handle:
+                    while chunk := source.read(1024 * 1024):
+                        size += len(chunk)
+                        if size > max_bytes:
+                            raise ValueError(f"{original_name!r} exceeds the {max_bytes} byte upload limit.")
+                        handle.write(chunk)
+                os.replace(temp.name, destination.name, src_dir_fd=parent, dst_dir_fd=parent)
+            finally:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(temp.name, dir_fd=parent)
         return size
 
     def _metadata_path(self, corp_id: str) -> Path:
@@ -701,7 +806,9 @@ class Workspace:
             if not path.exists():
                 return {}
             try:
-                value = json.loads(path.read_text(encoding="utf-8"))
+                with workspace_file(self.data_root, path, os.O_RDONLY) as descriptor:
+                    with os.fdopen(os.dup(descriptor), "r", encoding="utf-8") as handle:
+                        value = json.load(handle)
             except (OSError, json.JSONDecodeError):
                 return {}
             return value if isinstance(value, dict) else {}
@@ -709,13 +816,15 @@ class Workspace:
     def _save_metadata(self, corp_id: str, value: dict[str, dict[str, Any]]) -> None:
         with self._metadata_lock:
             path = self._metadata_path(corp_id)
-            path.parent.mkdir(parents=True, exist_ok=True)
             temp = path.with_suffix(".tmp")
-            temp.write_text(
-                json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
-            os.replace(temp, path)
+            with workspace_file(
+                self.data_root, temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                create_parents=True,
+            ) as descriptor:
+                with os.fdopen(os.dup(descriptor), "w", encoding="utf-8") as handle:
+                    json.dump(value, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            with workspace_directory(self.data_root, path.parent) as parent:
+                os.replace(temp.name, path.name, src_dir_fd=parent, dst_dir_fd=parent)
 
     def _metadata_for(self, corp_id: str, relative: str) -> dict[str, Any]:
         return self._load_metadata(corp_id).get(relative, {})
@@ -843,9 +952,9 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
-def _sha256(path: Path) -> str:
+def _sha256(descriptor: int) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with os.fdopen(os.dup(descriptor), "rb") as handle:
         while chunk := handle.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()

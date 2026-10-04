@@ -1,0 +1,7 @@
+[
+  {
+    "path": "service/label.js",
+    "old": "`root:${value}`",
+    "new": "`nested:${value}`"
+  }
+]

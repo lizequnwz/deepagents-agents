@@ -1,0 +1,12 @@
+[
+  {
+    "path": "email_validation.py",
+    "old": "    return \"@\" in value",
+    "new": "    return value.count(\"@\") == 1 and all(value.split(\"@\")) and not any(c.isspace() for c in value)"
+  },
+  {
+    "path": "tests/test_email.py",
+    "old": null,
+    "new": "import unittest\nfrom email_validation import valid_email\nclass Tests(unittest.TestCase):\n    def test_good(self):\n        self.assertTrue(valid_email(\"a@b\"))\n    def test_invalid(self):\n        for value in (\"@b\", \"a@\", \"a@@b\", \"a b@c\", \"no-at\"):\n            self.assertFalse(valid_email(value))\n"
+  }
+]

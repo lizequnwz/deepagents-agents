@@ -1,0 +1,12 @@
+[
+  {
+    "path": "pricing.js",
+    "old": "  return prices.reduce((a, b) => a + b, 0) - discount;",
+    "new": "  if (discount < 0 || discount > 1) throw new RangeError(\"discount\");\n  return prices.reduce((a, b) => a + b, 0) * (1 - discount);"
+  },
+  {
+    "path": "index.js",
+    "old": "export const version = 1;",
+    "new": "export const version = 1;\nexport {total} from \"./pricing.js\";"
+  }
+]

@@ -18,6 +18,7 @@ from general_agent.workspace import Workspace
 
 
 EXPECTED_SKILLS = {
+    "coding",
     "docx",
     "frontend-design",
     "pdf",

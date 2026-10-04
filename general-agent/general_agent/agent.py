@@ -12,11 +12,7 @@ from deepagents import (
     register_harness_profile,
 )
 from deepagents.middleware import FilesystemMiddleware
-from langchain.agents.middleware import (
-    ModelCallLimitMiddleware,
-    TodoListMiddleware,
-    ToolCallLimitMiddleware,
-)
+from langchain.agents.middleware import TodoListMiddleware
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 
@@ -165,7 +161,7 @@ def build_agent(
     model: BaseChatModel | None = None,
     harness_profile_key: str | None = None,
 ) -> Any:
-    """Create General Agent with an application-configured harness profile."""
+    """Create the shared graph; run-scoped callbacks own invocation budgets."""
 
     chat_model = (
         model
@@ -186,19 +182,6 @@ def build_agent(
         middleware=[
             _filesystem_middleware(backend),
             TodoListMiddleware(system_prompt=""),
-            ModelCallLimitMiddleware(
-                run_limit=settings.max_model_calls,
-                exit_behavior="error",
-            ),
-            ToolCallLimitMiddleware(
-                run_limit=settings.max_tool_calls,
-                exit_behavior="error",
-            ),
-            ToolCallLimitMiddleware(
-                tool_name="task",
-                run_limit=settings.max_task_calls,
-                exit_behavior="error",
-            ),
         ],
         checkpointer=checkpointer,
     )

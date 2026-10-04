@@ -1,0 +1,7 @@
+[
+  {
+    "path": "double.js",
+    "old": "value => value",
+    "new": "value => value * 2"
+  }
+]

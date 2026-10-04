@@ -1,0 +1,7 @@
+[
+  {
+    "path": "package.json",
+    "old": "{\"name\":\"fixture\",\"type\":\"commonjs\",\"scripts\":{\"format\":\"echo retain\"}}",
+    "new": "{\"name\":\"fixture\",\"type\":\"module\",\"scripts\":{\"format\":\"echo retain\",\"test\":\"node tests/check.mjs\"}}"
+  }
+]

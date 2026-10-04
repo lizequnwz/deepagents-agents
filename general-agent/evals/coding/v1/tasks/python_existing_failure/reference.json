@@ -1,0 +1,7 @@
+[
+  {
+    "path": "selection.py",
+    "old": "    return values[0]",
+    "new": "    return values[0] if values else None"
+  }
+]

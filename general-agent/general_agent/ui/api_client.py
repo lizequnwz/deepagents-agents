@@ -21,6 +21,7 @@ class AgentAPIClient:
         self._client = httpx.Client(
             base_url=self.base_url,
             timeout=30.0,
+            trust_env=False,
             headers={"X-Corp-ID": corp_id},
         )
 
@@ -41,6 +42,106 @@ class AgentAPIClient:
 
     def health(self) -> dict[str, Any]:
         return self._request("GET", "/health")
+
+    def coding_readiness(self) -> dict[str, Any]:
+        return self._request("GET", "/coding/readiness")
+
+    def projects(self) -> list[dict[str, Any]]:
+        return self._request("GET", "/projects")
+
+    def register_project(self, root: str, name: str, checks: dict[str, str],
+                         documentation_domains: list[str] | None = None) -> dict[str, Any]:
+        return self._request("POST", "/projects", json={"root": root, "name": name, "checks": checks,
+                                                        "documentation_domains": documentation_domains or []})
+
+    def coding_sessions(self) -> list[dict[str, Any]]:
+        return self._request("GET", "/sessions")
+
+    def coding_session(self, session_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/sessions/{quote(session_id, safe='')}")
+
+    def create_coding_session(self, project_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/projects/{quote(project_id, safe='')}/sessions")
+
+    def coding_setup(self, session_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/sessions/{quote(session_id, safe='')}/setup")
+
+    def prepare_coding_setup(self, session_id: str, kind: str, manifest_identity: str) -> dict[str, Any]:
+        return self._request("POST", f"/sessions/{quote(session_id, safe='')}/setup",
+                             json={"kind": kind, "manifest_identity": manifest_identity})
+
+    def coding_decision_status(self, decision_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/decisions/{quote(decision_id, safe='')}")
+
+    def answer_coding_input(self, decision_id: str, message: str) -> dict[str, Any]:
+        return self._request("POST", f"/decisions/{quote(decision_id, safe='')}/input", json={"message": message})
+
+    def coding_task(self, session_id: str, message: str, mode: str, **links: Any) -> dict[str, Any]:
+        return self._request("POST", f"/sessions/{quote(session_id, safe='')}/tasks",
+                             json={"message": message, "mode": mode, **links})
+
+    def coding_run(self, run_id: str, after: int = 0) -> dict[str, Any]:
+        return self._request("GET", f"/coding/runs/{quote(run_id, safe='')}", params={"after": after})
+
+    def stop_coding_run(self, run_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/coding/runs/{quote(run_id, safe='')}/stop")
+
+    def coding_processes(self, run_id: str):
+        return self._request("GET", f"/coding/runs/{quote(run_id, safe='')}/processes")
+
+    def coding_process_output(self, run_id: str, process_id: str, cursor: int = 0):
+        return self._request("GET", f"/coding/runs/{quote(run_id, safe='')}/processes/{quote(process_id, safe='')}", params={"cursor": cursor})
+
+    def stop_coding_process(self, run_id: str, process_id: str):
+        return self._request("POST", f"/coding/runs/{quote(run_id, safe='')}/processes/{quote(process_id, safe='')}/stop")
+
+    def coding_browser_image(self, run_id: str, check_id: str) -> bytes:
+        response = self._client.get(f"/coding/runs/{quote(run_id, safe='')}/browser/{quote(check_id, safe='')}/image")
+        if response.is_error:
+            raise APIError("Screenshot is unavailable.", status_code=response.status_code)
+        return response.content
+
+    def steer_coding_run(self, run_id: str, message: str) -> dict[str, Any]:
+        return self._request("POST", f"/coding/runs/{quote(run_id, safe='')}/steer", json={"message": message})
+
+    def coding_diff(self, change_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/changes/{quote(change_id, safe='')}/diff")
+
+    def coding_github_status(self, project_id: str):
+        return self._request("GET", f"/projects/{quote(project_id, safe='')}/github")
+
+    def coding_snowflake_status(self, project_id: str):
+        return self._request("GET", f"/projects/{quote(project_id, safe='')}/snowflake")
+
+    def enable_coding_snowflake(self, project_id: str, enabled: bool, digest: str | None):
+        return self._request("POST", f"/projects/{quote(project_id, safe='')}/snowflake", json={"enabled": enabled, "expected_digest": digest})
+
+    def connect_coding_github(self, project_id: str, owner: str, repository: str):
+        return self._request("POST", f"/projects/{quote(project_id, safe='')}/github", json={"owner": owner, "repository": repository})
+
+    def prepare_coding_delivery(self, change_id: str, title: str, body: str, base: str | None):
+        return self._request("POST", f"/changes/{quote(change_id, safe='')}/deliveries", json={"title": title, "body": body, "base": base})
+
+    def coding_deliveries(self, session_id: str):
+        return self._request("GET", f"/sessions/{quote(session_id, safe='')}/deliveries")
+
+    def publish_coding_delivery(self, delivery_id: str, digest: str):
+        return self._request("POST", f"/deliveries/{quote(delivery_id, safe='')}/publish", json={"expected_digest": digest})
+
+    def apply_coding_change(self, change_id: str, revision: str, paths: list[str]) -> dict[str, Any]:
+        return self._request("POST", f"/changes/{quote(change_id, safe='')}/apply",
+                             json={"expected_revision": revision, "paths": paths})
+
+    def revert_coding_change(self, change_id: str, revision: str) -> dict[str, Any]:
+        return self._request("POST", f"/changes/{quote(change_id, safe='')}/revert",
+                             json={"expected_revision": revision})
+
+    def reject_coding_change(self, change_id: str, revision: str) -> dict[str, Any]:
+        return self._request("POST", f"/changes/{quote(change_id, safe='')}/reject",
+                             json={"expected_revision": revision})
+
+    def coding_decision(self, decision_id: str, response: str) -> dict[str, Any]:
+        return self._request("POST", f"/decisions/{quote(decision_id, safe='')}/respond", json={"response": response})
 
     def create_conversation(self, title: str | None = None) -> dict[str, Any]:
         return self._request("POST", "/conversations", json={"title": title})
