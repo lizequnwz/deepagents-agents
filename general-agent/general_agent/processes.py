@@ -292,6 +292,36 @@ class ProcessSupervisor:
             process.cancel_requested.set()
         await asyncio.gather(*(process.finished.wait() for process in owned))
 
+    def process_groups(self, owner_id: str) -> tuple[int, ...]:
+        """Return application-held active group IDs for listener ownership checks.
+
+        These are observed subprocess handles, never IDs supplied by source,
+        command output or a mutable PID file. Call on this instance's event loop.
+        """
+        return tuple(sorted({process.transport.get_pid()
+                             for process in self._owners.get(owner_id, ())
+                             if process.transport is not None and not process.finished.is_set()}))
+
+    def release_descriptors(self, descriptors: tuple[int, ...]) -> None:
+        """Release caller-owned inherited handles after uncertain startup settles.
+
+        Closing early can reuse an FD number before a late spawn inherits it.
+        Normal completed startup releases immediately; only pending spawns defer.
+        """
+        pending = {task for task in self._spawns if not task.done()}
+
+        def close_when_settled(task=None):
+            pending.discard(task)
+            if not pending:
+                for descriptor in descriptors:
+                    os.close(descriptor)
+
+        if not pending:
+            close_when_settled()
+        else:
+            for task in tuple(pending):
+                task.add_done_callback(close_when_settled)
+
     def _spawn_finished(self, task: asyncio.Task, owned: _OwnedProcess) -> None:
         self._spawns.discard(task)
         # Retrieve startup failures even if the command already timed out.

@@ -1,0 +1,306 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Coding workbench",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "coding-entry",
+      "type": "frontend",
+      "label": "Workbench & editor",
+      "sublabel": "Streamlit · official ACP adapter",
+      "pos": [
+        40,
+        65
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Shared application service"
+    },
+    {
+      "id": "coding-owner",
+      "type": "backend",
+      "label": "Coding API & queue",
+      "sublabel": "Corporation scope · one writer",
+      "pos": [
+        370,
+        65
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Questions pause durably"
+    },
+    {
+      "id": "coding-harness",
+      "type": "backend",
+      "label": "Coding agent",
+      "sublabel": "Plan / Review / Implement",
+      "pos": [
+        700,
+        65
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Read-only Plan & Review"
+    },
+    {
+      "id": "coding-model",
+      "type": "external",
+      "label": "Model provider",
+      "sublabel": "Configured provider / endpoint",
+      "pos": [
+        1030,
+        65
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "External if configured"
+    },
+    {
+      "id": "coding-history",
+      "type": "database",
+      "label": "Immutable history",
+      "sublabel": "SQLite · checkpoints · file blobs",
+      "pos": [
+        40,
+        230
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Revisions and decisions"
+    },
+    {
+      "id": "coding-copy",
+      "type": "database",
+      "label": "Session source copy",
+      "sublabel": "Filtered source · scoped context",
+      "pos": [
+        370,
+        230
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Original .git excluded"
+    },
+    {
+      "id": "coding-runtime",
+      "type": "backend",
+      "label": "Private execution",
+      "sublabel": "Trusted local default · Docker option",
+      "pos": [
+        700,
+        230
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Limits · clean environment"
+    },
+    {
+      "id": "approved-reads",
+      "type": "external",
+      "label": "Approved read services",
+      "sublabel": "Documentation · Snowflake",
+      "pos": [
+        1030,
+        230
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Optional · scoped reads"
+    },
+    {
+      "id": "original-checkout",
+      "type": "database",
+      "label": "Original checkout",
+      "sublabel": "Registered host repository",
+      "pos": [
+        370,
+        590
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "User apply only"
+    },
+    {
+      "id": "review-gate",
+      "type": "security",
+      "label": "Review & apply",
+      "sublabel": "Immutable diff · exact revision",
+      "pos": [
+        370,
+        410
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Explicit user actions"
+    },
+    {
+      "id": "check-evidence",
+      "type": "backend",
+      "label": "Checks & previews",
+      "sublabel": "Tests · private preview · browser",
+      "pos": [
+        700,
+        410
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Source-bound evidence"
+    },
+    {
+      "id": "github-remote",
+      "type": "external",
+      "label": "GitHub repository",
+      "sublabel": "Connected remote · draft delivery",
+      "pos": [
+        40,
+        410
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Optional · no merge / deploy"
+    }
+  ],
+  "connections": [
+    {
+      "id": "coding-request",
+      "from": "coding-entry",
+      "to": "coding-owner",
+      "label": "HTTP / ACP",
+      "variant": "emphasis"
+    },
+    {
+      "id": "coding-dispatch",
+      "from": "coding-owner",
+      "to": "coding-harness",
+      "label": "Scoped attempt",
+      "variant": "emphasis"
+    },
+    {
+      "id": "coding-inference",
+      "from": "coding-harness",
+      "to": "coding-model",
+      "label": "Model calls",
+      "variant": "dashed"
+    },
+    {
+      "id": "coding-execute",
+      "from": "coding-harness",
+      "to": "coding-runtime",
+      "label": "Implement only",
+      "variant": "emphasis",
+      "labelAt": [
+        805,
+        169
+      ]
+    },
+    {
+      "id": "coding-reconcile",
+      "from": "coding-copy",
+      "to": "coding-runtime",
+      "label": "Sync copy"
+    },
+    {
+      "id": "coding-context",
+      "from": "coding-owner",
+      "to": "coding-copy",
+      "label": "Open copy",
+      "labelAt": [
+        475,
+        169
+      ]
+    },
+    {
+      "id": "coding-records",
+      "from": "coding-owner",
+      "to": "coding-history",
+      "label": "Persist"
+    },
+    {
+      "id": "coding-evidence",
+      "from": "coding-runtime",
+      "to": "check-evidence",
+      "label": "Run / record",
+      "variant": "emphasis",
+      "labelAt": [
+        805,
+        334
+      ]
+    },
+    {
+      "id": "coding-review",
+      "from": "check-evidence",
+      "to": "review-gate",
+      "label": "Diff + evidence",
+      "variant": "emphasis"
+    },
+    {
+      "id": "coding-apply",
+      "from": "review-gate",
+      "to": "original-checkout",
+      "label": "Approved apply",
+      "variant": "security",
+      "labelAt": [
+        475,
+        514
+      ]
+    },
+    {
+      "id": "coding-services",
+      "from": "coding-harness",
+      "to": "approved-reads",
+      "label": "Brokered reads",
+      "variant": "dashed"
+    },
+    {
+      "id": "coding-github",
+      "from": "review-gate",
+      "to": "github-remote",
+      "label": "Approved draft PR",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Local commands have host permissions",
+      "items": [
+        "Private copies and a clean environment do not sandbox host filesystem or network access. Docker is an explicit optional runtime."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Review controls delivery",
+      "items": [
+        "Source-bound checks precede immutable review. Applying files checks original preimages; remote draft delivery requires a separate reviewed user action."
+      ]
+    }
+  ]
+}

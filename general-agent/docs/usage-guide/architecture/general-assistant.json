@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "General assistant",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "chat-ui",
+      "type": "frontend",
+      "label": "Chat workspace",
+      "sublabel": "Streamlit · one current chat",
+      "pos": [
+        40,
+        110
+      ],
+      "size": [
+        210,
+        90
+      ]
+    },
+    {
+      "id": "chat-api",
+      "type": "backend",
+      "label": "Loopback API",
+      "sublabel": "FastAPI · corporation scope",
+      "pos": [
+        370,
+        110
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "127.0.0.1 only"
+    },
+    {
+      "id": "run-owner",
+      "type": "backend",
+      "label": "Run manager",
+      "sublabel": "Budgets · events · cancellation",
+      "pos": [
+        700,
+        110
+      ],
+      "size": [
+        210,
+        90
+      ]
+    },
+    {
+      "id": "chat-state",
+      "type": "database",
+      "label": "Durable state",
+      "sublabel": "SQLite · LangGraph checkpoints",
+      "pos": [
+        1030,
+        110
+      ],
+      "size": [
+        210,
+        90
+      ]
+    },
+    {
+      "id": "delegated-task",
+      "type": "backend",
+      "label": "Delegated tasks",
+      "sublabel": "General-purpose subagent",
+      "pos": [
+        370,
+        330
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Bounded context"
+    },
+    {
+      "id": "chat-harness",
+      "type": "backend",
+      "label": "DeepAgents harness",
+      "sublabel": "Planning · skills · model loop",
+      "pos": [
+        700,
+        330
+      ],
+      "size": [
+        210,
+        90
+      ]
+    },
+    {
+      "id": "chat-model",
+      "type": "external",
+      "label": "Model provider",
+      "sublabel": "Configured provider / endpoint",
+      "pos": [
+        1030,
+        330
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "External if configured"
+    },
+    {
+      "id": "chat-workspace",
+      "type": "database",
+      "label": "Scoped workspace",
+      "sublabel": "Uploads · shared files · chat files",
+      "pos": [
+        370,
+        550
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Immutable turn artifacts"
+    },
+    {
+      "id": "host-tools",
+      "type": "backend",
+      "label": "File & shell tools",
+      "sublabel": "Virtual files · trusted host execute",
+      "pos": [
+        700,
+        550
+      ],
+      "size": [
+        210,
+        90
+      ],
+      "tag": "Host user permissions"
+    }
+  ],
+  "connections": [
+    {
+      "id": "chat-request",
+      "from": "chat-ui",
+      "to": "chat-api",
+      "label": "Loopback HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "id": "chat-admission",
+      "from": "chat-api",
+      "to": "run-owner",
+      "label": "Scoped run",
+      "variant": "emphasis"
+    },
+    {
+      "id": "chat-invoke",
+      "from": "run-owner",
+      "to": "chat-harness",
+      "label": "Invoke / stream",
+      "variant": "emphasis",
+      "labelAt": [
+        805,
+        214
+      ]
+    },
+    {
+      "id": "chat-tools",
+      "from": "chat-harness",
+      "to": "host-tools",
+      "label": "Tool calls",
+      "variant": "emphasis",
+      "labelAt": [
+        805,
+        434
+      ]
+    },
+    {
+      "id": "chat-files",
+      "from": "host-tools",
+      "to": "chat-workspace",
+      "label": "Virtual file I/O",
+      "variant": "emphasis"
+    },
+    {
+      "id": "chat-persist",
+      "from": "run-owner",
+      "to": "chat-state",
+      "label": "Persist"
+    },
+    {
+      "id": "chat-delegate",
+      "from": "chat-harness",
+      "to": "delegated-task",
+      "label": "Delegate"
+    },
+    {
+      "id": "chat-inference",
+      "from": "chat-harness",
+      "to": "chat-model",
+      "label": "Model calls",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Trusted local execution",
+      "items": [
+        "Shell commands use the host user’s permissions and network access. Time, output and cancellation limits are controls, not a sandbox."
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Scoped files and durable history",
+      "items": [
+        "File tools enforce corporation scope and protected paths; installed skills are read-only. Completed turns and immutable file versions survive later work."
+      ]
+    }
+  ]
+}

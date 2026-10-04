@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import io
 import json
 import os
 import re
+import stat
 import tarfile
 import tempfile
 import tomllib
@@ -19,9 +21,10 @@ from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
 
 from general_agent.coding.runtime import DockerRuntime, _SETUP_CONTROLLER, _shielded
-from general_agent.coding.source import source_file, source_revision
+from general_agent.coding.source import source_file, source_manifest, source_revision
 from general_agent.coding.store import identifier, now
 from general_agent.config import Settings
+from general_agent.processes import BinaryProcessResult, ProcessResult, ProcessSupervisor
 from general_agent.workspace import corp_storage_key, workspace_directory, workspace_file
 
 MAX_PACKAGE_FILES = 50_000
@@ -71,7 +74,7 @@ def _validate_uv(project: bytes, lock: bytes) -> None:
         raise SetupBlocked("Invalid Python project metadata.")
     if definition.get("dynamic") or tool.get("uv", {}).get("workspace"):
         raise SetupBlocked("Dynamic Python metadata and workspace layouts require unsupported local setup.")
-    # Validate the declaration here; uv's offline lock check uses the image's
+    # Validate the declaration here; uv's offline lock check uses the runtime's
     # actual patch version rather than assuming that Python 3.11 means 3.11.0.
     requires_python = definition.get("requires-python", ">=3.11")
     if not isinstance(requires_python, str):
@@ -128,7 +131,7 @@ def _validate_node(project: bytes, lock: bytes) -> None:
             r"sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}", package.get("integrity", "")
         ):
             raise SetupBlocked("Node packages must have integrity hashes and public npm registry URLs.")
-    # npm's engine-strict setting enforces the image's actual Node version.
+    # npm's engine-strict setting enforces the runtime's actual Node version.
 
 
 def validate_package_archive(data: bytes, kind: str, *, max_bytes: int, requirements: bytes | None = None) -> None:
@@ -192,10 +195,142 @@ class AcquisitionRuntime(DockerRuntime):
     def _create_arguments(self) -> tuple[str, ...]:
         return tuple("--network=bridge" if value == "--network=none" else value for value in super()._create_arguments())
 
+    async def package_bytes(self, *arguments: str, **kwargs) -> BinaryProcessResult:
+        return await self._docker_bytes(
+            "exec", "--interactive", "--user=1000:1000", self._container,
+            "/usr/local/bin/python", "-I", _SETUP_CONTROLLER, *arguments, **kwargs,
+        )
+
+
+class LocalAcquisition:
+    """Fixed package-manager commands over a private manifest-only host copy."""
+
+    def __init__(self, settings: Settings, repo: Path, owner_id: str):
+        self.settings, self.repo, self.owner_id = settings, repo, owner_id
+        if not repo.is_absolute() or not repo.is_relative_to(settings.coding_root):
+            raise SetupBlocked("Local dependency acquisition requires a private coding session directory.")
+        if not re.fullmatch(r"[0-9a-f]{32}", owner_id):
+            raise SetupBlocked("Invalid local dependency setup ID.")
+        with workspace_directory(settings.coding_root, repo):
+            pass
+        self.runtime_id: str | None = None
+        self._supervisor = ProcessSupervisor()
+        self._tools: dict = {}
+        self._config: Path | None = None
+
+    async def start(self):
+        from general_agent.coding.local_runtime import local_toolchain, local_toolchain_identity
+
+        self._tools = await asyncio.to_thread(local_toolchain, self.settings)
+        if not self._tools.get("python"):
+            raise SetupBlocked("Local dependency setup requires an available Python interpreter.")
+        if (self.repo / "uv.lock").exists() and not self._tools.get("uv"):
+            raise SetupBlocked("Preparing uv.lock requires uv in the trusted local toolchain.")
+        if (self.repo / "package-lock.json").exists() and not all(self._tools.get(name) for name in ("node", "npm")):
+            raise SetupBlocked("Preparing Node dependencies requires Node and npm in the trusted local toolchain.")
+        self.runtime_id = await asyncio.to_thread(local_toolchain_identity, self.settings)
+        if not isinstance(self.runtime_id, str) or not self.runtime_id:
+            raise SetupBlocked("Local dependency toolchain has no valid immutable identity.")
+        root = self.repo.parent
+        config = {"repo": str(self.repo), "acquired": str(root / "acquired"), "deps": str(root / "deps"),
+                  "tmp": str(root / "tmp"), **{name: self._tools.get(name) for name in ("python", "uv", "node", "npm")}}
+        for name in ("acquired", "deps", "tmp"):
+            Path(config[name]).mkdir(mode=0o700)
+        (Path(config["tmp"]) / "home").mkdir(mode=0o700)
+        self._config = root / "controller.json"
+        with self._config.open("x", encoding="utf-8") as stream:
+            json.dump(config, stream)
+        self._config.chmod(0o400)
+
+    async def package_bytes(self, *arguments: str, **kwargs) -> BinaryProcessResult:
+        from general_agent.coding.local_runtime import local_toolchain_identity, parent_death_command
+
+        current_identity = await asyncio.to_thread(local_toolchain_identity, self.settings)
+        if self._config is None or self.runtime_id != current_identity:
+            raise SetupBlocked("Local dependency toolchain changed during preparation.")
+        paths = [str(Path(value).parent) for value in self._tools.values() if value]
+        env = {"PATH": os.pathsep.join(dict.fromkeys(paths + ["/usr/local/bin", "/usr/bin", "/bin"])),
+               "HOME": str(self.repo.parent / "tmp/home"), "TMPDIR": str(self.repo.parent / "tmp"),
+               "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1"}
+        await asyncio.to_thread(self._storage_quota)
+        command = [self._tools["python"], "-I", str(Path(__file__).with_name("setup_controller.py")),
+                   "--local", str(self._config), *arguments]
+        with parent_death_command(self._tools["python"], command, self._supervisor) as (argv, descriptors):
+            process = asyncio.create_task(self._supervisor.run_bytes(
+                argv, pass_fds=descriptors, owner_id=self.owner_id, cwd=self.repo, env=env,
+                timeout=kwargs.pop("timeout", self.settings.command_timeout_seconds),
+                max_output_bytes=kwargs.pop("max_output_bytes", self.settings.max_command_output_bytes), **kwargs,
+            ))
+            monitor = asyncio.create_task(self._watch_storage())
+            try:
+                done, _ = await asyncio.wait((process, monitor), return_when=asyncio.FIRST_COMPLETED)
+                if monitor in done:
+                    await monitor
+                result = await process
+                await asyncio.to_thread(self._storage_quota)
+                return result
+            finally:
+                monitor.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await monitor
+                if not process.done():
+                    process.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await process
+
+    def _storage_quota(self):
+        """Bound intermediate package/cache writes without following symlinks."""
+        total, visited = 0, 0
+        pending = [self.repo.parent]
+        while pending:
+            directory = pending.pop()
+            try:
+                entries = os.scandir(directory)
+            except FileNotFoundError:
+                continue
+            with entries:
+                for entry in entries:
+                    visited += 1
+                    if visited > MAX_PACKAGE_FILES:
+                        raise SetupBlocked("Local dependency preparation exceeds its inventory limit.")
+                    try:
+                        info = entry.stat(follow_symlinks=False)
+                    except FileNotFoundError:
+                        continue  # package managers atomically rotate private cache entries
+                    if stat.S_ISDIR(info.st_mode):
+                        pending.append(Path(entry.path))
+                    elif stat.S_ISREG(info.st_mode):
+                        total += info.st_size
+                    elif not stat.S_ISLNK(info.st_mode):
+                        raise SetupBlocked("Local dependency preparation refuses special files.")
+                    if total > self.settings.coding_storage_mb * 1024 * 1024:
+                        raise SetupBlocked("Local dependency preparation exceeds its storage limit.")
+
+    async def _watch_storage(self):
+        while True:
+            await asyncio.sleep(0.1)
+            await asyncio.to_thread(self._storage_quota)
+
+    async def _package_controller(self, *arguments: str, **kwargs) -> ProcessResult:
+        result = await self.package_bytes(*arguments, **kwargs)
+        output = result.stdout.decode("utf-8", errors="replace")
+        if result.stderr:
+            output += "\n[stderr] " + result.stderr.decode("utf-8", errors="replace")
+        return ProcessResult(output, result.exit_code, result.truncated, result.timed_out, result.cancelled)
+
+    @staticmethod
+    def _require_success(result: ProcessResult | BinaryProcessResult, action: str):
+        if result.exit_code != 0 or result.truncated or result.timed_out or result.cancelled:
+            raise SetupBlocked(f"Unable to {action}; the operation failed or exceeded its bound.")
+
+    async def close(self):
+        await self._supervisor.cancel_owner(self.owner_id)
+
 
 class SetupManager:
-    def __init__(self, settings: Settings, *, runtime_factory=AcquisitionRuntime):
-        self.settings, self.runtime_factory = settings, runtime_factory
+    def __init__(self, settings: Settings, *, runtime_factory=None):
+        self.settings = settings
+        self.runtime_factory = runtime_factory or (LocalAcquisition if settings.coding_runtime == "local" else AcquisitionRuntime)
 
     def _session(self, corp_id: str, session_id: str, repo: Path) -> Path:
         if not re.fullmatch(r"[0-9a-f]{32}", session_id):
@@ -242,7 +377,11 @@ class SetupManager:
         try:
             inputs, identity = self._inputs(repo, kind)
             return {"kind": kind, "ready": True, "files": sorted(inputs), "manifest_identity": identity,
-                    "blockers": [], "network": "Public package acquisition in a separate container; project commands stay offline."}
+                    "blockers": [], "network": (
+                        "Public package acquisition in a private local manifest directory; installed packages stay in the selected session."
+                        if self.settings.coding_runtime == "local" else
+                        "Public package acquisition in a separate container; project commands stay offline."
+                    )}
         except (OSError, ValueError) as exc:
             return {"kind": kind, "ready": False, "files": [], "manifest_identity": None, "blockers": [str(exc)]}
 
@@ -252,15 +391,21 @@ class SetupManager:
         if not re.fullmatch(r"[0-9a-f]{32}", setup_id):
             raise SetupBlocked("Invalid dependency setup ID.")
         record = {"id": setup_id, "corp_id": corp_id, "session_id": session_id, "kind": kind,
-                  "created": now(), "status": "blocked", "manifest_identity": None, "image_id": None,
+                  "created": now(), "status": "blocked", "manifest_identity": None, "runtime_id": None,
                   "dependency_identity": None, "artifact_path": None, "artifact_sha256": None,
-                  "logs": "", "blockers": []}
+                  "source_before": None, "source_after": None, "logs": "", "blockers": []}
         runtime = None
         try:
             inputs, identity = self._inputs(repo, kind)
             canonical = validate_requirements(inputs["requirements.txt"]["content"]) if "requirements.txt" in inputs else None
             record["manifest_identity"] = identity
-            with tempfile.TemporaryDirectory(dir=directory, prefix="setup-input-") as temporary:
+            before = source_manifest(repo, max_files=self.settings.max_repository_files,
+                                     max_bytes=self.settings.max_repository_mb * 1024 * 1024)
+            record["source_before"] = source_revision(before)
+            with tempfile.TemporaryDirectory(dir=directory, prefix=f"setup-input-{setup_id}-") as temporary:
+                with workspace_file(self.settings.coding_root, Path(temporary) / ".owner.json",
+                                    os.O_WRONLY | os.O_CREAT | os.O_EXCL) as descriptor:
+                    os.write(descriptor, json.dumps({"owner": setup_id, "parent": str(directory)}).encode())
                 manifests = Path(temporary) / "repo"
                 manifests.mkdir()
                 for name, entry in inputs.items():
@@ -269,7 +414,7 @@ class SetupManager:
                             stream.write(canonical if name == "requirements.txt" else entry["content"])
                 runtime = self.runtime_factory(self.settings, manifests, setup_id)
                 await runtime.start()
-                record["image_id"] = runtime.image_id
+                record["runtime_id"] = runtime.runtime_id
                 if "uv.lock" in inputs:
                     exported_requirements = await runtime._package_controller(
                         "export-python-requirements", timeout=self.settings.command_timeout_seconds,
@@ -280,9 +425,8 @@ class SetupManager:
                     requirements = await runtime._package_controller("read-requirements", max_output_bytes=5 * 1024 * 1024)
                     runtime._require_success(requirements, "read the exported Python requirements")
                     canonical = validate_requirements(requirements.output.encode())
-                    accepted = await runtime._docker_bytes(
-                        "exec", "--interactive", "--user=1000:1000", runtime._container,
-                        "/usr/local/bin/python", "-I", _SETUP_CONTROLLER, "set-requirements",
+                    accepted = await runtime.package_bytes(
+                        "set-requirements",
                         input_data=canonical, max_output_bytes=16_384,
                     )
                     runtime._require_success(accepted, "accept the validated Python requirements")
@@ -291,8 +435,7 @@ class SetupManager:
                                                    max_output_bytes=self.settings.max_command_output_bytes)
                 record["logs"] = (record["logs"] + "\n" + result.output).encode()[:self.settings.max_command_output_bytes].decode("utf-8", errors="ignore")
                 runtime._require_success(result, "prepare locked dependencies")
-                exported = await runtime._docker_bytes(
-                    "exec", "--user=1000:1000", runtime._container, "/usr/local/bin/python", "-I", _SETUP_CONTROLLER,
+                exported = await runtime.package_bytes(
                     "package-export", kind, str(self.settings.coding_storage_mb * 1024 * 1024),
                     max_output_bytes=self.settings.coding_storage_mb * 1024 * 1024 + MAX_PACKAGE_FILES * 1024,
                 )
@@ -301,6 +444,11 @@ class SetupManager:
                                          requirements=canonical)
                 if self._inputs(repo, kind)[1] != identity:
                     raise SetupBlocked("Dependency manifests changed during preparation; retry on the current files.")
+                after = source_manifest(repo, tracked_paths=tuple(before), max_files=self.settings.max_repository_files,
+                                        max_bytes=self.settings.max_repository_mb * 1024 * 1024)
+                record["source_after"] = source_revision(after)
+                if record["source_before"] != record["source_after"]:
+                    raise SetupBlocked("Repository source changed during dependency preparation; retry on the current files.")
                 artifact = directory / "setups" / setup_id / "packages.tar"
                 with workspace_file(self.settings.coding_root, artifact, os.O_WRONLY | os.O_CREAT | os.O_EXCL,
                                     create_parents=True) as descriptor:
@@ -310,7 +458,7 @@ class SetupManager:
                     os.fsync(descriptor)
                     os.fchmod(descriptor, 0o400)
                 artifact_hash = hashlib.sha256(exported.stdout).hexdigest()
-                provenance = f"{kind}:{identity}:{runtime.image_id}:{artifact_hash}"
+                provenance = f"{kind}:{identity}:{runtime.runtime_id}:{artifact_hash}"
                 record.update(status="ready", artifact_path=str(artifact), artifact_sha256=artifact_hash,
                               dependency_identity="sha256:" + hashlib.sha256(provenance.encode()).hexdigest())
         except asyncio.CancelledError:
@@ -323,11 +471,11 @@ class SetupManager:
         return record
 
 
-def read_setup_artifact(settings: Settings, repo: Path, record: dict, image_id: str) -> bytes:
+def read_setup_artifact(settings: Settings, repo: Path, record: dict, runtime_id: str) -> bytes:
     manager = SetupManager(settings)
     directory = manager._session(record["corp_id"], record["session_id"], repo)
-    if record["status"] != "ready" or record["image_id"] != image_id:
-        raise SetupBlocked("Dependency setup is unavailable or belongs to another image.")
+    if record["status"] != "ready" or record["runtime_id"] != runtime_id:
+        raise SetupBlocked("Dependency setup is unavailable or belongs to another runtime.")
     if manager._inputs(repo, record["kind"])[1] != record["manifest_identity"]:
         raise SetupBlocked("Dependency manifests changed after setup; prepare the selected environment again.")
     expected = directory / "setups" / record["id"] / "packages.tar"
@@ -339,7 +487,7 @@ def read_setup_artifact(settings: Settings, repo: Path, record: dict, image_id: 
             data = stream.read(limit + 1)
     if len(data) > limit or hashlib.sha256(data).hexdigest() != record["artifact_sha256"]:
         raise SetupBlocked("Dependency artifact content changed or exceeded its bound.")
-    provenance = f"{record['kind']}:{record['manifest_identity']}:{image_id}:{record['artifact_sha256']}"
+    provenance = f"{record['kind']}:{record['manifest_identity']}:{runtime_id}:{record['artifact_sha256']}"
     if record["dependency_identity"] != "sha256:" + hashlib.sha256(provenance.encode()).hexdigest():
         raise SetupBlocked("Invalid dependency artifact provenance.")
     validate_package_archive(data, record["kind"], max_bytes=settings.coding_storage_mb * 1024 * 1024)

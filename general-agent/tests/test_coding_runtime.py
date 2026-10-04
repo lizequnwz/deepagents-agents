@@ -175,7 +175,7 @@ async def test_forbidden_export_preserves_the_entire_durable_source(runtime, nam
         await instance.start()
         fake.export_override = _archive({"main.py": b"changed", name: b"untrusted"})
         with pytest.raises(SourceTransferError):
-            await instance.sync_from_container()
+            await instance.sync_from_runtime()
         assert (instance.repo / "main.py").read_bytes() == b"original"
         assert sorted(path.name for path in instance.repo.iterdir()) == ["main.py"]
     finally:
@@ -189,11 +189,11 @@ async def test_symlink_export_and_oversized_source_fail_before_replacement(runti
         await instance.start()
         fake.export_override = _archive({"main.py": b"changed"}, link=("alias", b"/etc/passwd"))
         with pytest.raises(SourceTransferError):
-            await instance.sync_from_container()
+            await instance.sync_from_runtime()
         assert (instance.repo / "main.py").read_bytes() == b"original"
         fake.export_override = _archive({"large.py": b"x" * (5 * 1024 * 1024 + 1)})
         with pytest.raises(SourceTransferError):
-            await instance.sync_from_container()
+            await instance.sync_from_runtime()
         assert (instance.repo / "main.py").read_bytes() == b"original"
     finally:
         await instance.close()
@@ -207,7 +207,7 @@ async def test_export_conflicts_with_an_intervening_host_edit(runtime):
         (instance.repo / "main.py").write_text("user edit", encoding="utf-8")
         fake.export_override = _archive({"main.py": b"container edit"})
         with pytest.raises(SourceTransferError, match="changed while"):
-            await instance.sync_from_container()
+            await instance.sync_from_runtime()
         assert (instance.repo / "main.py").read_bytes() == b"user edit"
     finally:
         await instance.close()
@@ -293,7 +293,7 @@ async def test_new_ignored_output_is_not_retained_but_tracked_source_is(runtime)
             "main.py": b"tracked change", "scratch.log": b"new generated output",
             ".gitignore": b"*.py\n*.log\n",
         })
-        await instance.sync_from_container()
+        await instance.sync_from_runtime()
         assert (instance.repo / "main.py").read_bytes() == b"tracked change"
         assert not (instance.repo / "scratch.log").exists()
         assert (instance.repo / ".gitignore").exists()

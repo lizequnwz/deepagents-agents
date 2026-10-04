@@ -1,4 +1,4 @@
-"""Fixed Playwright checks for one owned, container-local HTTP origin."""
+"""Fixed Playwright checks for one application-selected local HTTP origin."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import ctypes
 import json
 import math
 import os
+from pathlib import Path
 import struct
 import sys
 from urllib.parse import urlsplit
@@ -62,7 +63,7 @@ async def _wait_server(port: int, timeout: float) -> None:
             await asyncio.sleep(0.05)
 
 
-async def probe(request: dict, playwright_factory) -> tuple[dict, bytes]:
+async def probe(request: dict, playwright_factory, *, local_directory: Path | None = None) -> tuple[dict, bytes]:
     validate_request(request)
     port, timeout = request["port"], request["timeout"]
     url = f"http://127.0.0.1:{port}{request['path']}"
@@ -77,9 +78,12 @@ async def probe(request: dict, playwright_factory) -> tuple[dict, bytes]:
             target.append(value[:500])
 
     async with playwright_factory() as playwright:
+        environment = {"PATH": "/usr/local/bin:/usr/bin:/bin",
+                       "HOME": str(local_directory / "home") if local_directory else "/work/tmp/home",
+                       "TMPDIR": str(local_directory) if local_directory else "/work/tmp"}
         browser = await playwright.chromium.launch(
-            headless=True, chromium_sandbox=False, args=["--disable-dev-shm-usage"], timeout=10_000,
-            env={"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/work/tmp/home", "TMPDIR": "/work/tmp"},
+            headless=True, chromium_sandbox=local_directory is not None,
+            args=["--disable-dev-shm-usage"], timeout=10_000, env=environment,
         )
         try:
             context = await browser.new_context(viewport={"width": WIDTH, "height": HEIGHT},
@@ -132,19 +136,30 @@ async def probe(request: dict, playwright_factory) -> tuple[dict, bytes]:
 
 
 async def main() -> None:
-    _protect_controller()
-    request = json.loads(sys.argv[1])
+    local_directory = None
+    if sys.argv[1] == "--local":
+        local_directory = Path(sys.argv[2])
+        if not local_directory.is_absolute() or local_directory.is_symlink() or not local_directory.is_dir():
+            raise ValueError("An application-owned local temporary directory is required")
+        request = json.loads(sys.argv[3])
+        # Keep the browser driver out of repository-installed modules. -I sets
+        # Python's import path to the application environment, without source.
+        (local_directory / "home").mkdir(exist_ok=True)
+    else:
+        _protect_controller()
+        request = json.loads(sys.argv[1])
     validate_request(request)
     # Driver imports and browser discovery come exclusively from the read-only
     # SDK baked into the explicitly selected image, never project dependencies.
-    os.environ.clear()
-    os.environ.update(PATH="/usr/local/bin:/usr/bin:/bin", HOME="/work/tmp/home", TMPDIR="/work/tmp",
-                      PLAYWRIGHT_BROWSERS_PATH="/opt/general-agent/browsers")
-    sys.path.insert(0, "/opt/general-agent/browser-sdk")
+    if local_directory is None:
+        os.environ.clear()
+        os.environ.update(PATH="/usr/local/bin:/usr/bin:/bin", HOME="/work/tmp/home", TMPDIR="/work/tmp",
+                          PLAYWRIGHT_BROWSERS_PATH="/opt/general-agent/browsers")
+        sys.path.insert(0, "/opt/general-agent/browser-sdk")
     from playwright.async_api import async_playwright
 
     async with asyncio.timeout(request["timeout"] + 4):
-        metadata, png = await probe(request, async_playwright)
+        metadata, png = await probe(request, async_playwright, local_directory=local_directory)
     encoded = json.dumps(metadata, ensure_ascii=True).encode()
     if len(encoded) > 65_536:
         raise ValueError("Browser metadata exceeds its size bound")

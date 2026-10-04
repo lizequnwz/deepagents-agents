@@ -21,6 +21,7 @@ from tests.test_budgets import ScriptedModel
 class FixtureRuntime:
     """Test injection only; production never selects this runtime."""
     identity = "fixture-image-v1"
+    runtime_id = "fixture-image-v1"
     executions = 0
 
     def __init__(self, settings, repo, owner_id):
@@ -28,7 +29,7 @@ class FixtureRuntime:
 
     @classmethod
     async def check_readiness(cls, settings):
-        return {"ready": True, "errors": [], "image_id": cls.identity}
+        return {"ready": True, "errors": [], "runtime": "local", "runtime_id": cls.runtime_id}
 
     @classmethod
     async def cleanup_owner(cls, settings, owner_id):
@@ -37,13 +38,13 @@ class FixtureRuntime:
     async def start(self):
         pass
 
-    async def sync_to_container(self):
+    async def sync_to_runtime(self):
         pass
 
     def track_source(self, paths):
         self.source_paths = paths
 
-    async def sync_from_container(self):
+    async def sync_from_runtime(self):
         pass
 
     async def close(self):
@@ -334,7 +335,7 @@ def test_explicit_dependency_preparation_is_queued_scoped_and_installed(settings
         async def prepare(self, corp, sid, repo, kind, *, setup_id):
             return {"id": setup_id, "corp_id": corp, "session_id": sid, "kind": kind, "status": "ready",
                     "manifest_identity": self.describe(corp, sid, repo, kind)["manifest_identity"],
-                    "image_id": "fixture-image-v1", "dependency_identity": "fixture-packages-v1", "logs": "Fixture prepared", "blockers": []}
+                    "runtime_id": "fixture-image-v1", "dependency_identity": "fixture-packages-v1", "logs": "Fixture prepared", "blockers": []}
 
     class PreparedRuntime(FixtureRuntime):
         installed = []

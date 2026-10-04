@@ -8,6 +8,7 @@ import copy
 import json
 import math
 import re
+import socket
 import struct
 import uuid
 from dataclasses import dataclass, field, replace
@@ -63,6 +64,8 @@ class _Session:
     source_revision: str
     timeout: float
     log: CursorLog
+    runtime_identity: str | None = None
+    main_runtime_identity: str | None = None
     state: str = "starting"
     task: asyncio.Task | None = None
     exit_code: int | None = None
@@ -114,7 +117,7 @@ class ProcessSessions:
         if not isinstance(command, str) or not command.strip() or len(command) > 16_384:
             raise ProcessSessionError("A bounded, non-empty preview command is required.")
         if port is not None and (type(port) is not int or not 1 <= port <= 65535):
-            raise ProcessSessionError("A valid container-local port is required.")
+            raise ProcessSessionError("A valid local preview port is required.")
         if browser and port is None:
             raise ProcessSessionError("A browser preview needs its owned local server port.")
         remaining = self._deadline - asyncio.get_running_loop().time()
@@ -129,13 +132,26 @@ class ProcessSessions:
             active = [value for value in self._sessions.values() if value.state in {"starting", "running", "stopping"}]
             if len(active) >= MAX_PREVIEWS:
                 raise ProcessSessionError("At most two preview processes may run in one attempt.")
+            if self.settings.coding_runtime == "local" and port is not None:
+                # Local ports are shared with other applications. Refuse an
+                # existing listener before dispatch; browser probes additionally
+                # verify the listener's process-group ownership after startup.
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+                        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        listener.bind(("127.0.0.1", port))
+                        listener.listen(1)
+                except OSError as exc:
+                    raise ProcessSessionError("The selected local preview port is already in use or unavailable.") from exc
             while len(self._sessions) >= MAX_HISTORY:
                 expired = next((key for key, value in self._sessions.items() if value.state not in {"starting", "running", "stopping"}), None)
                 if expired is None:
                     raise ProcessSessionError("The preview history is full.")
                 del self._sessions[expired]
-            image = self.settings.coding_browser_image if browser else self.runtime.image_id
-            settings = replace(self.settings, coding_image=image)
+            settings = self.settings
+            if self.settings.coding_runtime == "docker":
+                image = self.settings.coding_browser_image if browser else self.runtime.image_id
+                settings = replace(self.settings, coding_image=image)
             preview = self.runtime_factory(settings, self.runtime.repo, self.runtime.owner_id)
             preview.track_source(self.runtime.source_paths)
             process_id = uuid.uuid4().hex
@@ -144,10 +160,16 @@ class ProcessSessions:
             self._sessions[process_id] = session
             try:
                 await preview.start()
-                if browser and (not preview.browser_capable or self.runtime.image_id not in {preview.image_id, preview.base_image_id}):
+                if browser and not preview.browser_capable:
+                    raise ProcessSessionError("The selected runtime needs the configured Playwright and Chromium browser tools.")
+                if browser and self.settings.coding_runtime == "docker" and self.runtime.image_id not in {preview.image_id, preview.base_image_id}:
                     raise ProcessSessionError("Build the browser image from this exact coding image before starting a browser preview.")
+                if browser and self.settings.coding_runtime == "local" and preview.runtime_id != self.runtime.runtime_id:
+                    raise ProcessSessionError("The preview and coding runtime toolchains differ.")
                 for setup in self.setup_records:
                     await preview.install_setup(setup)
+                session.runtime_identity = preview.identity
+                session.main_runtime_identity = self.runtime.identity
                 if self._revision() != session.source_revision or preview.source_revision != session.source_revision:
                     raise ProcessSessionError("Session source changed while starting the preview; restart it on current files.")
                 session.timeout = min(session.timeout, self._deadline - asyncio.get_running_loop().time())
@@ -192,7 +214,7 @@ class ProcessSessions:
                 session.task.cancel()
             await asyncio.shield(asyncio.gather(session.task, return_exceptions=True))
         # A task cancelled before its first instruction never enters _drive's
-        # finally block. The manager still owns and must close that container.
+        # finally block. The manager still owns and must close that runtime.
         await session.runtime.close()
         if session.state in {"starting", "running", "stopping"}:
             session.state = "stopped"
@@ -209,6 +231,10 @@ class ProcessSessions:
             preview_before = await session.runtime.preview_revision()
             await session.runtime._refresh_dependency_identity()
             environment_before = session.runtime.identity
+            if environment_before != session.runtime_identity or self.runtime.identity != session.main_runtime_identity:
+                return {"metadata": {"status": "stale", "source_revision": session.source_revision,
+                        "main_runtime_identity": self.runtime.identity, "process_id": process_id,
+                        "reason": "The preview or main dependency environment changed after preview startup; restart it."}, "png": b""}
             if before != session.source_revision or preview_before != session.source_revision:
                 return {"metadata": {"status": "stale", "source_revision": session.source_revision,
                         "main_runtime_identity": self.runtime.identity, "process_id": process_id,

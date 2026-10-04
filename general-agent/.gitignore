@@ -13,3 +13,4 @@ __pycache__/
 build/
 dist/
 logs/
+node_modules/

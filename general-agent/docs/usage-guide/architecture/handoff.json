@@ -1,0 +1,36 @@
+{
+  "diagrams": [
+    {
+      "diagram_type": "architecture",
+      "output": "/Users/charlie/Repos/deepagents-agents/general-agent/docs/usage-guide/architecture/general-assistant.html",
+      "specification_sha256": "53163726c6e27eb8c0158c353863eb91dd74bee16aa6cc665b0215f75092bd17",
+      "specification_bytes": 4446,
+      "artifact_sha256": "3a05d6ab8e2e482045661085af44540fe61605374e477bbcca2e24d93c024e7f",
+      "artifact_bytes": 809303,
+      "validation": "9/9 showcase, 0 errors, 0 warnings",
+      "browser_evidence": "passed",
+      "visual_review": "passed",
+      "correction_rounds": 0,
+      "delivery_receipt": "general-assistant.delivery.json",
+      "visual_check_receipt": "general-assistant.visual-check.json",
+      "visual_review_receipt": "general-assistant.visual-review.json"
+    },
+    {
+      "diagram_type": "architecture",
+      "output": "/Users/charlie/Repos/deepagents-agents/general-agent/docs/usage-guide/architecture/coding-workbench.html",
+      "specification_sha256": "b4a9e3994016f2e377613bddf5b821b6725122b81c0f0ea85f58026f971aa563",
+      "specification_bytes": 6336,
+      "artifact_sha256": "d280778680c09a30caaa2a1f975b85d531a9861c09915a029fe3eb5c7c795088",
+      "artifact_bytes": 818201,
+      "validation": "9/9 showcase, 0 errors, 0 warnings",
+      "browser_evidence": "passed",
+      "visual_review": "passed",
+      "correction_rounds": 0,
+      "delivery_receipt": "coding-workbench.delivery.json",
+      "visual_check_receipt": "coding-workbench.visual-check.json",
+      "visual_review_receipt": "coding-workbench.visual-review.json"
+    }
+  ],
+  "application_source_changes": false,
+  "skill_changes": false
+}

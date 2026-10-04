@@ -46,6 +46,9 @@ dependencies = [
     "xlrd>=2.0.1",
 ]
 
+[project.optional-dependencies]
+browser = ["playwright==1.63.0"]
+
 [project.scripts]
 general-agent-acp = "general_agent.coding.acp:main"
 
@@ -66,7 +69,7 @@ include = ["general_agent*"]
 addopts = "-q"
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = ["live: requires configured model credentials"]
+markers = ["live: requires explicitly configured external tools, services or model credentials"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"

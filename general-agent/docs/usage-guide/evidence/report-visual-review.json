@@ -1,0 +1,45 @@
+{
+  "kind": "independent perceptual review",
+  "artifact": {
+    "file": "/Users/charlie/Repos/deepagents-agents/general-agent/docs/usage-guide/index.html",
+    "bytes": 2260953,
+    "sha256": "1a777ce640322bfc6fd849a178456a079c55480b2ceb6c6a22d2f10d06c21d8c"
+  },
+  "reviewed_at_utc": "2026-10-04T22:25:07.091735+00:00",
+  "reviewer": "Root image-capable reviewer",
+  "status": "passed",
+  "scope": "Report screenshots, separate from automated checks and standalone Archify visual receipts.",
+  "observations": [
+    "Desktop hierarchy and chapter navigation are clear.",
+    "Mobile headings, cards and controls fit the available width.",
+    "Both themes preserve clear text and interface contrast.",
+    "Embedded architecture routes and labels remain distinct; full-view and zoom controls provide a larger reading workspace.",
+    "Captured diagrams contain no active hover fading or notification overlay."
+  ],
+  "screenshots": [
+    {
+      "file": "guide-1440x900-light.png",
+      "sha256": "1be50e8d6372ba9b1c5387b209b62d1d8f1eb34db8b331795171949fd2b7eb20"
+    },
+    {
+      "file": "guide-1440x900-dark.png",
+      "sha256": "75a509b884d02c41e0edab3c88976bf1bf4d817755be3dce60280b07df4978bf"
+    },
+    {
+      "file": "guide-375x812-light.png",
+      "sha256": "1e1150e1b6eb2a5ed9d61971359984be7a855ba8cf8dce8671e79d76d7510fe1"
+    },
+    {
+      "file": "guide-375x812-dark.png",
+      "sha256": "55764276d539344a0393d24ea198d798d5bd9d0d31625cb3c4468ca9c1b71796"
+    },
+    {
+      "file": "guide-architecture-general.png",
+      "sha256": "bdb9569803ed995bde2f47484663202407ad2a2e167bfb5bd50e283dce623bea"
+    },
+    {
+      "file": "guide-architecture-coding.png",
+      "sha256": "7463b52a748299fc1b63b8f9d9b0ab446e78a7a552787868de4c1e4414a9d199"
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "basis": "Current working-tree source inspected read-only; uncommitted source is not represented as revision-pinned Git evidence.",
+  "diagrams": {
+    "general-assistant": [
+      {
+        "component": "chat-ui",
+        "path": "streamlit_app.py",
+        "line": 1,
+        "label": "Chat interface",
+        "working_tree_sha256": "68bf4ee371685fa5d5363703e9aa12cf85a7835e5e6b33136156f590fbfc6989"
+      },
+      {
+        "component": "chat-api",
+        "path": "general_agent/api.py",
+        "line": 50,
+        "label": "Application lifecycle",
+        "working_tree_sha256": "26e1c296f8fc6c95a07044b9e886dff3f908c988d003687f385d78ff888fdcf1"
+      },
+      {
+        "component": "run-owner",
+        "path": "general_agent/run_manager.py",
+        "line": 239,
+        "label": "Run scope and budgets",
+        "working_tree_sha256": "111204644c0a3eff53a9ffd21394215c45ab941c740e76d2a92adaaecd786117"
+      },
+      {
+        "component": "chat-state",
+        "path": "general_agent/config.py",
+        "line": 184,
+        "label": "Application and checkpoint stores",
+        "working_tree_sha256": "db88533545881b0d236f15595109b268a0c003f7616228d624648316363b5323"
+      },
+      {
+        "component": "delegated-task",
+        "path": "general_agent/agent.py",
+        "line": 214,
+        "label": "Additive harness profile",
+        "working_tree_sha256": "59245047f1d5a3eba47db6c80d3981ce5c6d64a489ec50b471a6e7f474d4d95f"
+      },
+      {
+        "component": "chat-harness",
+        "path": "general_agent/agent.py",
+        "line": 175,
+        "label": "Shared agent graph",
+        "working_tree_sha256": "59245047f1d5a3eba47db6c80d3981ce5c6d64a489ec50b471a6e7f474d4d95f"
+      },
+      {
+        "component": "chat-model",
+        "path": "general_agent/agent.py",
+        "line": 166,
+        "label": "Model construction",
+        "working_tree_sha256": "59245047f1d5a3eba47db6c80d3981ce5c6d64a489ec50b471a6e7f474d4d95f"
+      },
+      {
+        "component": "chat-workspace",
+        "path": "general_agent/workspace.py",
+        "line": 291,
+        "label": "Corporation workspace",
+        "working_tree_sha256": "b56184b626c3e1245b2b4afa457463fbdc5008448e36b31a006947455a115380"
+      },
+      {
+        "component": "host-tools",
+        "path": "general_agent/execution.py",
+        "line": 112,
+        "label": "Explicit subprocess environment",
+        "working_tree_sha256": "699ae00938d80517a95bdbe60addbb9e5e3b215c2d263617b7ae193027043dd1"
+      }
+    ],
+    "coding-workbench": [
+      {
+        "component": "coding-entry",
+        "path": "general_agent/coding/acp.py",
+        "line": 1,
+        "label": "Editor adapter",
+        "working_tree_sha256": "1bac3ef54cab42955e37f1c8c98a926edd5fda3bc19012c46acdcebe116a46f8"
+      },
+      {
+        "component": "coding-owner",
+        "path": "general_agent/coding/service.py",
+        "line": 95,
+        "label": "Shared coding service",
+        "working_tree_sha256": "8ed96a8c873ed39190aafdd1961e5a38436565e7310a1ec6243397dba0a4530b"
+      },
+      {
+        "component": "coding-harness",
+        "path": "general_agent/coding/agent.py",
+        "line": 72,
+        "label": "Mode-scoped graph",
+        "working_tree_sha256": "d87b5a7454bc35a73aeb01f6edf12eb8e490e04020740f4b3c2e1f6ac868736d"
+      },
+      {
+        "component": "coding-model",
+        "path": "general_agent/coding/agent.py",
+        "line": 72,
+        "label": "Model construction",
+        "working_tree_sha256": "d87b5a7454bc35a73aeb01f6edf12eb8e490e04020740f4b3c2e1f6ac868736d"
+      },
+      {
+        "component": "coding-history",
+        "path": "general_agent/coding/changes.py",
+        "line": 1,
+        "label": "Immutable change snapshots",
+        "working_tree_sha256": "2065e58e34e576df9b7a63b8aae5f129b56429f1d66f94b9151be0de29e9be72"
+      },
+      {
+        "component": "coding-history",
+        "path": "general_agent/config.py",
+        "line": 193,
+        "label": "Coding persistence",
+        "working_tree_sha256": "db88533545881b0d236f15595109b268a0c003f7616228d624648316363b5323"
+      },
+      {
+        "component": "coding-copy",
+        "path": "general_agent/coding/projects.py",
+        "line": 1,
+        "label": "Project onboarding and copies",
+        "working_tree_sha256": "472cbaaf103544a4601954dce9a7c98ec51f9e98943244e7ce63fdc6724b69bc"
+      },
+      {
+        "component": "coding-copy",
+        "path": "general_agent/coding/context.py",
+        "line": 1,
+        "label": "Repository context",
+        "working_tree_sha256": "19df4784aad0b4168f3251fb6557dab4c45f1b04286e6d7bb84f35c51c1d0b5e"
+      },
+      {
+        "component": "coding-runtime",
+        "path": "general_agent/coding/local_runtime.py",
+        "line": 196,
+        "label": "Explicit runtime environment",
+        "working_tree_sha256": "6438f3021712977219dd3ffcbfc2894ca20f3beee9028723aff42b0c83582ee3"
+      },
+      {
+        "component": "coding-runtime",
+        "path": "general_agent/coding/service.py",
+        "line": 108,
+        "label": "Runtime selection",
+        "working_tree_sha256": "8ed96a8c873ed39190aafdd1961e5a38436565e7310a1ec6243397dba0a4530b"
+      },
+      {
+        "component": "approved-reads",
+        "path": "general_agent/coding/documentation.py",
+        "line": 1,
+        "label": "Approved public documentation",
+        "working_tree_sha256": "672e2d1b79b851a96f4a49465b460dc1b51eae4305d6301a7834472db012fe23"
+      },
+      {
+        "component": "approved-reads",
+        "path": "general_agent/coding/snowflake.py",
+        "line": 1,
+        "label": "Scoped database reads",
+        "working_tree_sha256": "ffd40167530ec8c05daa1dc05a75ac5329ca3304a0b50c156787b12dc297c310"
+      },
+      {
+        "component": "original-checkout",
+        "path": "general_agent/coding/service.py",
+        "line": 915,
+        "label": "Explicit original application",
+        "working_tree_sha256": "8ed96a8c873ed39190aafdd1961e5a38436565e7310a1ec6243397dba0a4530b"
+      },
+      {
+        "component": "review-gate",
+        "path": "general_agent/coding/service.py",
+        "line": 915,
+        "label": "Conflict-checked apply",
+        "working_tree_sha256": "8ed96a8c873ed39190aafdd1961e5a38436565e7310a1ec6243397dba0a4530b"
+      },
+      {
+        "component": "review-gate",
+        "path": "general_agent/coding/github_service.py",
+        "line": 1,
+        "label": "Explicit remote delivery",
+        "working_tree_sha256": "52e47061ab0f10e0d9ddb83835f9998d2f4887d6dac42139b0ad19326904f589"
+      },
+      {
+        "component": "check-evidence",
+        "path": "general_agent/coding/evidence.py",
+        "line": 1,
+        "label": "Verification provenance",
+        "working_tree_sha256": "cffcba439d87656b74487d60a1c18e7af32dcaff31dffc4365b1ab74e9282b10"
+      },
+      {
+        "component": "check-evidence",
+        "path": "general_agent/coding/process_sessions.py",
+        "line": 1,
+        "label": "Owned preview sessions",
+        "working_tree_sha256": "df01dd21f1b8107dbd99b56f73a02b5d6158c585a34767536b6b94ce15dc968a"
+      },
+      {
+        "component": "github-remote",
+        "path": "general_agent/coding/github.py",
+        "line": 1,
+        "label": "Bounded GitHub REST connector",
+        "working_tree_sha256": "9d0ea9bbc1cc91ab783a2b83f9e9186aeb362c3938d94e6dac38ef19a3c0e6ea"
+      }
+    ]
+  }
+}

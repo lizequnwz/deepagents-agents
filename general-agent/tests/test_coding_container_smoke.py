@@ -105,3 +105,20 @@ async def test_real_browser_preview_freezes_source_and_cleans_up(container):
     finally:
         await manager.close()
     assert all(record["state"] not in {"starting", "running", "stopping"} for record in manager.records())
+
+
+@pytest.mark.skipif(os.getenv("GENERAL_AGENT_POLYGLOT_TEST") != "1",
+                   reason="Select the built polyglot image and set GENERAL_AGENT_POLYGLOT_TEST=1.")
+@pytest.mark.parametrize("filename,source,command", [
+    ("main.go", 'package main\nimport "fmt"\nfunc main() { fmt.Println("toolchain-ok") }\n',
+     "go run main.go"),
+    ("main.rs", 'fn main() { println!("toolchain-ok"); }\n',
+     "rustc main.rs -o /work/tmp/rust-smoke && /work/tmp/rust-smoke"),
+    ("Main.java", 'public class Main { public static void main(String[] args) { System.out.println("toolchain-ok"); } }\n',
+     "javac -d /work/tmp Main.java && java -cp /work/tmp Main"),
+])
+async def test_real_offline_polyglot_toolchain(container, filename, source, command):
+    (container.repo / filename).write_text(source)
+    await container.sync_to_runtime()
+    result = await container.execute(command, timeout=60)
+    assert result.exit_code == 0 and "toolchain-ok" in result.output, result.output

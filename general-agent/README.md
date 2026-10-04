@@ -8,9 +8,12 @@ run Python or shell commands, and preserve downloadable versions of every file
 changed by a turn.
 
 > [!CAUTION]
-> The **General assistant** executes commands automatically on the host and is
-> **not sandboxed**. The **Coding workbench** executes only in its configured
-> constrained Docker runtime, with no host-execution fallback.
+> The **General assistant** and default **Coding workbench** execute commands
+> automatically with the current local user's host permissions. They are
+> **not sandboxed** and commands can access the host network and filesystem.
+> Coding uses a separate source copy and reviewed application of changes;
+> those controls do not contain arbitrary host shell commands. Docker is an
+> optional explicit runtime, with no automatic switch between runtimes.
 > DeepAgents' built-in file tools are virtual-rooted to `workspace/`, but shell
 > commands run with the current local user's host permissions. The services bind
 > only to loopback and must not be exposed to a network or untrusted users.
@@ -28,29 +31,38 @@ links, dependency/build caches and this application's physical runtime storage
 are excluded. Onboarding reports exclusions and source limits.
 
 **Plan** and **Review** permit inspection only, including delegated work.
-**Implement** edits the copy and runs bounded offline commands. `run_check`
+**Implement** edits the copy and runs commands in the selected runtime. Local
+execution is the default and requires no Docker. Time, output and cancellation
+limits apply; container CPU, memory and process limits do not apply to local
+commands. `run_check`
 records approved check commands, source revisions, runtime identity and output.
 Missing, failing or stale checks cannot become verified from an assistant's
 answer. Image reads use DeepAgents' model-capability handling and bounded image
 inspection; binary documents retain their document-skill workflows.
 
-Navigation provides Python AST inspection and container-based JavaScript/
-TypeScript symbols, definitions, references and diagnostics. The fixed compiler
+Navigation provides Python AST inspection and optional JavaScript/TypeScript
+symbols, definitions, references and diagnostics through a pinned SDK. The fixed compiler
 reads approved snapshots without running repository code or plugins. Its
 bounded snapshot does not load project packages or `tsconfig.json`; the results
 state these limits. Python navigation is approximate lexical analysis.
 
 Prepare hash-pinned Python or locked public Node packages in **Dependencies**
-before checks that need them. Acquisition uses a separate source-free helper;
-installation and project commands stay offline. Baseline checks record existing
+before checks that need them. Acquisition uses validated manifests in a private,
+source-free helper directory or optional Docker helper. Packages are installed
+from saved artifacts into session dependency folders, separate from application
+and global environments. Local commands retain host network access even when
+package-manager offline flags are set. Baseline checks record existing
 failures separately. Questions pause durably; answering resumes the same task
 with its remaining budget and source revalidation.
 
 Implement tasks can start private preview processes, read incremental logs,
-stop them, and capture browser checks with the optional Playwright image. Each
+stop them, and capture browser checks with optional Playwright/Chromium setup. Each
 preview expires with its attempt and discards source writes. Screenshots bind
 to source and dependency identities and cannot replace approved tests. The
-browser has access only to the preview's local origin, with no host ports.
+browser request broker permits only the preview's owned local origin. Local
+servers must explicitly bind `127.0.0.1`; they use host ports and are not
+sandboxed. Docker previews keep the server and browser in the same container
+without publishing host ports.
 
 Project-approved public documentation websites enable bounded fetches; an
 optional Brave key enables search within those domains. Explicitly connected
@@ -68,7 +80,7 @@ original checkout stable during apply: a separate editor can still race the
 last filesystem check. Observed conflicts block apply/revert/compensation rather
 than overwrite a newer edit. Applied-repository verification is marked stale
 until the merged original is checked. Applying does not commit, push or publish.
-**Reject change proposal** restores an unapplied proposal in the isolated copy.
+**Reject change proposal** restores an unapplied proposal in the review copy.
 
 Sessions, decisions, changes, checks and event cursors are corporation-scoped.
 A durable local queue allows separate session writers within
@@ -77,21 +89,59 @@ new attempt. Executing attempts abandoned by a restart fail; shell side effects
 are never replayed automatically. Follow-up instructions queue at the next
 writer boundary.
 
-Coding execution requires Docker and a locally built image:
+### Optional local navigation and browser tools
+
+Python inspection and the edit/test/review workflow work with the default
+`CODING_RUNTIME=local`. Project checks use available local toolchains; missing
+tools or locked dependencies are reported as blockers rather than installed
+automatically. Standard host toolchains can also run Go, Rust, Java or native
+checks, without claiming a prevalidated environment for every project.
+
+To enable the exact TypeScript 5.9.3 navigation SDK, install the app-owned
+tooling package explicitly:
+
+```bash
+npm ci --prefix tooling/coding --ignore-scripts --no-audit --no-fund
+```
+
+The default SDK path is
+`tooling/coding/node_modules/typescript/lib/typescript.js`.
+`CODING_TYPESCRIPT_SDK` may select another absolute path to that exact SDK.
+Navigation does not execute repository code or load repository plugins.
+
+To enable local browser checks, provide the `lsof` system utility (included on
+macOS; install through the OS package manager on Linux), then explicitly install
+the optional application extra and its Chromium browser:
+
+```bash
+uv sync --locked --all-groups --extra browser
+uv run python -m playwright install chromium
+```
+
+These operator setup commands download packages/browser files. The workbench
+does not run them automatically. Browser requests remain limited to the owned
+preview origin and validate that its loopback listener belongs to the task's
+process group. An already occupied port or unrelated server is rejected. Local
+project commands and browser processes still have host permissions.
+
+### Optional Docker runtime
+
+Set `CODING_RUNTIME=docker` to require Docker and a locally built image:
 
 ```bash
 docker build -f docker/coding/Dockerfile -t general-agent-coding:local .
 ```
 
-This explicit build downloads the image's Python/Node/uv dependencies. Coding
-readiness never pulls an image or installs Docker. The runtime uses an immutable
+This explicit build downloads the image's Python/Node/uv dependencies. Docker
+readiness never pulls an image, installs Docker or falls back to local execution.
+The optional runtime uses an immutable
 image ID, nonroot execution, a read-only root filesystem, disabled networking,
 dropped capabilities, CPU/memory/PID bounds and finite tmpfs storage. It transfers
 only bounded, validated session source; it mounts no original checkout, home,
 application secrets or Docker socket into the container. Docker engine logs are
 disabled and command output is bounded by the controller.
 
-Docker is unavailable in the development environment used for the initial
+Docker is unavailable in the development environment used for this
 implementation. Deterministic runtime/controller tests and fixture-backed API
 checks pass; an actual image build, resource/egress checks and daemon recovery
 still need validation before claiming Docker-supported execution here. The
@@ -166,7 +216,7 @@ conversation export. OCR is a local optional dependency, not a hosted tool.
 | `.data/application.sqlite3` | Chats, runs, events, usage, and file records | No |
 | `.data/checkpoints.sqlite3` | LangGraph checkpoints | No |
 | `.data/coding.sqlite3` | Projects, sessions, coding attempts, decisions and events | No |
-| `.data/coding/<opaque-id>/<session-id>/` | Isolated source, immutable versions and apply/reject journals | Coding workbench |
+| `.data/coding/<opaque-id>/<session-id>/` | Review source, private dependencies, immutable versions and apply/reject journals | Coding workbench |
 | `.data/users/<opaque-id>/attachments/` | Immutable original uploads | No |
 | `.data/users/<opaque-id>/artifacts/` | Immutable per-turn file versions | No |
 
@@ -234,9 +284,12 @@ provider metadata or a provider-qualified model identifier.
 | `MAX_INSPECT_PAGES` / `MAX_INSPECT_SHEETS` | `20` / `20` |
 | `MAX_INSPECT_ROWS` / `MAX_INSPECT_COLUMNS` | `50` / `20` |
 | `MAX_INSPECT_CHARS` | `50000` |
-| `CODING_IMAGE` | `general-agent-coding:local` |
+| `CODING_RUNTIME` | `local`; optional explicit `docker` |
+| `CODING_TYPESCRIPT_SDK` | empty; app-owned `tooling/coding` SDK when installed |
+| `CODING_IMAGE` | `general-agent-coding:local`; Docker mode only |
 | `CODING_BROWSER_IMAGE` | `general-agent-coding-browser:local` |
-| `CODING_MEMORY_MB` / `CODING_PIDS` / `CODING_STORAGE_MB` | `1024` / `128` / `512` |
+| `CODING_MEMORY_MB` / `CODING_PIDS` | `1024` / `128`; container limits in Docker mode |
+| `CODING_STORAGE_MB` | `512`; bounded package artifacts/dependency inventories; also Docker tmpfs size |
 | `MAX_REPOSITORY_MB` / `MAX_REPOSITORY_FILES` | `50` / `5000` |
 | `MAX_CODING_WORKERS` | `2` |
 | `BRAVE_SEARCH_API_KEY` | empty; documentation search disabled |
@@ -248,7 +301,10 @@ Python path, `.packages`, workspace temp directory, and locale. API keys,
 tokens, passwords, and other application environment variables are not
 inherited. Configured secret values are also redacted from persisted tool
 output and errors. Prompts, responses, commands, and file contents are not sent
-to application logs.
+to application logs. This environment filtering does not prevent local commands
+from reading host files or opening network connections. Repository inclusion
+and artifact caps apply in both runtimes; local disk, CPU, memory and process
+usage have no container-enforced quota.
 
 Optional LangSmith variables are shown in `.env.example`. Tracing is a provider
 feature and may transmit model/tool data; enable it only when that is intended.

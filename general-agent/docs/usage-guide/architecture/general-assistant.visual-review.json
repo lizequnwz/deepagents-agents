@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "perceptual-review",
+  "reviewer": "Codex image-capable reviewer",
+  "artifact": {
+    "path": "/Users/charlie/Repos/deepagents-agents/general-agent/docs/usage-guide/architecture/general-assistant.html",
+    "sha256": "3a05d6ab8e2e482045661085af44540fe61605374e477bbcca2e24d93c024e7f",
+    "bytes": 809303
+  },
+  "specification": {
+    "sha256": "53163726c6e27eb8c0158c353863eb91dd74bee16aa6cc665b0215f75092bd17",
+    "bytes": 4446
+  },
+  "visual_review": "passed",
+  "correction_rounds": 0,
+  "browser_evidence": "passed",
+  "automated_receipt": "general-assistant.visual-check.json",
+  "supplementary_browser_receipt": "general-assistant.reader-controls.json",
+  "inspected_images": [
+    "general-assistant.visual-check.1440x900.light.png",
+    "general-assistant.visual-check.1440x900.dark.png",
+    "general-assistant.visual-check.2048x1320.light.png",
+    "general-assistant.visual-check.2048x1320.dark.png",
+    "general-assistant.reader-focus.png",
+    "general-assistant.reader-export.png"
+  ],
+  "coverage": {
+    "default_state": "READ / Still",
+    "viewport_measurements": [
+      [
+        1440,
+        900
+      ],
+      [
+        1600,
+        1000
+      ],
+      [
+        1920,
+        1080
+      ],
+      [
+        2048,
+        1320
+      ]
+    ],
+    "perceptual_theme_viewports": {
+      "light": [
+        [
+          1440,
+          900
+        ],
+        [
+          2048,
+          1320
+        ]
+      ],
+      "dark": [
+        [
+          1440,
+          900
+        ],
+        [
+          2048,
+          1320
+        ]
+      ]
+    }
+  },
+  "observations": [
+    "No horizontal or vertical overflow at the four required desktop sizes.",
+    "Primary route is clear; no unrelated node crossings, shared corridors, or label masks obscure the diagram.",
+    "Light and dark node/card text fits; the largest viewport uses the available height with balanced vertical rhythm.",
+    "Search focuses the requested node; its semantic passport opens and closes.",
+    "PNG and SVG exports retain the complete semantic diagram and omit reader-control overlays."
+  ],
+  "limitations": [
+    "The browser evidence tests the exact standalone HTML. Report embedding needs its own viewport check."
+  ],
+  "unresolved_diagnostics": []
+}

@@ -44,7 +44,7 @@ class FakeAcquisition:
 
     def __init__(self, settings, repo, owner_id):
         self.settings, self.repo, self.owner_id = settings, repo, owner_id
-        self.image_id, self._container = IMAGE, "helper"
+        self.runtime_id, self._container = IMAGE, "helper"
         self.calls, self.closed = [], False
         self.inputs = sorted(path.name for path in repo.iterdir())
         self.requirements = REQUIREMENTS
@@ -73,6 +73,9 @@ class FakeAcquisition:
         if kind == "node":
             files = {"node_modules/example/index.js": b"dependency"}
         return BinaryProcessResult(archive(files), b"", 0, False)
+
+    async def package_bytes(self, action, *arguments, **kwargs):
+        return await self._docker_bytes("exec", action, *arguments, **kwargs)
 
     _require_success = staticmethod(DockerRuntime._require_success)
 
@@ -140,7 +143,7 @@ async def test_prepare_is_manifest_only_and_artifact_is_owned_immutable_and_hash
     altered = dict(record, artifact_path=str(repo / "main.py"))
     with pytest.raises(SetupBlocked, match="ownership"):
         read_setup_artifact(settings, repo, altered, IMAGE)
-    with pytest.raises(SetupBlocked, match="image"):
+    with pytest.raises(SetupBlocked, match="runtime"):
         read_setup_artifact(settings, repo, record, "sha256:" + "e" * 64)
     with pytest.raises(SetupBlocked, match="corporation"):
         read_setup_artifact(settings, repo, dict(record, corp_id="OTHER"), IMAGE)
@@ -333,13 +336,7 @@ def test_node_dependency_restore_retains_relative_binary_symlinks_offline(tmp_pa
     repo = tmp_path / "repo"
     repo.mkdir()
     monkeypatch.setattr(controller, "REPO", repo)
-    original_path = controller.Path
-
-    def mapped_path(value, *parts):
-        raw = str(value)
-        return original_path(tmp_path / "deps/node" if raw == "/work/deps/node" else value, *parts)
-
-    monkeypatch.setattr(controller, "Path", mapped_path)
+    monkeypatch.setattr(controller, "DEPS", tmp_path / "deps")
     package = archive({"node_modules/example/bin.js": b"source"}, ("node_modules/.bin/example", "../example/bin.js"))
     monkeypatch.setattr(controller, "sys", SimpleNamespace(stdin=SimpleNamespace(buffer=io.BytesIO(package))))
     controller._package_import("node", 1024)

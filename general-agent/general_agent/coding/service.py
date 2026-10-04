@@ -28,6 +28,7 @@ from general_agent.coding.inline import InlineService
 from general_agent.coding.documentation import BraveSearchConfig, DocumentationBroker
 from general_agent.coding.navigation import Navigation
 from general_agent.coding.languages import Languages
+from general_agent.coding.local_runtime import LocalRuntime
 from general_agent.coding.process_sessions import ProcessSessions
 from general_agent.coding.projects import Projects
 from general_agent.coding.runtime import DockerRuntime, _shielded
@@ -93,7 +94,7 @@ class CodingUsage(BaseCallbackHandler):
 
 class CodingService:
     def __init__(self, settings: Settings, store: CodingStore, checkpointer: Any,
-                 *, runtime_factory=DockerRuntime, graph_factory=build_coding_agent,
+                 *, runtime_factory=None, graph_factory=build_coding_agent,
                  model=None):
         self.settings, self.store, self.checkpointer = settings, store, checkpointer
         self.projects = Projects(settings, store)
@@ -102,7 +103,10 @@ class CodingService:
         self.github = GitHubService(self)
         self.inline = InlineService(self)
         self.snowflake = SnowflakeService(self)
-        self.runtime_factory, self.graph_factory, self.model = runtime_factory, graph_factory, model
+        if settings.coding_runtime not in {"local", "docker"}:
+            raise ValueError("CODING_RUNTIME must be local or docker.")
+        self.runtime_factory = runtime_factory or (LocalRuntime if settings.coding_runtime == "local" else DockerRuntime)
+        self.graph_factory, self.model = graph_factory, model
         self.setups = SetupManager(settings)
         self._wake = asyncio.Event()
         self._scheduler: asyncio.Task | None = None
@@ -166,7 +170,7 @@ class CodingService:
         if self._orphan_errors and result["ready"]:
             await self._cleanup_abandoned()
         return {**result, "ready": result["ready"] and not self._orphan_errors,
-                "errors": [*result["errors"], *["Abandoned container cleanup failed: " + error
+                "errors": [*result["errors"], *["Abandoned runtime cleanup failed: " + error
                                               for error in self._orphan_errors.values()]],
                 "scheduler": self.store.scheduler_health()}
 
@@ -379,7 +383,7 @@ class CodingService:
                 if description["manifest_identity"] != attempt["approved_manifest_identity"]:
                     raise CodingConflict("The approved dependency manifests are stale; review setup again.")
                 if self._orphan_errors:
-                    raise CodingConflict("Abandoned containers must be cleaned up before dependency preparation.")
+                    raise CodingConflict("Abandoned runtimes must be cleaned up before dependency preparation.")
                 self.store.event(corp, aid, {"kind": "setup_started", "label": attempt["message"]})
                 setup_started = True
                 async with asyncio.timeout(self.settings.run_timeout_seconds):
@@ -446,7 +450,7 @@ class CodingService:
                     raise CodingConflict("The approved plan is stale. Create a plan for the current revision.")
                 if attempt["mode"] == "implement":
                     if self._orphan_errors:
-                        raise CodingConflict("Abandoned containers must be cleaned up before implementation.")
+                        raise CodingConflict("Abandoned runtimes must be cleaned up before implementation.")
                     runtime = self.runtime_factory(self.settings, repo, aid)
                     self._runtimes[aid] = runtime
                     await runtime.start()
@@ -476,7 +480,7 @@ class CodingService:
                     if selected is None:
                         if navigation_runtime is None:
                             if self._orphan_errors:
-                                raise CodingConflict("Abandoned containers must be cleaned up before compiler navigation.")
+                                raise CodingConflict("Abandoned runtimes must be cleaned up before compiler navigation.")
                             navigation_runtime = self.runtime_factory(self.settings, repo, aid)
                             self._runtimes[aid] = navigation_runtime
                             await navigation_runtime.start()
@@ -487,14 +491,14 @@ class CodingService:
 
                 @tool
                 async def symbols(path: str | None = None, query: str = "") -> str:
-                    """Inspect Python and JS/TS symbols without executing source. JS/TS uses the configured container SDK; paths are repository-relative."""
+                    """Inspect Python and JS/TS symbols without executing source. JS/TS uses the configured compiler SDK; paths are repository-relative."""
                     async with backend.lock:
                         python_navigation.tracked_paths = backend.tracked_paths
                         return json.dumps(await navigation.symbols(path, query))
 
                 @tool
                 async def definition(path: str, line: int, column: int) -> str:
-                    """Find Python or JS/TS definitions at one-based lines and zero-based Unicode columns. JS/TS requires the container SDK."""
+                    """Find Python or JS/TS definitions at one-based lines and zero-based Unicode columns. JS/TS requires the configured compiler SDK."""
                     async with backend.lock:
                         python_navigation.tracked_paths = backend.tracked_paths
                         return json.dumps(await navigation.definition(path, line, column))
@@ -508,7 +512,7 @@ class CodingService:
 
                 @tool
                 async def diagnostics(path: str | None = None) -> str:
-                    """Inspect Python syntax and JS/TS compiler diagnostics without importing or executing source. JS/TS uses the container SDK."""
+                    """Inspect Python syntax and JS/TS compiler diagnostics without importing or executing source. JS/TS uses the configured compiler SDK."""
                     async with backend.lock:
                         python_navigation.tracked_paths = backend.tracked_paths
                         return json.dumps(await navigation.diagnostics(path))
@@ -615,7 +619,7 @@ class CodingService:
                 if runtime:
                     @tool
                     async def execute(command: str, timeout: int | None = None) -> str:
-                        """Run a bounded command in the offline coding container in /repo; does not certify a project check."""
+                        """Run a bounded command in the selected runtime's private source copy. Use relative paths or GENERAL_AGENT_REPO_DIR; does not certify a project check."""
                         return json.dumps(_jsonable(await backend.aexecute(command, timeout=timeout)))
 
                     @tool
@@ -647,7 +651,7 @@ class CodingService:
                     @tool
                     async def start_process(command: str, port: int | None = None,
                                             timeout: float | None = None, browser: bool = False) -> str:
-                        """Start an attempt-owned process in a private preview snapshot. Source writes are discarded; browser previews require the optional browser image."""
+                        """Start an attempt-owned process in a private preview snapshot. Source writes are discarded; browser previews require the optional browser tools; local servers must bind 127.0.0.1."""
                         async with backend.lock:
                             runtime.track_source(backend.tracked_paths)
                             record = await previews.start(command, port=port, timeout=timeout, browser=browser)
@@ -661,13 +665,13 @@ class CodingService:
 
                     @tool
                     async def stop_process(process_id: str) -> str:
-                        """Stop a process owned by this attempt and remove its preview container."""
+                        """Stop a process owned by this attempt and remove its private preview runtime."""
                         return json.dumps(await previews.stop(process_id))
 
                     @tool
                     async def browser_check(process_id: str, path: str = "/", selector: str | None = None,
                                             expected_text: str | None = None, timeout: float = 15) -> str:
-                        """Check the owned offline preview with Playwright and freeze a PNG screenshot. Uses only its local origin; stale previews must restart."""
+                        """Check the owned local preview with Playwright and freeze a PNG screenshot. Uses only its local origin; stale previews must restart."""
                         async with backend.lock:
                             result = await previews.browser_check(process_id, path=path, selector=selector,
                                                                   expected_text=expected_text, timeout=timeout)

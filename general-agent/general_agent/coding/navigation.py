@@ -265,7 +265,7 @@ class Navigation:
                 continue
             suffix = Path(name).suffix.lower()
             if suffix in _JAVASCRIPT:
-                output["omitted"].append({"path": name, "reason": "Handled by the container TypeScript compiler navigation tools."})
+                output["omitted"].append({"path": name, "reason": "Handled by the configured TypeScript compiler navigation tools."})
                 continue
             if suffix != ".py":
                 continue

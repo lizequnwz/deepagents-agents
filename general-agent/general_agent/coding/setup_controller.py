@@ -1,4 +1,4 @@
-"""Read-only dependency controller; only explicit setup actions call this file."""
+"""Fixed dependency controller; only explicit setup actions call this file."""
 
 from __future__ import annotations
 
@@ -17,6 +17,12 @@ REPO = Path("/work/repo")
 ACQUIRED = Path("/work/acquired")
 MAX_PACKAGE_FILES = 50_000
 DEPS = Path("/work/deps")
+TMP = Path("/work/tmp")
+PYTHON = "/usr/local/bin/python"
+UV = "uv"
+NPM = "npm"
+NODE = "node"
+LOCAL = False
 
 
 def _path(name: str) -> PurePosixPath:
@@ -29,7 +35,7 @@ def _path(name: str) -> PurePosixPath:
 def _protect_controller() -> None:
     # Same-UID children must not reopen this process's stdout via /proc and
     # forge command evidence, or modify its memory with ptrace. This controller
-    # always runs in Linux, and unsupported protection is a hard blocker.
+    # runs in Linux for Docker mode, and unsupported protection is a blocker.
     library = ctypes.CDLL(None, use_errno=True)
     library.prctl.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
     library.prctl.restype = ctypes.c_int
@@ -38,9 +44,16 @@ def _protect_controller() -> None:
 
 
 def _package_environment() -> dict[str, str]:
+    path = "/usr/local/bin:/usr/bin:/bin"
+    if LOCAL:
+        path = os.pathsep.join(dict.fromkeys(
+            [str(Path(value).parent) for value in (NODE, PYTHON, UV, NPM) if value]
+            + ["/usr/local/bin", "/usr/bin", "/bin"]
+        ))
     return {
-        "PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/work/tmp/home", "TMPDIR": "/work/tmp",
-        "PIP_CONFIG_FILE": "/dev/null", "UV_CACHE_DIR": "/work/tmp/uv", "UV_PYTHON": "/usr/local/bin/python",
+        "PATH": path, "HOME": str(TMP / "home"), "TMPDIR": str(TMP),
+        "PIP_CONFIG_FILE": os.devnull, "UV_CACHE_DIR": str(TMP / "uv"), "UV_PYTHON": PYTHON,
+        "UV_NO_CONFIG": "1", "UV_PYTHON_DOWNLOADS": "never", "PYTHONNOUSERSITE": "1",
     }
 
 
@@ -51,9 +64,9 @@ def _package_command(argv: list[str]) -> None:
 def _export_python_requirements() -> None:
     ACQUIRED.mkdir(exist_ok=True)
     constraints = ["--offline", "--no-config", "--no-build", "--no-python-downloads", "--no-cache"]
-    _package_command(["uv", "lock", "--check", "--python", "/usr/local/bin/python", *constraints])
+    _package_command([UV, "lock", "--check", "--python", PYTHON, *constraints])
     _package_command([
-        "uv", "export", "--frozen", *constraints, "--format", "requirements.txt",
+        UV, "export", "--frozen", *constraints, "--format", "requirements.txt",
         "--no-emit-local", "--no-emit-project", "--no-emit-workspace", "--all-groups",
         "--no-header", "--no-annotate", "--output-file", str(ACQUIRED / "requirements.txt"),
     ])
@@ -64,7 +77,7 @@ def _acquire_python() -> None:
     if not (ACQUIRED / "requirements.txt").exists():
         shutil.copyfile(REPO / "requirements.txt", ACQUIRED / "requirements.txt")
     _package_command([
-        "/usr/local/bin/python", "-I", "-m", "pip", "--isolated", "--disable-pip-version-check",
+        PYTHON, "-I", "-m", "pip", "--isolated", "--disable-pip-version-check", "--no-input", "--keyring-provider=disabled",
         "--no-cache-dir", "download", "--index-url", "https://pypi.org/simple",
         "--only-binary=:all:", "--require-hashes", "--no-deps", "--dest", str(ACQUIRED / "wheels"),
         "-r", str(ACQUIRED / "requirements.txt"),
@@ -73,11 +86,11 @@ def _acquire_python() -> None:
 
 def _acquire_node() -> None:
     for name in ("empty-user.npmrc", "empty-global.npmrc"):
-        Path("/work/tmp", name).write_text("")
+        (TMP / name).write_text("")
     _package_command([
-        "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--engine-strict",
-        "--registry=https://registry.npmjs.org", "--cache=/work/tmp/npm",
-        "--userconfig=/work/tmp/empty-user.npmrc", "--globalconfig=/work/tmp/empty-global.npmrc",
+        NPM, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--engine-strict",
+        "--registry=https://registry.npmjs.org", "--cache=" + str(TMP / "npm"),
+        "--userconfig=" + str(TMP / "empty-user.npmrc"), "--globalconfig=" + str(TMP / "empty-global.npmrc"),
     ])
 
 
@@ -132,7 +145,7 @@ def _package_export(kind: str, max_bytes: int) -> None:
 def _package_import(kind: str, max_bytes: int) -> None:
     if kind not in {"python", "node"}:
         raise ValueError("Unknown dependency kind")
-    destination = ACQUIRED if kind == "python" else Path("/work/deps/node")
+    destination = ACQUIRED if kind == "python" else DEPS / "node"
     if destination.is_symlink():
         destination.unlink()
     elif destination.exists():
@@ -147,13 +160,13 @@ def _package_import(kind: str, max_bytes: int) -> None:
             _path(member.name)
             archive.extract(member, destination, filter="data")
     if kind == "python":
-        target = Path("/work/deps/python")
+        target = DEPS / "python"
         if target.is_symlink():
             target.unlink()
         elif target.exists():
             shutil.rmtree(target)
         _package_command([
-            "/usr/local/bin/python", "-I", "-m", "pip", "--isolated", "--disable-pip-version-check",
+            PYTHON, "-I", "-m", "pip", "--isolated", "--disable-pip-version-check", "--no-input", "--keyring-provider=disabled",
             "--no-cache-dir", "install", "--no-index", "--only-binary=:all:", "--require-hashes",
             "--no-deps", "--no-compile", "--find-links", str(ACQUIRED / "wheels"),
             "--target", str(target), "-r", str(ACQUIRED / "requirements.txt"),
@@ -215,9 +228,41 @@ def _dependency_identity(max_bytes: int) -> str:
     return digest.hexdigest()
 
 
+def configure_local(path: Path) -> None:
+    """Load the application's private explicit paths, never ambient settings."""
+    global REPO, ACQUIRED, DEPS, TMP, PYTHON, UV, NPM, NODE, LOCAL
+    with path.open("rb") as stream:
+        content = stream.read(16_385)
+    if len(content) > 16_384:
+        raise ValueError("Local setup configuration exceeds its limit")
+    config = json.loads(content)
+    if not isinstance(config, dict) or set(config) != {"repo", "acquired", "deps", "tmp", "python", "uv", "node", "npm"}:
+        raise ValueError("Invalid local setup configuration")
+    for name, value in config.items():
+        if name in {"uv", "node", "npm"} and value is None:
+            continue
+        if not isinstance(value, str) or not value or not Path(value).is_absolute() or "\x00" in value:
+            raise ValueError("Local setup paths must be explicit absolute paths")
+        if name in {"repo", "acquired", "deps", "tmp"} and Path(value).is_symlink():
+            raise ValueError("Local setup directories must not be symlinks")
+    REPO, ACQUIRED, DEPS, TMP = (Path(config[name]) for name in ("repo", "acquired", "deps", "tmp"))
+    PYTHON = config["python"]
+    UV, NODE, NPM = (config[name] or "" for name in ("uv", "node", "npm"))
+    LOCAL = True
+    # npm commonly uses an env-node shebang. Pin its explicitly selected Node
+    # directory ahead of the fixed platform paths, rather than inheriting PATH.
+    TMP.mkdir(parents=True, exist_ok=True)
+    (TMP / "home").mkdir(exist_ok=True)
+
+
 def main() -> None:
-    _protect_controller()
-    action = sys.argv[1]
+    arguments = sys.argv[1:]
+    if arguments[:1] == ["--local"]:
+        configure_local(Path(arguments[1]))
+        arguments = arguments[2:]
+    else:
+        _protect_controller()
+    action = arguments[0]
     if action == "export-python-requirements":
         _export_python_requirements()
     elif action == "read-requirements":
@@ -233,11 +278,11 @@ def main() -> None:
     elif action == "acquire-node":
         _acquire_node()
     elif action == "package-export":
-        _package_export(sys.argv[2], int(sys.argv[3]))
+        _package_export(arguments[1], int(arguments[2]))
     elif action == "package-import":
-        _package_import(sys.argv[2], int(sys.argv[3]))
+        _package_import(arguments[1], int(arguments[2]))
     elif action == "dependency-identity":
-        print(_dependency_identity(int(sys.argv[2])))
+        print(_dependency_identity(int(arguments[1])))
     else:
         raise ValueError("Unknown setup action")
 

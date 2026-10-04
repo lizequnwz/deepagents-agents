@@ -7,6 +7,14 @@ The review below records the original baseline. Current implementation, tests,
 scope decisions and remaining release gates are tracked in
 [CODING_AGENT_IMPLEMENTATION.md](CODING_AGENT_IMPLEMENTATION.md).
 
+**Execution decision superseded October 4, 2026:** The user requested execution
+without Docker. The implementation now defaults to trusted-local host commands
+in a separate review copy, with Docker available only by explicit selection.
+The copy and reviewed apply are not a sandbox; local commands have host
+filesystem/network permissions and no container CPU/memory/PID limits. The
+container proposal below is retained as the original reviewed design, not the
+current default. See the implementation ledger and README for current setup.
+
 **First-release priority confirmed by the user:** Local repositories, code editing, tests, and diff review.
 
 ## 1. Recommendation and intended outcome
@@ -16,7 +24,7 @@ Keep the existing DeepAgents harness, FastAPI service, SQLite persistence, skill
 1. Select an explicitly registered local repository.
 2. Inspect its instructions, structure, existing changes, and validation commands.
 3. Produce a plan, or implement an already authorized task.
-4. Edit an isolated working copy and run checks in a constrained coding environment.
+4. Edit a separate working copy and run checks in the explicitly selected coding environment.
 5. Present a trustworthy diff, check results, and unresolved problems.
 6. Apply the reviewed changes to the original repository without overwriting intervening user work.
 

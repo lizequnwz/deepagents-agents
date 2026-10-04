@@ -1,0 +1,224 @@
+{
+  "artifact": {
+    "file": "/Users/charlie/Repos/deepagents-agents/general-agent/docs/usage-guide/index.html",
+    "bytes": 2260953,
+    "sha256": "1a777ce640322bfc6fd849a178456a079c55480b2ceb6c6a22d2f10d06c21d8c"
+  },
+  "checked_at_utc": "2026-10-04T22:22:55.873996+00:00",
+  "scope": "Local report only; no app server, model call, or connector action.",
+  "local_links_checked": 56,
+  "broken_links": [],
+  "embedded_diagrams": [
+    {
+      "diagram": "general",
+      "sha256": "3a05d6ab8e2e482045661085af44540fe61605374e477bbcca2e24d93c024e7f",
+      "bytes": 809303
+    },
+    {
+      "diagram": "coding",
+      "sha256": "d280778680c09a30caaa2a1f975b85d531a9861c09915a029fe3eb5c7c795088",
+      "bytes": 818201
+    }
+  ],
+  "layouts": [
+    {
+      "width": 1440,
+      "height": 900,
+      "scroll_width": 1440,
+      "scroll_height": 19696,
+      "reduced_motion": true,
+      "theme": "light",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1600,
+      "height": 1000,
+      "scroll_width": 1600,
+      "scroll_height": 19333,
+      "reduced_motion": true,
+      "theme": "light",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "scroll_width": 1920,
+      "scroll_height": 19301,
+      "reduced_motion": true,
+      "theme": "light",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 2048,
+      "height": 1320,
+      "scroll_width": 2048,
+      "scroll_height": 19275,
+      "reduced_motion": true,
+      "theme": "light",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "scroll_width": 768,
+      "scroll_height": 25360,
+      "reduced_motion": true,
+      "theme": "light",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 375,
+      "height": 812,
+      "scroll_width": 375,
+      "scroll_height": 34281,
+      "reduced_motion": true,
+      "theme": "light",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 812,
+      "height": 375,
+      "scroll_width": 812,
+      "scroll_height": 23991,
+      "reduced_motion": true,
+      "theme": "light",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "scroll_width": 1440,
+      "scroll_height": 19696,
+      "reduced_motion": true,
+      "theme": "dark",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1600,
+      "height": 1000,
+      "scroll_width": 1600,
+      "scroll_height": 19333,
+      "reduced_motion": true,
+      "theme": "dark",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "scroll_width": 1920,
+      "scroll_height": 19275,
+      "reduced_motion": true,
+      "theme": "dark",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 2048,
+      "height": 1320,
+      "scroll_width": 2048,
+      "scroll_height": 19273,
+      "reduced_motion": true,
+      "theme": "dark",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "scroll_width": 768,
+      "scroll_height": 25360,
+      "reduced_motion": true,
+      "theme": "dark",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 375,
+      "height": 812,
+      "scroll_width": 375,
+      "scroll_height": 34281,
+      "reduced_motion": true,
+      "theme": "dark",
+      "horizontal_overflow": false
+    },
+    {
+      "width": 812,
+      "height": 375,
+      "scroll_width": 812,
+      "scroll_height": 23991,
+      "reduced_motion": true,
+      "theme": "dark",
+      "horizontal_overflow": false
+    }
+  ],
+  "text_contrast": [
+    {
+      "checked": 479,
+      "minimum_ratio": 6.41,
+      "failures": [],
+      "theme": "light"
+    },
+    {
+      "checked": 479,
+      "minimum_ratio": 7.63,
+      "failures": [],
+      "theme": "dark"
+    },
+    {
+      "checked": 443,
+      "minimum_ratio": 10.35,
+      "failures": [],
+      "theme": "light",
+      "media": "print"
+    },
+    {
+      "checked": 443,
+      "minimum_ratio": 10.35,
+      "failures": [],
+      "theme": "dark",
+      "media": "print"
+    }
+  ],
+  "interactions": {
+    "search_keyboard_closed_topics_and_empty_state": "passed",
+    "keyboard_skip_link": "passed",
+    "chapter_menu_pointer_and_keyboard": "passed",
+    "review_checklist_status": "passed",
+    "copy_feedback": "passed",
+    "theme_persistence": "passed",
+    "embedded_general_1440": {
+      "width": 1090,
+      "height": 900,
+      "scroll_width": 1090,
+      "scroll_height": 900
+    },
+    "embedded_general_375": {
+      "width": 333,
+      "height": 1100,
+      "scroll_width": 333,
+      "scroll_height": 1100
+    },
+    "embedded_coding_1440": {
+      "width": 1090,
+      "height": 900,
+      "scroll_width": 1090,
+      "scroll_height": 900
+    },
+    "embedded_coding_375": {
+      "width": 333,
+      "height": 1100,
+      "scroll_width": 333,
+      "scroll_height": 1100
+    },
+    "diagram_selection_and_exact_html_download": "passed",
+    "print_expands_details_and_restores_state": "passed"
+  },
+  "browser_errors": [],
+  "external_requests": [],
+  "language_principles": {
+    "instruction_items": 123,
+    "descriptive_paragraphs": 149,
+    "instruction_over_20": [],
+    "description_over_25": [],
+    "note": "Approximate sentence count; not a formal STE dictionary audit."
+  },
+  "status": "passed",
+  "visual_review": "pending independent image inspection"
+}

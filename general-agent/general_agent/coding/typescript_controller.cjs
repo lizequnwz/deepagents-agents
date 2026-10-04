@@ -115,8 +115,15 @@ if (require.main === module) {
   });
   process.stdin.on("end", () => {
     try {
-      const ts = require("/opt/general-agent/typescript-sdk/node_modules/typescript");
-      const directory = "/opt/general-agent/typescript-sdk/node_modules/typescript/lib";
+      // The application may select an explicit operator-installed local SDK.
+      // Source snapshots cannot select a package, plugin, or configuration.
+      const sdk = process.argv[2] || "/opt/general-agent/typescript-sdk/node_modules/typescript/lib/typescript.js";
+      if (!require("node:path").isAbsolute(sdk) || require("node:path").basename(sdk) !== "typescript.js") {
+        throw new Error("An absolute TypeScript SDK file is required.");
+      }
+      const ts = require(sdk);
+      if (ts.version !== "5.9.3") throw new Error("TypeScript 5.9.3 is required.");
+      const directory = require("node:path").dirname(sdk);
       const libraries = new Map();
       for (const name of fs.readdirSync(directory).filter(value => /^lib\.[a-z0-9.]+\.d\.ts$/.test(value))) {
         libraries.set(directory + "/" + name, fs.readFileSync(directory + "/" + name, "utf8"));

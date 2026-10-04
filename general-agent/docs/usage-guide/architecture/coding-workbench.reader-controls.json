@@ -1,0 +1,70 @@
+{
+  "evidenceKind": "supplementary-browser",
+  "artifact": {
+    "path": "/Users/charlie/Repos/deepagents-agents/general-agent/docs/usage-guide/architecture/coding-workbench.html",
+    "sha256": "d280778680c09a30caaa2a1f975b85d531a9861c09915a029fe3eb5c7c795088",
+    "bytes": 818201
+  },
+  "viewports": [
+    {
+      "innerWidth": 1440,
+      "innerHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 900,
+      "ok": true
+    },
+    {
+      "innerWidth": 1600,
+      "innerHeight": 1000,
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "ok": true
+    },
+    {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "scrollWidth": 1920,
+      "scrollHeight": 1080,
+      "ok": true
+    },
+    {
+      "innerWidth": 2048,
+      "innerHeight": 1320,
+      "scrollWidth": 2048,
+      "scrollHeight": 1320,
+      "ok": true
+    }
+  ],
+  "state": {
+    "detail": "read",
+    "motion": "still"
+  },
+  "browser": "Installed Google Chrome through Playwright",
+  "controls": {
+    "search": {
+      "query": "Private execution",
+      "visible_result": true
+    },
+    "focus_passport": {
+      "opened": true,
+      "closed": true,
+      "capture": "coding-workbench.reader-focus.png"
+    },
+    "exports": {
+      "svg": {
+        "file": "coding-workbench.reader-export.svg",
+        "sha256": "3f662f25d9ef0209d695f9d7c86e90d08cb7ad3f4f3c5d38b34dcbf64dd46836",
+        "bytes": 160162,
+        "clean_semantic_svg": true
+      },
+      "png": {
+        "file": "coding-workbench.reader-export.png",
+        "sha256": "211eb4ef009173c589732be4cbb71f6e01f6aa5fc22df130b4921bd7e59fad9c",
+        "bytes": 744753
+      }
+    }
+  },
+  "page_errors": [],
+  "html_unchanged": true,
+  "visualReview": "pending"
+}

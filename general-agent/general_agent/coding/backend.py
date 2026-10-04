@@ -266,7 +266,7 @@ class ExecutableRepositoryBackend(RepositoryBackend, SandboxBackendProtocol):
             result = self.write(file_path, content)
             if result.error is None:
                 self.runtime.track_source(self.tracked_paths)
-                await self.runtime.sync_to_container()
+                await self.runtime.sync_to_runtime()
             return result
 
     async def aedit(self, file_path: str, old_string: str, new_string: str,
@@ -275,7 +275,7 @@ class ExecutableRepositoryBackend(RepositoryBackend, SandboxBackendProtocol):
             result = self.edit(file_path, old_string, new_string, replace_all)
             if result.error is None:
                 self.runtime.track_source(self.tracked_paths)
-                await self.runtime.sync_to_container()
+                await self.runtime.sync_to_runtime()
             return result
 
     async def adelete(self, file_path: str) -> DeleteResult:
@@ -283,7 +283,7 @@ class ExecutableRepositoryBackend(RepositoryBackend, SandboxBackendProtocol):
             result = self.delete(file_path)
             if result.error is None:
                 self.runtime.track_source(self.tracked_paths)
-                await self.runtime.sync_to_container()
+                await self.runtime.sync_to_runtime()
             return result
 
     async def aexecute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
@@ -294,9 +294,9 @@ class ExecutableRepositoryBackend(RepositoryBackend, SandboxBackendProtocol):
         """The check recorder holds the same writer lock around both manifests."""
         self._admit_mutation()
         self.runtime.track_source(self.tracked_paths)
-        await self.runtime.sync_to_container()
+        await self.runtime.sync_to_runtime()
         result = await self.runtime.execute(command, timeout=timeout)
-        await self.runtime.sync_from_container()
+        await self.runtime.sync_from_runtime()
         self.tracked_paths = tuple(set(self.tracked_paths) | set(self.runtime.source_paths))
         self.reconcile()
         return ExecuteResponse(output=result.output, exit_code=result.exit_code,

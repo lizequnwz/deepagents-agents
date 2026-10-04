@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/charlie/Repos/deepagents-agents/general-agent/docs/usage-guide/architecture/coding-workbench.json",
+  "output": "/Users/charlie/Repos/deepagents-agents/general-agent/docs/usage-guide/architecture/coding-workbench.html",
+  "specification": {
+    "sha256": "b4a9e3994016f2e377613bddf5b821b6725122b81c0f0ea85f58026f971aa563",
+    "bytes": 6336
+  },
+  "artifact": {
+    "sha256": "d280778680c09a30caaa2a1f975b85d531a9861c09915a029fe3eb5c7c795088",
+    "bytes": 818201
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

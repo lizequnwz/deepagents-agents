@@ -4,8 +4,12 @@
 
 - This project is a trusted-local DeepAgents application built with LangChain,
   FastAPI, Streamlit, and SQLite.
-- The general assistant's `execute` runs directly on the host with the user's
-  permissions. It is not sandboxed and has no approval step.
+- The general assistant and default local coding runtime execute directly on
+  the host with the user's permissions. Separate source copies, filtered
+  environments and review/apply controls are not an OS sandbox. Host network
+  access remains possible; no repetitive command-approval step is required.
+- `CODING_RUNTIME=docker` explicitly selects constrained container execution.
+  Never silently change the selected runtime or fall back when it is unavailable.
 - Keep both services loopback-only. Do not weaken the `API_HOST` or `APP_HOST`
   readiness checks or present this application as safe for untrusted users.
 - Prompt instructions are behavioral guidance, not a security boundary. Enforce
@@ -24,7 +28,7 @@
 - `general_agent/store.py`: application persistence and recovery.
 - `general_agent/api.py`: loopback API and corporation-scoped request handling.
 - `streamlit_app.py`, `app_pages/`, and `general_agent/ui/`: assistant and coding UI.
-- `general_agent/coding/`: scoped project/session copies, constrained runtime,
+- `general_agent/coding/`: scoped project/session copies, selected runtime,
   immutable source evidence, change review/application and durable coding queue.
 - `general_agent/coding/github_service.py`, `snowflake.py`: application-owned
   connector authority and receipts; publishing is a separate reviewed action.
@@ -48,8 +52,10 @@
 - Keep `inherit_env=False`. Do not expose application secrets or the ambient
   host environment to agent-run commands. Add environment variables only when
   they are narrowly required and safe for model-generated shell commands.
-- Coding commands require the configured container. Never fall back to host
-  execution. Plan/Review repository tools and delegated work remain read-only.
+- Coding uses `CODING_RUNTIME=local` by default; Docker is optional. Plan/Review
+  repository tools and delegated work remain read-only. Local commands retain
+  time/output/cancellation limits, but do not claim container CPU/memory/PID or
+  filesystem/network containment. Source/export caps are not host disk quotas.
 - Original coding changes require a reviewed immutable revision and registered
   root identity. Keep application runtime roots excluded at broker mutation
   time, including paths newly created by the model in the isolated copy.

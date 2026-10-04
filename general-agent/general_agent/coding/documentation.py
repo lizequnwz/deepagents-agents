@@ -1,4 +1,4 @@
-"""Bounded public documentation access outside the network-disabled code runtime.
+"""Bounded public documentation access through an application-owned broker.
 
 HTTPcore's documented ``sni_hostname`` extension allows an IP-address request
 with the approved hostname retained for TLS verification and the Host header.
@@ -180,6 +180,8 @@ class DocumentationBroker:
     Reuse this instance across root and delegated tools. Never accept domains,
     credentials, transports or limits from model-generated tool arguments.
     Returned text is untrusted source content, not an instruction channel.
+    Seed usage from the attempt when resuming. Counts remain cumulative while
+    each active broker window gets a deadline that excludes the human wait.
     """
 
     def __init__(self, approved_domains, *, search: BraveSearchConfig | None = None,

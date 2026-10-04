@@ -25,6 +25,7 @@ from general_agent.coding.source import (
 )
 from general_agent.config import Settings
 from general_agent.processes import BinaryProcessResult, ProcessResult, ProcessSupervisor
+from general_agent.workspace import remove_workspace_tree, workspace_file
 
 _CONTROLLER = "/opt/general-agent/controller.py"
 _SETUP_CONTROLLER = "/opt/general-agent/setup_controller.py"
@@ -41,6 +42,26 @@ class RuntimeUnavailable(RuntimeError):
 
 class SourceTransferError(RuntimeError):
     pass
+
+
+def cleanup_owner_directories(settings: Settings, owner_id: str) -> int:
+    """Remove only marked private mirrors/setup inputs for one owned attempt."""
+    if not isinstance(owner_id, str) or not re.fullmatch(r"[0-9a-f]{32}", owner_id):
+        raise ValueError("An application-generated owner is required.")
+    candidates = []
+    for prefix in ("local-runtime", "setup-input"):
+        for candidate in settings.coding_root.glob(f"*/*/{prefix}-{owner_id}-*"):
+            if len(candidates) >= 64:
+                raise RuntimeUnavailable("Too many private directories belong to one attempt.")
+            with workspace_file(settings.coding_root, candidate / ".owner.json", os.O_RDONLY) as descriptor:
+                with os.fdopen(os.dup(descriptor), "rb") as reader:
+                    marker = json.loads(reader.read(4097))
+            if marker != {"owner": owner_id, "parent": str(candidate.parent)}:
+                raise RuntimeUnavailable("An abandoned private directory failed its ownership check.")
+            candidates.append(candidate)
+    for candidate in candidates:
+        remove_workspace_tree(settings.coding_root, candidate)
+    return len(candidates)
 
 
 class DockerRuntime:
@@ -79,6 +100,10 @@ class DockerRuntime:
         self._lock = asyncio.Lock()
         self._config = tempfile.TemporaryDirectory(prefix="general-agent-docker-")
         self.typescript_version = None
+
+    @property
+    def runtime_id(self) -> str | None:
+        return self.image_id
 
     @property
     def _max_bytes(self) -> int:
@@ -159,7 +184,7 @@ class DockerRuntime:
             if validated:
                 removed = await runtime._docker("rm", "--force", "--", *validated)
                 runtime._require_success(removed, "remove abandoned coding containers")
-            return len(validated)
+            return len(validated) + cleanup_owner_directories(settings, owner_id)
         finally:
             await runtime.close()
 
@@ -255,7 +280,8 @@ class DockerRuntime:
                                     self.base_image_id = base
             except (OSError, RuntimeError, ValueError) as exc:
                 errors.append(f"Coding runtime readiness failed: {exc}")
-        return {"ready": not errors, "errors": errors, "image_id": self.image_id,
+        return {"ready": not errors, "errors": errors, "runtime": "docker", "runtime_id": self.runtime_id,
+                "image_id": self.image_id,
                 "browser": self.browser_capable, "typescript_version": self.typescript_version}
 
     def _create_arguments(self) -> tuple[str, ...]:
@@ -344,7 +370,7 @@ class DockerRuntime:
             raise RuntimeUnavailable("Invalid installed dependency identity.")
         self._installed_dependency_revision = revision
 
-    async def sync_to_container(self) -> None:
+    async def sync_to_runtime(self) -> None:
         async with self._lock:
             self._require_started()
             await self._sync_to_locked()
@@ -366,7 +392,7 @@ class DockerRuntime:
         self._tracked_paths.update(snapshot)
         self._synced_revision = source_revision(snapshot)
 
-    async def sync_from_container(self) -> None:
+    async def sync_from_runtime(self) -> None:
         async with self._lock:
             self._require_started()
             await self._sync_from_locked()
@@ -435,7 +461,7 @@ class DockerRuntime:
             self._require_started()
             await self._quiesce()
             compatible_image = self.image_id
-            if self.browser_capable and record["image_id"] == self.base_image_id:
+            if self.browser_capable and record["runtime_id"] == self.base_image_id:
                 compatible_image = self.base_image_id
             artifact = await asyncio.to_thread(read_setup_artifact, self.settings, self.repo, record, compatible_image)
             result = await self._docker_bytes(

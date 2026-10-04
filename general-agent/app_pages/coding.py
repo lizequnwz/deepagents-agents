@@ -20,11 +20,24 @@ def coding_client(url: str, corp_id: str) -> AgentAPIClient:
 
 client = coding_client(os.getenv("API_BASE_URL", "http://127.0.0.1:8001"), st.session_state["corp_id"])
 st.title("Coding workbench", anchor=False)
-st.caption("Open a local repository, work in an isolated copy, inspect checks and diffs, then apply selected files.")
+st.caption("Open a local repository, work in a separate copy, inspect checks and diffs, then apply selected files.")
 try:
     ready = client.coding_readiness()
+    runtime = ready["runtime"]
+    if runtime == "local":
+        st.caption("Local execution · Commands run with your host permissions and can access the network. The review copy is not a sandbox.")
+    else:
+        st.caption("Docker execution · Commands use the configured container with networking disabled.")
     if not ready["ready"]:
         st.warning("Implementation is unavailable: " + "; ".join(ready["errors"]))
+    with st.expander("Runtime and optional tools", icon=":material/settings:"):
+        st.write(f"{'Local' if runtime == 'local' else 'Docker'} runtime · {'ready' if ready['ready'] else 'unavailable'}")
+        st.caption(f"JavaScript/TypeScript navigation · {'available' if ready['typescript_version'] else 'not configured'}")
+        st.caption(f"Browser checks · {'available' if ready['browser'] else 'not configured'}")
+        if runtime == "local":
+            st.caption("Commands have time, output and cancellation limits. Host CPU, memory and process counts are not constrained by Docker limits.")
+            if not ready["typescript_version"] or not ready["browser"]:
+                st.caption("Optional navigation and browser setup is described in the repository README. Python inspection and coding tasks do not require these tools.")
     projects = client.projects()
     sessions = client.coding_sessions()
     with st.sidebar:
@@ -34,7 +47,7 @@ try:
                 root = st.text_input("Absolute repository folder")
                 name = st.text_input("Project name")
                 tests_command = st.text_input("Tests command", value="python -m pytest",
-                                              help="Approve the test command to run inside the container.")
+                                              help="Name the test command for recorded checks in the selected runtime.")
                 build_command = st.text_input("Build command (optional)")
                 documentation = st.text_input("Documentation websites (optional)",
                     help="Comma-separated exact hostnames, such as docs.python.org. Approves public HTTPS documentation requests through the application.")
@@ -80,12 +93,16 @@ try:
                 client.enable_coding_snowflake(session["project_id"], not snowflake["enabled"], snowflake["digest"])
                 st.rerun()
     with st.expander("Dependencies", icon=":material/package_2:"):
-        st.caption("Prepare locked public packages in a separate container. Coding commands stay offline. Private registries, local packages and online source builds are unavailable.")
+        if runtime == "local":
+            st.caption("Prepare locked public packages in private dependency folders. Preparation downloads packages; installation uses the saved artifacts. Local commands can access the host network.")
+        else:
+            st.caption("Prepare locked public packages in a separate helper container. Project commands run offline in the coding container.")
+        st.caption("Preparation does not install into the application or global environment. Private registries, local packages, install scripts and source builds are unavailable.")
         for kind, setup in client.coding_setup(session_id).items():
             prepared = setup.get("prepared")
             current = bool(prepared and prepared["status"] == "ready"
                            and prepared["manifest_identity"] == setup["manifest_identity"]
-                           and prepared["image_id"] == ready.get("image_id"))
+                           and prepared["runtime_id"] == ready["runtime_id"])
             st.caption(f"{kind.capitalize()} · {'prepared' if current else 'not prepared'}")
             if setup["ready"]:
                 st.write("Locked files: " + ", ".join(setup["files"]))
@@ -177,7 +194,7 @@ try:
                     if check.get("reason"):
                         st.caption(check["reason"])
                     if check.get("image"):
-                        st.image(client.coding_browser_image(attempt["id"], check["id"]), caption="Captured from the isolated preview")
+                        st.image(client.coding_browser_image(attempt["id"], check["id"]), caption="Captured from the private preview copy")
             if attempt.get("decision_id"):
                 decision = client.coding_decision_status(attempt["decision_id"])
                 pending = decision["status"] == "pending"
@@ -199,7 +216,7 @@ try:
                     st.caption("Keep the original checkout stable while applying. Intervening edits produce a conflict. Applying does not commit or publish.")
                     rejected = diff.get("review_status") == "rejected"
                     if rejected:
-                        st.caption("Rejected. The isolated copy was restored to its accepted baseline.")
+                        st.caption("Rejected. The review copy was restored to its accepted baseline.")
                     if st.button("Apply selected files to original", key=f"apply_{attempt['id']}", disabled=bool(active) or not selected or rejected):
                         client.apply_coding_change(attempt["change_id"], diff["revision"], selected)
                         st.rerun()

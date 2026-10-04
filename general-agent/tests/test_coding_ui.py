@@ -23,7 +23,8 @@ class WorkbenchClient:
                         "answer": "Changed a.py", "checks": [], "change_id": "c1"}
 
     def coding_readiness(self):
-        return {"ready": True, "errors": []}
+        return {"ready": True, "errors": [], "runtime": "local", "runtime_id": "local-fixture",
+                "browser": False, "typescript_version": None}
 
     def projects(self):
         return [{"id": "p1", "name": "Fixture"}]

@@ -1,0 +1,70 @@
+{
+  "evidenceKind": "supplementary-browser",
+  "artifact": {
+    "path": "/Users/charlie/Repos/deepagents-agents/general-agent/docs/usage-guide/architecture/general-assistant.html",
+    "sha256": "3a05d6ab8e2e482045661085af44540fe61605374e477bbcca2e24d93c024e7f",
+    "bytes": 809303
+  },
+  "viewports": [
+    {
+      "innerWidth": 1440,
+      "innerHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 900,
+      "ok": true
+    },
+    {
+      "innerWidth": 1600,
+      "innerHeight": 1000,
+      "scrollWidth": 1600,
+      "scrollHeight": 1000,
+      "ok": true
+    },
+    {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "scrollWidth": 1920,
+      "scrollHeight": 1080,
+      "ok": true
+    },
+    {
+      "innerWidth": 2048,
+      "innerHeight": 1320,
+      "scrollWidth": 2048,
+      "scrollHeight": 1320,
+      "ok": true
+    }
+  ],
+  "state": {
+    "detail": "read",
+    "motion": "still"
+  },
+  "browser": "Installed Google Chrome through Playwright",
+  "controls": {
+    "search": {
+      "query": "DeepAgents harness",
+      "visible_result": true
+    },
+    "focus_passport": {
+      "opened": true,
+      "closed": true,
+      "capture": "general-assistant.reader-focus.png"
+    },
+    "exports": {
+      "svg": {
+        "file": "general-assistant.reader-export.svg",
+        "sha256": "a3ecfa15a8126c8678735632100a9b19347dfcf779d18835bac0c53f7ceaa57c",
+        "bytes": 151669,
+        "clean_semantic_svg": true
+      },
+      "png": {
+        "file": "general-assistant.reader-export.png",
+        "sha256": "f6e809bf3f7802634877ab86aca1405d4cbdf590dd004bcce4c8e48fd8d6f49e",
+        "bytes": 562786
+      }
+    }
+  },
+  "page_errors": [],
+  "html_unchanged": true,
+  "visualReview": "pending"
+}

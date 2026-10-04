@@ -1,0 +1,9 @@
+{
+  "name": "general-agent-coding-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Application-owned compiler tools; repository source never selects this SDK",
+  "dependencies": {
+    "typescript": "5.9.3"
+  }
+}

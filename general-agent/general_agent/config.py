@@ -133,6 +133,13 @@ class Settings:
     max_inspect_chars: int = field(
         default_factory=lambda: _positive_int("MAX_INSPECT_CHARS", 50_000)
     )
+    coding_runtime: str = field(
+        default_factory=lambda: os.getenv("CODING_RUNTIME", "local").strip()
+    )
+    coding_typescript_sdk: Path | None = field(
+        default_factory=lambda: Path(os.environ["CODING_TYPESCRIPT_SDK"]).expanduser()
+        if os.getenv("CODING_TYPESCRIPT_SDK", "").strip() else None
+    )
     coding_image: str = field(
         default_factory=lambda: os.getenv("CODING_IMAGE", "general-agent-coding:local").strip()
     )
@@ -242,9 +249,13 @@ class Settings:
             errors.append("APP_HOST must remain loopback-only for trusted execution.")
         if not self.default_corp_id:
             errors.append("DEFAULT_CORP_ID must not be empty.")
-        if not self.coding_image or any(char.isspace() for char in self.coding_image):
+        if self.coding_runtime not in {"local", "docker"}:
+            errors.append("CODING_RUNTIME must be local or docker.")
+        if self.coding_typescript_sdk is not None and not self.coding_typescript_sdk.is_absolute():
+            errors.append("CODING_TYPESCRIPT_SDK must be an absolute path to lib/typescript.js.")
+        if self.coding_runtime == "docker" and (not self.coding_image or any(char.isspace() for char in self.coding_image)):
             errors.append("CODING_IMAGE must be a nonempty image name without whitespace.")
-        if not self.coding_browser_image or any(char.isspace() for char in self.coding_browser_image):
+        if self.coding_runtime == "docker" and (not self.coding_browser_image or any(char.isspace() for char in self.coding_browser_image)):
             errors.append("CODING_BROWSER_IMAGE must be a nonempty image name without whitespace.")
         return errors
 

@@ -19,6 +19,33 @@ from general_agent.execution import CancellableLocalShellBackend
 from general_agent.workspace import Workspace
 
 
+def test_coding_prompt_tracks_selected_runtime_and_delegation(settings, tmp_path):
+    from dataclasses import replace
+
+    from general_agent.coding.agent import build_coding_agent
+    from general_agent.coding.backend import RepositoryBackend
+
+    repo = tmp_path / "prompt-source"
+    repo.mkdir()
+    for runtime in ("local", "docker"):
+        with (patch("general_agent.coding.agent.create_deep_agent", return_value="graph") as create,
+              patch("general_agent.coding.agent.configure_harness_profile")):
+            build_coding_agent(replace(settings, coding_runtime=runtime),
+                               repository=RepositoryBackend(repo, read_only=True),
+                               mode="review", checkpointer=None, model=Mock())
+        prompt = create.call_args.kwargs["system_prompt"]
+        assert "Plan and Review modes permit inspection only" in prompt
+        assert "GENERAL_AGENT_REPO_DIR" in prompt
+        assert prompt in create.call_args.kwargs["subagents"][0]["system_prompt"]
+        if runtime == "local":
+            assert "this is not a sandbox" in prompt
+            assert "Host filesystem and network access remain possible" in prompt
+            assert "constrained offline Linux container" not in prompt
+        else:
+            assert "constrained offline Linux container" in prompt
+            assert "Trusted local runtime" not in prompt
+
+
 def _backend_mock() -> CancellableLocalShellBackend:
     return NonCallableMock(spec=CancellableLocalShellBackend)
 

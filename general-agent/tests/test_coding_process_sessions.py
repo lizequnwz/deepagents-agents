@@ -17,6 +17,7 @@ from general_agent.processes import ProcessResult
 class PreviewRuntime:
     instances = []
     image_id = "sha256:base"
+    runtime_id = "sha256:base"
     base_image_id = "sha256:base"
     identity = "base:deps"
     browser_capable = True
@@ -114,6 +115,20 @@ async def test_browser_evidence_pinned_to_source_and_environment(settings):
         result = await manager.browser_check(record["id"])
         assert result["metadata"]["status"] == "stale"
         assert not result["png"]
+    finally:
+        await manager.close()
+
+
+async def test_browser_startup_dependency_changes_are_stale_before_capture(settings):
+    main, manager = await preview_manager(settings)
+    try:
+        record = await manager.start("server", port=8080, browser=True)
+        preview = manager._sessions[record["id"]].runtime
+        preview.identity = "base:changed-by-server-startup"
+        result = await manager.browser_check(record["id"])
+        assert result["metadata"]["status"] == "stale"
+        assert not result["png"]
+        assert "after preview startup" in result["metadata"]["reason"]
     finally:
         await manager.close()
 

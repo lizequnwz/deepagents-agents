@@ -192,8 +192,11 @@ async def test_owner_cancel_kills_children_after_parent_exit_and_is_scoped(tmp_p
         )
     )
     await _wait_for_file(tmp_path / "child-ready")
+    assert supervisor.process_groups("run-one")
+    assert supervisor.process_groups("another-owner") == ()
     await supervisor.cancel_owner("run-one")
     result = await asyncio.wait_for(first, 1)
+    assert supervisor.process_groups("run-one") == ()
     assert result.cancelled
     assert result.exit_code < 0
     await _assert_not_running(int((tmp_path / "child.pid").read_text()))
@@ -240,13 +243,18 @@ async def test_cancellation_before_startup_completes_owns_late_process(tmp_path,
 
     monkeypatch.setattr(loop, "subprocess_exec", delayed_spawn)
     supervisor = ProcessSupervisor()
+    inherited, writer = os.pipe()
     task = asyncio.create_task(
-        supervisor.run(_python("import time; time.sleep(30)"), **_arguments(tmp_path))
+        supervisor.run(_python("import time; time.sleep(30)"),
+                       **_arguments(tmp_path, pass_fds=(inherited,)))
     )
     await asyncio.wait_for(startup_entered.wait(), 1)
     await asyncio.wait_for(supervisor.cancel_owner("run-one"), 1)
     result = await asyncio.wait_for(task, 1)
     assert result.cancelled
+    os.close(writer)
+    supervisor.release_descriptors((inherited,))
+    os.fstat(inherited)  # Still held until the uncertain startup settles.
     release_startup.set()
     await asyncio.wait_for(asyncio.gather(*supervisor._spawns), 1)
     async with asyncio.timeout(1):
@@ -254,6 +262,8 @@ async def test_cancellation_before_startup_completes_owns_late_process(tmp_path,
             await asyncio.sleep(0.01)
     assert transports[0].get_returncode() < 0
     assert not supervisor._spawns
+    with pytest.raises(OSError):
+        os.fstat(inherited)
 
 
 @pytest.mark.asyncio

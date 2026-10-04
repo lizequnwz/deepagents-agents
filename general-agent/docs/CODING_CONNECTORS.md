@@ -1,9 +1,11 @@
 # Coding connector setup and authority
 
 Connectors run in the application, outside model-controlled shell commands.
-Credentials are corporation-scoped server settings and are not sent into coding
-containers. Responses and connector errors redact configured credential values.
-The trusted-local corporation header is a namespace, not authentication.
+Credentials are corporation-scoped server settings and are not passed to coding
+command environments. Responses and connector errors redact configured values.
+Default local commands still have host filesystem/network permissions; this
+environment separation is not a sandbox. The trusted-local corporation header
+is a namespace, not authentication.
 
 ## Public documentation
 
@@ -23,7 +25,8 @@ URL, retrieval time and content hash; retrieved text cannot grant authority.
 Set `BRAVE_SEARCH_API_KEY` only if domain-scoped search is intended. Search goes
 through the fixed public Brave endpoint and filters results to the approved
 website. The key stays in the broker and is redacted from retained evidence.
-Documentation access does not enable container internet access.
+Documentation access does not change the selected runtime's networking. Local
+commands already have host network access; Docker commands remain network-disabled.
 
 ## GitHub
 
@@ -123,5 +126,5 @@ Routes:
 No Snowflake query was sent during implementation. Compiler/scope, typed
 bindings, polling, cancellation, redaction, receipts and restart behavior are
 tested with mocked responses. Snowpark/dbt/Streamlit source tasks can use the
-normal coding workflow where locked offline dependencies support them; live
+normal coding workflow where prepared locked dependencies support them; live
 account execution, data changes and deployment remain separate capabilities.
