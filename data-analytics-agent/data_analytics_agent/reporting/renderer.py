@@ -615,10 +615,10 @@ def _upload_sources(results: Mapping[str, SavedResult]) -> str:
     sources = {}
     for result in results.values():
         provenance = result.upload_provenance
-        if provenance and (
-            result.source_id not in sources or provenance.schema_reviewed
-        ):
-            sources[result.source_id] = result
+        if provenance:
+            key = (provenance.sha256, provenance.filename, str(provenance.excel_selection))
+            if key not in sources or provenance.schema_reviewed:
+                sources[key] = result
     if not sources:
         return ""
     items = []
@@ -630,6 +630,8 @@ def _upload_sources(results: Mapping[str, SavedResult]) -> str:
                 for r in results.values()
                 if r.source_id == result.source_id
                 and r.upload_provenance
+                and r.upload_provenance.sha256 == provenance.sha256
+                and r.upload_provenance.excel_selection == provenance.excel_selection
                 and not r.upload_provenance.schema_reviewed
             ),
             result,
@@ -647,6 +649,9 @@ def _upload_sources(results: Mapping[str, SavedResult]) -> str:
         import_notes = "".join(
             f"<p>{escape(warning)}</p>" for warning in provenance.warnings
         )
+        if provenance.document_reference:
+            reference = provenance.document_reference
+            import_notes += f"<p>Extracted from {escape(reference['filename'])}, page {reference['page']}; original SHA-256: {escape(reference['sha256'])}.</p>"
         items.append(
             f"<article><h3>{escape(provenance.filename)}</h3>"
             f"<p>File SHA-256: <code>{escape(provenance.sha256)}</code></p>"

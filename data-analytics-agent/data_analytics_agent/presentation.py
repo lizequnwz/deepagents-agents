@@ -21,10 +21,51 @@ def resolve_answer(response, *, thread_id, source_id, results, analyses, runs):
         evidence.result(key)
     analytical = [evidence.analysis(key) for key in response.analysis_ids]
     charts = [evidence.chart(key) for key in response.chart_ids]
+    if not response.partial and any(
+        analysis.outcome != "analysis_completed" for analysis in analytical
+    ):
+        raise ValueError(
+            "Selected unfinished analyses require partial findings and their unresolved questions."
+        )
+    superseded = {
+        key
+        for analysis in analytical
+        for execution in analysis.executions
+        for key in execution.output_datasets.values()
+        if key not in analysis.final_result_ids
+    }
+    material = list(
+        dict.fromkeys(
+            [
+                *response.result_ids,
+                *(key for analysis in analytical for key in analysis.final_result_ids),
+                *(chart.result_id for chart in charts),
+            ]
+        )
+    )
+    if superseded.intersection(
+        [
+            *response.result_ids,
+            *(chart.source_result_id or chart.result_id for chart in charts),
+        ]
+    ):
+        raise ValueError(
+            "A selected dataset/chart uses superseded analytical output; select the analysis's final_result_ids or run a new analysis."
+        )
     selected = evidence.results
-    primary = next(iter(selected), None)
-    ordered = ([primary] if primary else []) + [
-        key for key in selected if key != primary
+    primary = next(iter(material), None)
+    ordered = material
+    from data_analytics_agent.documents import get_document
+
+    document_ids = list(response.document_ids)
+    for result in selected.values():
+        if result.upload_provenance and result.upload_provenance.document_reference:
+            document_ids.append(
+                result.upload_provenance.document_reference["document_id"]
+            )
+    documents = [
+        get_document(runs.storage, key, thread_id, source_id)
+        for key in dict.fromkeys(document_ids)
     ]
     return FinalAnswer(
         answer=response.answer,
@@ -43,6 +84,15 @@ def resolve_answer(response, *, thread_id, source_id, results, analyses, runs):
         assumptions=response.assumptions,
         partial=response.partial,
         unresolved_questions=response.unresolved_questions,
+        documents=[
+            {
+                "document_id": doc.document_id,
+                "filename": doc.filename,
+                "sha256": doc.sha256,
+                "page_count": doc.page_count,
+            }
+            for doc in documents
+        ],
     )
 
 
@@ -58,24 +108,6 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
         """
         context = _runtime_context(runtime)
         try:
-            from data_analytics_agent.analytical_scope import (
-                check_inputs,
-                require_refreshed_input,
-            )
-
-            require_refreshed_input(runs, context.run_id)
-            keys = list(findings.result_ids)
-            for chart_id in findings.chart_ids:
-                chart = runs.storage.get("charts", chart_id, dict)
-                if chart is None:
-                    raise StoreNotFound(chart_id)
-                keys.append(chart["spec"]["result_id"])
-            for analysis_id in findings.analysis_ids:
-                analysis = analyses.get(
-                    analysis_id, context.thread_id, source_id=source_id
-                ).analysis
-                keys.extend(analysis.input_result_ids)
-            check_inputs(results, runs, context.run_id, keys)
             answer = resolve_answer(
                 findings,
                 thread_id=context.thread_id,
@@ -84,25 +116,6 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
                 analyses=analyses,
                 runs=runs,
             )
-            run = runs.get(context.run_id)
-            if run.analytical_input and not run.source_expansion_allowed:
-                material = []
-                for reference in answer.results:
-                    try:
-                        check_inputs(
-                            results, runs, context.run_id, [reference.result_id]
-                        )
-                    except ValueError:
-                        continue
-                    material.append(reference)
-                answer = answer.model_copy(
-                    update={
-                        "results": material,
-                        "primary_result_id": material[0].result_id
-                        if material
-                        else None,
-                    }
-                )
         except (StoreNotFound, ValueError) as exc:
             raise ToolException(
                 "Findings were not published: a referenced artifact is unknown, "
@@ -156,60 +169,8 @@ def create_presentation_tools(results, analyses, runs, conversations, *, source_
         )
         return {"ok": True}
 
-    @tool
-    def bind_refreshed_input(result_id: str, runtime: ToolRuntime) -> dict:
-        """Bind the regenerated equivalent of a refresh's selected base dataset.
-
-        Required for refreshes with a selected input. First retrieve fresh source
-        rows and recompute any saved derivation at the same grain and fields.
-        This reapplies the previous categorical/date scope and returns its exact
-        new input ID. Analyze that input or descendants before publishing.
-        """
-        from data_analytics_agent.analytical_scope import check_inputs, prepare_input
-
-        context = _runtime_context(runtime)
-        run = runs.get(context.run_id)
-        if not run.fresh_source_required or not run.analytical_input:
-            raise ToolException(
-                "Only a refresh with a selected dataset requires this binding."
-            )
-        try:
-            old = results.get(
-                run.analytical_input.selected_result_id,
-                context.thread_id,
-                source_id=source_id,
-            )
-            new = results.get(result_id, context.thread_id, source_id=source_id)
-            check_inputs(results, runs, context.run_id, [result_id])
-            import pyarrow.parquet as pq
-
-            old_types = {
-                field.name: field.type for field in pq.read_schema(old.parquet_path)
-            }
-            new_types = {
-                field.name: field.type for field in pq.read_schema(new.parquet_path)
-            }
-            if set(new.columns) != set(old.columns) or any(
-                new_types[column] != old_types[column] for column in old.columns
-            ):
-                raise ValueError(
-                    "Refresh must regenerate the selected dataset's fields and types at the same grain; reshape the fresh data before binding."
-                )
-            scope = run.analytical_input.scope
-            if scope:
-                scope = scope.model_copy(update={"base_result_id": result_id})
-            updated = prepare_input(
-                results, context.thread_id, source_id, result_id, scope, refreshed=True
-            )
-            updated = updated.model_copy(update={"grain": run.analytical_input.grain})
-            runs.bind_refreshed_input(context.run_id, updated)
-        except (StoreNotFound, ValueError) as exc:
-            raise ToolException(str(exc)) from exc
-        return {"ok": True, "analytical_input": updated.model_dump(mode="json")}
-
     publish_findings.handle_tool_error = True
-    bind_refreshed_input.handle_tool_error = True
-    return [publish_findings, save_investigation, bind_refreshed_input]
+    return [publish_findings, save_investigation]
 
 
 def create_list_conversation_charts_tool(runs, *, source_id):

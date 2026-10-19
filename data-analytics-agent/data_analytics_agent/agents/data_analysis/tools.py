@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import json
+from typing import Literal
 from uuid import uuid4
 from langchain.tools import tool, ToolRuntime
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
@@ -14,16 +15,25 @@ from data_analytics_agent.agents.data_analysis.schemas import (
     DataAnalysisOutcome,
     PythonExecutionResult,
 )
-from data_analytics_agent.forecasting import ForecastEvaluationRequest, evaluate_forecast
+from data_analytics_agent.forecasting import (
+    ForecastEvaluationRequest,
+    evaluate_forecast,
+)
 
 
 def create_analysis_tools(results, runs, analyses, *, source_id, limits):
     @tool
     def execute_analysis_python(
-        inputs: dict[str, str], code: str, runtime: ToolRuntime
+        inputs: dict[str, str],
+        code: str,
+        analysis_kind: Literal["general", "forecast"],
+        runtime: ToolRuntime,
     ) -> dict:
         """Execute a Python step with named pandas DataFrames in datasets.
 
+        Declare analysis_kind='forecast' before forecasting, including its preparation.
+        A declared forecast cannot complete without validated saved evaluation.
+        General exploration/statistics/prediction use 'general'.
         Set analysis_outputs to compact text/scalars/tables/figures and
         output_datasets to named DataFrames to save for later steps. Each call
         is a fresh process; explicitly load all needed saved inputs. Return at most
@@ -34,6 +44,11 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
         Example: inputs={"sales": "saved-result-id"}, code="df = datasets['sales'];
         analysis_outputs = {'rows': len(df)}". There are no automatic variables
         named sales, source, data, or df: use datasets['sales'] explicitly.
+        Reusable DataFrame procedures can be imported from
+        data_analytics_agent.analysis.exploration, preparation, diagnostics,
+        customer, statistical, prediction, time_series and scenarios. Their exact
+        sources are captured with execution and portable replay. Load the analysis
+        skill's practical-workflows reference for signatures and saved outputs.
         """
         context = _runtime_context(runtime)
         assignment_id = runtime.state["assignment_id"]
@@ -42,6 +57,12 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
             return json.loads(committed)
         if reason := runs.analysis_stop_reason(context.run_id):
             return {"ok": False, "error": reason, "needs_synthesis": True}
+        if analysis_kind not in {"general", "forecast"}:
+            return {
+                "ok": False,
+                "error": "Declare analysis_kind as general or forecast.",
+            }
+        runs.declare_analysis_kind(context.run_id, assignment_id, analysis_kind)
         if not inputs:
             return {"ok": False, "error": "Provide at least one named dataset."}
         try:
@@ -65,11 +86,6 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
                 "error": "An input is incomplete. Request a complete suitable dataset through the coordinator.",
                 "needs_sql_reshape": True,
             }
-        from data_analytics_agent.analytical_scope import check_inputs
-        try:
-            check_inputs(results, runs, context.run_id, inputs.values())
-        except ValueError as exc:
-            return {"ok": False, "error": str(exc)}
         attempt = runs.reserve_python_execution_attempt(context.run_id)
         runs.set_phase(context.run_id, "analyzing")
         with runs.worker(context.run_id):
@@ -122,6 +138,8 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
     def finish_analysis(
         outcome: DataAnalysisOutcome,
         answer: str,
+        final_outputs: dict[str, list[str]],
+        final_result_ids: list[str],
         runtime: ToolRuntime,
         method: str = "",
         assumptions: list[str] | None = None,
@@ -131,7 +149,10 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
     ) -> dict:
         """Finish this analytical assignment, or request more SQL data with a complete brief.
 
-        All executions and inputs from this assignment are attached automatically.
+        Select authoritative final_outputs by execution_id and output name, and
+        final_result_ids from this assignment's saved output_datasets. Supply empty
+        selections for unsupported partial outcomes. Earlier executions remain
+        inspectable provenance, but their superseded diagnostics are not findings.
         You may be assigned again after the coordinator retrieves more data.
         Supply interpretation, not artifact IDs or copied code. Derive counts and
         flagged observations from the final saved output, never from mental counting.
@@ -165,17 +186,76 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
                 "ok": False,
                 "error": "Completed analysis requires a successful execution. Continue analysis or report a partial outcome.",
             }
+        successful = {
+            execution.execution_id: execution
+            for execution in executions
+            if execution.error is None
+        }
+        available_outputs = {
+            key
+            for execution in successful.values()
+            for key in execution.output_datasets.values()
+        }
+        for execution_id, names in final_outputs.items():
+            execution = successful.get(execution_id)
+            if (
+                execution is None
+                or not names
+                or len(names) != len(set(names))
+                or set(names) - {output.name for output in execution.outputs}
+            ):
+                return {
+                    "ok": False,
+                    "error": "Select exact output names from successful executions in this assignment.",
+                }
+        if (
+            len(final_result_ids) != len(set(final_result_ids))
+            or set(final_result_ids) - available_outputs
+        ):
+            return {
+                "ok": False,
+                "error": "Select final_result_ids from this assignment's successful output_datasets.",
+            }
+        if outcome == DataAnalysisOutcome.ANALYSIS_COMPLETED and not (
+            final_outputs or final_result_ids
+        ):
+            return {
+                "ok": False,
+                "error": "Completed analysis requires selected final outputs or saved final datasets.",
+            }
+        kind = runs.assignment(context.run_id, assignment_id).analysis_kind or "general"
+        if (
+            kind == "forecast"
+            and outcome == DataAnalysisOutcome.ANALYSIS_COMPLETED
+            and forecast_evaluation is None
+        ):
+            return {
+                "ok": False,
+                "error": "A declared forecast requires saved predictions and forecast_evaluation; otherwise finish partial with the limitation.",
+            }
         evaluation = None
         if forecast_evaluation:
-            available_outputs = {key for execution in executions if execution.error is None for key in execution.output_datasets.values()}
-            if forecast_evaluation.predictions_result_id not in available_outputs:
-                return {"ok": False, "error": "Save the complete prediction table in this assignment's output_datasets before evaluating it."}
+            if forecast_evaluation.predictions_result_id not in final_result_ids:
+                return {
+                    "ok": False,
+                    "error": "Select this assignment's complete prediction table in final_result_ids before evaluating it.",
+                }
             try:
-                evaluation = evaluate_forecast(forecast_evaluation, results=results, thread_id=context.thread_id, source_id=source_id)
+                evaluation = evaluate_forecast(
+                    forecast_evaluation,
+                    results=results,
+                    thread_id=context.thread_id,
+                    source_id=source_id,
+                )
             except (ValueError, TypeError, KeyError) as exc:
                 return {"ok": False, "error": str(exc)}
+            kind = "forecast"
+            final_result_ids = [*final_result_ids, evaluation.scores_result_id]
         result = DataAnalysisResult(
             outcome=outcome,
+            analysis_kind=kind,
+            final_outputs=final_outputs,
+            final_result_ids=final_result_ids,
             input_result_ids=input_result_ids,
             executions=executions,
             answer=answer,
@@ -184,6 +264,19 @@ def create_analysis_tools(results, runs, analyses, *, source_id, limits):
             warnings=warnings or [],
             requested_data=requested_data,
             forecast_evaluation=evaluation,
+        )
+        produced = {
+            key
+            for execution in executions
+            for key in execution.output_datasets.values()
+        }
+        result.input_result_ids = list(
+            dict.fromkeys(
+                key
+                for execution in result.selected_executions()
+                for key in execution.inputs.values()
+                if key not in produced
+            )
         )
         saved = analyses.save(
             thread_id=context.thread_id, source_id=source_id, analysis=result

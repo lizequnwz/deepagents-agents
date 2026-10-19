@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import pyarrow as pa
+from datetime import datetime
 from threading import Event
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
+from sqlglot import exp, parse_one
+from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 
 from data_analytics_agent.backends.base import (
     ColumnInfo,
@@ -51,6 +54,92 @@ def _column_names(description: Sequence[Any] | None) -> list[str]:
             raise ValueError("Snowflake cursor returned unnamed column metadata.")
         names.append(str(name))
     return names
+
+
+def _metadata_value(column: Any, attribute: str, index: int) -> Any:
+    value = getattr(column, attribute, None)
+    if value is None and isinstance(column, Sequence) and len(column) > index:
+        value = column[index]
+    return value
+
+
+def _result_schema(description: Sequence[Any] | None) -> pa.Schema:
+    """Use documented connector metadata, never observed rows, to fix batch types.
+
+    https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-api#type-codes
+    NUMBER stays decimal, including scale zero and values beyond int64. Native
+    fetchmany datetimes have microsecond precision; timezone-aware timestamps
+    normalize to UTC without changing their instants. The original Snowflake
+    temporal type remains in field metadata. Semi-structured connector values
+    use their JSON text representation rather than inferred Arrow structures.
+    """
+    if not description:
+        raise ValueError("Snowflake SELECT returned no result column metadata.")
+    fields = []
+    types = {
+        1: pa.float64(),
+        2: pa.string(),
+        3: pa.date32(),
+        4: pa.timestamp("us", tz="UTC"),
+        5: pa.string(),
+        6: pa.timestamp("us", tz="UTC"),
+        7: pa.timestamp("us", tz="UTC"),
+        8: pa.timestamp("us"),
+        9: pa.string(),
+        10: pa.string(),
+        11: pa.binary(),
+        12: pa.time64("us"),
+        13: pa.bool_(),
+        14: pa.string(),
+        15: pa.string(),
+    }
+    for name, column in zip(_column_names(description), description, strict=True):
+        code = _metadata_value(column, "type_code", 1)
+        if code is None:
+            raise ValueError(f"Snowflake column {name!r} has no type metadata.")
+        if code == 0:
+            precision = _metadata_value(column, "precision", 4)
+            scale = _metadata_value(column, "scale", 5)
+            if not isinstance(precision, int) or not isinstance(scale, int):
+                raise ValueError(
+                    f"Snowflake NUMBER column {name!r} needs precision and scale metadata."
+                )
+            if not (1 <= precision <= 38 and 0 <= scale <= precision):
+                raise ValueError(
+                    f"Invalid Snowflake NUMBER precision/scale for {name!r}."
+                )
+            arrow_type = pa.decimal128(precision, scale)
+        elif code in types:
+            arrow_type = types[code]
+        else:
+            raise ValueError(
+                f"Unsupported Snowflake type code {code!r} for {name!r}; project a supported scalar type explicitly."
+            )
+        nullable = _metadata_value(column, "is_nullable", 6)
+        fields.append(
+            pa.field(
+                name,
+                arrow_type,
+                nullable=True if nullable is None else bool(nullable),
+                metadata={b"snowflake_type_code": str(code).encode()},
+            )
+        )
+    return pa.schema(fields)
+
+
+def _typed_array(values: list[Any], field: pa.Field) -> pa.Array:
+    if pa.types.is_timestamp(field.type):
+        aware = field.type.tz is not None
+        for value in values:
+            if (
+                value is not None
+                and isinstance(value, datetime)
+                and (value.utcoffset() is not None) != aware
+            ):
+                raise ValueError(
+                    f"Timestamp timezone for {field.name!r} disagrees with declared Snowflake metadata."
+                )
+    return pa.array(values, type=field.type)
 
 
 def _mapping_value(row: Mapping[Any, Any], name: str) -> Any:
@@ -126,7 +215,7 @@ class SnowflakeBackend:
         cursor = None
         try:
             cursor = self.client.run_query(query, timeout_seconds=timeout_seconds)
-            columns = _column_names(cursor.description)
+            schema = _result_schema(cursor.description)
             emitted = False
             while True:
                 if cancel and cancel.is_set():
@@ -137,14 +226,16 @@ class SnowflakeBackend:
                 emitted = True
                 yield pa.RecordBatch.from_arrays(
                     [
-                        pa.array([_row_value(row, index, name) for row in rows])
-                        for index, name in enumerate(columns)
+                        _typed_array(
+                            [_row_value(row, index, field.name) for row in rows], field
+                        )
+                        for index, field in enumerate(schema)
                     ],
-                    names=columns,
+                    schema=schema,
                 )
             if not emitted:
                 yield pa.RecordBatch.from_arrays(
-                    [pa.array([], type=pa.string()) for _ in columns], names=columns
+                    [pa.array([], type=field.type) for field in schema], schema=schema
                 )
         except InterruptedError:
             raise
@@ -161,58 +252,67 @@ class SnowflakeBackend:
     def get_table_schema(self, table_names: list[str]) -> list[TableInfo]:
         if not table_names:
             return []
-
-        literals = ", ".join(_sql_string_literal(name.upper()) for name in table_names)
-        query = f"""
-            SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = CURRENT_SCHEMA()
-              AND UPPER(TABLE_NAME) IN ({literals})
-            ORDER BY TABLE_NAME, ORDINAL_POSITION
-        """
-        columns, rows = self._fetch_all_metadata(query)
-        positions = {name: index for index, name in enumerate(columns)}
-        actual_names: dict[str, str] = {}
-        by_table: dict[str, list[ColumnInfo]] = {}
-        for row in rows:
-            raw_table = str(_row_value(row, positions["TABLE_NAME"], "TABLE_NAME"))
-            folded_name = raw_table.casefold()
-            actual_names[folded_name] = raw_table
-            by_table.setdefault(folded_name, [])
-            nullable = str(
-                _row_value(
-                    row,
-                    positions["IS_NULLABLE"],
-                    "IS_NULLABLE",
-                )
-            ).upper()
-            by_table[folded_name].append(
-                ColumnInfo(
-                    name=str(
-                        _row_value(
-                            row,
-                            positions["COLUMN_NAME"],
-                            "COLUMN_NAME",
-                        )
-                    ),
-                    data_type=str(
-                        _row_value(
-                            row,
-                            positions["DATA_TYPE"],
-                            "DATA_TYPE",
-                        )
-                    ),
-                    nullable=nullable == "YES",
-                )
+        # Resolve only configured source identities; never enumerate other schemas.
+        requested = []
+        by_scope = {}
+        for name in table_names:
+            table = normalize_identifiers(
+                parse_one(name, read=self.dialect, into=exp.Table), dialect=self.dialect
             )
-
-        unknown = [name for name in table_names if name.casefold() not in actual_names]
+            if not all(
+                isinstance(part, exp.Identifier) and part.name for part in table.parts
+            ) or (
+                table.args.get("catalog")
+                and not isinstance(table.args.get("db"), exp.Identifier)
+            ):
+                raise ValueError(
+                    "Use a table, schema.table or database.schema.table identity with explicit identifiers."
+                )
+            requested.append((name, table))
+            by_scope.setdefault((table.catalog or None, table.db or None), []).append(
+                (name, table)
+            )
+        found: dict[str, list[ColumnInfo]] = {}
+        for (database, schema), entries in by_scope.items():
+            metadata_table = exp.Table(
+                this=exp.to_identifier("COLUMNS"),
+                db=exp.to_identifier("INFORMATION_SCHEMA"),
+                catalog=exp.to_identifier(database, quoted=True) if database else None,
+            )
+            schema_sql = _sql_string_literal(schema) if schema else "CURRENT_SCHEMA()"
+            names_sql = ", ".join(
+                _sql_string_literal(table.name) for _, table in entries
+            )
+            query = f"""
+                SELECT TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+                FROM {metadata_table.sql(dialect=self.dialect)}
+                WHERE TABLE_SCHEMA = {schema_sql} AND TABLE_NAME IN ({names_sql})
+                ORDER BY TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION
+            """
+            columns, rows = self._fetch_all_metadata(query)
+            positions = {name: index for index, name in enumerate(columns)}
+            for row in rows:
+                values = {
+                    key: _row_value(row, positions[key], key) for key in positions
+                }
+                for original, table in entries:
+                    if (
+                        values["TABLE_NAME"] != table.name
+                        or (table.db and values["TABLE_SCHEMA"] != table.db)
+                        or (table.catalog and values["TABLE_CATALOG"] != table.catalog)
+                    ):
+                        continue
+                    found.setdefault(original, []).append(
+                        ColumnInfo(
+                            name=str(values["COLUMN_NAME"]),
+                            data_type=str(values["DATA_TYPE"]),
+                            nullable=str(values["IS_NULLABLE"]).upper() == "YES",
+                        )
+                    )
+        unknown = [name for name in table_names if name not in found]
         if unknown:
             raise ValueError("Unknown table(s): " + ", ".join(sorted(unknown)))
         return [
-            TableInfo(
-                name=actual_names[name.casefold()],
-                columns=tuple(by_table[name.casefold()]),
-            )
-            for name in table_names
+            TableInfo(name=table.sql(dialect=self.dialect), columns=tuple(found[name]))
+            for name, table in requested
         ]

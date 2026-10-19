@@ -287,6 +287,84 @@ def test_preaggregated_key_preserves_invoice_grain(catalog):
     validate_semantic_sql(query, catalog, metric_names=["total_revenue"])
 
 
+def test_entity_key_count_rejects_one_to_many_fanout_without_canonical_metric(catalog):
+    query = "SELECT COUNT(i.InvoiceId) AS invoice_count FROM Invoice i JOIN InvoiceLine l ON i.InvoiceId=l.InvoiceId"
+    with sqlite3.connect(":memory:") as db:
+        db.executescript(
+            "CREATE TABLE Invoice(InvoiceId); CREATE TABLE InvoiceLine(InvoiceId); INSERT INTO Invoice VALUES(1),(2); INSERT INTO InvoiceLine VALUES(1),(1),(2);"
+        )
+        assert db.execute(query).fetchone()[0] == 3
+        assert db.execute("SELECT COUNT(InvoiceId) FROM Invoice").fetchone()[0] == 2
+    with pytest.raises(SQLValidationError, match="fan out"):
+        validate_semantic_sql(query, catalog)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT COUNT(DISTINCT i.InvoiceId) FROM Invoice i JOIN InvoiceLine l ON i.InvoiceId=l.InvoiceId",
+        "SELECT COUNT(l.InvoiceLineId) FROM Invoice i JOIN InvoiceLine l ON i.InvoiceId=l.InvoiceId",
+        "SELECT COUNT(*) AS joined_row_count FROM Invoice i JOIN InvoiceLine l ON i.InvoiceId=l.InvoiceId",
+        "SELECT COUNT(1) AS custom_row_count FROM Invoice i JOIN InvoiceLine l ON i.InvoiceId=l.InvoiceId",
+        "SELECT COUNT(i.InvoiceId), AVG(i.Total)*2 AS custom_value FROM Invoice i JOIN Customer c ON i.CustomerId=c.CustomerId",
+        "WITH lines AS (SELECT InvoiceId, COUNT(*) AS n FROM InvoiceLine GROUP BY InvoiceId) SELECT COUNT(i.InvoiceId) FROM Invoice i JOIN lines l ON i.InvoiceId=l.InvoiceId",
+    ],
+)
+def test_count_guard_preserves_distinct_line_population_and_custom_calculations(
+    catalog, query
+):
+    validate_semantic_sql(query, catalog)
+
+
+def test_snowflake_quoted_table_case_cannot_change_approved_source(catalog):
+    revised = replace(
+        catalog,
+        dialect="snowflake",
+        datasets={
+            name: replace(dataset, source='"My.DB"."Sales Team"."Invoice"')
+            if name == "invoices"
+            else dataset
+            for name, dataset in catalog.datasets.items()
+        },
+    )
+    validate_semantic_sql(
+        'SELECT InvoiceId FROM "My.DB"."Sales Team"."Invoice"', revised
+    )
+    with pytest.raises(SQLValidationError, match="Undeclared physical source"):
+        validate_semantic_sql(
+            'SELECT InvoiceId FROM "My.DB"."Sales Team"."INVOICE"', revised
+        )
+
+
+def test_snowflake_quoted_column_case_preserves_access_and_metric_identity(catalog):
+    fields = dict(catalog.datasets["invoices"].fields)
+    fields["total"] = SemanticField("total", "", '"total"')
+    datasets = dict(catalog.datasets)
+    datasets["invoices"] = replace(datasets["invoices"], fields=fields)
+    revised = replace(catalog, dialect="snowflake", datasets=datasets)
+    validate_semantic_sql('SELECT "total" FROM Invoice', revised)
+    with pytest.raises(SQLValidationError):
+        validate_semantic_sql('SELECT "TOTAL" FROM Invoice', revised)
+    fields["other_total"] = SemanticField("other_total", "", '"TOTAL"')
+    revised = replace(revised, datasets=dict(datasets))
+    validate_semantic_sql(
+        'SELECT SUM("total") FROM Invoice', revised, metric_names=["total_revenue"]
+    )
+    with pytest.raises(SQLValidationError):
+        validate_semantic_sql(
+            'SELECT SUM("TOTAL") FROM Invoice', revised, metric_names=["total_revenue"]
+        )
+
+
+def test_mixed_source_depth_preserves_fully_qualified_column(catalog):
+    datasets = dict(catalog.datasets)
+    datasets["invoices"] = replace(datasets["invoices"], source="DB.PUBLIC.Invoice")
+    revised = replace(catalog, dialect="snowflake", datasets=datasets)
+    validate_semantic_sql(
+        "SELECT DB.PUBLIC.Invoice.InvoiceId FROM DB.PUBLIC.Invoice", revised
+    )
+
+
 def test_source_tool_checks_sql_before_execution_including_reviewed_edits(
     workspace, test_settings
 ):

@@ -16,11 +16,11 @@ from data_analytics_agent.backends.validation import (
     SQLValidationError,
     validate_readonly_sql,
 )
-from data_analytics_agent.semantic_bindings import parse_expression
-
-
-def _table_key(table):
-    return tuple(p.name.casefold() for p in table.parts)
+from data_analytics_agent.semantic_bindings import (
+    column_key,
+    parse_expression,
+    table_key,
+)
 
 
 def _scalar(scope):
@@ -59,28 +59,67 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
     schema = MappingSchema(dialect=catalog.dialect)
     for dataset in catalog.datasets.values():
         table = exp.to_table(dataset.source)
-        key = _table_key(table)
+        key = table_key(table, catalog.dialect)
         tables.setdefault(key, []).append(dataset.name)
-    for names in tables.values():
-        schema.add_table(
-            exp.to_table(catalog.datasets[names[0]].source),
-            {c: "UNKNOWN" for name in names for c in bindings.columns[name]},
-        )
     try:
         # Validate base objects before qualification can infer unknown schema.
         for scope in traverse_scope(statement):
             for source in scope.sources.values():
-                if isinstance(source, exp.Table) and _table_key(source) not in tables:
+                if (
+                    isinstance(source, exp.Table)
+                    and table_key(source, catalog.dialect) not in tables
+                ):
                     raise SQLValidationError(
                         f"Undeclared physical source {source.sql()}; discover an exact catalog source."
                     )
+        # MappingSchema requires uniform nesting depth. Flatten only the validation
+        # copy, preserving original aliases and exact approved physical identities.
+        validation = statement.copy()
+        internal = {}
+        grounded_tables = {}
+        for index, (key, names) in enumerate(tables.items()):
+            table = exp.to_table(f'"__APP_SOURCE_{index}"')
+            internal[key] = table
+            grounded_tables[table_key(table, catalog.dialect)] = names
+            schema.add_table(
+                table,
+                {
+                    column.this.sql(dialect=catalog.dialect): "UNKNOWN"
+                    for name in names
+                    for field in catalog.datasets[name].fields
+                    for column in parse_expression(
+                        bindings.fields[name, field], catalog.dialect
+                    ).find_all(exp.Column)
+                },
+            )
+        for column in validation.find_all(exp.Column):
+            if column.args.get("db") or column.args.get("catalog"):
+                physical = exp.Table(
+                    this=column.args["table"].copy(),
+                    db=column.args.get("db"),
+                    catalog=column.args.get("catalog"),
+                )
+                if table_key(physical, catalog.dialect) in internal:
+                    column.set("db", None)
+                    column.set("catalog", None)
+        for scope in traverse_scope(validation):
+            for source in scope.sources.values():
+                if isinstance(source, exp.Table):
+                    original_name = source.this.copy()
+                    target = internal[table_key(source, catalog.dialect)]
+                    source.set("this", target.this.copy())
+                    source.set("db", None)
+                    source.set("catalog", None)
+                    if not source.args.get("alias"):
+                        source.set("alias", exp.TableAlias(this=original_name))
         qualified = qualify(
-            statement.copy(),
+            validation,
             dialect=catalog.dialect,
             schema=schema,
             infer_schema=False,
             expand_stars=False,
         )
+        tables = grounded_tables
         scopes = list(traverse_scope(qualified))
     except SqlglotError as exc:
         raise SQLValidationError(
@@ -96,13 +135,26 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
         if source is None and scope.parent is not None:
             return origin(scope.parent, column, seen | {key})
         if isinstance(source, exp.Table):
-            names = tables.get(_table_key(source), [])
+            names = tables.get(table_key(source, catalog.dialect), [])
             if len(names) != 1:
                 names = [n for n in names if n.casefold() == column.table.casefold()]
-            return (names[0], column.name.casefold()) if len(names) == 1 else None
+            return (
+                (names[0], column_key(column, catalog.dialect))
+                if len(names) == 1
+                else None
+            )
         if isinstance(source, Scope) and isinstance(source.expression, exp.Select):
             for select in source.expression.selects:
-                if select.alias_or_name.casefold() == column.name.casefold():
+                identifier = (
+                    select.args.get("alias")
+                    if isinstance(select, exp.Alias)
+                    else select.this
+                    if isinstance(select, exp.Column)
+                    else None
+                )
+                if isinstance(identifier, exp.Identifier) and column_key(
+                    exp.Column(this=identifier), catalog.dialect
+                ) == column_key(column, catalog.dialect):
                     inner = select.this if isinstance(select, exp.Alias) else select
                     if isinstance(inner, exp.Column):
                         return origin(source, inner, seen | {key})
@@ -111,11 +163,18 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
     def normalized(node, scope=None):
         copy = node.copy()
         for column in copy.find_all(exp.Column):
-            resolved = origin(scope, column) if scope else (column.table, column.name)
+            resolved = (
+                origin(scope, column)
+                if scope
+                else (column.table, column_key(column, catalog.dialect))
+            )
             if resolved is None:
                 return None
             column.set("table", exp.to_identifier(resolved[0].casefold()))
-            column.set("this", exp.to_identifier(resolved[1].casefold()))
+            column.set(
+                "this",
+                exp.to_identifier(resolved[1], quoted=catalog.dialect == "snowflake"),
+            )
             column.set("db", None)
             column.set("catalog", None)
         # Compare normalized ASTs, preserving operator structure while ignoring
@@ -147,8 +206,8 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
                         break
                     expected.add(
                         (
-                            (relation.from_dataset, a.name.casefold()),
-                            (relation.to_dataset, b.name.casefold()),
+                            (relation.from_dataset, column_key(a, catalog.dialect)),
+                            (relation.to_dataset, column_key(b, catalog.dialect)),
                         )
                     )
                 else:
@@ -173,9 +232,10 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
         join_origins = {
             (
                 parent,
-                parse_expression(
-                    bindings.fields[parent, k], catalog.dialect
-                ).name.casefold(),
+                column_key(
+                    parse_expression(bindings.fields[parent, k], catalog.dialect),
+                    catalog.dialect,
+                ),
             )
             for k in keys
         }
@@ -222,7 +282,8 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
             if predicate is None:
                 raise SQLValidationError(
                     "Join needs an explicit ON predicate over declared relationship keys.",
-                    code="missing_join_keys", details={"right_alias": right},
+                    code="missing_join_keys",
+                    details={"right_alias": right},
                     repair="Retrieve the selected relationships and use every physical key pair in ON. Build calendar grids and cross-products of non-scalar populations over named saved data, not warehouse joins.",
                 )
             pairs = {}
@@ -270,7 +331,7 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
                             ),
                             exp.Column,
                         )
-                        and (parent, node.name.casefold()) in origins
+                        and (parent, column_key(node, catalog.dialect)) in origins
                     ]
                     if keys and all(
                         unique_source(scope, alias, parent, keys) for alias in aliases
@@ -285,7 +346,11 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
                 else:
                     raise SQLValidationError(
                         "Join is not grounded in the selected declared relationships. Retrieve/select the correct relationship and all composite keys; computed join keys are unsupported.",
-                        code="ungrounded_join", details={"right_alias": right, "selected_relationships": sorted(allowed)[:20]},
+                        code="ungrounded_join",
+                        details={
+                            "right_alias": right,
+                            "selected_relationships": sorted(allowed)[:20],
+                        },
                         repair="Resolve exact relationship definitions; use all key pairs without computed transformations. Select an explicit route if alternatives exist.",
                     )
             for aliases, relation, reverse in matched:
@@ -309,9 +374,30 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
                         (aliases[opposite], unique)
                     )
         # Check multiplicity along the whole selected route, not just the first hop.
-        for aggregate in select.find_all(exp.Sum, exp.Avg):
+        for aggregate in select.find_all(exp.Sum, exp.Avg, exp.Count):
             if aggregate.find_ancestor(exp.Select) is not select:
                 continue
+            if isinstance(aggregate, exp.Count):
+                # A direct entity-key count retains the source entity's grain.
+                # DISTINCT removes join replication. COUNT(*)/COUNT(1) explicitly
+                # count joined rows, and custom expressions have no provable
+                # entity identity here; do not guess their business meaning.
+                column = aggregate.this
+                if not isinstance(column, exp.Column):
+                    continue
+                resolved = origin(scope, column)
+                if resolved is None:
+                    continue
+                parent, physical = resolved
+                primary_columns = {
+                    column_key(
+                        parse_expression(bindings.fields[parent, key], catalog.dialect),
+                        catalog.dialect,
+                    )
+                    for key in catalog.datasets[parent].primary_key
+                }
+                if physical not in primary_columns:
+                    continue
             for alias in {c.table for c in aggregate.find_all(exp.Column)}:
                 pending, visited = [alias], set()
                 while pending:
@@ -323,7 +409,11 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
                         if not unique:
                             raise SQLValidationError(
                                 "Aggregate can fan out across a join whose opposite keys are not declared unique. Aggregate at the required grain before joining, or use the appropriate line-level metric.",
-                                code="fanout_risk", details={"aggregate_alias": alias, "opposite_alias": other},
+                                code="fanout_risk",
+                                details={
+                                    "aggregate_alias": alias,
+                                    "opposite_alias": other,
+                                },
                                 repair="Choose the canonical line-level metric or preaggregate the population at its business grain before joining. Unknown key uniqueness is not permission to sum duplicated rows.",
                             )
                         pending.append(other)
@@ -419,7 +509,9 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
         if not found:
             raise SQLValidationError(
                 f"Selected metric {name!r} does not match its canonical expression. Retrieve its definition and preserve its aggregation and filters.",
-                code="metric_mismatch", details={"metric": name}, repair="Retrieve this metric's exact expression and preserve its filters, aggregation and operands.",
+                code="metric_mismatch",
+                details={"metric": name},
+                repair="Retrieve this metric's exact expression and preserve its filters, aggregation and operands.",
             )
 
     def output_expression(scope, node, seen=frozenset()):
@@ -433,7 +525,9 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
                 and isinstance(source.expression, exp.Select)
             ):
                 for item in source.expression.selects:
-                    if item.alias_or_name.casefold() == node.name.casefold():
+                    if item.alias_or_name.casefold() == column_key(
+                        node, catalog.dialect
+                    ):
                         return output_expression(source, item, seen | {key})
         return normalized(node, scope)
 
@@ -459,12 +553,20 @@ def validate_semantic_sql(query, catalog, *, metric_names=(), relationship_names
             | {"relationship:" + name for name in used}
             | {
                 "field:" + parent + "." + field
-                for scope in active for column in scope.columns
+                for scope in active
+                for column in scope.columns
                 if (resolved := origin(scope, column))
                 for parent, physical in [resolved]
                 for field in catalog.datasets[parent].fields
-                if isinstance((node := parse_expression(bindings.fields[parent, field], catalog.dialect)), exp.Column)
-                and node.name.casefold() == physical
+                if isinstance(
+                    (
+                        node := parse_expression(
+                            bindings.fields[parent, field], catalog.dialect
+                        )
+                    ),
+                    exp.Column,
+                )
+                and column_key(node, catalog.dialect) == physical
             }
         ),
     }

@@ -59,6 +59,7 @@ analysis_outputs = {'evaluation_periods': 2}
         inputs={"observations": source.result_id},
         code=code,
         runtime=w.runtime("execute"),
+        analysis_kind="forecast",
     )
     assert executed["ok"]
     descriptor = request(executed["output_datasets"]["predictions"])
@@ -67,6 +68,8 @@ analysis_outputs = {'evaluation_periods': 2}
         answer="The short holdout supports only a limited evaluation.",
         method="Earlier training fit; untouched later holdout; production refit uses all observed periods.",
         forecast_evaluation=ForecastEvaluationRequest(**descriptor.model_dump()),
+        final_outputs={executed["execution_id"]: ["evaluation_periods"]},
+        final_result_ids=[executed["output_datasets"]["predictions"]],
         runtime=w.runtime("finish"),
     )
     assert finished.get("analysis_id"), finished

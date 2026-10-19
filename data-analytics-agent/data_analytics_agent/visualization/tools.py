@@ -7,7 +7,11 @@ from pydantic_core import to_json
 from langchain.tools import tool, ToolRuntime
 from data_analytics_agent.schemas import ChartDataPreparation
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
-from data_analytics_agent.visualization.schemas import ChartRequest, ChartSpec, ChartType
+from data_analytics_agent.visualization.schemas import (
+    ChartRequest,
+    ChartSpec,
+    ChartType,
+)
 from data_analytics_agent.visualization.validation import (
     validate_chart_spec,
     chart_columns,
@@ -29,6 +33,13 @@ def create_chart_tool(results, runs, *, source_id):
         for prediction/confidence intervals, never for scenario/sensitivity ranges.
         For actual/forecast line charts, set interval_series to the forecast y
         column and forecast_start to its first future calendar period.
+        Waterfalls require x labels, one y, and waterfall_measure naming a saved
+        column ordered absolute baseline, relative contributions, final total.
+        The saved total must reconcile within 1e-9 absolute source units.
+        Funnels require x stage labels, one y count, and explicit stage_order
+        covering all stages; counts must be nonnegative integers and cannot
+        increase. Both use complete unsampled saved tables, with no sorting,
+        grouping, category limits, or hidden calculations.
         """
         context = _runtime_context(runtime)
         if committed := runs.storage.committed(context.run_id, runtime.tool_call_id):
@@ -39,9 +50,13 @@ def create_chart_tool(results, runs, *, source_id):
                 source = results.get(
                     source.parent_result_ids[0], context.thread_id, source_id=source_id
                 )
-            from data_analytics_agent.analytical_scope import check_inputs
-
-            check_inputs(results, runs, context.run_id, [source.result_id])
+            if (
+                spec.chart_type in {ChartType.WATERFALL, ChartType.FUNNEL}
+                and source.truncated
+            ):
+                raise ValueError(
+                    "Waterfall and funnel charts require complete unsampled saved data."
+                )
             version = 1
             if spec.previous_chart_id:
                 previous = runs.storage.load("charts", dict).get(spec.previous_chart_id)

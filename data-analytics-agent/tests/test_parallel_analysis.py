@@ -66,6 +66,8 @@ class ParallelAnalyst(AnalystModel):
                         "outcome": "analysis_completed",
                         "answer": f"Branch {branch}",
                         "method": "Synthetic isolated calculation",
+                        "final_outputs": {payload["execution_id"]: ["value"]},
+                        "final_result_ids": [],
                     },
                     "same-finish-id",
                 )
@@ -75,6 +77,7 @@ class ParallelAnalyst(AnalystModel):
                     "execute_analysis_python",
                     {
                         "inputs": {"sales": self.dataset},
+                        "analysis_kind": "general",
                         "code": f"analysis_outputs = {{'value': float(datasets['sales']['amount'].sum()) * {branch}}}",
                     },
                     "same-python-id",
@@ -163,17 +166,23 @@ class SkillReadingAnalyst(ParallelAnalyst):
             else "reporting/report-design"
         )
         read = next(
-            (m for m in messages if isinstance(m, ToolMessage) and m.tool_call_id == "read-skill"),
+            (
+                m
+                for m in messages
+                if isinstance(m, ToolMessage) and m.tool_call_id == "read-skill"
+            ),
             None,
         )
         if read is None:
             message = AIMessage(
                 content="",
-                tool_calls=[{
-                    "name": "read_file",
-                    "args": {"file_path": f"/project/skills/{skill}/SKILL.md"},
-                    "id": "read-skill",
-                }],
+                tool_calls=[
+                    {
+                        "name": "read_file",
+                        "args": {"file_path": f"/project/skills/{skill}/SKILL.md"},
+                        "id": "read-skill",
+                    }
+                ],
             )
             return ChatResult(generations=[ChatGeneration(message=message)])
         assert "name: " + skill.split("/")[-1] in str(read.content), read.content
@@ -198,7 +207,8 @@ async def test_restricted_harness_reads_owned_skills_and_finishes_analysis(
     assert {"read_file", "execute_analysis_python", "finish_analysis"} <= python_tools
     assert "execute_sql" not in python_tools
     readers = {
-        e.agent for e in state.events
+        e.agent
+        for e in state.events
         if e.tool and e.tool.name == "read_file" and e.phase == "completed"
     }
     assert readers == {"coordinator", "data-analysis"}

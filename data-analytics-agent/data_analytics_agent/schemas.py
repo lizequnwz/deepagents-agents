@@ -13,9 +13,8 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 )
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
-from data_analytics_agent.analytical_scope import AnalyticalInput, SavedScope
 
-API_CONTRACT_VERSION = 19
+API_CONTRACT_VERSION = 22
 
 
 class StrictModel(BaseModel):
@@ -119,9 +118,17 @@ class CoordinatorResponse(StrictModel):
     answer: str
     result_ids: list[str] = Field(
         default_factory=list,
-        description="Ordered material datasets; the first is primary. Chart/analysis inputs and lineage are attached automatically.",
+        description="Ordered material datasets; the first is primary. Final analytical datasets are attached automatically; source lineage remains inspectable provenance.",
     )
     assumptions: list[str] = Field(default_factory=list)
+    document_ids: list[str] = Field(default_factory=list)
+
+
+class DocumentReference(StrictModel):
+    document_id: str
+    filename: str
+    sha256: str
+    page_count: int
 
 
 class ResultReference(StrictModel):
@@ -134,9 +141,6 @@ class ResultReference(StrictModel):
 
 
 class FinalAnswer(StrictModel):
-    analytical_input: AnalyticalInput | None = None
-    refreshed_from_report_id: str | None = None
-    source_expansion_allowed: bool = False
     answer: str
     primary_result_id: str | None = None
     results: list[ResultReference] = Field(default_factory=list)
@@ -146,6 +150,7 @@ class FinalAnswer(StrictModel):
     partial: bool = False
     unresolved_questions: list[str] = Field(default_factory=list)
     report: ReportReference | None = None
+    documents: list[DocumentReference] = Field(default_factory=list)
 
 
 class SavedDataAnalysis(StrictModel):
@@ -176,6 +181,7 @@ class UploadProvenance(StrictModel):
     types: dict[str, str] = Field(default_factory=dict)
     grain: str = ""
     key_columns: list[str] = Field(default_factory=list)
+    document_reference: dict[str, Any] | None = None
 
 
 class SavedResult(StrictModel):
@@ -410,7 +416,6 @@ class ClarificationRequest(StrictModel):
     interrupt_id: str
     question: str
     choices: list[str] = Field(default_factory=list)
-    source_expansion: bool = False
 
 
 class SteeringResponse(StrictModel):
@@ -421,7 +426,6 @@ class SteeringResponse(StrictModel):
 
 
 class ChatTurn(StrictModel):
-    analytical_input: AnalyticalInput | None = None
     run_id: str = ""
     corrections: list[Correction] = Field(default_factory=list)
     user_message: str
@@ -433,7 +437,6 @@ class ChatTurn(StrictModel):
 
 
 class ConversationResponse(StrictModel):
-    analytical_input: AnalyticalInput | None = None
     thread_id: str
     source_id: str
     turns: list[ChatTurn]
@@ -458,18 +461,11 @@ class MessageRequest(StrictModel):
 
 
 class AnalyticalMessageRequest(MessageRequest):
-    selected_result_id: str | None = None
-    scope: SavedScope | None = None
     previous_report_id: str | None = None
 
 
 class ClarificationReply(MessageRequest):
-    allow_source_expansion: bool = False
     interrupt_id: str | None = None
-
-
-class ReportRevisionRequest(StrictModel):
-    report_id: str
 
 
 class CreateRunResponse(StrictModel):
@@ -478,9 +474,6 @@ class CreateRunResponse(StrictModel):
 
 
 class RunResponse(StrictModel):
-    analytical_input: AnalyticalInput | None = None
-    source_expansion_allowed: bool = False
-    fresh_source_required: bool = False
     previous_report_id: str | None = None
     evaluation_receipts: list[dict[str, Any]] = Field(default_factory=list)
     active_model_agent: str | None = None

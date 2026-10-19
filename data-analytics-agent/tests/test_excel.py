@@ -62,7 +62,7 @@ def test_explicit_excel_selection_review_reopen_and_sql(test_settings):
             content=content,
         )
         assert response.status_code == 201, response.text
-        u = get_upload(s.storage, response.json()["source_id"])
+        u = get_upload(s.storage, response.json()["upload_id"])
     confirmed = confirm_upload(
         s,
         u.thread_id,
@@ -71,6 +71,7 @@ def test_explicit_excel_selection_review_reopen_and_sql(test_settings):
             key_columns=["id"],
             grain="One sale",
         ),
+        upload_id=u.upload_id,
     )
     result = s.results.get(confirmed.result_id, u.thread_id)
     assert result.rows[0]["id"] == "00007"
@@ -78,7 +79,7 @@ def test_explicit_excel_selection_review_reopen_and_sql(test_settings):
     assert result.rows[0]["date"] == datetime(2026, 9, 1)
     assert result.upload_provenance.excel_selection == selection.model_dump()
     reopened = Services(settings=test_settings)
-    assert get_upload(reopened.storage, u.source_id) == confirmed
+    assert get_upload(reopened.storage, u.upload_id) == confirmed
     tool = create_query_saved_results_tool(s.results, s.runs, source_id=u.source_id)
     run = s.runs.create(u.thread_id, u.source_id, "Sum sales")
     s.runs.begin_assignment(run, "sum", "text-to-sql", "Sum sales")
@@ -188,10 +189,12 @@ def test_excel_limits_headers_merges_and_keys(test_settings):
                 types={c.name: c.suggested_type for c in u.columns},
                 key_columns=["date"],
             ),
+            upload_id=u.upload_id,
         )
 
 
-def test_excel_selection_ui_and_merged_title_outside_table(test_settings):
+@pytest.mark.parametrize("thread_id", [None, "existing-workspace"])
+def test_excel_selection_ui_and_merged_title_outside_table(test_settings, thread_id):
     from streamlit.testing.v1 import AppTest
 
     book = Workbook()
@@ -215,13 +218,16 @@ def test_excel_selection_ui_and_merged_title_outside_table(test_settings):
 import streamlit as st
 from data_analytics_agent.ui.uploads import render_workbook_selection
 class Client:
-    def upload_file(self, filename, content, selection):
+    def upload_file(self, filename, content, selection, *, thread_id=None):
         st.session_state['submitted_selection'] = selection
-        return {'thread_id':'chosen-table'}
-st.session_state.setdefault('pending_workbook', {'filename':'sales.xlsx','content':b'bytes','question':'Sum sales','info':{'sheets':[{'name':'First','range':'A1:B3','preview':[['id','amount'],['001','5']]},{'name':'Second','range':'A2:C5','preview':[['Title']]}]}})
+        st.session_state['submitted_thread'] = thread_id
+        return {'thread_id':thread_id or 'chosen-table'}
+st.session_state.setdefault('pending_workbook', {'filename':'sales.xlsx','content':b'bytes','question':'Sum sales','thread_id':st.session_state['target_thread'], 'info':{'sheets':[{'name':'First','range':'A1:B3','preview':[['id','amount'],['001','5']]},{'name':'Second','range':'A2:C5','preview':[['Title']]}]}})
 if 'submitted_selection' not in st.session_state:
     render_workbook_selection(Client())
-""").run()
+""")
+    app.session_state["target_thread"] = thread_id
+    app.run()
     assert not app.exception
     app.selectbox[0].select("Second").run()
     assert [n.value for n in app.number_input] == [2, 5]
@@ -239,7 +245,8 @@ if 'submitted_selection' not in st.session_state:
     assert not app.exception
     assert app.session_state["submitted_selection"]["sheet"] == "Second"
     assert app.session_state["submitted_selection"]["cell_range"] == "A2:B4"
-    assert app.session_state["upload_questions"]["chosen-table"] == "Sum sales"
+    assert app.session_state["submitted_thread"] == thread_id
+    assert app.session_state["upload_questions"][thread_id or "chosen-table"] == "Sum sales"
 
 
 async def test_excel_through_real_agent_harness_chart_report_and_download(
@@ -280,6 +287,7 @@ async def test_excel_through_real_agent_harness_chart_report_and_download(
         s,
         u.thread_id,
         UploadReview(types={c.name: c.suggested_type for c in u.columns}),
+        upload_id=u.upload_id,
     )
 
     def forbidden(*args, **kwargs):

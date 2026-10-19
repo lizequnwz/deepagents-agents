@@ -1,6 +1,6 @@
 # Reviews and evidence
 
-Updated 3 October 2026. Use the current guides for behavior and the
+Updated 19 October 2026. Use the current guides for behavior and the
 [handoff](../../HANDOFF.md) for next work. Reviews are dated snapshots; they do not
 supersede the [capability status](../roadmap/implementation-progress.md).
 
@@ -8,6 +8,10 @@ supersede the [capability status](../roadmap/implementation-progress.md).
 
 | Date | Record | How to use it |
 |---|---|---|
+| 19 October 2026 | [Composer simplification](composer-simplification-2026-10-19.md) | Removed Analyze and its backend feature; native chat attachments preserve conversation/question/review; 634 local cases covered including notebook retries, plus 31 focused composer checks |
+| 18 October 2026 | [Correctness and recovery checkup](checkup-2026-10-18.md) | Adversarial arithmetic/source/lifecycle repairs, explicit final evidence, declared forecast completion, native budget recovery and portable replay; 667 local passes, six provider skips |
+| 17 October 2026 | [Analytical capability expansion](capability-expansion-2026-10-17.md) | Seven capability families, reviewed multi-table workspaces, document context, helper-source replay, 617 local passes, six provider skips and remaining limits |
+| 17 October 2026 | [Comparative improvement assessment](improvement-plan-2026-10-17.md) | Pinned DB-GPT/Data Formulator source review, conference lessons, current gaps, delivery slices and isolated ablations; 107 focused local passes; supports the handoff, with no runtime changes or provider trials |
 | 3 October 2026 | [Agent review and improvement options](agent-review-2026-10-03.md) | Code-backed gaps, local checks and primary research; the handoff supersedes its earlier product priorities |
 | 2 October 2026 | [Extended priority testing](priority-followup-tests-2026-10-02.md) | Scope/refresh/calendar/forecast/lineage/source-recovery repairs, retained failures, local discovery observations and next improvement opportunities |
 | 1 October 2026 | [Priority analytics releases](priority-releases-2026-10-01.md) | Semantic study tooling, explicit saved inputs, forecast evaluation, shared scope and manual refresh; local/browser/replay checks and remaining live/user gates |
@@ -29,7 +33,7 @@ none was rerun during consolidation, and no provider skip is counted as a pass.
 | 1 October: business usability | 378 full-suite passes, six provider skips | Native-widget/API checks covered guided workbook selection, full-column review, preserved edits, exact ordered approvals and deferred downloads. No separate browser layout/responsive test or business-user study was performed. |
 | 1 October: exact SQL export files | 27 focused passes | Export/Excel/presentation checks covered exact UTF-8 SQL bytes, hashes, source/saved-query lineage, excluded unrelated queries and fresh-kernel replay. No provider evaluation was run. |
 
-Those increments recorded API contracts 16 and 17. The current contract is 19;
+Those increments recorded API contracts 16 and 17. The current contract is 22;
 older records do not supply current startup instructions. Replay numerical
 tolerances and limits remain in the [testing guide](../development/testing.md#portable-replay).
 

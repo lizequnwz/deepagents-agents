@@ -262,10 +262,6 @@ def create_lookup_values_tool(
             return json.loads(committed)
         if reason := runs.analysis_stop_reason(context.run_id):
             return {"ok": False, "error": reason}
-        try:
-            runs.require_source_access(context.run_id)
-        except ValueError as exc:
-            raise ToolException(str(exc)) from exc
         dataset = catalog.datasets[dataset_name]
         field = dataset.fields[field_name]
         literal = exp.Literal.string("%" + search.lower() + "%").sql(

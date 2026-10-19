@@ -6,6 +6,7 @@ import base64
 from io import BytesIO
 import json
 import math
+import os
 from pathlib import Path
 import struct
 import sys
@@ -215,6 +216,12 @@ def main() -> int:
         datasets = {name: pd.read_parquet(path) for name, path in bindings.items()}
         code = code_path.read_text(encoding="utf-8")
         limits = json.loads(limits_path.read_text(encoding="utf-8"))
+        # Use the exact application-owned workflow snapshot, including on replay.
+        library_root = Path(os.environ["ANALYTICS_LIBRARY_ROOT"])
+        sys.path.insert(0, str(library_root))
+        import data_analytics_agent
+
+        data_analytics_agent.__path__.insert(0, str(library_root / "data_analytics_agent"))
         namespace: dict[str, Any] = {
             "__name__": "__data_analysis__",
             "datasets": datasets,

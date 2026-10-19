@@ -29,12 +29,8 @@ class EvidenceResolver:
             if item.forecast_evaluation:
                 self.result(item.forecast_evaluation.predictions_result_id)
                 self.result(item.forecast_evaluation.scores_result_id)
-            for execution in item.executions:
-                for result_id in [
-                    *execution.inputs.values(),
-                    *execution.output_datasets.values(),
-                ]:
-                    self.result(result_id)
+            for result_id in item.final_result_ids:
+                self.result(result_id)
         return self.analyses[key]
 
     def chart(self, key):

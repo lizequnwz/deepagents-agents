@@ -60,8 +60,8 @@ def test_direct_evidence_resolution_uses_saved_sql_and_lineage(workspace):
         analyses=w.analyses,
         runs=w.runs,
     )
-    assert [r.result_id for r in answer.results] == [derived.result_id, r.result_id]
-    assert answer.results[1].executed_sql == "SELECT 2 AS value"
+    assert [r.result_id for r in answer.results] == [derived.result_id]
+    assert w.results.get(derived.result_id, w.thread).parent_result_ids == [r.result_id]
 
 
 async def test_greeting_completes_without_report(workspace):
@@ -137,7 +137,7 @@ async def test_analysis_budget_reserves_presentation_phase(workspace):
             Stream(
                 CoordinatorResponse(
                     answer="No completed data available.",
-                    partial=True,
+                    partial=False,
                     unresolved_questions=["Retrieve data"],
                 )
             ),

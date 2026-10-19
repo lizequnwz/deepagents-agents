@@ -45,6 +45,8 @@ async def delete_history(services, thread_ids: set[str]) -> dict:
                 candidates.append(value.get("html_path"))
             elif kind == "uploads":
                 candidates.append(value.get("original_path"))
+            elif kind == "documents":
+                candidates.extend([value.get("original_path"), value.get("extracted_path")])
             executions = (
                 value.get("python_executions", [])
                 if kind == "runs"

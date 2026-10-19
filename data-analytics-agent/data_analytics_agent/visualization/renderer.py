@@ -22,6 +22,7 @@ from data_analytics_agent.visualization.schemas import (
 )
 from data_analytics_agent.visualization.validation import (
     presentation_rows,
+    validate_analytical_chart_rows,
 )
 
 
@@ -151,7 +152,10 @@ def _style_figure(
         plot_bgcolor="rgba(0,0,0,0)",
     )
     if spec.chart_type not in {ChartType.PIE, ChartType.MAP}:
-        if spec.chart_type is ChartType.BAR and spec.orientation == "horizontal":
+        if (
+            spec.chart_type in {ChartType.BAR, ChartType.WATERFALL, ChartType.FUNNEL}
+            and spec.orientation == "horizontal"
+        ):
             x_title = spec.y_label or (spec.y[0] if len(spec.y) == 1 else None)
             y_title = spec.x_label or spec.x
         else:
@@ -180,6 +184,66 @@ def _style_figure(
                 }
             )
     return fig
+
+
+def _render_analytical_chart(
+    frame: pd.DataFrame,
+    spec: ChartSpec,
+    style: ChartRenderStyle | None = None,
+) -> go.Figure:
+    """Render already-validated contributions or stages without data shaping."""
+
+    discrete, _ = _palette(spec, style)
+    labels = frame[spec.x].tolist()
+    values = [
+        float(value) if isinstance(value, Decimal) else value
+        for value in frame[spec.y[0]].tolist()
+    ]
+    horizontal = spec.orientation == "horizontal"
+    positions = {"x": values, "y": labels} if horizontal else {"x": labels, "y": values}
+    if spec.chart_type is ChartType.WATERFALL:
+        # Plotly computes a `total` bar; zero is its non-contributing input.
+        # Keep the checked saved ending value visible as text and hover data.
+        contributions = [*values[:-1], 0]
+        positions["x" if horizontal else "y"] = contributions
+        trace = go.Waterfall(
+            **positions,
+            measure=frame[spec.waterfall_measure].tolist(),
+            orientation="h" if horizontal else "v",
+            customdata=values,
+            text=values,
+            textposition="outside",
+            hovertemplate=(
+                "%{y}: %{customdata}<extra></extra>"
+                if horizontal
+                else "%{x}: %{customdata}<extra></extra>"
+            ),
+            increasing={"marker": {"color": discrete[0]}},
+            decreasing={"marker": {"color": discrete[1 % len(discrete)]}},
+            totals={"marker": {"color": discrete[2 % len(discrete)]}},
+            showlegend=False,
+        )
+    else:
+        trace = go.Funnel(
+            **positions,
+            orientation="h" if horizontal else "v",
+            textinfo="value",
+            marker={"color": discrete[0]},
+            showlegend=False,
+        )
+    figure = go.Figure(trace)
+    axis = "yaxis" if horizontal else "xaxis"
+    figure.update_layout(
+        **{
+            axis: {
+                "type": "category",
+                "categoryorder": "array",
+                "categoryarray": labels,
+                **({"autorange": "reversed"} if horizontal else {}),
+            },
+        }
+    )
+    return figure
 
 
 def _render_cartesian(
@@ -540,6 +604,7 @@ def build_chart(
 
     warnings: list[str] = list(spec.notes)
     presented_rows = presentation_rows(rows, spec)
+    validate_analytical_chart_rows(spec, presented_rows)
     category_column = spec.location if spec.chart_type is ChartType.MAP else spec.x
     if spec.category_limit is not None and category_column is not None:
         all_categories = {
@@ -561,7 +626,12 @@ def build_chart(
     frame = pd.DataFrame(presented_rows)
     for column in set(
         [
-            *([] if spec.chart_type is ChartType.HEATMAP else spec.y),
+            *(
+                []
+                if spec.chart_type
+                in {ChartType.HEATMAP, ChartType.WATERFALL, ChartType.FUNNEL}
+                else spec.y
+            ),
             spec.value,
             spec.size,
             spec.lower_bound,
@@ -586,11 +656,15 @@ def build_chart(
             resolver or USLocationResolver(),
             style,
         )
+    elif spec.chart_type in {ChartType.WATERFALL, ChartType.FUNNEL}:
+        figure = _render_analytical_chart(frame, spec, style)
     else:
         figure = _render_cartesian(frame, spec, warnings, style)
     if spec.lower_bound and spec.upper_bound:
         target = spec.interval_series or spec.y[0]
-        band = frame.dropna(subset=[target, spec.lower_bound, spec.upper_bound]).sort_values(spec.x)
+        band = frame.dropna(
+            subset=[target, spec.lower_bound, spec.upper_bound]
+        ).sort_values(spec.x)
         figure.add_trace(
             go.Scatter(
                 x=band[spec.x],
@@ -616,8 +690,25 @@ def build_chart(
         )
     if spec.forecast_start:
         marker = spec.forecast_start.isoformat()
-        figure.add_shape(type="line", x0=marker, x1=marker, y0=0, y1=1, xref="x", yref="paper", line=dict(color="#525150", dash="dash"))
-        figure.add_annotation(x=marker, y=1, xref="x", yref="paper", text="Forecast start", showarrow=False, yshift=12)
+        figure.add_shape(
+            type="line",
+            x0=marker,
+            x1=marker,
+            y0=0,
+            y1=1,
+            xref="x",
+            yref="paper",
+            line=dict(color="#525150", dash="dash"),
+        )
+        figure.add_annotation(
+            x=marker,
+            y=1,
+            xref="x",
+            yref="paper",
+            text="Forecast start",
+            showarrow=False,
+            yshift=12,
+        )
     if spec.error_y:
         axis = (
             "error_x"

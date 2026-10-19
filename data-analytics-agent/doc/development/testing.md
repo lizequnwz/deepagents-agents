@@ -15,6 +15,12 @@ Use three distinct evidence levels: deterministic regression tests, live model
 runs through the API, and browser interaction checks. None substitutes for the
 others. A successful HTTP response or completed report is not a correctness grade.
 
+The [18 October checkup](../reviews/checkup-2026-10-18.md) adds adversarial numerical,
+source-identity, final-evidence and native budget-recovery checks to the feature
+expansion. The [19 October composer checks](../reviews/composer-simplification-2026-10-19.md)
+cover selector removal, attachment routing, review/question preservation and stable
+composer identity. Earlier counts remain historical.
+
 ## Local regression suite
 
 ```sh

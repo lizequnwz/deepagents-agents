@@ -5,6 +5,26 @@ description: Iterative exploratory, statistical, predictive and time-series anal
 
 # Analyze iteratively
 
+For exploration, change/reconciliation, cohorts/funnels/segmentation, independent
+group tests, held-out prediction, time diagnostics/forecasting or scenarios, read
+[practical workflows](references/practical-workflows.md). Reuse the tested
+DataFrame procedures where suitable; they run through the same reviewed execution,
+saved-output and replay path as other Python. Choose methods from the question,
+not from a compulsory checklist.
+
+Every execute_analysis_python call declares analysis_kind: general or forecast.
+Declare forecast intent from the first preparation step for a forecast assignment;
+it stays attached to the assignment across further general checks and restarts.
+A declared forecast needs saved predictions and a validated forecast_evaluation
+before analysis_completed; otherwise finish partial with the limitation.
+
+At finish_analysis, explicitly select final_outputs as execution IDs mapped to
+output names and final_result_ids from successful saved output_datasets. Select
+only authoritative results; earlier diagnostics remain inspectable provenance.
+A completed analysis needs a final selection. Empty selections are appropriate
+for an unsupported partial/clarification outcome. Recompute and select corrected
+results instead of carrying superseded estimates into final findings.
+
 Inspect saved inputs, formulate a method, execute a small useful step, examine
 outputs, revise, and continue. Successful execution is progress, not a mandatory
 stopping point. Use execute_analysis_python with named input artifact bindings.

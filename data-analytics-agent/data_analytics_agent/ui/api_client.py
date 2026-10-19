@@ -87,11 +87,17 @@ class AgentAPIClient:
             timeout=70,
         )["text"]
 
-    def upload_file(self, filename: str, content: bytes, selection=None):
+    def upload_file(
+        self, filename: str, content: bytes, selection=None, *, thread_id=None
+    ):
         return self.request(
             "POST",
             "/api/uploads",
-            params={"filename": filename, **(selection or {})},
+            params={
+                "filename": filename,
+                **(selection or {}),
+                **({"thread_id": thread_id} if thread_id else {}),
+            },
             content=content,
             headers={"Content-Type": "application/octet-stream"},
             timeout=120,
@@ -102,16 +108,56 @@ class AgentAPIClient:
             "POST", "/api/uploads/workbook", content=content, timeout=120
         )
 
-    def get_upload(self, thread_id: str):
-        return self.request("GET", f"/api/conversations/{thread_id}/upload")
+    def get_upload(self, thread_id: str, upload_id: str):
+        return self.request(
+            "GET", f"/api/conversations/{thread_id}/uploads/{upload_id}"
+        )
 
-    def confirm_upload(self, thread_id: str, review: dict[str, Any]):
+    def confirm_upload(self, thread_id: str, review: dict[str, Any], *, upload_id: str):
         return self.request(
             "POST",
-            f"/api/conversations/{thread_id}/upload/confirm",
+            f"/api/conversations/{thread_id}/uploads/{upload_id}/confirm",
             json=review,
             timeout=120,
         )
+
+    def get_uploads(self, thread_id):
+        return self.request("GET", f"/api/conversations/{thread_id}/uploads")["uploads"]
+
+    def upload_document(self, filename, content, *, thread_id=None):
+        return self.request(
+            "POST",
+            "/api/documents",
+            params={
+                "filename": filename,
+                **({"thread_id": thread_id} if thread_id else {}),
+            },
+            content=content,
+            timeout=90,
+        )
+
+    def list_documents(self, thread_id):
+        return self.request("GET", f"/api/conversations/{thread_id}/documents")[
+            "documents"
+        ]
+
+    def inspect_document(self, thread_id, document_id, page=1):
+        return self.request(
+            "GET",
+            f"/api/conversations/{thread_id}/documents/{document_id}",
+            params={"page": page},
+        )
+
+    def import_document_table(self, thread_id, document_id, table_index, header_row=0):
+        return self.request(
+            "POST",
+            f"/api/conversations/{thread_id}/documents/{document_id}/tables",
+            params={"table_index": table_index, "header_row": header_row},
+            timeout=120,
+        )
+
+    def document_download_url(self, thread_id, document_id):
+        return f"{self.base_url.rstrip('/')}/api/conversations/{thread_id}/documents/{document_id}/download"
 
     def get_conversation_source(self, thread_id: str):
         return self.request("GET", f"/api/conversations/{thread_id}/source")
@@ -127,30 +173,41 @@ class AgentAPIClient:
     def get_conversation(self, thread_id: str) -> dict[str, Any]:
         return self.request("GET", f"/api/conversations/{thread_id}")
 
-    def send_message(self, thread_id: str, message: str, *, selected_result_id=None, scope=None, previous_report_id=None) -> dict[str, Any]:
+    def send_message(
+        self,
+        thread_id: str,
+        message: str,
+        *,
+        previous_report_id=None,
+    ) -> dict[str, Any]:
         return self.request(
             "POST",
             f"/api/conversations/{thread_id}/messages",
-            json={"message": message, "selected_result_id": selected_result_id, "scope": scope, "previous_report_id": previous_report_id},
+            json={
+                "message": message,
+                "previous_report_id": previous_report_id,
+            },
         )
-
-    def list_datasets(self, thread_id):
-        return self.request("GET", f"/api/conversations/{thread_id}/datasets")["datasets"]
-
-    def scope_options(self, thread_id, result_id):
-        return self.request("GET", f"/api/conversations/{thread_id}/datasets/{result_id}/scope-options")
-
-    def refresh_warehouse(self, run_id, report_id):
-        return self.request("POST", f"/api/runs/{run_id}/refresh", json={"report_id": report_id})
 
     def send_correction(self, run_id: str, message: str):
         return self.request(
             "POST", f"/api/runs/{run_id}/corrections", json={"message": message}
         )
 
-    def answer_clarification(self, run_id: str, message: str, *, interrupt_id=None, allow_source_expansion=False):
+    def answer_clarification(
+        self,
+        run_id: str,
+        message: str,
+        *,
+        interrupt_id=None,
+    ):
         return self.request(
-            "POST", f"/api/runs/{run_id}/clarification", json={"message": message, "interrupt_id": interrupt_id, "allow_source_expansion": allow_source_expansion}
+            "POST",
+            f"/api/runs/{run_id}/clarification",
+            json={
+                "message": message,
+                "interrupt_id": interrupt_id,
+            },
         )
 
     def get_run(self, run_id: str, *, after_event_id: int = 0) -> dict[str, Any]:

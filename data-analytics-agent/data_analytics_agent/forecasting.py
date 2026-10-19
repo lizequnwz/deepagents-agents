@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlglot import exp
 
 from data_analytics_agent.visualization.schemas import ChartInterval
+from data_analytics_agent.analysis._calendar import FREQUENCIES
 
 
 class ForecastEvaluationRequest(BaseModel):
@@ -91,15 +92,6 @@ class ForecastEvaluation(ForecastEvaluationRequest):
                 else "No forecast interval supplied."
             )
         )
-
-
-FREQUENCIES = {
-    "daily": "D",
-    "weekly": "7D",
-    "monthly": "MS",
-    "quarterly": "QS",
-    "yearly": "YS",
-}
 
 
 def _finite(frame, columns, purpose):

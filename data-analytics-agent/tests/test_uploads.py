@@ -38,7 +38,9 @@ def reviewed(services, content=b"id,amount\n001,2\n002,4\n003,6\n", **changes):
     review = UploadReview(
         types={c.name: c.suggested_type for c in upload.columns}, **changes
     )
-    return confirm_upload(services, upload.thread_id, review)
+    return confirm_upload(
+        services, upload.thread_id, review, upload_id=upload.upload_id
+    )
 
 
 def test_file_review_preserves_identifiers_dates_nulls_and_provenance(test_settings):
@@ -66,6 +68,7 @@ def test_file_review_preserves_identifiers_dates_nulls_and_provenance(test_setti
             grain="One sale",
             key_columns=["id"],
         ),
+        upload_id=u.upload_id,
     )
     result = s.results.get(confirmed.result_id, u.thread_id)
     assert result.rows[0]["date"] == date(2026, 3, 2)
@@ -75,14 +78,18 @@ def test_file_review_preserves_identifiers_dates_nulls_and_provenance(test_setti
     assert result.upload_provenance.grain == "One sale"
     assert s.results.get(u.original_result_id, u.thread_id).rows == rows
     reopened = Services(settings=test_settings)
-    assert get_upload(reopened.storage, u.source_id) == confirmed
+    assert get_upload(reopened.storage, u.upload_id) == confirmed
     assert reopened.source_summary(u.source_id).ready
-    assert confirm_upload(reopened, u.thread_id, confirmed.review) == confirmed
+    assert (
+        confirm_upload(reopened, u.thread_id, confirmed.review, upload_id=u.upload_id)
+        == confirmed
+    )
     with pytest.raises(ValueError, match="already confirmed"):
         confirm_upload(
             reopened,
             u.thread_id,
             UploadReview(types=confirmed.review.types, grain="Other"),
+            upload_id=u.upload_id,
         )
 
 
@@ -102,6 +109,7 @@ def test_parquet_retains_decimal_timestamp_and_identifier_types(test_settings):
         s,
         upload.thread_id,
         UploadReview(types={c.name: "original" for c in upload.columns}),
+        upload_id=upload.upload_id,
     )
     stored = pq.read_table(
         s.results.get(result.result_id, result.thread_id).parquet_path
@@ -139,8 +147,8 @@ def test_schema_review_preserves_all_column_choices_after_key_error(
             # state alongside the form fields, as the browser does on each submit.
             for editor in app.dataframe:
                 if editor.key in {
-                    f"upload_notes_{u.thread_id}",
-                    f"upload_types_{u.thread_id}",
+                    f"upload_notes_{u.upload_id}",
+                    f"upload_types_{u.upload_id}",
                 }:
                     states.widgets.add(
                         id=editor.proto.id,
@@ -148,7 +156,7 @@ def test_schema_review_preserves_all_column_choices_after_key_error(
                     )
             app._run(states)
 
-        def app_code(thread_id):
+        def app_code(thread_id, upload_id):
             from data_analytics_agent.ui.api_client import AgentAPIClient
             from data_analytics_agent.ui.uploads import (
                 render_upload_review,
@@ -156,27 +164,27 @@ def test_schema_review_preserves_all_column_choices_after_key_error(
             )
 
             client = AgentAPIClient("http://upload-test")
-            upload = client.get_upload(thread_id)
+            upload = client.get_upload(thread_id, upload_id)
             if upload["confirmed"]:
                 render_uploaded_source(client, upload)
             else:
                 render_upload_review(client, upload)
 
-        app = AppTest.from_function(app_code, args=(u.thread_id,)).run()
+        app = AppTest.from_function(app_code, args=(u.thread_id, u.upload_id)).run()
         assert not app.exception
-        assert not get_upload(s.storage, u.source_id).confirmed
+        assert not get_upload(s.storage, u.upload_id).confirmed
         assert next(
-            d for d in app.dataframe if d.key == f"upload_notes_{u.thread_id}"
+            d for d in app.dataframe if d.key == f"upload_notes_{u.upload_id}"
         ).value["Column"].tolist() == ["id", "date"]
         other = next(e for e in app.expander if e.label == "Other column types · 1")
         assert other.proto.expanded is False
         # AppTest exposes data-editor edits through native widget session state.
-        app.session_state[f"upload_notes_{u.thread_id}"] = {
+        app.session_state[f"upload_notes_{u.upload_id}"] = {
             "edited_rows": {1: {"Use as": "Date: DD/MM/YYYY"}},
             "added_rows": [],
             "deleted_rows": [],
         }
-        app.session_state[f"upload_types_{u.thread_id}"] = {
+        app.session_state[f"upload_types_{u.upload_id}"] = {
             "edited_rows": {0: {"Use as": "Number (approximate)"}},
             "added_rows": [],
             "deleted_rows": [],
@@ -186,14 +194,14 @@ def test_schema_review_preserves_all_column_choices_after_key_error(
         submit_review(app)
         assert not app.exception
         assert "duplicated" in app.error[0].value
-        assert not get_upload(s.storage, u.source_id).confirmed
+        assert not get_upload(s.storage, u.upload_id).confirmed
         assert app.text_input[0].value == "One sale"
         assert (
-            app.session_state[f"upload_notes_{u.thread_id}"]["edited_rows"][1]["Use as"]
+            app.session_state[f"upload_notes_{u.upload_id}"]["edited_rows"][1]["Use as"]
             == "Date: DD/MM/YYYY"
         )
         assert (
-            app.session_state[f"upload_types_{u.thread_id}"]["edited_rows"][0]["Use as"]
+            app.session_state[f"upload_types_{u.upload_id}"]["edited_rows"][0]["Use as"]
             == "Number (approximate)"
         )
 
@@ -201,7 +209,7 @@ def test_schema_review_preserves_all_column_choices_after_key_error(
         submit_review(app)
         assert not app.exception
         assert not app.error
-        confirmed = get_upload(s.storage, u.source_id)
+        confirmed = get_upload(s.storage, u.upload_id)
         assert confirmed.review == UploadReview(
             types={"id": "text", "date": "date_dmy", "amount": "number"},
             grain="One sale",
@@ -259,9 +267,12 @@ def test_invalid_dates_and_duplicate_keys_use_complete_population(test_settings)
     u = stage_upload(s, b"id,date\n1,2026-02-30\n", "bad-date.csv")
     with pytest.raises(ValueError, match="Invalid calendar"):
         confirm_upload(
-            s, u.thread_id, UploadReview(types={"id": "text", "date": "date_iso"})
+            s,
+            u.thread_id,
+            UploadReview(types={"id": "text", "date": "date_iso"}),
+            upload_id=u.upload_id,
         )
-    assert not get_upload(s.storage, u.source_id).confirmed
+    assert not get_upload(s.storage, u.upload_id).confirmed
     content = "id,value\n" + "\n".join(f"{i},1" for i in range(15)) + "\n14,2\n"
     u = stage_upload(s, content.encode(), "duplicates.csv")
     with pytest.raises(ValueError, match="duplicated"):
@@ -269,9 +280,10 @@ def test_invalid_dates_and_duplicate_keys_use_complete_population(test_settings)
             s,
             u.thread_id,
             UploadReview(types={"id": "text", "value": "integer"}, key_columns=["id"]),
+            upload_id=u.upload_id,
         )
     assert s.results.get(u.result_id, u.thread_id).row_count == 16
-    assert not get_upload(s.storage, u.source_id).confirmed
+    assert not get_upload(s.storage, u.upload_id).confirmed
 
 
 def test_registry_optional_uploads_not_exposed_as_reusable_sources_and_deletion(
@@ -306,13 +318,13 @@ def test_registry_optional_uploads_not_exposed_as_reusable_sources_and_deletion(
             == 422
         )
         confirmed = api.post(
-            f"/api/conversations/{thread}/upload/confirm",
+            f"/api/conversations/{thread}/uploads/{u['upload_id']}/confirm",
             json={"types": {"id": "text", "amount": "integer"}},
         )
         assert confirmed.status_code == 200, confirmed.text
         assert api.get("/api/data-sources").json()["sources"] == []
         assert api.get(f"/api/conversations/{thread}/source").json()["ready"]
-        original_path = Path(get_upload(s.storage, u["source_id"]).original_path)
+        original_path = Path(get_upload(s.storage, u["upload_id"]).original_path)
         assert original_path.exists()
         assert api.delete(f"/api/conversations/{thread}").status_code == 200
         assert not original_path.exists() and not s.storage.load("uploads", dict)
@@ -632,7 +644,7 @@ def test_upload_ui_review_and_reopen_without_configured_sources(
         ).click().run(timeout=15)
         assert not app.exception
         assert len(app.chat_input) == 1
-        assert get_upload(s.storage, upload.source_id).confirmed
+        assert get_upload(s.storage, upload.upload_id).confirmed
 
 
 def test_upload_api_serializes_decimal_dates_and_nonfinite_preview(test_settings):
@@ -676,7 +688,9 @@ def test_upload_blocks_deletion_and_duplicate_confirmation_during_review(
 
     monkeypatch.setattr(api_module, "confirm_upload", slow_review)
     with TestClient(create_app(s)) as api, ThreadPoolExecutor() as executor:
-        path = f"/api/conversations/{upload.thread_id}/upload/confirm"
+        path = (
+            f"/api/conversations/{upload.thread_id}/uploads/{upload.upload_id}/confirm"
+        )
         work = executor.submit(api.post, path, json={"types": {"n": "integer"}})
         try:
             assert started.wait(5)
@@ -710,6 +724,7 @@ def test_python_reuses_uploaded_evidence_and_preserves_lineage(test_settings):
     s = Services(settings=test_settings)
     upload = reviewed(s)
     run = s.runs.create(upload.thread_id, upload.source_id, "Analyze amounts")
+    s.runs.begin_assignment(run, "upload-analysis", "data-analysis", "Analyze amounts")
     runtime = SimpleNamespace(
         state={
             "thread_id": upload.thread_id,
@@ -728,6 +743,7 @@ def test_python_reuses_uploaded_evidence_and_preserves_lineage(test_settings):
         limits=s.settings.python_execution_limits(),
     )
     step = execute.func(
+        analysis_kind="general",
         inputs={"sales": upload.result_id},
         code="analysis_outputs={'mean': datasets['sales']['amount'].mean()}; output_datasets={'copy':datasets['sales'].copy()}",
         runtime=runtime,

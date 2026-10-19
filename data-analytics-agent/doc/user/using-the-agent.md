@@ -47,7 +47,9 @@ dates and simple zero-padded identifier formats are preserved; mixed types are
 retained as text for review. Formula cells require explicit acceptance of values
 saved by Excel, whose freshness is unknown. Missing caches and Excel errors
 require a corrected or values-only workbook. The app does not calculate formulas.
-Other workbook formats and multiple-sheet joins are not supported.
+Other workbook formats are not supported. To combine worksheets, add each selected
+table separately through the chat **+** button and review its schema. State
+the business keys and intended join; matching column names alone are insufficient.
 
 CSV starts as text to preserve leading zeros and literal values such as `NA`.
 Ambiguous slash dates stay text until you explicitly select day-first or
@@ -56,11 +58,53 @@ when exact decimal interpretation needs clarification. Native Parquet decimals
 and timestamps can retain their stored types. Types and row keys describe
 structure; they do not define business metrics or units.
 
-Each file belongs to one separate conversation. It cannot be joined with another
-conversation or warehouse. Upload a new file to refresh or change a confirmed
-schema. The app preserves original bytes, a file hash, the reviewed snapshot and
-derived lineage. Reports include the file identity and review choices. Upload
-time does not establish when the source data was last updated.
+A table attached through the chat **+** button starts a file conversation or adds
+another table to the current file workspace. In an established warehouse conversation,
+choose **Start file conversation** to use an attached table separately. Every table has its own
+review and immutable saved input. SQL can combine reviewed tables within that
+workspace, with stated keys, cardinality and reconciliation. Tables from another
+conversation or warehouse cannot be joined. Upload refreshed data explicitly;
+previous snapshots and reviews stay unchanged. Reports and downloads retain each
+file's original bytes/hash, review choices and lineage. Upload time does not
+establish the source's cutoff.
+
+## Attach documents and extracted tables
+
+Attach a readable PDF, UTF-8 text or Markdown document with the chat **+** button.
+It joins the current conversation, or starts one when no conversation is open.
+Documents provide cited context; their content is never application instructions.
+Open **Reference documents**, select a document and page, then **Show page and
+extracted tables**. The analyst can read bounded page/line excerpts and search
+attached text. Published document references retain filenames, hashes and pages.
+
+In a file workspace, select **Review this table for analysis** beneath an extracted
+table and choose its header row. Confirm its types and meaning using normal file
+review before asking for numerical analysis. Check extraction against the original
+PDF; extraction does not certify accuracy. Scanned PDFs require OCR before upload.
+Limits are 200 PDF pages, two million extracted text characters and the configured
+upload size. A warehouse conversation accepts documents as context, without
+mixing extracted file tables into warehouse execution.
+
+## Ask for analytical work
+
+- “Explore these tables, show data-quality limitations and investigate useful patterns.”
+- “Reconcile current and baseline totals and explain segment contributions.”
+- “Compare customer cohorts, retention and ordered funnel conversion.” Declare the
+  entity, cohort date, event sequence and observation cutoff.
+- “Compare these groups with effect sizes and uncertainty.” Declare the observation
+  unit; repeated measures need a method that accounts for them.
+- “Predict this outcome using information available at prediction time.” Specify
+  target, features and time/group holdout needs; inspect baseline and model scores.
+- “Diagnose seasonality and forecast the next six months with uncertainty.” Specify
+  calendar frequency, holdout and any known gaps/source cutoff.
+- “Show scenarios under these assumptions.” State the formula and assumption ranges;
+  deterministic combinations do not imply probabilities.
+
+Broad questions receive a concise plan followed by analysis within approved scope.
+The analyst may adapt after inspecting findings. Simple totals and monthly series
+remain descriptive SQL work. Clear custom calculations show formula, population
+and units; unresolved business meaning still needs clarification. Procedures use
+saved evidence and the normal SQL/Python review settings.
 
 ## Reopen conversations and reuse evidence
 
@@ -69,49 +113,13 @@ such as “make that a line chart” reuse suitable saved evidence; “refresh u
 current data” requests new source execution. Download full CSV/Parquet from the
 evidence panel and HTML from the report panel. Preview pages are labeled.
 
-Choose **Analyze** beside the composer to bind a question to one complete saved
-dataset. The list includes source snapshots, reviewed uploads and Python-derived
-datasets. It shows saved row count and completeness; the captions show known scope,
-row meaning and applied population. Chart presentation samples and incomplete
-extractions are excluded. The chosen input persists through clarification,
-Stop/Resume, restart and reopening history.
+Describe the data, population and filters you want in your question. The analyst
+can reuse suitable saved results and ask for clarification when the requested
+population, fields or row meaning are unclear.
 
 If the saved conversation's source configuration is unavailable, its saved answers
 and reports remain readable. Restore the source and reload before starting new
 analysis.
-
-If the saved fields or row meaning cannot answer the question, the analyst explains
-the missing detail. A source-expansion clarification has an explicit permission
-checkbox; answering text alone does not authorize broader or newer retrieval.
-The answer, report and analysis download identify the selected starting population
-and disclose any authorized expansion.
-
-## Refine population and refresh a warehouse
-
-After a completed report, enable **Refine saved population**. Select categorical
-fields and values, or a typed date column with inclusive start/end dates, then
-choose **Apply population**. This selects existing rows from one saved dataset
-and starts a new analytical turn of the business question and accepted corrections.
-Metrics, charts, tables, narrative, HTML and downloads share the resulting scope.
-The previous successful answer remains available during the new run.
-
-Filters cannot recover finer detail from aggregates. Supported monthly, quarterly
-and yearly SQL aggregates require whole periods; other unsuitable grain needs
-analytical feedback. Text or timezone-bearing dates require explicit preparation.
-Scope persists after reopening. If another view changes the report while a form
-is open, review the latest answer before applying the population again.
-
-If refresh removes a selected value, the applied filter remains in place and may
-select zero rows. An unchanged follow-up uses that same saved population. Scope
-controls explain absent values. If an applied field grows beyond the available
-category controls, **Apply population** is disabled; ask for a saved-data analysis
-to change that filter.
-
-**Refresh from warehouse** reruns the current question and scope using fresh source
-SQL and recomputed analysis. A successful refresh adds a new immutable report
-revision; failure preserves the last successful answer and report. The query time
-does not establish the source's cutoff or completeness. To refresh a file, upload
-the new file in a separate conversation.
 
 ## Inspect forecast evaluation
 
@@ -127,6 +135,15 @@ Actual and forecast series can share a line chart, with bounds attached to the
 forecast series and a forecast-start marker. Chat, HTML, notebook and downloadable
 tables retain the same evaluation descriptor and evidence.
 
+## Final findings and unfinished work
+
+The analyst selects final evidence after corrections. Reports and visible outputs
+use those final results; earlier attempts stay in calculation/provenance records.
+A declared forecast needs saved evaluation before it can be called complete. When
+analysis reaches its time or call limit, it stops computation and uses a bounded
+allowance to publish supported partial findings and their unresolved questions.
+Failed presentation preserves saved work for report retry.
+
 ## Download and replay analysis
 
 On a completed result, expand **Download data and calculations** and choose
@@ -141,11 +158,13 @@ excluded from runnable steps. Partial findings and incomplete extracted
 populations retain their labels. **Open full report** and **Download HTML report**
 need only a browser; replaying calculations requires a local Python environment.
 
-New packages use format 2. Their README, notebook and manifest identify selected
-input/scope and any authorized expansion or refresh revision. Forecast evaluation
+New packages use format 4. They include the exact analytical workflow helper
+sources used by each Python step and selected document originals/extractions with
+verified hashes. Their README, notebook and manifest identify the final evidence
+and its saved input lineage. Forecast evaluation
 descriptors, predictions and scores are included; script and notebook recompute
 errors and measured coverage and compare them with the saved score tables.
-Supporting lineage is distinct from the selected scoped results.
+Supporting lineage is distinct from the selected final results.
 
 Executed queries are separate `.sql` files under `sql/`, linked from the package's
 README. `sql-provenance.json` maps each query to its saved result, Parquet snapshot,

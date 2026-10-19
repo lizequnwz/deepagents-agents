@@ -155,7 +155,12 @@ def replace_study(trials, study):
 
 
 def test_quality_gate_requires_paired_target_failure_resolution(trials):
-    study = {**STUDY, "gate_kind": "quality", "timed_case_ids": [], "required_candidate_scenarios": ["exact_keys"]}
+    study = {
+        **STUDY,
+        "gate_kind": "quality",
+        "timed_case_ids": [],
+        "required_candidate_scenarios": ["exact_keys"],
+    }
     replace_study(trials, study)
     for folder in trials:
         grades = json.loads((folder / "grades.json").read_text())
@@ -164,7 +169,9 @@ def test_quality_gate_requires_paired_target_failure_resolution(trials):
         write(folder / "grades.json", grades)
     result = compare_trials(study, trials)
     assert result["decision"] == "inconclusive"
-    assert any(item["reason"] == "target_not_resolved:exact_keys" for item in result["unknown"])
+    assert any(
+        item["reason"] == "target_not_resolved:exact_keys" for item in result["unknown"]
+    )
     for folder in trials[:3]:
         grades = json.loads((folder / "grades.json").read_text())
         grades["cases"]["case-0"]["scenario_checks"]["exact_keys"] = check("fail")
@@ -177,28 +184,62 @@ def test_quality_gate_requires_paired_target_failure_resolution(trials):
 
 
 def test_timed_semantic_study_still_grades_untimed_clarification_controls(trials):
-    study = {**STUDY, "gate_kind": "speed", "target_metric": "active_ms_to_first_correct_snapshot", "timed_case_ids": [f"case-{i}" for i in range(20)]}
+    study = {
+        **STUDY,
+        "gate_kind": "speed",
+        "target_metric": "active_ms_to_first_correct_snapshot",
+        "timed_case_ids": [f"case-{i}" for i in range(20)],
+    }
     replace_study(trials, study)
     for folder in trials:
         manifest = json.loads((folder / "manifest.json").read_text())
         grades = json.loads((folder / "grades.json").read_text())
         for outcome in grades["cases"].values():
-            outcome["semantic_metrics"] = {"snapshot_reviews_complete": True, "active_ms_to_first_correct_snapshot": 100 if manifest["variant"] == "baseline" else 80}
+            outcome["semantic_metrics"] = {
+                "snapshot_reviews_complete": True,
+                "active_ms_to_first_correct_snapshot": 100
+                if manifest["variant"] == "baseline"
+                else 80,
+            }
         case_id = "clarification-control"
-        manifest["corpus"].append({"id": case_id, "conversation": case_id, "expected_outcome": "clarification"})
+        manifest["corpus"].append(
+            {
+                "id": case_id,
+                "conversation": case_id,
+                "expected_outcome": "clarification",
+            }
+        )
         manifest["case_ids"].append(case_id)
         destination = folder / case_id
         destination.mkdir()
         run_id = f"{folder.name}-{case_id}"
-        write(destination / "run.json", {"run_id": run_id, "thread_id": run_id, "status": "clarification_required", "run_diagnostics": {}})
-        grades["cases"][case_id] = {**grades["cases"]["case-0"], "run_id": run_id, "run_sha256": file_hash(destination / "run.json"), "receipt_sha256": receipt_hash(destination), "semantic_metrics": {}}
+        write(
+            destination / "run.json",
+            {
+                "run_id": run_id,
+                "thread_id": run_id,
+                "status": "clarification_required",
+                "run_diagnostics": {},
+            },
+        )
+        grades["cases"][case_id] = {
+            **grades["cases"]["case-0"],
+            "run_id": run_id,
+            "run_sha256": file_hash(destination / "run.json"),
+            "receipt_sha256": receipt_hash(destination),
+            "semantic_metrics": {},
+        }
         write(folder / "manifest.json", manifest)
         grades["manifest_sha256"] = file_hash(folder / "manifest.json")
         write(folder / "grades.json", grades)
     result = compare_trials(study, trials)
     assert result["decision"] == "eligible_for_adoption"
     assert result["case_count"] == 21 and result["cases"][-1]["timed"] is False
-    update_grade(trials[-1], "clarification-control", {"outcome": "fail", "failures": ["clarification"]})
+    update_grade(
+        trials[-1],
+        "clarification-control",
+        {"outcome": "fail", "failures": ["clarification"]},
+    )
     assert compare_trials(study, trials)["decision"] == "retain_baseline"
 
 
@@ -416,7 +457,8 @@ def test_file_only_fingerprints_and_frozen_workbook_review(test_settings, tmp_pa
         assert uploaded.status_code == 201, uploaded.text
         thread = uploaded.json()["thread_id"]
         confirmed = client.post(
-            f"/api/conversations/{thread}/upload/confirm", json=fixture["review"]
+            f"/api/conversations/{thread}/uploads/{uploaded.json()['upload_id']}/confirm",
+            json=fixture["review"],
         )
         assert confirmed.status_code == 200, confirmed.text
         saved = services.results.get_unscoped(confirmed.json()["result_id"])

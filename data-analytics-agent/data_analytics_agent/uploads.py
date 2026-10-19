@@ -64,6 +64,7 @@ class UploadColumn(BaseModel):
 
 class UploadedFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    upload_id: str
     source_id: str
     thread_id: str
     filename: str
@@ -92,42 +93,107 @@ class UploadSource:
     examples: tuple = ()
 
 
-def get_upload(storage, source_id) -> UploadedFile | None:
-    return storage.get("uploads", source_id, UploadedFile)
+def get_upload(storage, upload_id) -> UploadedFile | None:
+    return storage.get("uploads", upload_id, UploadedFile)
 
 
-def upload_for_thread(services, thread_id) -> UploadedFile:
+def uploads_for_thread(services, thread_id) -> list[UploadedFile]:
     conversation = services.conversations.get(thread_id)
-    upload = get_upload(services.storage, conversation.source_id)
-    if upload is None or upload.thread_id != thread_id:
+    return [
+        item
+        for item in services.storage.load("uploads", UploadedFile).values()
+        if item.thread_id == thread_id and item.source_id == conversation.source_id
+    ]
+
+
+def upload_for_thread(services, thread_id, upload_id) -> UploadedFile:
+    conversation = services.conversations.get(thread_id)
+    upload = get_upload(services.storage, upload_id)
+    if (
+        upload is None
+        or upload.thread_id != thread_id
+        or upload.source_id != conversation.source_id
+    ):
         raise StoreNotFound(thread_id)
     return upload
 
 
-def upload_source(upload, settings):
+def _discard_uncommitted_result(services, result):
+    Path(result.parquet_path).unlink(missing_ok=True)
+    with services.storage.connect() as db:
+        db.execute(
+            "DELETE FROM metadata WHERE kind='datasets' AND id=?", (result.result_id,)
+        )
+    with services.results._lock:
+        services.results._items.pop(result.result_id, None)
+
+
+def file_source(services, source_id):
+    """Resolve a file workspace without constructing a warehouse client."""
+    if not source_id.startswith(("upload:", "documents:")):
+        return None
+    from data_analytics_agent.documents import Document
+
+    tables = [
+        item
+        for item in services.storage.load("uploads", UploadedFile).values()
+        if item.source_id == source_id
+    ]
+    docs = [
+        item
+        for item in services.storage.load("documents", Document).values()
+        if item.source_id == source_id
+    ]
+    if tables:
+        return upload_source(
+            tables,
+            services.settings,
+            documents=[doc.reference() for doc in docs],
+        )
+    if docs:
+        return UploadSource(
+            source_id=source_id,
+            name=docs[0].filename,
+            description="Attached documents and reviewed extracted tables.",
+            limits=ExecutionLimits(
+                services.settings.sql_timeout_seconds,
+                services.settings.max_result_rows,
+                services.settings.model_sample_rows,
+            ),
+            context=json.dumps(
+                {"tables": [], "documents": [doc.reference() for doc in docs]}
+            ),
+        )
+    return None
+
+
+def upload_source(tables, settings, *, documents):
     context = {
-        "filename": upload.filename,
-        "file_sha256": upload.sha256,
-        "saved_result_id": upload.result_id,
-        "rows": upload.row_count,
-        "excel_selection": upload.excel_selection.model_dump()
-        if upload.excel_selection
-        else None,
-        "import_warnings": upload.warnings,
-        "schema": [
-            {"column": c.name, "stored_type": c.stored_type} for c in upload.columns
+        "tables": [
+            {
+                "filename": item.filename,
+                "saved_result_id": item.result_id,
+                "rows": item.row_count,
+                "confirmed": item.confirmed,
+                "schema": [
+                    {"column": c.name, "stored_type": c.stored_type}
+                    for c in item.columns
+                ],
+                "grain": item.review.grain if item.review else "Unreviewed",
+                "declared_keys": item.review.key_columns if item.review else [],
+            }
+            for item in tables
+            if item.confirmed
         ],
-        "grain": upload.review.grain or "Unknown; clarify when material"
-        if upload.review
-        else "Unreviewed",
-        "declared_keys": upload.review.key_columns if upload.review else [],
-        "reviewed_types": upload.review.types if upload.review else {},
-        "source_freshness": "Unknown; upload time does not establish source freshness",
+        "documents": documents,
+        "source_freshness": "Unknown; upload time is not source freshness",
     }
     return UploadSource(
-        source_id=upload.source_id,
-        name=upload.filename,
-        description="Isolated uploaded file. Reviewed types describe structure, not governed business meaning.",
+        source_id=tables[0].source_id,
+        name=tables[0].filename
+        if len(tables) == 1
+        else f"{tables[0].filename} + {len(tables) - 1} tables",
+        description="Reviewed file workspace. Types describe structure, not governed business meaning. Joins require explicit business keys and cardinality checks.",
         limits=ExecutionLimits(
             settings.sql_timeout_seconds,
             settings.max_result_rows,
@@ -288,6 +354,8 @@ def stage_upload(
     content: bytes,
     filename: str,
     excel_selection: ExcelSelection | None = None,
+    thread_id: str | None = None,
+    document_reference: dict | None = None,
 ):
     if not content or len(content) > services.settings.upload_max_bytes:
         raise ValueError("Upload is empty or exceeds UPLOAD_MAX_BYTES.")
@@ -313,9 +381,31 @@ def stage_upload(
             table = _read_table(content, filename, services.settings)
     except pa.ArrowException as exc:
         raise ValueError(f"The file could not be read: {exc}") from exc
-    source_id = "upload:" + str(uuid4())
+    upload_id = "upload:" + str(uuid4())
+    new_conversation = thread_id is None
     with services._lock:
-        thread_id = services.conversations.create(source_id)
+        if new_conversation:
+            source_id = upload_id
+            thread_id = services.conversations.create(source_id)
+        else:
+            conversation = services.conversations.get(thread_id)
+            source_id = conversation.source_id
+            if not source_id.startswith(("upload:", "documents:")):
+                raise ValueError(
+                    "Add tables to a file workspace; warehouse/file enrichment requires a separate source decision."
+                )
+            if (
+                conversation.active_run_id
+                or thread_id in services.uploading_conversations
+                or thread_id in services.deleting_conversations
+            ):
+                raise ValueError(
+                    "Finish active work and file review before adding a table."
+                )
+            if any(
+                not item.confirmed for item in uploads_for_thread(services, thread_id)
+            ):
+                raise ValueError("Confirm the pending table before adding another.")
         services.uploading_conversations.add(thread_id)
     original_path = services.storage.artifacts / f"{uuid4()}.upload"
     sha = hashlib.sha256(content).hexdigest()
@@ -326,7 +416,9 @@ def stage_upload(
         file_bytes=len(content),
         excel_selection=excel_selection.model_dump() if excel_selection else None,
         warnings=warnings,
+        document_reference=document_reference,
     )
+    result = None
     try:
         original_path.write_bytes(content)
         result = services.results.save_batches(
@@ -351,6 +443,7 @@ def stage_upload(
                 )
             )
         upload = UploadedFile(
+            upload_id=upload_id,
             source_id=source_id,
             thread_id=thread_id,
             filename=filename,
@@ -364,26 +457,21 @@ def stage_upload(
             excel_selection=excel_selection,
             warnings=warnings,
         )
-        services.storage.put("uploads", source_id, upload)
+        services.storage.put("uploads", upload_id, upload)
         return upload
     except Exception:
         # Only this newly created, unreturned workspace is rolled back.
         original_path.unlink(missing_ok=True)
-        for item in services.results.list_for_conversation(
-            thread_id, source_id=source_id
-        ):
-            Path(item.parquet_path).unlink(missing_ok=True)
+        for item in [result] if result is not None else []:
+            _discard_uncommitted_result(services, item)
+        if new_conversation:
             with services.storage.connect() as db:
                 db.execute(
-                    "DELETE FROM metadata WHERE kind='datasets' AND id=?",
-                    (item.result_id,),
+                    "DELETE FROM metadata WHERE kind='conversations' AND id=?",
+                    (thread_id,),
                 )
-        with services.storage.connect() as db:
-            db.execute(
-                "DELETE FROM metadata WHERE kind='conversations' AND id=?", (thread_id,)
-            )
-        services.results.forget_conversations({thread_id})
-        services.conversations.forget_conversations({thread_id})
+            services.results.forget_conversations({thread_id})
+            services.conversations.forget_conversations({thread_id})
         raise
     finally:
         with services._lock:
@@ -423,8 +511,8 @@ def _convert(column, kind):
     return pc.cast(dates, pa.date32())
 
 
-def confirm_upload(services, thread_id, review: UploadReview):
-    upload = upload_for_thread(services, thread_id)
+def confirm_upload(services, thread_id, review: UploadReview, upload_id):
+    upload = upload_for_thread(services, thread_id, upload_id)
     if upload.confirmed:
         if upload.review == review:
             return upload
@@ -490,6 +578,7 @@ def confirm_upload(services, thread_id, review: UploadReview):
             types=review.types,
             grain=review.grain,
             key_columns=review.key_columns,
+            document_reference=original.upload_provenance.document_reference,
         ),
     )
     columns = [
@@ -504,5 +593,9 @@ def confirm_upload(services, thread_id, review: UploadReview):
             "columns": columns,
         }
     )
-    services.storage.put("uploads", upload.source_id, upload)
+    try:
+        services.storage.put("uploads", upload.upload_id, upload)
+    except Exception:
+        _discard_uncommitted_result(services, result)
+        raise
     return upload

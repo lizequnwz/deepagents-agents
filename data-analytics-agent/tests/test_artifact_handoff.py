@@ -14,7 +14,7 @@ from data_analytics_agent.reporting.tools import (
 
 def test_investigation_has_no_artifact_arguments(workspace):
     w = workspace
-    _, tool, _ = create_presentation_tools(
+    _, tool = create_presentation_tools(
         w.results, w.analyses, w.runs, w.conversations, source_id="test"
     )
     assert "artifact_ids" not in tool.args
@@ -121,7 +121,11 @@ def test_analysis_completion_cannot_claim_another_assignments_execution(workspac
         w.results, w.runs, w.analyses, source_id="test", limits=PythonExecutionLimits()
     )
     response = finish.func(
-        outcome="analysis_completed", answer="Finished", runtime=w.runtime("finish")
+        outcome="analysis_completed",
+        answer="Finished",
+        final_outputs={},
+        final_result_ids=[],
+        runtime=w.runtime("finish"),
     )
     assert response["ok"] is False
     assert not w.analyses.list_for_conversation(w.thread, source_id="test")
@@ -137,6 +141,9 @@ def test_analysis_synthesis_omits_code_and_logs_but_keeps_evidence():
 
     saved = DataAnalysisResult(
         outcome="analysis_completed",
+        analysis_kind="general",
+        final_outputs={"execution": ["mean"]},
+        final_result_ids=["derived"],
         input_result_ids=["input"],
         answer="Mean is 3",
         executions=[
@@ -212,13 +219,11 @@ def test_report_cannot_change_published_evidence(workspace):
     w = workspace
     selected = save(w, [{"amount": 4}])
     unrelated = save(w, [{"amount": 100}])
-    publish, _, _ = create_presentation_tools(
+    publish, _ = create_presentation_tools(
         w.results, w.analyses, w.runs, w.conversations, source_id="test"
     )
     publish.func(
-        findings=CoordinatorResponse(
-            answer="Four", result_ids=[selected.result_id]
-        ),
+        findings=CoordinatorResponse(answer="Four", result_ids=[selected.result_id]),
         runtime=w.runtime("publish"),
     )
     report = create_create_report_tool(
@@ -460,13 +465,28 @@ def test_chart_request_excludes_application_owned_fields(workspace):
     from tests.test_persistent_analyst import save
 
     w = workspace
-    dataset = save(w, [{'category': 'A', 'amount': 3}])
-    request = ChartRequest(result_id=dataset.result_id, chart_type='bar', title='Amount', x='category', y=['amount'])
-    assert not {'chart_id', 'version', 'source_result_id'} & set(ChartRequest.model_fields)
-    tool = create_chart_tool(w.results, w.runs, source_id='test')
-    result = tool.func(spec=request, runtime=w.runtime('chart-request'))
-    assert result['ok']
-    chart = ChartSpec.model_validate(result['chart'])
-    assert chart.chart_id and chart.version == 1 and chart.source_result_id == dataset.result_id
-    revision = tool.func(spec=request.model_copy(update={'previous_chart_id': chart.chart_id}), runtime=w.runtime('chart-revision'))
-    assert revision['ok'] and revision['chart']['version'] == 2
+    dataset = save(w, [{"category": "A", "amount": 3}])
+    request = ChartRequest(
+        result_id=dataset.result_id,
+        chart_type="bar",
+        title="Amount",
+        x="category",
+        y=["amount"],
+    )
+    assert not {"chart_id", "version", "source_result_id"} & set(
+        ChartRequest.model_fields
+    )
+    tool = create_chart_tool(w.results, w.runs, source_id="test")
+    result = tool.func(spec=request, runtime=w.runtime("chart-request"))
+    assert result["ok"]
+    chart = ChartSpec.model_validate(result["chart"])
+    assert (
+        chart.chart_id
+        and chart.version == 1
+        and chart.source_result_id == dataset.result_id
+    )
+    revision = tool.func(
+        spec=request.model_copy(update={"previous_chart_id": chart.chart_id}),
+        runtime=w.runtime("chart-revision"),
+    )
+    assert revision["ok"] and revision["chart"]["version"] == 2

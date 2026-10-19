@@ -1,6 +1,6 @@
 # Documentation
 
-Updated 3 October 2026. Start with the task you want to complete.
+Updated 18 October 2026. Start with the task you want to complete.
 
 | I want to… | Read |
 |---|---|
@@ -8,10 +8,10 @@ Updated 3 October 2026. Start with the task you want to complete.
 | Ask questions or review an upload | [User guide](user/using-the-agent.md) |
 | Try realistic questions | [Examples](user/deep-dive-examples.md) and [sample CSV](user/examples/monthly-index.csv) |
 | Inspect/replay portable work | [Downloadable analysis example](examples/README.md) |
-| Review current gaps and next-version options | [Agent review and prioritized plan](reviews/agent-review-2026-10-03.md) |
+| Review comparative lessons, current gaps and delivery options | [17 October improvement assessment](reviews/improvement-plan-2026-10-17.md), then [earlier code review](reviews/agent-review-2026-10-03.md) |
 | Understand the selected workspace direction and next work | [Handoff](../HANDOFF.md), the single active product plan |
 | Check delivered capabilities | [Current capability status](roadmap/implementation-progress.md) |
-| Verify the latest release | [Extended priority testing and observations](reviews/priority-followup-tests-2026-10-02.md) |
+| Verify the latest release | [18 October correctness checkup](reviews/checkup-2026-10-18.md) |
 | Check earlier Excel, usability and export work | [Historical implementation checks](reviews/README.md#earlier-implementation-checks) |
 | Check the latest ablation and review repair | [1 October outcome](reviews/ablation-outcomes-2026-10-01.md) |
 | Understand system boundaries | [Architecture](development/architecture.md) |

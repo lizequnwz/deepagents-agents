@@ -13,6 +13,7 @@ from types import MappingProxyType
 
 from sqlglot import exp, parse
 from sqlglot.errors import SqlglotError
+from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,20 @@ class CatalogBindings:
     field_dependencies: Mapping[tuple[str, str], tuple[str, ...]]
     metrics: Mapping[str, MetricBinding]
     columns: Mapping[str, frozenset[str]]
+
+
+def table_key(table: exp.Table, dialect: str) -> tuple[str, ...]:
+    """Compare physical identities using the database's identifier case rules."""
+    normalized = normalize_identifiers(table.copy(), dialect=dialect)
+    return tuple(
+        part.name if dialect == "snowflake" else part.name.casefold()
+        for part in normalized.parts
+    )
+
+
+def column_key(column: exp.Column, dialect: str) -> str:
+    identifier = normalize_identifiers(column.this.copy(), dialect=dialect)
+    return identifier.name if dialect == "snowflake" else identifier.name.casefold()
 
 
 def parse_expression(value, dialect):

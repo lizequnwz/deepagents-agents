@@ -161,6 +161,7 @@ def test_large_typed_extraction_python_pagination_download_and_restart(
         inputs={"facts": result.result_id},
         code="analysis_outputs={'count':len(datasets['facts'])}; output_datasets={'copy':datasets['facts'].copy()}",
         runtime=w.runtime("python"),
+        analysis_kind="general",
     )
     assert step["ok"], step
     derived = w.results.get_unscoped(step["output_datasets"]["copy"])
@@ -201,17 +202,20 @@ def test_iterative_python_repairs_reuses_multiple_inputs_and_saves_all_steps(wor
         inputs={"source": r.result_id},
         code="import pandas as pd\nf=datasets['source'].copy()\nf['numeric']=pd.to_numeric(f['value'])\nanalysis_outputs={'mean':f.numeric.mean()}\noutput_datasets={'features':f}",
         runtime=w.runtime("a"),
+        analysis_kind="general",
     )
     bad = execute.func(
         inputs={"features": a["output_datasets"]["features"]},
         code='raise ValueError("Repair this step")',
         runtime=w.runtime("bad"),
+        analysis_kind="general",
     )
     assert not bad["ok"] and "Repair this step" in bad["error"]
     b = execute.func(
         inputs={"features": a["output_datasets"]["features"], "original": r.result_id},
         code="analysis_outputs={'count':len(datasets['features'])+len(datasets['original'])}",
         runtime=w.runtime("b"),
+        analysis_kind="general",
     )
     assert b["ok"] and b["outputs"][0]["value"] == 80
     assert "execution_ids" not in finish.args
@@ -221,9 +225,12 @@ def test_iterative_python_repairs_reuses_multiple_inputs_and_saves_all_steps(wor
         outcome="analysis_completed",
         answer="The mean is 12.35.",
         method="Exploration",
+        final_outputs={a["execution_id"]: ["mean"], b["execution_id"]: ["count"]},
+        final_result_ids=[],
         runtime=w.runtime("finish"),
     )
-    assert len(completed["executions"]) == 3
+    assert len(completed["executions"]) == 2
+    assert completed["execution_count"] == 3
     persisted = DataAnalysisStore(LocalStorage(w.storage.root)).get(
         completed["analysis_id"], w.thread, source_id="test"
     )
@@ -268,6 +275,7 @@ def test_saved_sql_profiles_and_incomplete_population(workspace):
         inputs={"incomplete": capped.result_id},
         code='analysis_outputs={"count":3}',
         runtime=w.runtime("capped"),
+        analysis_kind="general",
     )
     assert refused["needs_sql_reshape"] and not w.runs.get_python_execution(w.run)
 
@@ -314,7 +322,7 @@ def test_shared_chart_versions_uncertainty_and_report_metric_binding(workspace):
     assert (
         revised["chart"]["version"] == 2 and revised["chart_id"] != created["chart_id"]
     )
-    publish, _, _ = create_presentation_tools(
+    publish, _ = create_presentation_tools(
         w.results, w.analyses, w.runs, w.conversations, source_id="test"
     )
     publish.func(
@@ -450,6 +458,7 @@ def test_chart_sampling_is_display_only_and_payload_is_bounded(workspace):
         inputs={"data": shown.result_id},
         code='analysis_outputs={"n":1}',
         runtime=w.runtime("reject-sample"),
+        analysis_kind="general",
     )
     assert not rejected["ok"] and "parent" in rejected["error"]
 
@@ -579,7 +588,7 @@ def test_publication_reference_errors_are_recoverable_and_do_not_publish(
         missing = w.results.save(
             thread_id=other, source_id="test", columns=["total"], rows=[{"total": 999}]
         ).result_id
-    publish, _, _ = create_presentation_tools(
+    publish, _ = create_presentation_tools(
         w.results, w.analyses, w.runs, w.conversations, source_id="test"
     )
     findings = CoordinatorResponse(

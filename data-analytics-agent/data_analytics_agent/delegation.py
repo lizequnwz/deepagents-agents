@@ -58,7 +58,13 @@ class DelegationMiddleware(AgentMiddleware):
                 update={
                     k: v
                     for k, v in result.update.items()
-                    if k not in {"thread_id", "run_id", "source_id", "question", "analytical_input"}
+                    if k
+                    not in {
+                        "thread_id",
+                        "run_id",
+                        "source_id",
+                        "question",
+                    }
                 },
             )
         return result
@@ -70,6 +76,10 @@ class DelegationMiddleware(AgentMiddleware):
         if slot is None:
             return handler(request)
         with slot:
+            if reason := self.runs.analysis_stop_reason(request.state["run_id"]):
+                return ToolMessage(
+                    content=reason, tool_call_id=request.tool_call["id"], status="error"
+                )
             if self.runs.cancel_event(request.state["run_id"]).is_set():
                 raise InterruptedError("Run stopped before assignment.")
             return self._result(handler(request))
@@ -85,6 +95,10 @@ class DelegationMiddleware(AgentMiddleware):
         while not slot.acquire(blocking=False):
             await asyncio.sleep(0.05)
         try:
+            if reason := self.runs.analysis_stop_reason(request.state["run_id"]):
+                return ToolMessage(
+                    content=reason, tool_call_id=request.tool_call["id"], status="error"
+                )
             if self.runs.cancel_event(request.state["run_id"]).is_set():
                 raise InterruptedError("Run stopped before assignment.")
             return self._result(await handler(request))

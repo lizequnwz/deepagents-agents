@@ -34,7 +34,7 @@ from data_analytics_agent.ui.uploads import (
     render_uploaded_source,
     render_workbook_selection,
 )
-from data_analytics_agent.ui.scope import render_input_selector, render_scope_controls
+from data_analytics_agent.ui.workspace import render_workspace_documents
 
 load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -72,29 +72,32 @@ def clear_conversation_state() -> None:
         "starter_question_",
         "chat_input_",
         "voice_",
-        "analytical_dataset_",
-        "scope_",
-        "show_scope_",
     )
     for key in list(st.session_state):
         if key.startswith(removable_prefixes):
             del st.session_state[key]
     st.session_state["active_run_id"] = None
     st.session_state["review_notice"] = None
+    st.session_state.pop("pending_file_conversation", None)
 
 
-def open_attachment(submission):
+def open_attachment(submission, *, target_thread_id=None):
     try:
         with st.spinner("Opening your file…"):
-            uploaded = stage_attachment(client, submission, upload_max_bytes)
+            uploaded = stage_attachment(
+                client, submission, upload_max_bytes, thread_id=target_thread_id
+            )
     except APIError as exc:
         st.error(str(exc))
         return
+    st.session_state.pop("pending_file_conversation", None)
     if uploaded is None:
         st.rerun()
-    clear_conversation_state()
     new_thread = uploaded["thread_id"]
+    if new_thread != target_thread_id:
+        clear_conversation_state()
     st.session_state.setdefault("upload_questions", {})[new_thread] = submission.text
+    st.session_state["conversation_notice"] = "Attachment added to this conversation."
     st.query_params["thread_id"] = new_thread
     st.session_state["current_thread_id"] = None
     st.rerun()
@@ -251,19 +254,11 @@ def render_active_run(
                     answer = st.text_input(
                         "Your answer", key=f"clarification_answer_{run_id}"
                     )
-                    allow_expansion = (
-                        st.checkbox(
-                            "Allow broader or newer source retrieval", value=False
-                        )
-                        if clarification.get("source_expansion")
-                        else False
-                    )
                     if st.form_submit_button("Continue") and answer.strip():
                         client.answer_clarification(
                             run_id,
                             answer,
                             interrupt_id=clarification["interrupt_id"],
-                            allow_source_expansion=allow_expansion,
                         )
                         st.rerun()
             if state == "approval_required":
@@ -372,7 +367,7 @@ except APIError as exc:
 if conversation is None:
     render_page_header()
     st.info(
-        "Upload a CSV, Parquet or Excel file to start. A warehouse connection is optional."
+        "Upload a data table or PDF, text or Markdown document to start. A warehouse connection is optional."
     )
     for error in data_sources.get("errors", []):
         st.caption(f"Source configuration: {error}")
@@ -380,7 +375,7 @@ if conversation is None:
         for error in configured.get("errors", []):
             st.caption(f"{configured['name']}: {error}")
     submission = chat_submission(
-        "Ask a question and attach a CSV, Parquet or Excel file",
+        "Ask a question and attach data or a document",
         key="chat_input_upload",
         max_bytes=upload_max_bytes,
         client=client,
@@ -389,7 +384,7 @@ if conversation is None:
         if submission.files:
             open_attachment(submission)
         else:
-            st.info("Attach a CSV, Parquet or Excel file to start this conversation.")
+            st.info("Attach a data table or document to start this conversation.")
     st.stop()
 
 if conversation["source_id"] not in sources_by_id:
@@ -495,25 +490,46 @@ with st.sidebar:
 
 render_page_header(source)
 
+pending_file = st.session_state.get("pending_file_conversation")
+if pending_file and pending_file["thread_id"] == thread_id:
+    st.info(
+        "This conversation uses a warehouse. Analyze the attached table in a new "
+        "file conversation; your existing conversation will stay available."
+    )
+    with st.container(horizontal=True):
+        if st.button("Start file conversation", disabled=bool(active_run_id)):
+            open_attachment(pending_file["submission"])
+        if st.button("Cancel attachment"):
+            st.session_state[f"chat_input_{thread_id}"] = pending_file["submission"].text
+            st.session_state.pop("pending_file_conversation")
+            st.rerun()
+
 if source["backend_type"] == "upload":
-    uploaded_file = client.get_upload(thread_id)
-    if not uploaded_file["confirmed"]:
+    uploaded_files = client.get_uploads(thread_id)
+    pending_upload = next((item for item in uploaded_files if not item["confirmed"]), None)
+    if pending_upload:
         pending_question = st.session_state.get("upload_questions", {}).get(thread_id)
         if pending_question:
             st.info("After you confirm the data, I’ll answer: " + pending_question)
-        render_upload_review(client, uploaded_file)
+        render_upload_review(client, pending_upload)
         st.stop()
-    pending_question = st.session_state.get("upload_questions", {}).pop(thread_id, None)
-    if pending_question:
-        try:
-            client.send_message(thread_id, pending_question)
-            conversation = client.get_conversation(thread_id)
-            active_run_id = conversation.get("active_run_id")
-            st.session_state["active_run_id"] = active_run_id
-        except APIError as exc:
-            st.session_state[f"chat_input_{thread_id}"] = pending_question
-            st.error(str(exc))
-    render_uploaded_source(client, uploaded_file)
+    for uploaded_file in uploaded_files:
+        render_uploaded_source(client, uploaded_file)
+
+pending_question = st.session_state.get("upload_questions", {}).pop(thread_id, None)
+if pending_question:
+    try:
+        client.send_message(thread_id, pending_question)
+        conversation = client.get_conversation(thread_id)
+        active_run_id = conversation.get("active_run_id")
+        st.session_state["active_run_id"] = active_run_id
+    except APIError as exc:
+        st.session_state[f"chat_input_{thread_id}"] = pending_question
+        st.error(str(exc))
+
+render_workspace_documents(
+    client, thread_id, is_file=source["backend_type"] == "upload", disabled=bool(active_run_id)
+)
 
 
 if st.session_state.get("conversation_notice"):
@@ -543,16 +559,6 @@ for saved_run_id in conversation.get("run_ids") or []:
         render_active_run(client, saved_run_id, thread_id, conversation["source_id"])
 
 chat_input_key = f"chat_input_{thread_id}"
-selected_result_id, selected_scope = render_input_selector(
-    client, conversation, disabled=bool(active_run_id)
-)
-if not active_run_id:
-    render_scope_controls(
-        client,
-        conversation,
-        selected_result_id,
-        is_warehouse=source["backend_type"] != "upload",
-    )
 if not conversation["turns"] and not conversation.get("run_ids"):
     render_empty_state(
         thread_id,
@@ -569,7 +575,20 @@ submission = chat_submission(
     client=client,
 )
 if submission and submission.files:
-    open_attachment(submission)
+    if active_run_id:
+        st.error("Wait for the current work to finish or stop it before attaching a file.")
+    else:
+        is_document = submission.files[0].name.lower().endswith((".pdf", ".txt", ".md"))
+        if source["backend_type"] == "upload" or is_document:
+            open_attachment(submission, target_thread_id=thread_id)
+        elif conversation["turns"] or conversation.get("run_ids"):
+            st.session_state["pending_file_conversation"] = {
+                "thread_id": thread_id,
+                "submission": submission,
+            }
+            st.rerun()
+        else:
+            open_attachment(submission)
 if submission and not submission.files and submission.text.strip():
     typed_question = submission.text
     try:
@@ -586,8 +605,6 @@ if submission and not submission.files and submission.text.strip():
             run = client.send_message(
                 thread_id,
                 typed_question,
-                selected_result_id=selected_result_id,
-                scope=selected_scope,
             )
         st.session_state["active_run_id"] = active_run_id or run["run_id"]
         st.rerun()

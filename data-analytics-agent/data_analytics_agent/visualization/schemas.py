@@ -29,6 +29,8 @@ class ChartType(StrEnum):
     BOX = "box"
     HEATMAP = "heatmap"
     MAP = "map"
+    WATERFALL = "waterfall"
+    FUNNEL = "funnel"
 
 
 class Palette(StrEnum):
@@ -104,6 +106,16 @@ class ChartRequest(VisualizationModel):
         description="Saved x column. Scatter axes must be numeric; use a line chart for calendar dates.",
     )
     y: list[str] = Field(default_factory=list)
+    waterfall_measure: str | None = Field(
+        default=None,
+        description="Waterfall saved column: first absolute baseline, then relative contributions, then total ending value. Saved row order is retained.",
+    )
+    stage_order: list[str] | None = Field(
+        default=None,
+        min_length=2,
+        max_length=30,
+        description="Funnel stage labels in explicit process order, covering every saved stage exactly once. Counts must not increase in this order.",
+    )
     secondary_y: str | None = None
     color: str | None = None
     size: str | None = None
@@ -180,6 +192,34 @@ class ChartRequest(VisualizationModel):
     @model_validator(mode="after")
     def validate_shape(self) -> ChartRequest:
         chart_type = self.chart_type
+        if self.waterfall_measure is not None and chart_type is not ChartType.WATERFALL:
+            raise ValueError(
+                "waterfall_measure is supported only for waterfall charts."
+            )
+        if self.stage_order is not None and chart_type is not ChartType.FUNNEL:
+            raise ValueError("stage_order is supported only for funnel charts.")
+        if chart_type in {ChartType.WATERFALL, ChartType.FUNNEL}:
+            if not self.x or len(self.y) != 1:
+                raise ValueError(f"{chart_type} requires x and exactly one y.")
+            if (
+                self.color is not None
+                or self.sort_by is not None
+                or self.category_limit is not None
+            ):
+                raise ValueError(
+                    f"{chart_type} does not support color, sorting, or category limits; use the complete saved table."
+                )
+            if chart_type is ChartType.WATERFALL and not self.waterfall_measure:
+                raise ValueError("waterfall requires a waterfall_measure saved column.")
+            if chart_type is ChartType.FUNNEL:
+                if not self.stage_order:
+                    raise ValueError("funnel requires explicit stage_order.")
+                if any(not stage.strip() for stage in self.stage_order) or len(
+                    set(self.stage_order)
+                ) != len(self.stage_order):
+                    raise ValueError(
+                        "stage_order must contain unique nonblank stage labels."
+                    )
         map_fields = {
             self.location,
             self.region,
@@ -294,8 +334,14 @@ class ChartRequest(VisualizationModel):
                     "US city/state locations."
                 )
 
-        if self.orientation == "horizontal" and chart_type is not ChartType.BAR:
-            raise ValueError("horizontal orientation is supported only for bar.")
+        if self.orientation == "horizontal" and chart_type not in {
+            ChartType.BAR,
+            ChartType.WATERFALL,
+            ChartType.FUNNEL,
+        }:
+            raise ValueError(
+                "horizontal orientation is supported only for bar, waterfall, or funnel."
+            )
         if len(self.y) > 1 and self.color is not None:
             raise ValueError(
                 "multi-series charts cannot also use a color grouping column."
@@ -314,8 +360,12 @@ class ChartRequest(VisualizationModel):
             )
         if self.lower_bound and (chart_type is not ChartType.LINE or self.color):
             raise ValueError("Uncertainty bands require an ungrouped line chart.")
-        if self.interval_series is not None and (not self.interval or self.interval_series not in self.y):
-            raise ValueError("interval_series must name a y series with declared bounds.")
+        if self.interval_series is not None and (
+            not self.interval or self.interval_series not in self.y
+        ):
+            raise ValueError(
+                "interval_series must name a y series with declared bounds."
+            )
         if self.lower_bound and len(self.y) > 1 and self.interval_series is None:
             raise ValueError("Multi-series bounds require an explicit interval_series.")
         if self.forecast_start and chart_type is not ChartType.LINE:

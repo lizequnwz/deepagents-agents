@@ -949,9 +949,7 @@
     "id": "saved-population-follow-up",
     "source": "fixture",
     "conversation": "saved-population",
-    "question": "Using only this selected population, compare recorded revenue for West with the other regions. Keep its saved scope and units and provide the report.",
-    "selected_dataset_from": "saved-population-base",
-    "selected_dataset_label": "Complete monthly population",
+    "question": "Using the Complete monthly population dataset saved in the previous answer, compare recorded revenue for West with the other regions. Keep that dataset's population and units and provide the report.",
     "expected_outcome": "complete",
     "held_out": true,
     "scenarios": [

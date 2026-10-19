@@ -503,7 +503,7 @@ result = {
 with patch("data_analytics_agent.ui.components._saved_result", return_value=result):
     render_answer(AgentAPIClient("http://localhost:8000"), {
         "answer": "Forecast ready", "results": [{"result_id": "forecast"}],
-        "analyses": [{"executions": [{"execution_id": "exec-1",
+        "analyses": [{"final_outputs": {}, "executions": [{"execution_id": "exec-1",
             "executed_python": "forecast = model.predict()"}]}],
     }, turn_key="test", source_id="sales")
 """).run()

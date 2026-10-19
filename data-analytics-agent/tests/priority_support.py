@@ -19,22 +19,11 @@ class SavedPopulationGraph:
         self.services, self.base_result_id = services, base_result_id
 
     async def astream_events(self, state, **kwargs):
-        s = self.services
-        run = s.runs.get(state["run_id"])
-        if run.fresh_source_required:
-            raise RuntimeError(
-                "Synthetic warehouse refresh failed; previous report is preserved."
-            )
         return await self.answer(state)
 
     async def answer(self, state):
         s = self.services
         run = s.runs.get(state["run_id"])
-        selected = (
-            run.analytical_input.input_result_id
-            if run.analytical_input
-            else self.base_result_id
-        )
         query = create_query_saved_results_tool(
             s.results, s.runs, source_id=run.source_id
         )
@@ -44,13 +33,13 @@ class SavedPopulationGraph:
 
         total = query.func(
             query="SELECT count(*) AS records FROM snapshot",
-            bindings={"snapshot": selected},
+            bindings={"snapshot": self.base_result_id},
             purpose="Population count",
             runtime=runtime("total"),
         )
         grouped = query.func(
             query='SELECT "Name" AS artist, count(*) AS records FROM snapshot GROUP BY "Name" ORDER BY "Name"',
-            bindings={"snapshot": selected},
+            bindings={"snapshot": self.base_result_id},
             purpose="Records by artist",
             runtime=runtime("grouped"),
         )
@@ -69,7 +58,7 @@ class SavedPopulationGraph:
             chart_ids.append(chart["chart_id"])
         count = s.results.get_unscoped(total["result_id"]).rows[0]["records"]
         response = CoordinatorResponse(
-            answer=f"The selected population contains {count} records.",
+            answer=f"The saved dataset contains {count} records.",
             result_ids=[total["result_id"], grouped["result_id"]],
             chart_ids=chart_ids,
         )
@@ -103,42 +92,3 @@ class SavedPopulationGraph:
             runtime=runtime("report"),
         )
         return Stream(response)
-
-
-class FreshPopulationGraph(SavedPopulationGraph):
-    """Refresh with real local source SQL, then follow the shared scope path."""
-
-    async def astream_events(self, state, **kwargs):
-        from data_analytics_agent.agents.text_to_sql.tools import (
-            create_execute_sql_tool,
-        )
-
-        s = self.services
-        run = s.runs.get(state["run_id"])
-        if run.fresh_source_required:
-            runtime = SimpleNamespace(state=state, tool_call_id="fresh-source")
-            source = create_execute_sql_tool(
-                s.source(run.source_id),
-                s.backend_for_source(run.source_id),
-                s.results,
-                s.runs,
-                catalog=s.semantic_catalog_for_source(run.source_id),
-            )
-            result = source.func(
-                query="SELECT ArtistId, Name FROM Artist",
-                purpose="Fresh complete artists",
-                runtime=runtime,
-            )
-            bind = next(
-                t
-                for t in create_presentation_tools(
-                    s.results,
-                    s.analyses,
-                    s.runs,
-                    s.conversations,
-                    source_id=run.source_id,
-                )
-                if t.name == "bind_refreshed_input"
-            )
-            bind.func(result_id=result["result_id"], runtime=runtime)
-        return await self.answer(state)

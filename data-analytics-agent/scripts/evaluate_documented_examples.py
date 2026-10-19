@@ -71,10 +71,18 @@ def save_receipts(client, call, folder, state):
     # erase a failed, partial, or successful model outcome.
     write_json(folder / "run.json", state)
     answer = state.get("answer") or state.get("findings") or {}
-    result_ids = list(dict.fromkeys([
-        *(ref["result_id"] for ref in answer.get("results", [])),
-        *(r["result_id"] for r in state.get("evaluation_receipts", []) if r.get("result_id")),
-    ]))
+    result_ids = list(
+        dict.fromkeys(
+            [
+                *(ref["result_id"] for ref in answer.get("results", [])),
+                *(
+                    r["result_id"]
+                    for r in state.get("evaluation_receipts", [])
+                    if r.get("result_id")
+                ),
+            ]
+        )
+    )
     for rid in result_ids:
         for format in ("csv", "parquet"):
             response = client.get(
@@ -169,12 +177,14 @@ def run_case(case, cases, output, threads, client, call):
     thread = threads[group]
     if case["source"] == "upload" and not (folder / "request.json").exists():
         # The confirmation is idempotent for the exact same reviewed schema.
-        fixture = next(
-            c["upload"] for c in cases if c["conversation"] == group and c.get("upload")
+        upload_case = next(
+            c for c in cases if c["conversation"] == group and c.get("upload")
         )
+        fixture = upload_case["upload"]
+        upload = json.loads((output / upload_case["id"] / "upload.json").read_text())
         review = call(
             "POST",
-            f"/api/conversations/{thread}/upload/confirm",
+            f"/api/conversations/{thread}/uploads/{upload['upload_id']}/confirm",
             json=fixture["review"],
         )
         write_json(folder / "review.json", review)
@@ -193,14 +203,6 @@ def run_case(case, cases, output, threads, client, call):
         run_id = request["run_id"]
     else:
         message = {"message": case["question"]}
-        if selected_case := case.get("selected_dataset_from"):
-            parent = json.loads((output / selected_case / "run.json").read_text())
-            candidates = (parent.get("answer") or {}).get("results", [])
-            label = case.get("selected_dataset_label")
-            matches = [r for r in candidates if not label or r.get("short_label") == label]
-            if len(matches) != 1:
-                raise ValueError("Selected dataset fixture requires one exact saved label from the preceding receipt.")
-            message["selected_result_id"] = matches[0]["result_id"]
         created = call(
             "POST",
             f"/api/conversations/{thread}/messages",

@@ -27,6 +27,9 @@ async def test_checkpoint_restart_reuses_committed_step_and_executes_exact_edite
     source = save(w, [{"value": 1}, {"value": 2}])
     code = "analysis_outputs={'total':datasets['sales'].value.sum()}"
     config = {"configurable": {"thread_id": w.run}}
+    w.runs.begin_assignment(
+        w.run, "checkpoint-assignment", "data-analysis", "Sum values"
+    )
 
     def graph(saver, results, runs, analyses):
         execute, _ = create_analysis_tools(
@@ -39,6 +42,7 @@ async def test_checkpoint_restart_reuses_committed_step_and_executes_exact_edite
                 inputs={"sales": source.result_id},
                 code=code,
                 runtime=SimpleNamespace(state=state, tool_call_id="committed"),
+                analysis_kind="general",
             )
             return {
                 "messages": [
@@ -53,6 +57,7 @@ async def test_checkpoint_restart_reuses_committed_step_and_executes_exact_edite
                 inputs={"sales": source.result_id},
                 code=edited,
                 runtime=SimpleNamespace(state=state, tool_call_id="edited"),
+                analysis_kind="general",
             )
             return {}
 

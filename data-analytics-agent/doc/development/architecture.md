@@ -15,6 +15,11 @@ flowchart TD
     S --> Source[Configured SQL source]
     S --> Duck[DuckDB saved-data queries]
     P --> Py[Fresh Python subprocess per execution]
+    Py --> Methods[Reusable analytical procedures]
+    UI --> Intake[Separate table review and document extraction]
+    Intake --> D
+    Intake --> Docs[Cited document context]
+    Docs --> C
     Source --> D[Typed Parquet datasets]
     Duck --> D
     D --> Duck
@@ -38,6 +43,8 @@ metadata-only discussion directly. SQL owns warehouse access and descriptive
 transformations; Python owns analysis over explicit saved artifacts. Python can
 request more data through the coordinator, which makes a sequential SQL
 assignment and resumes the analysis. There are no fixed one-delegation rules.
+The same coordinator and two specialists serve the expanded analytical methods;
+each method is an ordinary Python procedure rather than another agent.
 
 `datasets.py` handles bounded extraction, typed Parquet and full-artifact
 summaries. `stores.py` handles conversation/run/analysis/report state using
@@ -52,6 +59,50 @@ On startup, unfinished computations become paused and pending reviews remain
 reviewable. Each tool registers artifacts directly and journals its committed
 output under run/assignment/tool-call identity for specialist work. Final assembly resolves explicit references;
 it does not scan backward through messages or guess embedded JSON schemas.
+
+## Reusable analytical procedures
+
+`analysis/` supplies small pandas procedures that return named DataFrames for
+`output_datasets`. The existing execution, review, lineage, chart and reporting
+paths save and publish these results. The analyst chooses and inspects the
+procedure through the analysis skill; no algorithm registry or new workflow
+engine is involved. The seven delivered families are:
+
+| Family | Procedure and evidence |
+|---|---|
+| Exploration and preparation | Full-population profiles, numeric/categorical distributions, pairwise correlations with sample counts, declared-date coverage and explicit conversion, fill, derived-column, drop and deduplication operations with an audit |
+| Comparison and diagnostics | Descriptive group comparisons, keyed reconciliation and additive change contributions; unmatched groups and missing measures remain visible |
+| Customer journeys | Retention over declared cohorts, ordered fixed-window funnels with right censoring, and deterministic RFM scores with segment profiles |
+| Statistical comparison | Independent-group Welch mean differences and Hedges' g, or binary risk differences with Newcombe intervals and Fisher tests; sample/exclusion counts and undefined outcomes are saved |
+| Prediction | Fixed Ridge regression or binary logistic pipelines with training-only preprocessing, declared random/time/group splits, simple baselines, held-out scores and scored rows |
+| Time series | Explicit-frequency trend/STL diagnostics and residual anomaly flags; chronological ETS forecast evaluation followed by a final refit, with saved baseline/candidate predictions and declared model-based intervals |
+| Scenarios | Cartesian grids of explicit scalar assumptions and a caller-supplied formula; undefined calculations are retained, and ranges have no assigned probability coverage |
+
+Methods require task-specific choices rather than inferring business meaning
+from column names. They preserve population/exclusion or censoring evidence and
+unknown units. Reconciliation requires inputs at the same declared grain; additive
+contributions are not causal explanations. Group inference assumes independent
+observations and does not identify a causal effect. Prediction requires a declared
+account of feature availability; split checks cannot detect every leakage path.
+Time-series helpers require prepared calendar series and never infer a source
+cutoff from first/last transactions. These are implemented procedures with local
+numerical checks, not provider accuracy or user-study results.
+
+## Analytical completion
+
+Every Python execution declares general or forecast intent. Forecast intent stays
+attached to the assignment across general checks and restart. Completion selects
+final_outputs by execution ID/name and final_result_ids from successful assignment
+outputs. A declared forecast needs selected saved predictions and validated
+evaluation before completion; otherwise it remains partial. Full execution history
+is retained, but synthesis, UI diagnostics and reports use final output selections.
+Material dataset references are distinct from transitive supporting lineage.
+
+Native call counters remain intact after exhaustion. The durable run marker blocks
+further computation/delegation, forces partial publication and enables a bounded
+coordinator allowance of eight model calls and sixteen tool calls for presentation,
+within the separate time budget. In-flight work remains bounded by existing worker
+limits. A failed presentation retains saved evidence and its report-retry path.
 
 ## Findings, reports, and recovery
 
@@ -104,9 +155,11 @@ widget keys. Immutable previews/reports are cached by ID with bounded caches.
 Full downloads stream separately from preview pages. Conversation changes cause
 an app rerun; ordinary active-run refresh does not rebuild the conversation.
 
-Constraints: one process, one local user, one source per conversation, sequential
-source queries. No persistent arbitrary Python object state, cross-conversation
-learning, or obsolete in-memory-state migration.
+Constraints: one process, one local user, one warehouse or isolated file workspace
+per conversation, sequential source queries. A file workspace may contain multiple
+separately reviewed tables; warehouse conversations may attach documents as context
+but cannot enrich warehouse data with uploaded tables. No persistent arbitrary
+Python object state, cross-conversation learning, or obsolete in-memory-state migration.
 
 
 ## Semantic context
@@ -135,20 +188,26 @@ reporting runs, fails or is retried. The composer remains outside the polling
 fragment so typing and focus persist.
 
 
-## Isolated uploaded files
+## Reviewed file workspaces and document context
 
-`uploads.py` stages one bounded CSV/Parquet/Excel table in its own conversation and
-requires explicit schema confirmation before any run. CSV first enters Arrow as
+`uploads.py` stages bounded CSV/Parquet/Excel tables in an isolated file conversation
+and requires explicit schema confirmation for each table before analytical use.
+The chat **+** button creates a file conversation or appends another table to the
+current file workspace. CSV first enters Arrow as
 text; Parquet retains supported scalar types. `excel.py` uses read-only `openpyxl`
 to inspect `.xlsx` worksheets and normalize one explicit header/table range through
 the same Arrow/Parquet review path. Range and formula-cache choices are saved;
-formula recalculation and multiple-sheet joins are unsupported. Type suggestions and review checks
+each additional worksheet table must be imported and reviewed separately. Formula
+recalculation is unsupported. Type suggestions and review checks
 use the full bounded population. Confirmation creates an immutable reviewed
 Parquet child, retains original bytes and snapshot, and saves SHA-256, selected
 types, declared grain and verified row keys. Unsupported nested types, invalid
 casts, duplicate declared keys and oversized files fail without truncation.
 
-Uploads are source-scoped evidence, not entries in the shared warehouse registry
+All reviewed tables in a file workspace share its source identity. Saved-data SQL
+may combine named tables after resolving keys, grain and population meaning; a
+matching column name does not establish a relationship. Uploads remain source-scoped
+evidence, not entries in the shared warehouse registry
 or generated OSI catalogs. Coordinator and SQL specialist use the same harness
 with reviewed file context, omitting warehouse/semantic tools. SQL binds saved
 artifacts into the existing external-access-disabled DuckDB query path; Python
@@ -158,9 +217,11 @@ curated semantic catalog requirements.
 
 `POST /api/uploads/workbook` inspects workbook bytes before creating a conversation.
 `POST /api/uploads?filename=...` accepts raw file bytes and creates the staged
-conversation. `GET /api/conversations/{id}/upload` returns at most ten preview rows
-and review metadata; `POST /api/conversations/{id}/upload/confirm` commits explicit
-types/grain/keys. `GET /api/conversations/{id}/source` resolves that isolated
+conversation, or appends a table when its file-workspace `thread_id` is supplied.
+`GET /api/conversations/{id}/uploads` lists its table records.
+`GET /api/conversations/{id}/uploads/{upload_id}` returns at most ten preview rows
+and review metadata; `POST /api/conversations/{id}/uploads/{upload_id}/confirm`
+commits that table's explicit types/grain/keys. `GET /api/conversations/{id}/source` resolves that isolated
 source. Upload sources never appear in the reusable source listing. Imports and
 confirmation run off the event loop; history deletion refuses active imports or
 reviews. Restart reopens staged or confirmed files. Source-configuration errors
@@ -170,6 +231,23 @@ Excel staging also requires `sheet`, `cell_range` and, when applicable, explicit
 `use_cached_formulas` acceptance. Cached formula freshness is unknown. Original
 bytes/hash, selected range, warnings, types and keys remain visible on reopening
 and in report provenance.
+
+`documents.py` accepts readable PDF, UTF-8 text and Markdown in a new conversation
+or as context attached to an existing one. Extraction runs in a bounded local
+subprocess and retains original bytes/hash, parsed pages and candidate tables.
+The coordinator's `list_documents`, `search_documents` and `read_document` tools
+return bounded excerpts with document/page/line references. Document text is
+unreviewed context, never instructions or accepted metric semantics. Scanned PDFs
+require OCR before intake; no OCR or general repository/browser tooling is added.
+
+`POST /api/documents` stages documents; conversation-scoped list, inspect and
+download endpoints expose their provenance. Selecting a candidate PDF or Markdown
+table stages a separate upload through the existing schema-review path. Numerical
+use waits for confirmation. Warehouse conversations allow context documents only;
+their extracted tables cannot become a second analytical source. Published document
+references appear in reports and analysis exports, while reviewed table provenance
+retains its document/page/table origin. General warehouse discovery, arbitrary
+workspace code authoring and cross-source federation remain outside this expansion.
 
 
 ## Plans and concurrent analysis assignments
@@ -207,10 +285,15 @@ chart discovery tools recover valid scoped references; invalid model selections
 produce correction feedback rather than aborting the run. Scope validation remains
 mandatory. Available artifacts are not automatically selected for publication.
 
-The composer uses native `st.chat_input` attachments. An attachment creates a new
-isolated file conversation; an optional question waits in UI session state until
-schema confirmation, then is consumed once. Reloading the confirmed conversation
-does not replay the question. The sidebar upload entry was removed.
+The composer uses native `st.chat_input` attachments as the sole upload entry.
+Tables join the current file workspace; documents join either source type. A table
+attached in an established warehouse conversation offers a separate file conversation.
+An optional table question waits in UI session state until schema confirmation,
+then is consumed once. A document question proceeds in the current conversation.
+Reloading does not replay the question. The composer keeps a stable configuration
+through active work and completion so drafts survive polling. An attachment
+submitted during active work receives feedback to finish or stop that work first;
+text and voice corrections remain available.
 
 ## Model-authored choices and application-owned responses
 
@@ -218,8 +301,8 @@ does not replay the question. The sidebar upload entry was removed.
 contains `answer`, `assumptions`, ordered `result_ids`, `analysis_ids`, `chart_ids`,
 `partial`, and `unresolved_questions`. Interpretation belongs in `answer` rather
 than a duplicate narrative field. Evidence resolution derives the primary dataset
-from the ordered selection and attaches transitive lineage, exact SQL, stored
-analysis executions, charts, and the report. Selection remains model-authored:
+from the ordered material selection and final analytical datasets. Transitive
+lineage, exact SQL and full execution attempts remain supporting provenance. Selection remains model-authored:
 not every retrieved diagnostic dataset belongs in the published answer.
 
 `ChartRequest` contains chart choices and `previous_chart_id` for revisions.
@@ -228,7 +311,7 @@ Run state, diagnostics, approval details, execution profiles, and persistence
 records are internal/application contracts, not model-generated final responses.
 The obsolete, unused `ReportBrief` contract has been removed.
 
-API contract **19** exposes all actions in an interrupt as one ordered review,
+API contract **22** exposes all actions in an interrupt as one ordered review,
 including all named Python inputs. The UI submits one decision per action together
 with the current interrupt ID; missing and stale decisions are rejected. Different
 worker interrupts remain separate. One common form replaces the old SQL/Python
@@ -238,29 +321,19 @@ no old-record migration or compatibility reader; use a separate storage director
 for a new-contract workspace when retaining old history. Existing storage is not
 deleted or modified by this code change.
 
-## Explicit analytical input and population
+## Conversational follow-ups and saved evidence
 
-`AnalyticalMessageRequest` carries the question, optional selected_result_id,
-SavedScope and previous_report_id. Correction and clarification remain separate
-requests. Conversation-scoped dataset and scope-option endpoints list complete,
-reviewed analytical populations. `analytical_scope.py` materializes native
-category/date filters through saved-data DuckDB and records exact input lineage.
-Saved SQL results retain alias-to-parent bindings so date lineage follows the
-selected projection through joins, CTEs and prior scoped inputs. All stored result
-and inspection records require this field under contract 19; source/file/Python
-records carry an empty mapping. Exports retain the bindings as SQL provenance.
-Selected references persist in run state, specialist briefs, checkpoints, completed
-turns, findings and exports. SQL/Python execution and publication enforce the
-selected input or its descendants. An explicit decision on the current scope
-clarification can authorize source expansion; free-text agreement alone does not.
+`AnalyticalMessageRequest` carries the question and optional previous_report_id
+for ordinary report revisions. Correction and clarification remain separate
+requests. Dataset listing, inspection and downloads preserve conversation/source
+isolation. Agents can reuse suitable named saved results or retrieve current
+warehouse data when the question requires it. Filters and business populations are
+specified conversationally. There is no application-level input selector, population
+filter, source-expansion flag or warehouse-refresh endpoint.
 
-Warehouse refresh creates a new run of the current question and accepted
-corrections with fresh_source_required and previous_report_id. New source SQL must
-execute. If an input is selected, the coordinator regenerates its equivalent base
-dataset and calls bind_refreshed_input to apply the stored scope. Publication must
-use that fresh binding. Failed runs leave the previous completed turn/report intact.
-Field/type equivalence is checked; business grain equivalence remains specialist
-responsibility. File refresh requires a new upload and conversation.
+Saved SQL retains alias-to-parent bindings as calculation provenance. Reports and
+exports identify final evidence and its supporting lineage. File updates require
+an explicit new attachment; earlier snapshots remain unchanged.
 
 `ForecastEvaluationRequest` describes a named prediction dataset and chronological
 evaluation windows, frequency, origin, horizon, baseline/candidate and interval.
@@ -286,10 +359,14 @@ runtime; each step runs in a fresh local process with exact named bindings.
 Dataset and scalar/table results are compared with saved evidence. SQL is a fixed
 snapshot boundary; replay does not refresh sources or regenerate interpretations
 and published business charts. There is no app notebook editor or persistent kernel.
-New bundles use format **2** and include analytical input/scope, expansion/refresh
-provenance and forecast descriptors. Forecast errors and measured coverage recompute
+New bundles use format **4** and include final analysis_selections, named input
+lineage and forecast descriptors. Only necessary
+final producers/dependencies enter replay. Application analytical helpers are captured
+at execution time; bundles replay each step against its exact source snapshot in
+`steps/libraries/`, rather than the currently installed application code. Material
+documents are included with original hashes and parsed context. Forecast errors and measured coverage recompute
 from immutable or replayed predictions in both script and notebook. Lineage datasets
-are distinguished from the selected scoped results.
+are distinguished from the selected final results.
 See [portable replay checks](testing.md#portable-replay) and the
 [historical record](../reviews/README.md#earlier-implementation-checks) for their
 limits.

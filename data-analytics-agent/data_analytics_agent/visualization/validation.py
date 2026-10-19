@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from numbers import Real
-from decimal import Decimal
+from decimal import Decimal, localcontext
+from math import isfinite
 from typing import Any
 import pandas as pd
 
@@ -77,6 +78,7 @@ def chart_columns(spec: ChartSpec) -> set[str]:
         spec.latitude,
         spec.longitude,
         spec.sort_by,
+        spec.waterfall_measure,
     }
     return {value for value in values if value is not None}
 
@@ -96,6 +98,17 @@ def presentation_rows(
     """Apply only the reviewed sort and category-limit operations."""
 
     presented = list(rows)
+    if spec.chart_type is ChartType.FUNNEL:
+        assert spec.stage_order is not None
+        # The declared process order is authoritative, never a sort by counts.
+        return sorted(
+            presented,
+            key=lambda row: (
+                spec.stage_order.index(row.get(spec.x))
+                if row.get(spec.x) in spec.stage_order
+                else len(spec.stage_order)
+            ),
+        )
     if spec.sort_by:
         presented.sort(
             key=lambda row: _sort_key(row.get(spec.sort_by)),
@@ -125,6 +138,63 @@ def presentation_rows(
     ]
 
 
+def validate_analytical_chart_rows(spec: ChartSpec, rows: list[dict[str, Any]]) -> None:
+    """Require complete, already-shaped stages/contributions without dropping rows."""
+
+    if spec.chart_type not in {ChartType.WATERFALL, ChartType.FUNNEL}:
+        return
+    labels = [row.get(spec.x) for row in rows]
+    if any(not isinstance(label, str) or not label.strip() for label in labels):
+        raise ValueError(f"{spec.chart_type} requires nonblank text category labels.")
+    if len(set(labels)) != len(labels):
+        raise ValueError(
+            f"{spec.chart_type} categories must be unique; reshape the saved data explicitly."
+        )
+    if not 2 <= len(rows) <= 30:
+        raise ValueError(
+            f"{spec.chart_type} requires between 2 and 30 saved categories."
+        )
+    values = [row.get(spec.y[0]) for row in rows]
+    try:
+        valid = all(_is_number(value) and isfinite(float(value)) for value in values)
+    except (OverflowError, ValueError):
+        valid = False
+    if not valid:
+        raise ValueError(
+            f"{spec.chart_type} requires a finite numeric value for every category."
+        )
+    if spec.chart_type is ChartType.FUNNEL:
+        if set(labels) != set(spec.stage_order or []):
+            raise ValueError(
+                "stage_order must cover every saved funnel stage exactly once."
+            )
+        if any(value < 0 or value != int(value) for value in values):
+            raise ValueError("Funnel counts must be nonnegative integers.")
+        if any(current > previous for previous, current in zip(values, values[1:])):
+            raise ValueError(
+                "Funnel counts must not increase in the declared stage_order."
+            )
+        return
+    measures = [row.get(spec.waterfall_measure) for row in rows]
+    if len(rows) < 3 or measures != [
+        "absolute",
+        *(["relative"] * (len(rows) - 2)),
+        "total",
+    ]:
+        raise ValueError(
+            "Waterfall requires an absolute baseline, relative contributions, and a final total in saved row order."
+        )
+    # Decimal arithmetic preserves saved money values; only tiny floating-point
+    # roundoff (absolute 1e-9 source units) is tolerated in the supplied total.
+    with localcontext() as context:
+        context.prec = 400
+        expected = sum((Decimal(str(value)) for value in values[:-1]), Decimal(0))
+        if abs(expected - Decimal(str(values[-1]))) > Decimal("1e-9"):
+            raise ValueError(
+                "Waterfall ending total must equal its baseline plus all relative contributions (absolute tolerance 1e-9)."
+            )
+
+
 def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     """Validate chart mappings, data compatibility, and readability limits."""
 
@@ -138,19 +208,53 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
     if not result.rows:
         raise ValueError("The saved result has no rows to visualize.")
 
+    if spec.chart_type in {ChartType.WATERFALL, ChartType.FUNNEL} and (
+        result.truncated
+        or (
+            result.chart_preparation is not None
+            and (
+                result.chart_preparation.sampling != "none"
+                or result.chart_preparation.input_row_count
+                != result.chart_preparation.output_row_count
+            )
+        )
+    ):
+        raise ValueError(
+            "Waterfall and funnel charts require complete unsampled saved data."
+        )
+
     rows = presentation_rows(result.rows, spec)
     if not rows:
         raise ValueError("The reviewed presentation operations removed all rows.")
+    validate_analytical_chart_rows(spec, rows)
     if spec.forecast_start:
-        _require_role(result, spec.x, {AnalyticalRole.TEMPORAL}, "a typed temporal axis for a forecast-start marker")
+        _require_role(
+            result,
+            spec.x,
+            {AnalyticalRole.TEMPORAL},
+            "a typed temporal axis for a forecast-start marker",
+        )
         marker = pd.Timestamp(spec.forecast_start)
-        times = pd.to_datetime([row.get(spec.x) for row in rows if row.get(spec.x) is not None])
+        times = pd.to_datetime(
+            [row.get(spec.x) for row in rows if row.get(spec.x) is not None]
+        )
         if times.tz is not None or not times.min() <= marker <= times.max():
-            raise ValueError("Forecast start must fall within the saved calendar series without timezone.")
+            raise ValueError(
+                "Forecast start must fall within the saved calendar series without timezone."
+            )
     if spec.lower_bound:
         target = spec.interval_series or spec.y[0]
-        if any((row.get(spec.lower_bound) is not None or row.get(spec.upper_bound) is not None) and row.get(target) is None for row in rows):
-            raise ValueError("Interval bounds must be attached to saved values of their target series.")
+        if any(
+            (
+                row.get(spec.lower_bound) is not None
+                or row.get(spec.upper_bound) is not None
+            )
+            and row.get(target) is None
+            for row in rows
+        ):
+            raise ValueError(
+                "Interval bounds must be attached to saved values of their target series."
+            )
 
     if spec.error_y and any(
         _is_number(row.get(spec.error_y)) and row[spec.error_y] < 0 for row in rows
@@ -185,7 +289,7 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
             dimensions,
             "categorical, temporal, or discrete numeric",
         )
-    elif spec.chart_type is ChartType.PIE:
+    elif spec.chart_type in {ChartType.PIE, ChartType.WATERFALL, ChartType.FUNNEL}:
         assert spec.x is not None
         _require_role(result, spec.x, categorical, "categorical")
     elif spec.chart_type in {ChartType.LINE, ChartType.AREA}:
@@ -242,6 +346,8 @@ def validate_chart_spec(spec: ChartSpec, result: SavedResult) -> None:
         ChartType.SCATTER,
         ChartType.PIE,
         ChartType.BOX,
+        ChartType.WATERFALL,
+        ChartType.FUNNEL,
     }:
         numeric_columns.extend(spec.y)
     if spec.secondary_y:

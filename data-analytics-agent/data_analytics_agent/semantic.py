@@ -14,8 +14,14 @@ from types import MappingProxyType
 from typing import Any, Literal
 
 import yaml
+from sqlglot import exp
 
 from data_analytics_agent.backends import SQLBackend
+from data_analytics_agent.semantic_bindings import (
+    column_key,
+    parse_expression,
+    table_key,
+)
 
 SIMPLE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 TOKEN_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
@@ -492,11 +498,14 @@ def load_semantic_catalog(
             errors.append(f"Could not inspect live table schemas: {exc}")
         else:
             schema_by_name = {
-                table.name.casefold(): table for table in inspected_tables
+                table_key(exp.to_table(table.name, dialect=dialect), dialect): table
+                for table in inspected_tables
             }
             annotated: dict[str, SemanticDataset] = {}
             for name, dataset in datasets.items():
-                table = schema_by_name.get(dataset.source.casefold())
+                table = schema_by_name.get(
+                    table_key(exp.to_table(dataset.source, dialect=dialect), dialect)
+                )
                 if table is None:
                     errors.append(f"Could not inspect table {dataset.source!r}.")
                     annotated[name] = dataset
@@ -558,14 +567,21 @@ def load_semantic_catalog(
         if backend is not None:
             for dataset in catalog.datasets.values():
                 available = {
-                    c.name.casefold()
-                    for c in schema_by_name[dataset.source.casefold()].columns
+                    c.name if dialect == "snowflake" else c.name.casefold()
+                    for c in schema_by_name[
+                        table_key(
+                            exp.to_table(dataset.source, dialect=dialect), dialect
+                        )
+                    ].columns
                 }
-                missing = {
-                    c
-                    for c in bindings.columns[dataset.name]
-                    if c.casefold() not in available
+                required = {
+                    column_key(column, dialect)
+                    for field in dataset.fields
+                    for column in parse_expression(
+                        bindings.fields[dataset.name, field], dialect
+                    ).find_all(exp.Column)
                 }
+                missing = required - available
                 if missing:
                     raise ValueError(
                         f"Dataset {dataset.name}: expressions reference missing physical columns {sorted(missing)}"

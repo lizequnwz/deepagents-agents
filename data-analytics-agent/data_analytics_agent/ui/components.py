@@ -20,6 +20,12 @@ from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.ui.api_client import APIError, AgentAPIClient
 
 FALLBACK_EXAMPLES = [
+    {"label": "Explore my data", "question": "Analyze the complete available data. Show a concise plan, explore its structure, distributions, quality and useful segments, then investigate the most useful patterns. Preserve unknown units and completeness, and create a report with meaningful follow-up questions."},
+    {"label": "Investigate a change", "question": "Help me investigate a material change over time. Establish the measure and comparison periods, reconcile segment contributions, inspect relevant patterns and distinguish evidence from possible explanations."},
+    {"label": "Customer behavior", "question": "Help me analyze customer or product behavior using the available data. Identify suitable segmentation, retention or funnel questions, clarify essential event and observation-window definitions, and carry out a useful supported analysis."},
+    {"label": "Compare groups", "question": "Compare meaningful groups in this data. Establish an outcome and independent observational units, report sample sizes and effect sizes with appropriate uncertainty, and explain the limitations."},
+    {"label": "Evaluate predictions", "question": "Help me evaluate whether an outcome can be predicted from the available data. Establish target, prediction time and available features, compare a candidate against a baseline on a suitable holdout, and save the scored rows and metrics."},
+    {"label": "Forecast and scenarios", "question": "Help me assess a forecast or what-if analysis for this data. Establish the target, time horizon or explicit scenario assumptions, use an appropriate baseline and evaluation, and explain the meaning of any uncertainty."},
     {
         "label": "Summarize the available data",
         "question": (
@@ -971,13 +977,13 @@ def render_empty_state(
     *,
     chat_input_key: str,
 ) -> None:
-    examples = source.get("examples") or FALLBACK_EXAMPLES
+    examples = [*(source.get("examples") or []), *FALLBACK_EXAMPLES]
     question_by_label = {
         f":material/lightbulb: {item['label']}": item["question"] for item in examples
     }
     with st.container(border=True):
         st.subheader(
-            "Start with a business question",
+            "Explore, investigate or ask a question",
             anchor=False,
         )
         st.caption(
@@ -1399,14 +1405,6 @@ def render_turn(
 def render_answer(
     client, answer, *, turn_key, source_id, analysis_download_available=True
 ):
-    if answer.get("analytical_input"):
-        from data_analytics_agent.analytical_scope import AnalyticalInput, scope_description
-
-        st.caption(scope_description(AnalyticalInput.model_validate(answer["analytical_input"])))
-        if answer.get("source_expansion_allowed"):
-            st.caption("Additional source retrieval was authorized. The selected snapshot is the starting population; see the attached evidence for the resulting populations.")
-    if answer.get("refreshed_from_report_id"):
-        st.caption("Refreshed from the warehouse. This answer uses a new source snapshot.")
     st.markdown(prose_markdown(answer["answer"]))
     executions = {
         execution["execution_id"]: execution
@@ -1613,7 +1611,12 @@ def _render_data_analysis(
             )
             if execution.get("error"):
                 st.warning(execution["error"])
+            final_names = analysis["final_outputs"].get(execution["execution_id"], [])
+            if not final_names:
+                st.caption("Supporting execution; its intermediate diagnostics are retained in stored provenance.")
             for j, output in enumerate(execution.get("outputs") or []):
+                if output.get("name") not in final_names:
+                    continue
                 st.caption(output.get("name") or "Output")
                 if output.get("kind") == "table":
                     st.dataframe(

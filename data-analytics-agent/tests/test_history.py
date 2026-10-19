@@ -41,6 +41,9 @@ def test_delete_history_removes_artifacts_checkpoints_and_preserves_other_conver
         source_id="test",
         analysis=DataAnalysisResult(
             outcome="analysis_completed",
+            analysis_kind="general",
+            final_outputs={"python-step": ["figure"]},
+            final_result_ids=[],
             input_result_ids=[result.result_id],
             executions=[execution],
             answer="12",

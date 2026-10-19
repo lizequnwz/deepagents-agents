@@ -37,11 +37,19 @@ from data_analytics_agent.excel import ExcelSelection, inspect_workbook
 from data_analytics_agent.uploads import (
     UploadReview,
     UploadSource,
-    get_upload,
+    UploadedFile,
     upload_for_thread,
-    upload_source,
     stage_upload,
     confirm_upload,
+    file_source,
+    uploads_for_thread,
+)
+from data_analytics_agent.documents import (
+    Document,
+    documents_for_thread,
+    get_document,
+    stage_document,
+    import_document_table,
 )
 from data_analytics_agent.presentation_edits import (
     ChartPresentationEdit,
@@ -67,7 +75,6 @@ from data_analytics_agent.schemas import (
     MessageRequest,
     AnalyticalMessageRequest,
     ClarificationReply,
-    ReportRevisionRequest,
     SteeringResponse,
     ResultPage,
     RunResponse,
@@ -150,15 +157,15 @@ class Services:
             return self.catalog
 
     def source(self, source_id: str) -> DataSource | UploadSource:
-        if upload := get_upload(self.storage, source_id):
-            return upload_source(upload, self.settings)
+        if source := file_source(self, source_id):
+            return source
         try:
             return self.source_catalog().get(source_id)
         except KeyError as exc:
             raise StoreNotFound(source_id) from exc
 
     def backend_for_source(self, source_id: str) -> SQLBackend:
-        if get_upload(self.storage, source_id):
+        if file_source(self, source_id):
             raise ValueError(
                 "Uploaded files have no warehouse backend. Query their saved datasets."
             )
@@ -223,18 +230,21 @@ class Services:
             return list(self._source_summaries.values())
 
     def source_summary(self, source_id: str) -> DataSourceSummary:
-        if upload := get_upload(self.storage, source_id):
-            source = upload_source(upload, self.settings)
+        if source := file_source(self, source_id):
+            tables = [
+                item
+                for item in self.storage.load("uploads", UploadedFile).values()
+                if item.source_id == source_id
+            ]
+            ready = all(item.confirmed for item in tables)
             return DataSourceSummary(
                 source_id=source_id,
                 name=source.name,
                 description=source.description,
                 backend_type="upload",
                 dialect="duckdb",
-                ready=upload.confirmed,
-                errors=[]
-                if upload.confirmed
-                else ["Review the file schema before analysis."],
+                ready=ready,
+                errors=[] if ready else ["Review the file schema before analysis."],
                 limits=ExecutionLimitsResponse(
                     timeout_seconds=source.limits.timeout_seconds,
                     max_result_rows=source.limits.max_result_rows,
@@ -256,7 +266,7 @@ class Services:
         return self.source(source_id)
 
     def semantic_catalog_for_source(self, source_id: str) -> SemanticCatalog:
-        if get_upload(self.storage, source_id):
+        if file_source(self, source_id):
             raise ValueError("An uploaded schema is not a curated semantic catalog.")
         self.require_ready_source(source_id)
         try:
@@ -293,10 +303,24 @@ class Services:
             return graph
 
     def source_version(self, source_id):
-        if upload := get_upload(self.storage, source_id):
+        if file_source(self, source_id):
             import hashlib
 
-            return hashlib.sha256(upload.model_dump_json().encode()).hexdigest()
+            tables = [
+                item.model_dump(mode="json")
+                for item in self.storage.load("uploads", UploadedFile).values()
+                if item.source_id == source_id
+            ]
+            docs = [
+                doc.reference()
+                for doc in self.storage.load("documents", Document).values()
+                if doc.source_id == source_id
+            ]
+            return hashlib.sha256(
+                json.dumps(
+                    {"tables": tables, "documents": docs}, sort_keys=True
+                ).encode()
+            ).hexdigest()
         return self.semantic_catalog_for_source(source_id).content_hash
 
     def manager(self) -> RunManager:
@@ -473,6 +497,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         sheet: str | None = Query(default=None, max_length=200),
         cell_range: str | None = Query(default=None, max_length=40),
         use_cached_formulas: bool = False,
+        thread_id: str | None = Query(default=None),
     ):
         content = await upload_bytes(request)
         try:
@@ -488,6 +513,7 @@ def create_app(services: Services | None = None) -> FastAPI:
                 )
                 if sheet and cell_range
                 else None,
+                thread_id,
             )
             return upload_response(upload)
         except ValueError as exc:
@@ -505,12 +531,21 @@ def create_app(services: Services | None = None) -> FastAPI:
                 503, f"Saved source configuration is unavailable: {exc}"
             ) from exc
 
-    @app.get("/api/conversations/{thread_id}/upload")
-    async def uploaded_file(thread_id: str):
-        return upload_response(upload_for_thread(container, thread_id))
+    @app.get("/api/conversations/{thread_id}/uploads/{upload_id}")
+    async def uploaded_file(thread_id: str, upload_id: str):
+        return upload_response(upload_for_thread(container, thread_id, upload_id))
 
-    @app.post("/api/conversations/{thread_id}/upload/confirm")
-    async def review_upload(thread_id: str, review: UploadReview):
+    @app.get("/api/conversations/{thread_id}/uploads")
+    async def uploaded_tables(thread_id: str):
+        return {
+            "uploads": [
+                upload_response(item)
+                for item in uploads_for_thread(container, thread_id)
+            ]
+        }
+
+    @app.post("/api/conversations/{thread_id}/uploads/{upload_id}/confirm")
+    async def review_upload(thread_id: str, upload_id: str, review: UploadReview):
         with container._lock:
             ensure_not_deleting(thread_id)
             if thread_id in container.uploading_conversations:
@@ -520,13 +555,94 @@ def create_app(services: Services | None = None) -> FastAPI:
             container.uploading_conversations.add(thread_id)
         try:
             return upload_response(
-                await run_in_threadpool(confirm_upload, container, thread_id, review)
+                await run_in_threadpool(
+                    confirm_upload, container, thread_id, review, upload_id
+                )
             )
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         finally:
             with container._lock:
                 container.uploading_conversations.discard(thread_id)
+
+    @app.post("/api/documents", status_code=201)
+    async def upload_document(
+        request: Request,
+        filename: str = Query(min_length=1, max_length=255),
+        thread_id: str | None = None,
+    ):
+        try:
+            doc = await run_in_threadpool(
+                stage_document,
+                container,
+                await upload_bytes(request),
+                filename,
+                thread_id,
+            )
+            return doc.reference()
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/conversations/{thread_id}/documents")
+    async def list_document_files(thread_id: str):
+        source_id = container.conversations.get(thread_id).source_id
+        return {
+            "documents": [
+                doc.reference()
+                for doc in documents_for_thread(container.storage, thread_id, source_id)
+            ]
+        }
+
+    @app.get("/api/conversations/{thread_id}/documents/{document_id}")
+    async def inspect_document(
+        thread_id: str, document_id: str, page: int = Query(default=1, ge=1)
+    ):
+        source_id = container.conversations.get(thread_id).source_id
+        doc = get_document(container.storage, document_id, thread_id, source_id)
+        if page > doc.page_count:
+            raise HTTPException(422, "Choose an existing page.")
+        payload = json.loads(Path(doc.extracted_path).read_text())
+        return {
+            **doc.reference(),
+            "page": page,
+            "text": payload["pages"][page - 1]["text"][:20000],
+            "tables": [
+                {
+                    "table_index": i,
+                    "page": table["page"],
+                    "row_count": len(table["rows"]),
+                    "preview": table["rows"][:10],
+                }
+                for i, table in enumerate(payload["tables"])
+                if table["page"] == page
+            ],
+        }
+
+    @app.post(
+        "/api/conversations/{thread_id}/documents/{document_id}/tables", status_code=201
+    )
+    async def import_document_rows(
+        thread_id: str,
+        document_id: str,
+        table_index: int = Query(ge=0),
+        header_row: int = Query(default=0, ge=0),
+    ):
+        source_id = container.conversations.get(thread_id).source_id
+        doc = get_document(container.storage, document_id, thread_id, source_id)
+        try:
+            return upload_response(
+                await run_in_threadpool(
+                    import_document_table, container, doc, table_index, header_row
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/conversations/{thread_id}/documents/{document_id}/download")
+    async def download_document(thread_id: str, document_id: str):
+        source_id = container.conversations.get(thread_id).source_id
+        doc = get_document(container.storage, document_id, thread_id, source_id)
+        return FileResponse(doc.original_path, filename=doc.filename)
 
     @app.post(
         "/api/conversations",
@@ -536,7 +652,11 @@ def create_app(services: Services | None = None) -> FastAPI:
     async def create_conversation(
         request: CreateConversationRequest | None = None,
     ) -> CreateConversationResponse:
-        if request and request.source_id and request.source_id.startswith("upload:"):
+        if (
+            request
+            and request.source_id
+            and request.source_id.startswith(("upload:", "documents:"))
+        ):
             raise HTTPException(
                 422,
                 "Each upload belongs to its original conversation. Upload a file to start another.",
@@ -595,6 +715,12 @@ def create_app(services: Services | None = None) -> FastAPI:
                 detail=" ".join(readiness_errors),
             )
         ensure_not_deleting(thread_id)
+        with container._lock:
+            if thread_id in container.uploading_conversations:
+                raise HTTPException(
+                    409,
+                    "Wait for file import or schema review before starting analysis.",
+                )
         conversation = container.conversations.get(thread_id)
         try:
             container.require_ready_source(conversation.source_id)
@@ -610,52 +736,33 @@ def create_app(services: Services | None = None) -> FastAPI:
             )
         if not request.message.strip():
             raise HTTPException(422, "Question cannot be blank.")
-        if request.scope and not request.selected_result_id:
-            raise HTTPException(422, "Select the scope's base dataset.")
         if request.previous_report_id:
             require_current_report(conversation, request.previous_report_id)
-        analytical_input = None
-        if request.selected_result_id:
-            from data_analytics_agent.analytical_scope import prepare_input
-
-            current = conversation.analytical_input
-            if (
-                current
-                and current.selected_result_id == request.selected_result_id
-                and current.scope == request.scope
-            ):
-                analytical_input = current
-            else:
-                try:
-                    analytical_input = await run_in_threadpool(
-                        prepare_input,
-                        container.results,
-                        thread_id,
-                        conversation.source_id,
-                        request.selected_result_id,
-                        request.scope,
-                    )
-                except ValueError as exc:
-                    raise HTTPException(422, str(exc)) from exc
-            if request.previous_report_id:
-                require_current_report(
-                    container.conversations.get(thread_id), request.previous_report_id
-                )
         manager = container.manager()
-        run_id = container.runs.create(
-            thread_id,
-            conversation.source_id,
-            request.message.strip(),
-            model=container.settings.model,
-            analytical_input=analytical_input,
-            previous_report_id=request.previous_report_id,
-        )
-        try:
+        with container._lock:
+            ensure_not_deleting(thread_id)
+            if thread_id in container.uploading_conversations:
+                raise HTTPException(
+                    409,
+                    "Wait for file import or schema review before starting analysis.",
+                )
+            latest = container.conversations.get(thread_id)
+            if latest.active_run_id:
+                raise HTTPException(
+                    409, "A run is already active for this conversation."
+                )
+            try:
+                container.require_ready_source(conversation.source_id)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            run_id = container.runs.create(
+                thread_id,
+                conversation.source_id,
+                request.message.strip(),
+                model=container.settings.model,
+                previous_report_id=request.previous_report_id,
+            )
             container.conversations.begin_run(thread_id, run_id)
-        except RuntimeError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail=str(exc)
-            ) from exc
         background_tasks.add_task(manager.start, run_id)
         return CreateRunResponse(run_id=run_id, status=RunStatus.QUEUED)
 
@@ -667,82 +774,34 @@ def create_app(services: Services | None = None) -> FastAPI:
         ):
             raise HTTPException(
                 409,
-                "The displayed report is stale. Reload before changing scope or refreshing.",
+                "The displayed report is stale. Reload before revising it.",
             )
 
     @app.get("/api/conversations/{thread_id}/datasets")
     async def conversation_datasets(thread_id: str):
-        from data_analytics_agent.analytical_scope import dataset_summary, selectable
-
         conversation = container.conversations.get(thread_id)
         items = container.results.list_for_conversation(
             thread_id, source_id=conversation.source_id
         )
         return {
             "datasets": [
-                dataset_summary(item) for item in reversed(items) if selectable(item)
+                {
+                    "result_id": item.result_id,
+                    "label": item.short_label,
+                    "row_count": item.row_count,
+                    "columns": item.columns,
+                    "kind": item.kind,
+                    "complete": not item.truncated,
+                    "snapshot_at": item.created_at.isoformat(),
+                    "grain": item.upload_provenance.grain
+                    if item.upload_provenance and item.upload_provenance.grain
+                    else "Business grain must be checked against the saved question and calculation.",
+                    "question": item.originating_question,
+                    "parent_result_ids": item.parent_result_ids,
+                }
+                for item in reversed(items)
             ]
         }
-
-    @app.get("/api/conversations/{thread_id}/datasets/{result_id}/scope-options")
-    async def dataset_scope_options(thread_id: str, result_id: str):
-        from data_analytics_agent.analytical_scope import scope_options
-
-        conversation = container.conversations.get(thread_id)
-        result = container.results.get(
-            result_id, thread_id, source_id=conversation.source_id
-        )
-        try:
-            return await run_in_threadpool(scope_options, result)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-
-    @app.post(
-        "/api/runs/{run_id}/refresh", response_model=CreateRunResponse, status_code=202
-    )
-    async def refresh_warehouse(
-        run_id: str, request: ReportRevisionRequest, background_tasks: BackgroundTasks
-    ):
-        previous = container.runs.get(run_id)
-        ensure_not_deleting(previous.thread_id)
-        conversation = container.conversations.get(previous.thread_id)
-        if container.source(previous.source_id).backend_type == "upload":
-            raise HTTPException(
-                422, "Refreshing a file requires a new upload and conversation."
-            )
-        if conversation.active_run_id is not None:
-            raise HTTPException(409, "An analytical run is already active.")
-        require_current_report(conversation, request.report_id)
-        if (
-            not conversation.turns
-            or conversation.turns[-1].run_id != run_id
-            or previous.status != RunStatus.COMPLETED
-        ):
-            raise HTTPException(409, "Refresh the latest completed analytical turn.")
-        try:
-            container.require_ready_source(previous.source_id)
-        except ValueError as exc:
-            raise HTTPException(503, str(exc)) from exc
-        question = previous.question
-        if previous.corrections:
-            question += "\nAccepted corrections: " + "\n".join(
-                c.message for c in previous.corrections
-            )
-        new_id = container.runs.create(
-            previous.thread_id,
-            previous.source_id,
-            question,
-            model=container.settings.model,
-            analytical_input=previous.analytical_input,
-            fresh_source_required=True,
-            previous_report_id=request.report_id,
-        )
-        try:
-            container.conversations.begin_run(previous.thread_id, new_id)
-        except RuntimeError as exc:
-            raise HTTPException(409, str(exc)) from exc
-        background_tasks.add_task(container.manager().start, new_id)
-        return CreateRunResponse(run_id=new_id, status=RunStatus.QUEUED)
 
     @app.post(
         "/api/runs/{run_id}/corrections",
@@ -824,16 +883,6 @@ def create_app(services: Services | None = None) -> FastAPI:
             raise HTTPException(
                 409, "This clarification has changed. Reload before answering."
             )
-        if request.allow_source_expansion:
-            if (
-                not run.clarification.source_expansion
-                or request.interrupt_id != run.clarification.interrupt_id
-            ):
-                raise HTTPException(
-                    409,
-                    "Explicit source expansion must answer the current scope clarification.",
-                )
-            container.runs.allow_source_expansion(run_id)
         container.runs.accept_correction(run_id, request.message)
         container.runs.resume(run_id)
         background_tasks.add_task(
@@ -934,19 +983,24 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     @app.get("/api/conversations")
     async def list_conversations():
+        def title_for(item):
+            if item.turns:
+                return item.turns[0].user_message
+            if item.run_ids:
+                return container.runs.get(item.run_ids[0]).question
+            tables = uploads_for_thread(container, item.thread_id)
+            if tables:
+                return tables[0].filename
+            documents = documents_for_thread(
+                container.storage, item.thread_id, item.source_id
+            )
+            return documents[0].filename if documents else "New conversation"
+
         return [
             {
                 "thread_id": item.thread_id,
                 "source_id": item.source_id,
-                "title": (
-                    item.turns[0].user_message
-                    if item.turns
-                    else container.runs.get(item.run_ids[0]).question
-                    if item.run_ids
-                    else upload.filename
-                    if (upload := get_upload(container.storage, item.source_id))
-                    else "New conversation"
-                )[:100],
+                "title": title_for(item)[:100],
                 "active_run_id": item.active_run_id,
                 "run_ids": item.run_ids,
             }
@@ -967,21 +1021,34 @@ def create_app(services: Services | None = None) -> FastAPI:
         return container.runs.get(run_id)
 
     def claim_saved_run(run_id):
-        run = container.runs.get(run_id)
-        ensure_not_deleting(run.thread_id)
-        if run.status not in {RunStatus.PAUSED, RunStatus.FAILED}:
-            raise HTTPException(409, "Run is not resumable.")
-        task = container.manager().tasks.get(run_id)
-        if container.runs.workers_active(run_id) or (task and not task.done()):
-            raise HTTPException(
-                409, "The previous attempt is still stopping. Retry after it finishes."
-            )
-        try:
-            container.conversations.begin_run(run.thread_id, run_id)
-        except RuntimeError as exc:
-            raise HTTPException(409, str(exc)) from exc
-        container.runs.set_status(run_id, RunStatus.QUEUED)
-        return run
+        with container._lock:
+            run = container.runs.get(run_id)
+            ensure_not_deleting(run.thread_id)
+            if run.thread_id in container.uploading_conversations:
+                raise HTTPException(
+                    409, "Wait for file import or schema review before resuming work."
+                )
+            if not run.findings and any(
+                not item.confirmed
+                for item in uploads_for_thread(container, run.thread_id)
+            ):
+                raise HTTPException(
+                    409, "Confirm the pending table before resuming analysis."
+                )
+            if run.status not in {RunStatus.PAUSED, RunStatus.FAILED}:
+                raise HTTPException(409, "Run is not resumable.")
+            task = container.manager().tasks.get(run_id)
+            if container.runs.workers_active(run_id) or (task and not task.done()):
+                raise HTTPException(
+                    409,
+                    "The previous attempt is still stopping. Retry after it finishes.",
+                )
+            try:
+                container.conversations.begin_run(run.thread_id, run_id)
+            except RuntimeError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            container.runs.set_status(run_id, RunStatus.QUEUED)
+            return run
 
     @app.post("/api/runs/{run_id}/resume", status_code=202)
     async def resume_run(run_id: str, background_tasks: BackgroundTasks):

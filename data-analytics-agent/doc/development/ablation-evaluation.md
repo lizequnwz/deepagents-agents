@@ -4,7 +4,7 @@ Updated 3 October 2026. This is an operational guide, not the active product pla
 Use the [handoff](../../HANDOFF.md) for the selected analytics workspace direction
 and acceptance gates. Preserve the current working tree when preparing a baseline;
 uncommitted implementation changes are part of the product being evaluated.
-The current API/storage contract is **19**. Keep verification local until the user
+The current API/storage contract is **22**. Keep verification local until the user
 authorizes the configured provider and fixture contents.
 
 ## Current evaluation capabilities

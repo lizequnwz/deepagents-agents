@@ -23,7 +23,7 @@ def chat_submission(placeholder, *, key, max_bytes, client):
             placeholder,
             key=key,
             accept_file=True,
-            file_type=["csv", "parquet", "xlsx"],
+            file_type=["csv", "parquet", "xlsx", "pdf", "txt", "md"],
             accept_audio=True,
             audio_sample_rate=16000,
             max_upload_size=max(1, (max_bytes + 1_048_575) // 1_048_576),
@@ -32,7 +32,7 @@ def chat_submission(placeholder, *, key, max_bytes, client):
         return review_voice_submission(submission, key)
 
 
-def stage_attachment(client, submission, max_bytes):
+def stage_attachment(client, submission, max_bytes, *, thread_id=None):
     """Stage only the attached file; its question waits for schema confirmation."""
     uploaded = submission.files[0]
     if uploaded.size > max_bytes:
@@ -45,9 +45,12 @@ def stage_attachment(client, submission, max_bytes):
             "content": content,
             "info": info,
             "question": submission.text,
+            "thread_id": thread_id,
         }
         return None
-    return client.upload_file(uploaded.name, uploaded.getvalue())
+    if uploaded.name.lower().endswith((".pdf", ".txt", ".md")):
+        return client.upload_document(uploaded.name, uploaded.getvalue(), thread_id=thread_id)
+    return client.upload_file(uploaded.name, uploaded.getvalue(), thread_id=thread_id)
 
 
 def _column_type_editor(columns, *, key):
@@ -74,6 +77,7 @@ def _column_type_editor(columns, *, key):
 
 
 def render_upload_review(client, upload):
+    review_key = upload["upload_id"]
     st.subheader("Confirm the data to analyze")
     st.caption(
         f"{upload['filename']} · {upload['row_count']:,} rows · {len(upload['columns'])} columns"
@@ -93,7 +97,7 @@ def render_upload_review(client, upload):
     st.dataframe(
         upload["sample_rows"],
         hide_index=True,
-        key=f"upload_preview_{upload['thread_id']}",
+        key=f"upload_preview_{review_key}",
     )
     st.caption(
         "Preview: at most 10 rows. Type checks and declared key checks use the entire file."
@@ -106,18 +110,18 @@ def render_upload_review(client, upload):
         "Keep IDs as text to preserve leading zeros. Choose the order of ambiguous dates explicitly. "
         "Types do not define business meaning or units."
     )
-    with st.form(f"review_upload_{upload['thread_id']}"):
+    with st.form(f"review_upload_{review_key}"):
         selected = []
         if notes:
             st.markdown(f"**Columns with notes · {len(notes)}**")
             selected.extend(
-                _column_type_editor(notes, key=f"upload_notes_{upload['thread_id']}")
+                _column_type_editor(notes, key=f"upload_notes_{review_key}")
             )
         if other:
             with st.expander(f"Other column types · {len(other)}", expanded=not notes):
                 selected.extend(
                     _column_type_editor(
-                        other, key=f"upload_types_{upload['thread_id']}"
+                        other, key=f"upload_types_{review_key}"
                     )
                 )
         with st.expander("Describe the rows (optional)"):
@@ -159,6 +163,7 @@ def render_upload_review(client, upload):
                         "grain": grain,
                         "key_columns": keys,
                     },
+                    upload_id=upload["upload_id"],
                 )
         except APIError as exc:
             st.error(str(exc))
@@ -314,6 +319,7 @@ def render_workbook_selection(client):
                         "cell_range": cell_range,
                         "use_cached_formulas": cached,
                     },
+                    thread_id=pending.get("thread_id"),
                 )
         except APIError as exc:
             st.error(str(exc))

@@ -216,7 +216,7 @@ def test_tool_failures_keep_identity_and_record_failed_duration(workspace):
     assert all(event.duration_ms is not None for event in failed)
 
 
-def test_owner_prompts_keep_only_analysis_and_report_skills(test_settings, monkeypatch):
+def test_owner_prompts_load_skills_for_their_responsibilities(test_settings, monkeypatch):
     from data_analytics_agent import coordinator
 
     services = Services(settings=test_settings)
@@ -230,7 +230,10 @@ def test_owner_prompts_keep_only_analysis_and_report_skills(test_settings, monke
         semantic_catalog=services.semantic_catalog_for_source("test"),
         backend=services.backend_for_source("test"),
     )
-    assert specification["skills"] == ["/project/skills/reporting/"]
+    assert specification["skills"] == [
+        "/project/skills/reporting/",
+        "/project/skills/workflows/",
+    ]
     specialists = {s["name"]: s for s in specification["subagents"]}
     assert "skills" not in specialists["text-to-sql"]
     assert specialists["data-analysis"]["skills"] == ["/project/skills/analysis/"]

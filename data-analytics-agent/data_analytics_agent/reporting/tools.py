@@ -31,15 +31,32 @@ def generate_report(
     findings=None,
 ):
     if findings:
-        if findings.analytical_input:
-            from data_analytics_agent.analytical_scope import scope_description
+        if findings.documents:
             from data_analytics_agent.reporting.schemas import ReportCalloutBlock
 
-            blocks = [b for b in spec.blocks if not (isinstance(b, ReportCalloutBlock) and b.title == "Analytical population")]
-            population = scope_description(findings.analytical_input)
-            if findings.source_expansion_allowed:
-                population += " Additional source retrieval was authorized. The selected snapshot is the starting population; consult the attached evidence for the resulting populations."
-            spec = spec.model_copy(update={"blocks": [ReportCalloutBlock(title="Analytical population", body=population, variant="note"), *blocks]})
+            existing = [
+                block
+                for block in spec.blocks
+                if not (
+                    isinstance(block, ReportCalloutBlock)
+                    and block.title == "Document sources"
+                )
+            ]
+            spec = spec.model_copy(
+                update={
+                    "blocks": [
+                        *existing,
+                        ReportCalloutBlock(
+                            title="Document sources",
+                            variant="note",
+                            body="\n\n".join(
+                                f"{doc.filename} · {doc.page_count} pages · SHA-256 {doc.sha256}"
+                                for doc in findings.documents
+                            ),
+                        ),
+                    ]
+                }
+            )
         selected_results = {r.result_id for r in findings.results}
         selected_analyses = {a.analysis_id for a in findings.analyses}
         selected_charts = {c.chart_id for c in findings.charts}
@@ -104,23 +121,25 @@ def generate_report(
                 forecast = saved.forecast_evaluation
                 scores = include(forecast.scores_result_id)
                 forecast_scores = scores.preview
-            for execution in saved.executions:
-                if execution.error:
-                    continue
-                for output in execution.outputs:
-                    value = output.model_dump(mode="json", exclude_none=True)
-                    if output.image_path:
-                        value["image_base64"] = base64.b64encode(
-                            Path(output.image_path).read_bytes()
-                        ).decode()
-                    outputs.append(value)
+            for output in saved.selected_outputs():
+                value = output.model_dump(mode="json", exclude_none=True)
+                if output.image_path:
+                    value["image_base64"] = base64.b64encode(
+                        Path(output.image_path).read_bytes()
+                    ).decode()
+                outputs.append(value)
             analyses[block.analysis_id] = ResolvedDataAnalysis(
                 reference_id=block.analysis_id,
                 input_result_ids=saved.input_result_ids,
                 answer=saved.answer,
                 method=saved.method,
                 assumptions=saved.assumptions,
-                warnings=saved.warnings + (saved.forecast_evaluation.warnings if saved.forecast_evaluation else []),
+                warnings=saved.warnings
+                + (
+                    saved.forecast_evaluation.warnings
+                    if saved.forecast_evaluation
+                    else []
+                ),
                 outputs=outputs,
                 forecast_evaluation=saved.forecast_evaluation,
                 forecast_scores=forecast_scores,
@@ -250,6 +269,8 @@ def create_list_conversation_analyses_tool(analysis_store, *, source_id):
                     "answer": saved.analysis.answer,
                     "outcome": saved.analysis.outcome,
                     "input_result_ids": saved.analysis.input_result_ids,
+                    "final_result_ids": saved.analysis.final_result_ids,
+                    "final_outputs": saved.analysis.final_outputs,
                     "execution_ids": [
                         e.execution_id for e in saved.analysis.executions
                     ],

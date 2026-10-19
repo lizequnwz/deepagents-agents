@@ -187,6 +187,17 @@ def execute_python(
     started = time.perf_counter()
     with TemporaryDirectory(prefix="data-analysis-") as raw_workdir:
         workdir = Path(raw_workdir)
+        library_root = workdir / "library"
+        library_package = library_root / "data_analytics_agent"
+        workflow_dir = library_package / "analysis"
+        workflow_dir.mkdir(parents=True)
+        (library_package / "__init__.py").write_text('"""Saved analytical workflow source."""\n')
+        workflow_sources = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in (Path(__file__).resolve().parents[2] / "analysis").glob("*.py")
+        }
+        for name, content in workflow_sources.items():
+            (workflow_dir / name).write_text(content, encoding="utf-8")
         frame_path = workdir / "datasets.json"
         code_path = workdir / "reviewed.py"
         config_path = workdir / "limits.json"
@@ -198,6 +209,8 @@ def execute_python(
             encoding="utf-8",
         )
 
+        environment = _sanitized_environment(workdir)
+        environment["ANALYTICS_LIBRARY_ROOT"] = str(library_root)
         process = subprocess.Popen(
             [
                 sys.executable,
@@ -209,7 +222,7 @@ def execute_python(
                 str(output_path),
             ],
             cwd=workdir,
-            env=_sanitized_environment(workdir),
+            env=environment,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=(os.name == "posix"),
@@ -322,5 +335,6 @@ def execute_python(
             stderr=stderr,
             elapsed_ms=elapsed_ms,
             runtime_versions=payload.get("runtime_versions", {}),
+            workflow_sources=workflow_sources,
             warnings=warnings,
         )

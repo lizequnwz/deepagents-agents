@@ -20,12 +20,12 @@ review its schema, or select a configured warehouse. The included SQLite sources
 use `data_sources.yaml`; see [adding sources](doc/development/adding-data-sources.md)
 to connect your own data.
 
-The current API/storage contract is **19**. Restart both services together and
+The current API/storage contract is **22**. Restart both services together and
 choose fresh `ANALYTICS_STORAGE_DIR` storage for older incompatible history;
 preserve needed artifacts separately. No migrations are provided.
 
 For an existing checkout with older storage, start both services against a new
-directory: `ANALYTICS_STORAGE_DIR=.analytics-v19 ./scripts/start.sh`.
+directory: `ANALYTICS_STORAGE_DIR=.analytics-v22 ./scripts/start.sh`.
 
 Provider alternatives, execution limits, review settings, tracing, and development
 reload are documented in [configuration](doc/development/configuration.md).
@@ -34,8 +34,10 @@ saved-data follow-ups, a sample upload, and run-control checks.
 
 ## Workflow
 
-- Select a configured source, or upload one CSV, Parquet or Excel file and confirm its
-  column types. Each file has its own conversation. Reopen either from history.
+- Select a configured source, or upload CSV, Parquet or a selected Excel table and
+  confirm its column types. Use the chat **+** button for every attachment: more
+  tables in a file conversation, or PDF/text/Markdown context in either source type.
+  Extracted document tables require review before calculation. Reopen from history.
 - **Understanding → Retrieving data → Analyzing → Findings ready → Preparing
   report** describes the current work. Descriptive questions may skip Python.
 - Findings appear before report rendering. Every data-backed answer finishes
@@ -46,14 +48,8 @@ saved-data follow-ups, a sample upload, and run-control checks.
   (default `whisper-1`), including when the analytics model uses Bedrock.
 - Ask follow-ups to refine charts or extend an investigation. Saved results are
   snapshots; ask for fresh/current data to execute source SQL again.
-- Use **Analyze** beside the composer to choose a complete saved snapshot,
-  reviewed upload or Python-derived dataset. The choice fixes the population;
-  missing detail requires an explicit source-expansion decision.
-- Use **Refine saved population** to apply categories or typed date ranges to
-  that dataset. This starts a new analytical turn with matching findings, chart,
-  HTML and downloads. **Refresh from warehouse** regenerates the current
-  question and scope from fresh source evidence, preserving the prior report if
-  it fails. A refreshed file requires a new upload and conversation.
+- Describe filters and follow-up questions in chat. To use updated file data,
+  attach the new version; earlier snapshots remain available.
 - Forecast evaluations save predictions, baseline/candidate MAE and RMSE,
   training/holdout windows and measured interval coverage separately from
   nominal coverage. Their tables and calculations are included in downloads.
@@ -64,9 +60,22 @@ saved-data follow-ups, a sample upload, and run-control checks.
   be retried without rerunning data retrieval or analysis.
 - **Download data and calculations** offers an analysis ZIP, prepared on click,
   containing SQL query files, a portable Python script, notebook, typed data and saved report. Python
-  steps replay locally; SQL remains snapshot provenance.
+  steps replay locally with their exact workflow helper sources; SQL remains snapshot provenance.
 - Evidence panels contain bounded previews, exact SQL/Python and full CSV and
   Parquet download links. Diagnostic images and HTML remain local artifacts.
+
+## Analytical capabilities
+
+Ask “Explore this dataset and investigate its strongest patterns,” “Explain this
+change by segment,” “Compare cohort retention and funnel drop-off,” or “Compare
+groups with uncertainty.” Prediction requests compare held-out models with a
+baseline; forecasts save predictions, errors and intervals. Scenario questions
+use declared assumptions. Multiple reviewed tables support preparation and keyed
+joins. Documents provide cited context and reviewable extracted tables.
+
+The analyst shows a plan for broad work and proceeds within approved scope. It
+asks when business meaning or source expansion changes the answer. Statistical
+associations do not establish causes; scenario outputs do not claim probabilities.
 
 ## Responsibilities
 
@@ -91,8 +100,8 @@ Each review shows every proposal in the interrupt and submits their decisions
 together. Choose a decision for each proposal; none is preselected. Decisions
 for an older review are rejected.
 The active analysis budget is 15 minutes, individual Python execution 120
-seconds, and presentation has a separate two-minute budget. Framework call
-limits remain emergency stops. Partial work is identified as partial.
+seconds, and presentation has a separate two-minute budget. Hard call limits stop further analysis and reserve bounded presentation calls.
+Supported unfinished work is published as partial.
 
 Uploads default to 32 MiB per file and 200 scalar columns. Files that exceed
 row/decoded-size limits are rejected in full. CSV identifiers stay text until
@@ -132,8 +141,7 @@ Python with repair, saved-data SQL, report consistency and retry, lifecycle,
 provider configuration and UI components. Opt-in model evaluations are separate;
 they send the supplied fixture context to the configured provider and must be
 explicitly enabled. They assess correctness and methodology rather than exact SQL.
-The [extended verification record](doc/reviews/priority-followup-tests-2026-10-02.md)
-records 490 passing local tests, six skipped provider tests, refresh/grain/forecast
-repairs, local discovery observations and portable replay checks. The three paired
+The [latest verification record](doc/reviews/checkup-2026-10-18.md)
+records the capability expansion, local checks and portable replay boundaries. The three paired
 semantic studies remain pending; verification stays local under the user's current
 instruction.

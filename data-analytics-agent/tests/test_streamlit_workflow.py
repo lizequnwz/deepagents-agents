@@ -1,6 +1,9 @@
 """Streamlit's supported UI harness verifies stable navigation and run controls."""
 
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 from fastapi.testclient import TestClient
 from streamlit.testing.v1 import AppTest
 from data_analytics_agent.api import Services, create_app
@@ -136,6 +139,8 @@ def test_one_turn_preserves_activity_identity_through_publication(
         app.query_params["thread_id"] = thread
         app.run(timeout=15)
         assert not app.exception and len(app.chat_input) == 1
+        assert app.chat_input[0].proto.accept_file
+        composer_id = app.chat_input[0].proto.id
         assert [m.name for m in app.chat_message] == ["user", "assistant"]
         activity_id = next(e for e in app.expander if e.label == "Activity").proto.id
         app.run(timeout=15)
@@ -153,6 +158,7 @@ def test_one_turn_preserves_activity_identity_through_publication(
         )
         assert sum(m.value == "Synthetic published findings" for m in app.markdown) == 1
         assert sum(e.label == "Activity" for e in app.expander) == 1
+        assert app.chat_input[0].proto.id == composer_id
         services.runs.fail(run, "Report rendering needs retry")
         services.conversations.fail_run(thread, run)
         app.run(timeout=15)
@@ -160,6 +166,7 @@ def test_one_turn_preserves_activity_identity_through_publication(
             "Findings saved · Report generation failed" in m.value for m in app.markdown
         )
         assert any(b.label == "Retry report" for b in app.button)
+        assert app.chat_input[0].proto.id == composer_id
         services.conversations.begin_run(thread, run)
         services.manager()._finish(run, findings)
         app.run(timeout=15)
@@ -174,6 +181,8 @@ def test_one_turn_preserves_activity_identity_through_publication(
         )
         assert sum(m.value == "Synthetic published findings" for m in app.markdown) == 1
         assert sum(e.label == "Activity" for e in app.expander) == 1
+
+        assert app.chat_input[0].proto.id == composer_id
 
 
 def test_live_model_status_retains_fast_tool_result_context(test_settings, monkeypatch):
@@ -295,3 +304,136 @@ def test_chat_attachment_preserves_question_until_review(test_settings, monkeypa
         assert not reopened.exception
         assert len(services.conversations.get(thread).turns) == 1
         assert reopened.chat_input[0].proto.accept_file
+
+
+@pytest.mark.parametrize(
+    "source_kind,filename,content,needs_review",
+    [
+        ("file", "more.csv", b"amount\n3\n4\n", True),
+        ("file", "notes.md", b"# Context\nAmounts are source units.", False),
+        ("warehouse", "notes.txt", b"Amounts are source units.", False),
+    ],
+)
+def test_composer_attachments_keep_conversation_and_question(
+    test_settings, monkeypatch, source_kind, filename, content, needs_review
+):
+    from data_analytics_agent.ui import uploads
+    from data_analytics_agent.uploads import stage_upload, uploads_for_thread
+    from tests.test_file_workspace import confirm
+
+    services = Services(
+        settings=test_settings,
+        agent=Graph([
+            Stream(CoordinatorResponse(answer="Existing context.")),
+            Stream(CoordinatorResponse(answer="Attachment received.")),
+        ]),
+    )
+    if source_kind == "file":
+        original = confirm(services, stage_upload(services, b"id\n1\n", "original.csv"))
+        thread = original.thread_id
+    else:
+        thread = services.conversations.create("test")
+    source_id = services.conversations.get(thread).source_id
+    with TestClient(create_app(services)) as api:
+        api.post(f"/api/conversations/{thread}/messages", json={"message": "Hello"}).raise_for_status()
+
+        def request(self, method, path, **kwargs):
+            kwargs.pop("timeout", None)
+            response = api.request(method, path, **kwargs)
+            if response.status_code >= 400:
+                raise APIError(str(response.json().get("detail")), status_code=response.status_code)
+            return response.json()
+
+        monkeypatch.setattr(AgentAPIClient, "request", request)
+        native = uploads.chat_submission
+        submissions = [SimpleNamespace(
+            text="What can you tell me about this attachment?",
+            files=[SimpleNamespace(name=filename, size=len(content), getvalue=lambda: content)],
+        )]
+
+        def composer(*args, **kwargs):
+            native(*args, **kwargs)
+            return submissions.pop() if submissions else None
+
+        monkeypatch.setattr(uploads, "chat_submission", composer)
+        app = AppTest.from_file(str(Path(__file__).parents[1] / "streamlit_app.py"))
+        app.query_params["thread_id"] = thread
+        app.run(timeout=15)
+        assert not app.exception
+        assert app.query_params["thread_id"] == [thread]
+        assert len(services.conversations.list()) == 1
+        if needs_review:
+            assert len(services.conversations.get(thread).turns) == 1
+            assert len(uploads_for_thread(services, thread)) == 2
+            assert any("What can you tell me" in item.value for item in app.info)
+            next(b for b in app.button if b.label == "Confirm data and continue").click().run(timeout=15)
+        else:
+            documents = api.get(f"/api/conversations/{thread}/documents").json()["documents"]
+            assert len(documents) == 1 and documents[0]["filename"] == filename
+        assert not app.exception
+        current = services.conversations.get(thread)
+        assert current.source_id == source_id
+        assert len(current.turns) == 2
+        assert current.turns[-1].user_message == "What can you tell me about this attachment?"
+        assert not any(item.label == "Analyze" for item in app.selectbox)
+        assert not any(item.label == "Add data and documents" for item in app.expander)
+        assert not app.get("file_uploader")
+        reopened = AppTest.from_file(str(Path(__file__).parents[1] / "streamlit_app.py"))
+        reopened.query_params["thread_id"] = thread
+        reopened.run(timeout=15)
+        assert not reopened.exception
+        assert len(services.conversations.get(thread).turns) == 2
+
+
+@pytest.mark.parametrize("accept", [True, False])
+def test_table_attachment_in_established_warehouse_requires_file_conversation(
+    test_settings, monkeypatch, accept
+):
+    from data_analytics_agent.ui import uploads
+
+    services = Services(
+        settings=test_settings,
+        agent=Graph([Stream(CoordinatorResponse(answer="Warehouse context."))]),
+    )
+    thread = services.conversations.create("test")
+    with TestClient(create_app(services)) as api:
+        api.post(f"/api/conversations/{thread}/messages", json={"message": "Hello"}).raise_for_status()
+
+        def request(self, method, path, **kwargs):
+            kwargs.pop("timeout", None)
+            response = api.request(method, path, **kwargs)
+            if response.status_code >= 400:
+                raise APIError(str(response.json().get("detail")), status_code=response.status_code)
+            return response.json()
+
+        monkeypatch.setattr(AgentAPIClient, "request", request)
+        native = uploads.chat_submission
+        submissions = [SimpleNamespace(
+            text="Explore this table",
+            files=[SimpleNamespace(name="new.csv", size=4, getvalue=lambda: b"x\n1\n")],
+        )]
+
+        def composer(*args, **kwargs):
+            native(*args, **kwargs)
+            return submissions.pop() if submissions else None
+
+        monkeypatch.setattr(uploads, "chat_submission", composer)
+        app = AppTest.from_file(str(Path(__file__).parents[1] / "streamlit_app.py"))
+        app.query_params["thread_id"] = thread
+        app.run(timeout=15)
+        assert not app.exception
+        assert len(services.conversations.list()) == 1
+        label = "Start file conversation" if accept else "Cancel attachment"
+        next(button for button in app.button if button.label == label).click().run(timeout=15)
+        assert not app.exception
+        assert services.conversations.get(thread).source_id == "test"
+        assert len(services.conversations.get(thread).turns) == 1
+        if accept:
+            new_thread = app.query_params["thread_id"][0]
+            assert new_thread != thread
+            assert services.conversations.get(new_thread).source_id.startswith("upload:")
+            assert not services.conversations.get(new_thread).run_ids
+            assert any("Explore this table" in item.value for item in app.info)
+        else:
+            assert len(services.conversations.list()) == 1
+            assert app.chat_input[0].value == "Explore this table"

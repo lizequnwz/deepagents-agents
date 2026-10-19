@@ -87,6 +87,7 @@ def analytical_bundle(test_settings, tmp_path):
         s,
         upload.thread_id,
         UploadReview(types={c.name: "original" for c in upload.columns}),
+        upload_id=upload.upload_id,
     )
     thread = upload.thread_id
     run = s.runs.create(thread, upload.source_id, "Analyze amounts")
@@ -125,6 +126,7 @@ ax.set_title('Doubled amounts')
 analysis_outputs = {'total': str(frame['amount'].sum()), 'figure': fig}
 """,
         runtime=runtime("first"),
+        analysis_kind="general",
     )
     assert first["ok"], first
     second = execute.func(
@@ -138,18 +140,25 @@ analysis_outputs = {'ratio': 2.0, 'rows': len(combined)}
 output_datasets = {'final': combined}
 """,
         runtime=runtime("second"),
+        analysis_kind="general",
     )
     assert second["ok"], second
     failed = execute.func(
         inputs={"original": upload.result_id},
         code="raise ValueError('discarded attempt')",
         runtime=runtime("failed"),
+        analysis_kind="general",
     )
     assert not failed["ok"]
     end = finish.func(
         outcome="analysis_completed",
         answer="Doubled total is 24.6800.",
         method="Multiply each complete snapshot amount by two.",
+        final_outputs={
+            first["execution_id"]: ["total", "figure"],
+            second["execution_id"]: ["ratio", "rows"],
+        },
+        final_result_ids=[second["output_datasets"]["final"]],
         runtime=runtime("finish"),
     )
     analysis = s.analyses.get(end["analysis_id"], thread).analysis

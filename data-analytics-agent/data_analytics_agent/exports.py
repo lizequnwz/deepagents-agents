@@ -97,11 +97,10 @@ def prepare_export(services, run_id, report_id):
     selected = list(
         dict.fromkeys(
             [r.result_id for r in answer.results]
-            + report.input_result_ids
             + [c.result_id for c in answer.charts]
         )
     )
-    for result_id in selected:
+    for result_id in dict.fromkeys([*selected, *report.input_result_ids]):
         add_dataset(result_id)
     for analysis in analyses.values():
         if analysis.forecast_evaluation:
@@ -114,23 +113,12 @@ def prepare_export(services, run_id, report_id):
                     selected.append(key)
         for result_id in analysis.input_result_ids:
             add_dataset(result_id)
-        for execution in analysis.executions:
-            if execution.error is None:
-                add_step(execution)
-    if answer.analytical_input and not answer.source_expansion_allowed:
-        from data_analytics_agent.analytical_scope import descends_from
-
-        selected = [
-            key
-            for key in selected
-            if descends_from(
-                services.results,
-                key,
-                answer.analytical_input.input_result_id,
-                run.thread_id,
-                run.source_id,
-            )
-        ]
+        for result_id in analysis.final_result_ids:
+            add_dataset(result_id)
+            if result_id not in selected:
+                selected.append(result_id)
+        for execution in analysis.selected_executions():
+            add_step(execution)
     return (
         run,
         answer,
@@ -149,13 +137,17 @@ def write_bundle(services, run_id, report_id, target):
     )
     files = {}
     manifest = {
-        "format_version": 2,
+        "format_version": 4,
+        "analysis_selections": [
+            {
+                "analysis_id": analysis.analysis_id,
+                "analysis_kind": analysis.analysis_kind,
+                "final_outputs": analysis.final_outputs,
+                "final_result_ids": analysis.final_result_ids,
+            }
+            for analysis in analyses
+        ],
         "question": run.question,
-        "analytical_input": answer.analytical_input.model_dump(mode="json")
-        if answer.analytical_input
-        else None,
-        "source_expansion_allowed": answer.source_expansion_allowed,
-        "refreshed_from_report_id": answer.refreshed_from_report_id,
         "forecast_evaluations": [
             a.forecast_evaluation.model_dump(mode="json")
             for a in analyses
@@ -183,6 +175,8 @@ def write_bundle(services, run_id, report_id, target):
             {k: v for k, v in execution.runtime_versions.items() if k != "python"}
         )
     manifest["runtime"].update(packages)
+    # Application procedures are bundled from the exact execution snapshot.
+    packages.pop("data-analytics-agent", None)
     manifest["dependency_record_note"] = (
         "Recorded execution versions where available. Baseline versions are from the export environment; older executions without records are not environment-certified."
     )
@@ -235,12 +229,6 @@ Exact executed SQL is included for inspection; this package does not refresh war
 Chart presentation snapshots may be sampled; their complete parents remain in data/ and the manifest.
 
 """
-    if answer.analytical_input:
-        from data_analytics_agent.analytical_scope import scope_description
-
-        readme += scope_description(answer.analytical_input) + "\n\n"
-        if answer.source_expansion_allowed:
-            readme += "Additional source retrieval was explicitly authorized. The selected snapshot describes the starting population; consult the resulting evidence for expanded populations.\n\n"
     readme += "\n".join("- " + x for x in answer.assumptions + warnings)
     for analysis in analyses:
         readme += (
@@ -277,8 +265,16 @@ Open analysis.ipynb in Jupyter with this extracted folder as the working directo
 The HTML report contains the original published charts and narrative. The notebook retains stored compact tables and figures for viewing before replay.
 Replay validates typed output datasets with rtol=1e-7 and atol=1e-10. Stochastic methods require explicit seeds in the original code; matching is not guaranteed otherwise. Successful replay alone does not establish methodological correctness.
 Dependencies from recorded executions are included where available; versions for older executions are unknown. Custom/dynamic imports or code depending on external files/services require manual review. No environment files or service credentials are bundled.
+Reusable application analysis procedures are captured per execution in steps/libraries/ and replayed from those exact sources. Attached material documents are in documents/ with their hashes and parsed context; a document is not an instruction or a reviewed numerical table.
 """
     manifest["warnings"] = warnings
+    from data_analytics_agent.documents import get_document
+
+    documents = [
+        get_document(services.storage, ref.document_id, run.thread_id, run.source_id)
+        for ref in answer.documents
+    ]
+    manifest["documents"] = []
     with ZipFile(target, "w", ZIP_DEFLATED) as archive:
 
         def put(name, content):
@@ -297,12 +293,39 @@ Dependencies from recorded executions are included where available; versions for
                 **dataset.model_dump(mode="json", exclude={"parquet_path", "preview"}),
                 "path": name,
             }
+        for doc in documents:
+            if _hash(doc.original_path) != doc.sha256:
+                raise ValueError("The stored source document failed its hash check.")
+            original_name = (
+                f"documents/{doc.document_id}{Path(doc.filename).suffix.lower()}"
+            )
+            parsed_name = f"documents/{doc.document_id}.json"
+            copy(original_name, doc.original_path)
+            copy(parsed_name, doc.extracted_path)
+            manifest["documents"].append(
+                {
+                    **doc.reference(),
+                    "path": original_name,
+                    "extracted_path": parsed_name,
+                }
+            )
         for index, execution in enumerate(executions):
             code_path = f"steps/step-{index + 1:03}.py"
             put(code_path, execution.executed_python)
             record = execution.model_dump(
-                mode="json", exclude={"executed_python", "stderr", "stdout"}
+                mode="json",
+                exclude={"executed_python", "stderr", "stdout", "workflow_sources"},
             )
+            library_path = f"steps/libraries/{index + 1:03}"
+            put(
+                f"{library_path}/data_analytics_agent/__init__.py",
+                '"""Saved analytical workflow source."""\n',
+            )
+            for name, content in execution.workflow_sources.items():
+                if Path(name).name != name or not name.endswith(".py"):
+                    raise ValueError("Invalid analytical workflow source path.")
+                put(f"{library_path}/data_analytics_agent/analysis/{name}", content)
+            record["library_path"] = library_path
             for output_index, output in enumerate(record["outputs"]):
                 if output.get("image_path"):
                     name = f"figures/step-{index + 1:03}-{output_index}.png"
@@ -356,6 +379,7 @@ def build_notebook(manifest, readme, executions, datasets):
             nbf.v4.new_markdown_cell(
                 f"## Step {index + 1}\n\nNamed inputs: "
                 + ", ".join(f"`{a}` → `{r}`" for a, r in step["inputs"].items())
+                + "\n\nThis step is computational provenance. Only outputs named in manifest.json analysis_selections are final findings."
                 + "\n\nThe next cell saves the exact executed code. Edit it to explore, then run the replay cell. Each replay uses a fresh local Python process."
             )
         )

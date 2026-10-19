@@ -17,12 +17,12 @@ import pyarrow.parquet as pq
 def load_manifest(root):
     root = Path(root)
     manifest = json.loads((root / "manifest.json").read_text())
-    if manifest["format_version"] != 2:
+    if manifest["format_version"] != 4:
         raise ValueError("Unsupported analysis bundle version.")
     for relative, expected in manifest["files"].items():
         # Notebook cells and step files are editable; verify immutable evidence.
         if not (
-            relative.startswith(("data/", "figures/")) or relative == "report.html"
+            relative.startswith(("data/", "figures/", "documents/", "steps/libraries/")) or relative == "report.html"
         ):
             continue
         path = (root / relative).resolve()
@@ -103,6 +103,7 @@ def run_step(root, index):
             PYTHONHASHSEED="0",
             PYTHONNOUSERSITE="1",
             PYTHONDONTWRITEBYTECODE="1",
+            ANALYTICS_LIBRARY_ROOT=str(root / step["library_path"]),
         )
         result = subprocess.run(
             [

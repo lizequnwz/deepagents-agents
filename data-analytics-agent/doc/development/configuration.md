@@ -155,7 +155,7 @@ tracing is enabled, its input/output tracing policy also applies to this runnabl
 
 ## Release storage contract
 
-This release uses API contract **17**. An approval contains `interrupt_id` and an
+This release uses API contract **22**. An approval contains `interrupt_id` and an
 ordered `actions` list; each action carries its code, allowed decisions and all
 named Python inputs when applicable. Decision requests contain that current
 `interrupt_id` and one decision for every action. Stale reviews are rejected.
