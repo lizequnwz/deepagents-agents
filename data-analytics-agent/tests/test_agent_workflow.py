@@ -233,6 +233,7 @@ def test_owner_prompts_load_skills_for_their_responsibilities(test_settings, mon
     assert specification["skills"] == [
         "/project/skills/reporting/",
         "/project/skills/workflows/",
+        "/project/skills/dashboards/",
     ]
     specialists = {s["name"]: s for s in specification["subagents"]}
     assert "skills" not in specialists["text-to-sql"]

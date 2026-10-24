@@ -1,0 +1,32 @@
+{
+  "tested_at": "2026-10-22T09:06:30.004Z",
+  "status": "pass",
+  "browser_version": "155.0.8059.85",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "build_a": {
+    "entry": "/workspace/assets/index-CFUfl9rX.js",
+    "assets": [
+      "index-CCid3ym4.css",
+      "index-CFUfl9rX.js"
+    ]
+  },
+  "build_b": {
+    "entry": "/workspace/assets/index-V_avJqIl.js",
+    "assets": [
+      "index-CCid3ym4.css",
+      "index-V_avJqIl.js"
+    ]
+  },
+  "old_hashed_entry_removed": true,
+  "app_open_without_chart_before_rebuild": true,
+  "first_chart_rendered_after_rebuild": true,
+  "new_script_requests_for_first_chart": [],
+  "reload_uses_new_build": true,
+  "model_provider_calls": 0,
+  "page_errors": [],
+  "console_errors": [],
+  "http_errors": []
+}

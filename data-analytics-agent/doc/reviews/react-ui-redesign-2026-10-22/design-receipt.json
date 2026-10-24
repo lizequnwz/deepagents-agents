@@ -1,0 +1,171 @@
+{
+  "tested_at": "2026-10-22T17:14:00.372Z",
+  "browser_version": "155.0.8059.85",
+  "frontend_assets": [
+    "index-Di_vRRZm.js",
+    "index-GjzC33Sx.css"
+  ],
+  "real_api": true,
+  "model_provider_calls": 0,
+  "viewports": [
+    {
+      "name": "phone",
+      "width": 375,
+      "height": 812
+    },
+    {
+      "name": "tablet",
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "name": "wide",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "name": "landscape",
+      "width": 812,
+      "height": 375
+    }
+  ],
+  "scenario_counts": {
+    "total": 9,
+    "passed": 9,
+    "failed": 0
+  },
+  "scenarios": [
+    {
+      "name": "Searchable workspace navigation and keyboard tabs",
+      "status": "pass",
+      "history_search": true,
+      "arrow_home_end_tabs": true
+    },
+    {
+      "name": "Unapplied filter choices and keyboard-accessible chart data",
+      "status": "pass",
+      "unapplied_choices_do_not_execute": true,
+      "explicit_reset_to_applied": true,
+      "chart_table_and_download_accessible": true,
+      "preview_sort_direction_announced": true
+    },
+    {
+      "name": "Chart rendering failure has an explicit working retry",
+      "status": "pass",
+      "injected_invalid_chart_response_once": true,
+      "retry_restored_saved_chart": true
+    },
+    {
+      "name": "Destructive action disclosure, modal escape and focus restoration",
+      "status": "pass",
+      "modal_keyboard_trap": true,
+      "escape_restores_visible_opener": true
+    },
+    {
+      "name": "Desktop, tablet, small phone and landscape reflow",
+      "status": "pass",
+      "viewports": [
+        {
+          "name": "phone",
+          "width": 375,
+          "height": 812,
+          "scroll": 375,
+          "no_horizontal_overflow": true
+        },
+        {
+          "name": "tablet",
+          "width": 768,
+          "height": 1024,
+          "scroll": 768,
+          "no_horizontal_overflow": true
+        },
+        {
+          "name": "desktop",
+          "width": 1440,
+          "height": 1000,
+          "scroll": 1440,
+          "no_horizontal_overflow": true
+        },
+        {
+          "name": "wide",
+          "width": 1920,
+          "height": 1080,
+          "scroll": 1920,
+          "no_horizontal_overflow": true
+        },
+        {
+          "name": "landscape",
+          "width": 812,
+          "height": 375,
+          "scroll": 812,
+          "no_horizontal_overflow": true
+        }
+      ],
+      "web_targets_at_least_24_css_px": true,
+      "phone_composer_and_header_targets_44_css_px": true
+    },
+    {
+      "name": "Mobile drawer escape and unobscured conversation focus",
+      "status": "pass",
+      "drawer_escape": true,
+      "focus_restored": true
+    },
+    {
+      "name": "Mobile file review, SQL approval and Excel selection remain reachable",
+      "status": "pass",
+      "csv_opens_required_review_automatically": true,
+      "reviewed_csv_allows_conversation": true,
+      "sql_approval_focus_visible": true,
+      "excel_dialog_within_phone_viewport": true,
+      "excel_keyboard_trap_and_escape": true
+    },
+    {
+      "name": "Light and dark contrast with reduced motion",
+      "status": "pass",
+      "themes": [
+        {
+          "theme": "light",
+          "contrast_ratios": {
+            "body": 17.238903537158805,
+            "surface_text": 18.422536070011546,
+            "muted": 7.410973996592063,
+            "muted_surface": 7.919815519116052
+          }
+        },
+        {
+          "theme": "dark",
+          "contrast_ratios": {
+            "body": 17.238903537158805,
+            "surface_text": 13.626505192308578,
+            "muted": 12.925171209751033,
+            "muted_surface": 10.216711998040305
+          }
+        }
+      ],
+      "reduced_motion_transitions_disabled": true
+    },
+    {
+      "name": "Equivalent 200 percent browser zoom reflow",
+      "status": "pass",
+      "css_viewport": {
+        "width": 720,
+        "height": 500
+      },
+      "device_scale_factor": 2,
+      "equivalent_physical_viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "composer_focus_visible": true
+    }
+  ],
+  "page_errors": [],
+  "console_errors": [],
+  "http_errors": [],
+  "status": "pass"
+}

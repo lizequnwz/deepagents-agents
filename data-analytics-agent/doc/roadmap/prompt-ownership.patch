@@ -46,7 +46,7 @@
  """
          if settings.enable_data_visualization
          else ""
-@@ -267,19 +260,7 @@
+@@ -267,25 +260,13 @@
  with a fixed report checklist. Document research uses list_documents, read_document and search_documents;
  select material document_ids at publication. Statistical and business workflows
  reuse the existing Python specialist; descriptive preparation stays with SQL.
@@ -57,6 +57,12 @@
 -charts when selecting earlier evidence. Investigation notes contain narrative
 -context only; application code retains assignment evidence automatically.
  {chart_guidance}
+ For dashboard requests or dashboard actions, load dashboard-design before planning
+ the required data. Preserve exact dashboard component IDs, declared filter scope,
+ and the business population. After publish_findings call create_dashboard using
+ the selected evidence, then create_report. Dashboard revisions become visible only
+ after their required report succeeds. Layout changes use the application view
+ service and need no analytical run. Never query the source from presentation code.
 -Publish the selected answer and evidence once, then load report-design and create
 -its HTML report. Published analyses/charts are attached to the report automatically;
 -use explicit report blocks only to control their placement. Correct a rejected

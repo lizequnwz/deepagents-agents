@@ -15,7 +15,7 @@ from typing import Any
 from plotly.io import to_html as plotly_to_html
 
 from data_analytics_agent.visualization.renderer import (
-    ChartRenderStyle,
+    PRODUCT_CHART_STYLE,
     build_chart,
 )
 from data_analytics_agent.visualization.schemas import ChartType
@@ -38,32 +38,6 @@ from data_analytics_agent.schemas import SavedResult
 _SCRIPT_PATTERN = re.compile(r"<script(?:\s[^>]*)?>(.*?)</script>", re.DOTALL)
 _INLINE_PATTERN = re.compile(r"\*\*(.+?)\*\*|`([^`]+)`")
 REPORT_RENDERER_VERSION = "1.7"
-
-# Report-owned semantic chart tokens. Every categorical color maintains at
-# least 3:1 contrast against both the light and dark report surfaces.
-_REPORT_CHART_DISCRETE = (
-    "#368727",  # Fidelity green
-    "#3266E0",  # blue
-    "#9747F6",  # purple
-    "#C74B07",  # orange
-    "#058070",  # aqua
-    "#997E05",  # gold
-    "#047CB8",  # cobalt
-    "#DC1616",  # red
-)
-_REPORT_CHART_CONTINUOUS = (
-    "#EDFAEB",
-    "#BBEBB2",
-    "#65C754",
-    "#368727",
-    "#044014",
-)
-_REPORT_CHART_STYLE = ChartRenderStyle(
-    discrete_colors=_REPORT_CHART_DISCRETE,
-    continuous_colors=_REPORT_CHART_CONTINUOUS,
-    show_title=False,
-    font_family=("Fidelity Sans, Source Sans 3, Arial, ui-sans-serif, sans-serif"),
-)
 
 
 def _inline_text(value: str) -> str:
@@ -318,7 +292,9 @@ def _forecast_evaluation(analysis: ResolvedDataAnalysis) -> str:
     columns = list(rows[0]) if rows else []
     header = "".join(f'<th scope="col">{escape(column)}</th>' for column in columns)
     body = "".join(
-        "<tr>" + "".join(f"<td>{escape(_value(row.get(column)))}</td>" for column in columns) + "</tr>"
+        "<tr>"
+        + "".join(f"<td>{escape(_value(row.get(column)))}</td>" for column in columns)
+        + "</tr>"
         for row in rows[:10]
     )
     return (
@@ -443,7 +419,7 @@ def _chart(
     rendered = build_chart(
         chart,
         result.rows,
-        style=_REPORT_CHART_STYLE,
+        style=PRODUCT_CHART_STYLE,
     )
     chart_html = plotly_to_html(
         rendered.figure,
@@ -616,7 +592,11 @@ def _upload_sources(results: Mapping[str, SavedResult]) -> str:
     for result in results.values():
         provenance = result.upload_provenance
         if provenance:
-            key = (provenance.sha256, provenance.filename, str(provenance.excel_selection))
+            key = (
+                provenance.sha256,
+                provenance.filename,
+                str(provenance.excel_selection),
+            )
             if key not in sources or provenance.schema_reviewed:
                 sources[key] = result
     if not sources:

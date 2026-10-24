@@ -43,6 +43,25 @@ class ChartRenderStyle:
     font_family: str | None = None
 
 
+# Shared product tokens keep the interactive workspace and exported report aligned.
+# Explicit chart palettes remain authoritative; these colors apply only to default.
+PRODUCT_CHART_STYLE = ChartRenderStyle(
+    discrete_colors=(
+        "#368727",
+        "#3266E0",
+        "#9747F6",
+        "#C74B07",
+        "#058070",
+        "#997E05",
+        "#047CB8",
+        "#DC1616",
+    ),
+    continuous_colors=("#EDFAEB", "#BBEBB2", "#65C754", "#368727", "#044014"),
+    show_title=False,
+    font_family="Fidelity Sans, Source Sans 3, Arial, ui-sans-serif, sans-serif",
+)
+
+
 def _is_number(value: Any) -> bool:
     return isinstance(value, (Real, Decimal)) and not isinstance(value, bool)
 

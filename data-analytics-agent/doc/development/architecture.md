@@ -2,6 +2,7 @@
 
 ```mermaid
 flowchart TD
+    React[React workspace: conversation, dashboard, report, data] --> API
     UI[Streamlit chat and saved conversations] --> API[FastAPI lifecycle and artifact API]
     API --> C[Deep Agents coordinator]
     UI --> Voice[Native WAV recorder]
@@ -9,6 +10,10 @@ flowchart TD
     STT --> Draft[Editable question draft]
     Draft --> UI
     API --> Edit[Validated presentation edits over saved evidence]
+    API --> Dash[Dashboard state and typed actions]
+    Dash --> C
+    C --> DashSpec[Validated dashboard candidate]
+    DashSpec --> Commit[Commit revision after HTML report succeeds]
     C --> S[Text-to-SQL specialist]
     C --> P[Data-analysis specialist]
     S --> OSI[Curated semantic catalog]
@@ -140,6 +145,33 @@ history supplied to later analytical turns. Rendering failure leaves the previou
 view intact; resubmitting the explicit edit retries it. History deletion includes
 these records and their report files. No new graph run or provider call is needed.
 
+## Saved dashboards
+
+`dashboard/` owns strict specifications, immutable revisions, evidence resolution
+and typed action briefs. The coordinator loads `dashboard-design` and prepares a
+candidate after publication. Report completion is required before the dashboard
+head advances. Explicit dashboard requests and data actions cannot complete with
+only an HTML report. Report retries reuse the saved candidate and evidence.
+
+`dashboard_api.py` serves scoped create/list/view/history endpoints and layout
+edits. Its filter, refresh and drill actions reserve an idempotent request and
+start a normal source-bound run. The action brief stays in application context;
+conversation history displays a concise human-readable question. Source execution
+still belongs exclusively to the SQL specialist, with the existing reviews.
+
+Each filter declares exact component/column bindings in complete analytical data.
+Applied state and saved draft selections remain separate. Action validation checks
+the full saved population, rejects stale/reused evidence for affected components,
+and checks fresh source lineage for warehouse refresh. New facts require a new
+report. Empty results have explicit empty bindings rather than old numerical values.
+
+Title/order/span changes use a deterministic view service. Compare-and-set heads
+reject stale revisions; repeated request IDs reuse their committed result. Failed
+analytical actions retain the prior dashboard. Dashboard finalization and run
+completion share the correction lock. Deleting history removes dashboard state,
+candidates and actions with the conversation. This remains a local single-user
+product; the scoped API is not a hosted identity/authorization system.
+
 ## Chart intervals
 
 Chart bounds require `interval` metadata: kind, method, optional label, and
@@ -150,10 +182,18 @@ does not migrate old bound specifications that omitted interval meaning.
 
 ## UI lifecycle and deployment constraints
 
+The React workspace is built with Vite and served by the same FastAPI process at
+`/workspace/`. It contains conversations, source selection, reviewed file intake,
+clarifications/code reviews, dashboards, reports, data and activity. Its typed
+requests use the same services as Streamlit. There is no separate agent runtime
+or data history per client. Production assets are local; charts reuse Plotly.
+
 Streamlit refreshes active content using a timed fragment, preserving stable
 widget keys. Immutable previews/reports are cached by ID with bounded caches.
 Full downloads stream separately from preview pages. Conversation changes cause
 an app rerun; ordinary active-run refresh does not rebuild the conversation.
+Its lazy Saved dashboards panel reads the same dashboard API and can save,
+apply filters, refresh and reopen dashboard reports.
 
 Constraints: one process, one local user, one warehouse or isolated file workspace
 per conversation, sequential source queries. A file workspace may contain multiple

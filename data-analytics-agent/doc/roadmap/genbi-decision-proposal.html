@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dynamic BI dashboards — decision proposal</title>
+<style>
+:root{color-scheme:light;--ink:#172b3e;--muted:#546575;--line:#dbe3e6;--paper:#fff;--wash:#f3f6f5;--accent:#087c74;--nav:#112c3a}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:36px}body{margin:0;background:var(--wash);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}a{color:#086b67;text-decoration-thickness:1px;text-underline-offset:3px}a:hover{color:#004943}a:focus-visible,button:focus-visible{outline:3px solid #d4a33b;outline-offset:4px}button{font:inherit}
+.layout{display:grid;grid-template-columns:250px minmax(0,1080px);gap:44px;max-width:1460px;margin:0 auto;padding:42px 42px 70px}.sidebar{position:sticky;top:28px;align-self:start;max-height:calc(100vh - 56px);overflow:auto;padding:10px 12px 22px 0}.brand{font-size:12px;letter-spacing:.13em;font-weight:750;color:var(--accent);margin:0 0 16px}.sidebar h2{font-size:21px;line-height:1.25;margin:0 0 6px}.date{font-size:13px;color:var(--muted);margin:0 0 26px}.nav{display:flex;flex-direction:column;gap:3px}.nav a{font-size:13px;line-height:1.4;text-decoration:none;color:#526675;border-left:2px solid transparent;padding:8px 12px}.nav a.active{border-left-color:var(--accent);background:#e3eeeb;color:#075e59;font-weight:650}.utilities{display:flex;gap:10px;flex-wrap:wrap;margin-top:27px}.utilities a,.utilities button{color:#274e5c;background:white;border:1px solid #cad8dc;border-radius:6px;font-size:12px;padding:8px 11px;text-decoration:none;cursor:pointer}.sidebar-note{font-size:11px;line-height:1.6;color:#71808a;margin-top:20px}
+main{min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 35px #17372a06;padding:56px 64px 42px}.eyebrow{font-size:11px;font-weight:750;letter-spacing:.15em;color:var(--accent);margin:0 0 18px}.decision-strip{display:flex;flex-wrap:wrap;gap:8px;margin:25px 0 30px}.decision-strip span{font-size:12px;line-height:1.4;font-weight:650;background:#eaf4f0;color:#16635e;border:1px solid #d4e9e1;border-radius:4px;padding:7px 10px}h1{font-size:46px;font-weight:740;line-height:1.12;letter-spacing:-.04em;margin:0 0 24px;max-width:720px}h2{font-size:28px;line-height:1.25;letter-spacing:-.025em;margin:60px 0 21px;padding-top:24px;border-top:1px solid var(--line);scroll-margin-top:20px}h3{font-size:19px;line-height:1.35;margin:33px 0 15px}p{margin:0 0 17px}strong{font-weight:680}ul,ol{padding-left:25px;margin:15px 0 24px}li{padding-left:5px;margin:8px 0}li p{margin:0}code{font:13px/1.5 ui-monospace,SFMono-Regular,monospace;background:#eef3f3;border-radius:3px;padding:2px 4px}.table-wrap{margin:25px 0 29px;border:1px solid #d8e2e5;border-radius:7px;overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6;text-align:left;table-layout:fixed}th{background:#173b49;color:#fff;font-weight:650;font-size:12px;padding:13px 15px;vertical-align:top}td{padding:14px 15px;vertical-align:top;border-bottom:1px solid #e2e9eb;overflow-wrap:anywhere}tr:last-child td{border-bottom:0}tbody tr:nth-child(even){background:#f5f8f7}td:first-child{font-weight:630;width:24%}td a{font-size:12px}blockquote{border-left:3px solid var(--accent);margin:24px 0;padding:4px 0 4px 20px;background:#f2f8f5}footer{border-top:1px solid var(--line);padding-top:22px;margin-top:42px;font-size:12px;color:var(--muted)}.reading{height:3px;position:fixed;top:0;left:0;background:var(--accent);width:0;z-index:10}.mobile-nav{display:none}
+@media(min-width:1700px){.layout{padding-top:60px;gap:60px}}
+@media(max-width:1100px){.layout{grid-template-columns:210px minmax(0,1fr);gap:24px;padding:28px 24px}main{padding:38px 34px}h1{font-size:39px}.sidebar h2{font-size:19px}}
+@media(max-width:800px){.layout{display:block;padding:14px}.sidebar{position:static;max-height:none;padding:14px 8px 22px}.nav,.sidebar-note{display:none}.sidebar .date{margin-bottom:0}.sidebar .utilities{margin-top:15px}.sidebar h2{font-size:18px}.brand{margin-bottom:8px}.mobile-nav{display:block;margin:0 0 22px}.mobile-nav summary{font-size:13px;font-weight:650;color:var(--accent);cursor:pointer}.mobile-nav a{display:block;padding:7px 0;font-size:13px}main{padding:29px 22px;border-radius:7px}h1{font-size:34px}h2{font-size:25px;margin-top:42px}h3{font-size:19px}body{font-size:15px}table{min-width:660px}th,td{padding:12px}}
+@media print{@page{size:A4;margin:17mm 15mm}body{background:#fff;font-size:10pt;line-height:1.45}.layout{display:block;max-width:none;padding:0}.sidebar,.reading,.mobile-nav,.decision-strip{display:none}main{padding:0;box-shadow:none;border:0}h1{font-size:31pt}h2{font-size:18pt;margin:25pt 0 12pt;padding-top:14pt;break-after:avoid}h3{font-size:12pt;break-after:avoid}p,li{orphans:3;widows:3}table{font-size:8.5pt;line-height:1.4;min-width:0}thead{display:table-header-group}tr{break-inside:avoid}th{background:#e8eeee!important;color:#172b3e!important}th,td{padding:8pt}.table-wrap{overflow:visible;border-radius:0}a{color:#145b5a}footer{font-size:8pt}}
+</style></head><body><div class="reading" aria-hidden="true"></div>
+<div class="layout"><aside class="sidebar" aria-label="Document navigation"><p class="brand">RESEARCH &amp; ARCHITECTURE</p><h2>Dynamic BI dashboards</h2><p class="date">Decision proposal · 21 October 2026</p><nav class="nav" aria-label="Contents"><a href="#1-recommended-decision">Recommended decision</a>
+<a href="#2-define-the-product-before-choosing-the-protocol">Define the product before choosing the protocol</a>
+<a href="#3-what-established-products-demonstrate">What established products demonstrate</a>
+<a href="#4-what-a2ui-supplies">What A2UI supplies</a>
+<a href="#5-fit-with-the-current-analytics-agent">Fit with the current analytics agent</a>
+<a href="#6-proposed-architecture-and-behavior">Proposed architecture and behavior</a>
+<a href="#7-where-text-to-sql-fits">Where text-to-SQL fits</a>
+<a href="#8-is-streamlit-still-a-good-choice">Is Streamlit still a good choice?</a>
+<a href="#9-delivery-plan-and-release-gates">Delivery plan and release gates</a>
+<a href="#10-material-risks-and-controls">Material risks and controls</a>
+<a href="#11-build-or-embed">Build or embed</a>
+<a href="#12-decisions-to-make">Decisions to make</a>
+<a href="#evidence-and-writing-method">Evidence and writing method</a></nav><div class="utilities"><button type="button" onclick="window.print()">Print / save PDF</button><a href="genbi-decision-proposal.md" download>Markdown</a><a href="genbi-architecture.html">Architecture</a></div><p class="sidebar-note">Official sources and repository evidence.<br>Recommendations are separate from verified implementation.</p></aside>
+<main><p class="eyebrow">PRODUCT DIRECTION · TECHNICAL DECISION</p><details class="mobile-nav"><summary>Contents</summary><a href="#1-recommended-decision">Recommended decision</a>
+<a href="#2-define-the-product-before-choosing-the-protocol">Define the product before choosing the protocol</a>
+<a href="#3-what-established-products-demonstrate">What established products demonstrate</a>
+<a href="#4-what-a2ui-supplies">What A2UI supplies</a>
+<a href="#5-fit-with-the-current-analytics-agent">Fit with the current analytics agent</a>
+<a href="#6-proposed-architecture-and-behavior">Proposed architecture and behavior</a>
+<a href="#7-where-text-to-sql-fits">Where text-to-SQL fits</a>
+<a href="#8-is-streamlit-still-a-good-choice">Is Streamlit still a good choice?</a>
+<a href="#9-delivery-plan-and-release-gates">Delivery plan and release gates</a>
+<a href="#10-material-risks-and-controls">Material risks and controls</a>
+<a href="#11-build-or-embed">Build or embed</a>
+<a href="#12-decisions-to-make">Decisions to make</a>
+<a href="#evidence-and-writing-method">Evidence and writing method</a></details><h1 id="dynamic-bi-dashboards-decision-proposal">Dynamic BI dashboards: decision proposal</h1>
+<p><strong>Prepared for Charlie · 21 October 2026</strong><br><strong>Decision scope:</strong> extend the current data analytics agent.<br><strong>Evidence:</strong> official product documentation and the current repository. Product integrations were not executed.</p>
+<h2 id="1-recommended-decision">1. Recommended decision</h2>
+<p>Build dynamic dashboards as a <strong>feature of the current analytics agent</strong>. Add a dashboard design skill and application tools. Keep the current coordinator and its two specialists.</p>
+<p>Use <strong>React with the existing Python API</strong> as the target for a persistent, interactive BI workspace. Streamlit remains a sound choice for a bounded internal analytics workbench. Select it if that narrower scope is the intended product.</p>
+<p>Use <strong>A2UI as an optional UI delivery protocol</strong>. Keep the dashboard definition and analytical evidence under application control. Prove A2UI with real BI components before making it a release dependency.</p>
+<p>Keep <strong>text-to-SQL as the only source execution owner</strong>. The dashboard requests data through that capability. A renderer must never receive warehouse credentials or create its own data access path.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Recommendation</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Product boundary</td>
+<td>Dashboard feature in the existing product</td>
+<td>Reuses semantic definitions, evidence, reviews and recovery.</td>
+</tr>
+<tr>
+<td>Agent structure</td>
+<td>Coordinator plus design skill</td>
+<td>Dashboard composition already fits the coordinator&#39;s responsibility.</td>
+</tr>
+<tr>
+<td>New subagent</td>
+<td>Add only after a demonstrated need</td>
+<td>Separate presentation context can help later. It does not supply a dashboard runtime.</td>
+</tr>
+<tr>
+<td>Front end</td>
+<td>React for the proposed GenBI workspace</td>
+<td>Gives direct control over linked interactions and durable client state.</td>
+</tr>
+<tr>
+<td>A2UI</td>
+<td>Validate now; adopt when interoperability has value</td>
+<td>It supplies UI messages and renderers. BI behavior still needs application code.</td>
+</tr>
+<tr>
+<td>Data execution</td>
+<td>Preserve the SQL specialist boundary</td>
+<td>Prevents competing query, metric and permission paths.</td>
+</tr>
+</tbody></table></div>
+<h2 id="2-define-the-product-before-choosing-the-protocol">2. Define the product before choosing the protocol</h2>
+<p>Here, <strong>GenBI</strong> means that an agent helps users create, change and investigate BI content through conversation.</p>
+<p>Four capabilities need separate acceptance criteria:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>User result</th>
+<th>Current position</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Conversational analysis</td>
+<td>A supported answer with charts and a report</td>
+<td>Implemented.</td>
+</tr>
+<tr>
+<td>Dashboard generation</td>
+<td>A useful arrangement of related metrics, charts and tables</td>
+<td>Existing report objects provide a base. A dashboard artifact is missing.</td>
+</tr>
+<tr>
+<td>Dashboard interaction</td>
+<td>Shared filters, drill paths and saved view state</td>
+<td>Requires a new state and action contract.</td>
+</tr>
+<tr>
+<td>Dashboard operation</td>
+<td>Reopen, refresh, recover and control access</td>
+<td>Persistence exists. Refresh bindings and hosted access controls need work.</td>
+</tr>
+</tbody></table></div>
+<p>A chart with hover and zoom does not establish linked dashboard behavior. A saved data snapshot does not establish a refreshable query.</p>
+<p>The first useful journey should be concrete:</p>
+<ol>
+<li>Ask for monthly sales by region using a reviewed sales definition.</li>
+<li>Receive a saved dashboard with metrics, charts, a table and an HTML report.</li>
+<li>Select a region and a period. See the same population across the affected components.</li>
+<li>Reopen the dashboard with its saved state.</li>
+<li>Refresh the data explicitly. Retain the previous evidence and report.</li>
+<li>Ask why a change occurred. Receive a new investigation with stated limitations.</li>
+</ol>
+<p>If the sales definition or reporting period is materially ambiguous, clarify it before execution. Do not assign a currency or completeness status from the UI.</p>
+<h2 id="3-what-established-products-demonstrate">3. What established products demonstrate</h2>
+<p>The reviewed products show different levels of capability. The table records documented behavior, not tested product parity.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Product</th>
+<th>Verified pattern</th>
+<th>Limit that affects this decision</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Power BI Copilot</td>
+<td>Creates and edits report pages that users can save as normal reports.</td>
+<td>Report authoring excludes custom visuals and styling changes. <a href="https://learn.microsoft.com/en-us/power-bi/create-reports/copilot-create-reports" target="_blank" rel="noopener noreferrer">Source</a></td>
+</tr>
+<tr>
+<td>ThoughtSpot SpotterViz</td>
+<td>Creates and revises multi-chart Liveboards, including layout and styling. Standard Liveboard operations remain available.</td>
+<td>Requires enablement and edit permissions. Insight tiles are Early Access. <a href="https://docs.thoughtspot.com/cloud/26.9.0.cl/spotter-viz" target="_blank" rel="noopener noreferrer">Source</a></td>
+</tr>
+<tr>
+<td>Looker Conversational Analytics</td>
+<td>Adds conversation to dashboards and their query-linked content.</td>
+<td>Dashboard agents are Preview. This documentation does not establish full dashboard authoring. <a href="https://docs.cloud.google.com/looker/docs/conversational-analytics-looker-data-agents-dashboards" target="_blank" rel="noopener noreferrer">Source</a></td>
+</tr>
+<tr>
+<td>Tableau Agent in Dashboards</td>
+<td>Explains dashboards and answers questions about underlying workbook data.</td>
+<td>The feature is Beta. The documentation says it cannot build dashboards. <a href="https://help.tableau.com/current/pro/desktop/en-us/dashboard_narratives_overview.htm" target="_blank" rel="noopener noreferrer">Source</a></td>
+</tr>
+<tr>
+<td>Databricks Genie Agents</td>
+<td>Connects curated context, SQL, evaluation and dashboard conversation.</td>
+<td>Refreshing prior SQL and regenerating an answer are separate operations. Dashboard credential settings affect access. <a href="https://docs.databricks.com/aws/en/genie-agents/concepts" target="_blank" rel="noopener noreferrer">Concepts</a>, <a href="https://docs.databricks.com/aws/en/genie-agents/monitor" target="_blank" rel="noopener noreferrer">monitoring</a></td>
+</tr>
+<tr>
+<td>Wren AI</td>
+<td>Its current OSS direction emphasizes inspectable context and governed SQL.</td>
+<td>The former Docker GenBI application is sunset. Old dashboard guides do not establish maintained support. <a href="https://docs.getwren.ai/oss/introduction" target="_blank" rel="noopener noreferrer">Source</a></td>
+</tr>
+</tbody></table></div>
+<p>Three patterns matter most.</p>
+<p><strong>Generate normal product objects.</strong> Users must be able to save, inspect and revise a dashboard after the initial conversation. A generated screen alone is insufficient.</p>
+<p><strong>Keep business meaning in one place.</strong> Looker recommends curated fields and centralized calculations. Your reviewed OSI catalog already provides that direction. <a href="https://docs.cloud.google.com/looker/docs/conversational-analytics-looker-best-practices" target="_blank" rel="noopener noreferrer">Looker configuration guidance</a></p>
+<p><strong>Separate refresh from reinterpretation.</strong> A refresh should preserve the approved question. A new metric, join or grain requires new semantic work.</p>
+<p>These are design conclusions from the sources. They do not imply that one vendor supplies every proposed capability.</p>
+<h2 id="4-what-a2ui-supplies">4. What A2UI supplies</h2>
+<p>A2UI describes an interface with JSON messages. Trusted client components render that description. UI structure and application data remain separate. The protocol supports incremental updates. <a href="https://a2ui.org/concepts/overview/" target="_blank" rel="noopener noreferrer">A2UI concepts</a></p>
+<p>As checked on 21 October 2026, <strong>v0.9.1 is current</strong> and <strong>v1.0 is a candidate</strong>. The project still describes its overall status as early-stage public preview. Use the current protocol for a production evaluation. Do not depend on candidate-only behavior. <a href="https://a2ui.org/" target="_blank" rel="noopener noreferrer">Version status</a>, <a href="https://github.com/a2ui-project/a2ui" target="_blank" rel="noopener noreferrer">project status</a></p>
+<p>The current protocol creates surfaces, updates components, updates data and removes surfaces. The application supplies transport, durable storage and action processing. <a href="https://a2ui.org/specification/v0.9.1-a2ui/" target="_blank" rel="noopener noreferrer">Protocol specification</a></p>
+<p>Maintained React, Lit and Angular renderers list stable v0.9.1 support. Flutter also appears in that matrix. However, Flutter&#39;s own GenUI documentation still calls its SDK alpha. Protocol support and SDK maturity are separate facts. <a href="https://a2ui.org/reference/renderers/" target="_blank" rel="noopener noreferrer">Renderer matrix</a>, <a href="https://docs.flutter.dev/ai/genui" target="_blank" rel="noopener noreferrer">Flutter status</a></p>
+<h3 id="bi-components-still-need-implementation">BI components still need implementation</h3>
+<p>The basic A2UI catalog does not supply a complete BI component set. Charts, analytical tables and metric cards need a trusted custom catalog. The application must define their behavior. <a href="https://a2ui.org/specification/v0.9.1-a2ui/#basic-component-catalog" target="_blank" rel="noopener noreferrer">Basic catalog</a>, <a href="https://a2ui.org/guides/defining-your-own-catalog/" target="_blank" rel="noopener noreferrer">catalog guide</a></p>
+<p>Start with a small catalog: dashboard grid, metric card, saved chart, table, text, filter bar, evidence link and status message.</p>
+<p>A custom BI catalog needs compatible components on every target renderer. Protocol support alone does not make a chart portable across clients.</p>
+<p>Bind components to verified evidence IDs. Application code supplies numerical values. Reuse the current Plotly chart contracts. Keep model-authored JavaScript and arbitrary query text outside component properties.</p>
+<p>Use the maintained message processor and renderer. Do not implement another A2UI engine. Pin the tested protocol, catalog and package versions. Reject unsupported versions explicitly. <a href="https://a2ui.org/guides/renderer-development/" target="_blank" rel="noopener noreferrer">Renderer development</a></p>
+<h3 id="related-protocols-have-different-jobs">Related protocols have different jobs</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Main job</th>
+<th>Need for this project</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A2UI</td>
+<td>Describes the agent-generated interface</td>
+<td>Optional presentation delivery contract.</td>
+</tr>
+<tr>
+<td>AG-UI</td>
+<td>Connects an agent runtime with application events and state</td>
+<td>Optional. Consider it if its event contract reduces integration work.</td>
+</tr>
+<tr>
+<td>MCP</td>
+<td>Connects agents with tools and external systems</td>
+<td>Optional connector boundary. It does not define BI meaning.</td>
+</tr>
+<tr>
+<td>MCP Apps</td>
+<td>Displays an interactive app inside a compatible assistant host</td>
+<td>Useful if assistant-host distribution becomes a requirement.</td>
+</tr>
+<tr>
+<td>A2A</td>
+<td>Connects distributed agents</td>
+<td>No current need for an in-process dashboard feature.</td>
+</tr>
+</tbody></table></div>
+<p>A2UI can use a direct event stream. AG-UI is not a prerequisite. MCP Apps uses a host sandbox with a different rendering model. <a href="https://a2ui.org/concepts/transports/" target="_blank" rel="noopener noreferrer">A2UI transports</a>, <a href="https://docs.ag-ui.com/introduction" target="_blank" rel="noopener noreferrer">AG-UI</a>, <a href="https://modelcontextprotocol.io/extensions/apps/overview" target="_blank" rel="noopener noreferrer">MCP Apps</a></p>
+<p><strong>Adoption rule:</strong> use A2UI when shared component catalogs, multiple clients or external agent interfaces create a clear benefit. One web client can use the same validated dashboard definition directly.</p>
+<h2 id="5-fit-with-the-current-analytics-agent">5. Fit with the current analytics agent</h2>
+<p>The current system already separates presentation, source execution and statistical work. That separation should remain.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Existing asset</th>
+<th>Reuse</th>
+<th>Required addition</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>FastAPI and persistent conversations</td>
+<td>Keep the application boundary</td>
+<td>Dashboard and action endpoints.</td>
+</tr>
+<tr>
+<td>Coordinator</td>
+<td>Keep ownership of the user answer and published evidence</td>
+<td>Dashboard composition tools and design skill.</td>
+</tr>
+<tr>
+<td>Text-to-SQL</td>
+<td>Keep semantic grounding and all source execution</td>
+<td>Reviewed, parameterized dashboard query bindings.</td>
+</tr>
+<tr>
+<td>Data-analysis</td>
+<td>Keep statistical work over saved datasets</td>
+<td>Invoke for analytical questions that require it.</td>
+</tr>
+<tr>
+<td>Strict chart and report definitions</td>
+<td>Reuse chart rendering and evidence-bound metrics</td>
+<td>A separate dashboard definition with actions and filters.</td>
+</tr>
+<tr>
+<td>Saved datasets and scoped evidence resolver</td>
+<td>Keep lineage and immutable evidence</td>
+<td>Bind each dashboard revision to exact evidence.</td>
+</tr>
+<tr>
+<td>Direct presentation edits</td>
+<td>Reuse validation, stale-edit rejection and atomic commit patterns</td>
+<td>Dashboard revisions and affected-component updates.</td>
+</tr>
+</tbody></table></div>
+<p>Implementation evidence: <a href="../development/architecture.md">architecture</a>, <a href="../../data_analytics_agent/coordinator.py">coordinator</a>, <a href="../../data_analytics_agent/visualization/schemas.py">chart contracts</a>, <a href="../../data_analytics_agent/reporting/schemas.py">report contracts</a>, <a href="../../data_analytics_agent/evidence.py">evidence resolver</a>, <a href="../../data_analytics_agent/presentation_edits.py">presentation edits</a>.</p>
+<p>The main gap is a <strong>dashboard runtime</strong>. This is application code that stores dashboard state, validates actions, obtains data and commits consistent revisions.</p>
+<p>The current HTML report is a published document. Keep it as the evidence record. The dashboard is a working view with explicit state. Give each new data-backed answer its required report.</p>
+<h3 id="feature-skill-subagent-or-independent-agent">Feature, skill, subagent or independent agent?</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Skill only</td>
+<td>Insufficient. Instructions cannot provide storage, rendering, permissions or action validation.</td>
+</tr>
+<tr>
+<td>Feature plus coordinator skill</td>
+<td>Recommended. Add the missing runtime while reusing analytical ownership.</td>
+</tr>
+<tr>
+<td>Presentation subagent plus skill</td>
+<td>Consider when composition needs substantial separate context or repeated design iteration.</td>
+</tr>
+<tr>
+<td>Independent GenBI agent</td>
+<td>Consider only for a separately owned product or security and deployment boundary.</td>
+</tr>
+</tbody></table></div>
+<p>A future presentation specialist should receive saved evidence IDs, the dashboard objective and the approved component catalog. It should return a candidate dashboard definition. It should have no warehouse tools.</p>
+<p>Adding that specialist is not just a configuration change. The current delegation middleware treats non-analysis assignments as source work. Its roles and concurrency rules need an explicit update. <a href="../../data_analytics_agent/delegation.py">Delegation policy</a></p>
+<p>Use a skill to teach dashboard purpose, layout, chart choice, filter scope, evidence use and revision rules. Keep authorization and numerical validation in code.</p>
+<h2 id="6-proposed-architecture-and-behavior">6. Proposed architecture and behavior</h2>
+<p><a href="genbi-architecture.html">Open the interactive architecture diagram</a>.</p>
+<p>Keep one canonical <strong>DashboardSpec</strong>. It should contain:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Required information</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Identity</td>
+<td>Dashboard ID, revision, conversation and source scope.</td>
+</tr>
+<tr>
+<td>Components</td>
+<td>Stable IDs, layout, approved component type and evidence bindings.</td>
+</tr>
+<tr>
+<td>Filters</td>
+<td>Business field, type, operator, defaults and affected components.</td>
+</tr>
+<tr>
+<td>Data bindings</td>
+<td>Saved evidence IDs and optional server-owned query binding IDs.</td>
+</tr>
+<tr>
+<td>State</td>
+<td>Applied selections, current revision and action status.</td>
+</tr>
+<tr>
+<td>Provenance</td>
+<td>Semantic version, source query time, declared cutoff and completeness status.</td>
+</tr>
+</tbody></table></div>
+<p>Query execution records should retain parameters, approved SQL, result IDs and review decisions. Do not store warehouse credentials in dashboard state.</p>
+<p>Use the existing SQLite and artifact stores for the local product. Add storage infrastructure only when deployment requirements justify it.</p>
+<p>If A2UI is selected, compile the validated DashboardSpec into its BI catalog messages. Keep that adapter small. Do not create a general multi-protocol framework.</p>
+<h3 id="apply-a-filter-as-a-controlled-action">Apply a filter as a controlled action</h3>
+<ol>
+<li>The client submits the dashboard revision, component, action, typed values and request ID.</li>
+<li>The server validates scope, fields, allowed values and the expected revision.</li>
+<li>The server identifies the affected components and their required populations.</li>
+<li>The SQL capability obtains complete saved or source-backed results.</li>
+<li>The system validates results, saves evidence, publishes selected findings and renders the required report.</li>
+<li>The system commits the new dashboard revision after its required artifacts succeed.</li>
+</ol>
+<p>Keep source assignments sequential under the current policy. Independent rendering can occur after the evidence is ready.</p>
+<p>Data-changing filters are asynchronous governed actions under the current report policy. Use an <strong>Apply</strong> control to batch selections. Show progress while retaining the last committed population. Immediate chart highlighting remains a separate visual operation.</p>
+<p>Reject duplicate or stale actions. A late response must not overwrite a newer selection. On failure, retain the last valid view and show its prior selections and failure status.</p>
+<p>Bind every affected metric, chart and table to the same declared filter meaning. Reuse one suitable result across components where possible. If several queries are required, do not claim a common source snapshot without source support.</p>
+<p>For initial agent-generated dashboards, prepare the dashboard after evidence publication and before report completion. The completion checks must require the requested dashboard artifact. A data-changing action starts a new run. It must not reopen computation inside an already published turn.</p>
+<p>This extends the current publication lifecycle explicitly. A skill alone cannot change that lifecycle. <a href="../development/architecture.md#findings-reports-and-recovery">Current completion behavior</a></p>
+<h2 id="7-where-text-to-sql-fits">7. Where text-to-SQL fits</h2>
+<p>Text-to-SQL supplies governed retrieval. GenBI adds a persistent interface, interaction handling and publication around that retrieval.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>User operation</th>
+<th>Execution path</th>
+<th>Model or source work</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Rename a title, move a panel or change an allowed color</td>
+<td>Presentation service</td>
+<td>Neither.</td>
+</tr>
+<tr>
+<td>Zoom a chart or highlight visible points</td>
+<td>Client rendering</td>
+<td>Neither. No new business total.</td>
+</tr>
+<tr>
+<td>Apply a declared filter to a complete saved population</td>
+<td>SQL-owned saved-data execution</td>
+<td>No new source query. A validated binding can avoid a model call.</td>
+</tr>
+<tr>
+<td>Refresh the same question</td>
+<td>SQL-owned execution of an approved query binding</td>
+<td>New source query. No reinterpretation is needed.</td>
+</tr>
+<tr>
+<td>Add a metric, grain, join or missing detail</td>
+<td>Coordinator to text-to-SQL</td>
+<td>Semantic grounding, query planning and applicable review.</td>
+</tr>
+<tr>
+<td>Forecast or test a statistical explanation</td>
+<td>SQL obtains inputs; data-analysis investigates</td>
+<td>Python analysis over complete saved evidence.</td>
+</tr>
+</tbody></table></div>
+<p>The deterministic query-binding path is a proposed addition. The current specialist tools do not yet provide that dashboard API. Keep it within the SQL owner&#39;s validation and execution module.</p>
+<p>For an action without a model call, application code must publish evidence-bound findings and render its report through the existing services. Fixed explanatory text can describe the declared filter or refresh. This needs an application service change; direct SQL execution alone does not complete the lifecycle.</p>
+<p>Do not ask an LLM to invent SQL for every click. Use typed parameters for actions with established meaning. A changed business question still requires the specialist.</p>
+<p>Bind parameter values through the database driver. Do not substitute UI text into SQL. Approval of one query does not approve every parameter or population. Preserve configured execution reviews unless the reviewed binding explicitly covers that scope.</p>
+<p>Preserve these rules:</p>
+<ul>
+<li>Warehouse conversations use their reviewed semantic catalog. File conversations use only explicitly reviewed, named datasets.</li>
+<li>Matching field names do not establish join keys or a shared filter dimension.</li>
+<li>Apply population filters before the relevant aggregation. Validate the meaning of ratios, averages and distinct counts.</li>
+<li>Never compute business totals from a chart sample. Reuse complete analytical datasets at a suitable grain.</li>
+<li>Preserve declared units. Source query time does not establish data completeness.</li>
+<li>Revalidate SQL, semantics and permissions on refresh. Reviewed edits remain authoritative.</li>
+</ul>
+<p>Some established systems compile metric requests into SQL through a semantic engine. Therefore, natural-language SQL generation is not mandatory for every BI operation. Retain the current specialist now. Consider another semantic engine only for a concrete need. <a href="https://docs.getdbt.com/docs/build/about-metricflow?version=2" target="_blank" rel="noopener noreferrer">MetricFlow</a></p>
+<h2 id="8-is-streamlit-still-a-good-choice">8. Is Streamlit still a good choice?</h2>
+<p><strong>Yes, for a deliberately scoped analytics workbench. React is the preferred target for the proposed interactive BI product.</strong></p>
+<p>Streamlit supports hosted deployment. The distinction here is interaction scope and application complexity. This repository&#39;s current local deployment is a separate constraint. <a href="https://docs.streamlit.io/deploy/concepts" target="_blank" rel="noopener noreferrer">Streamlit deployment</a></p>
+<p>Modern Streamlit supports partial reruns, stateful custom components and packaged JavaScript interfaces. Components v2 can host React or Lit inside the page. An A2UI renderer can therefore be integrated through a trusted component. <a href="https://docs.streamlit.io/develop/concepts/custom-components/overview" target="_blank" rel="noopener noreferrer">Components overview</a>, <a href="https://docs.streamlit.io/develop/concepts/custom-components/components-v2/state-and-triggers" target="_blank" rel="noopener noreferrer">state and triggers</a>, <a href="https://docs.streamlit.io/develop/concepts/architecture/fragments" target="_blank" rel="noopener noreferrer">fragments</a></p>
+<p>Do not base the decision on outdated iframe or full-rerun assumptions. Recent Streamlit releases add further interaction options. The repository&#39;s minimum version does not establish which later features are installed. <a href="https://docs.streamlit.io/develop/quick-reference/release-notes/2026" target="_blank" rel="noopener noreferrer">Release notes</a></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Best fit</th>
+<th>Main engineering cost</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Native Streamlit with a fixed dashboard schema</td>
+<td>Internal users, Python ownership and a bounded interaction set</td>
+<td>More custom coordination as client interactions grow.</td>
+</tr>
+<tr>
+<td>Streamlit with an A2UI component</td>
+<td>A bounded dashboard panel inside a useful Python shell</td>
+<td>Synchronizing component state and Python state.</td>
+</tr>
+<tr>
+<td>React with FastAPI</td>
+<td>Persistent canvas, linked controls, saved views and detailed design control</td>
+<td>Front-end implementation, deployment and browser tests.</td>
+</tr>
+<tr>
+<td>Next.js with FastAPI</td>
+<td>A React product with a concrete routing, hosting or server-rendering requirement</td>
+<td>Another server boundary if its features are unnecessary.</td>
+</tr>
+<tr>
+<td>Lit or Angular</td>
+<td>A team already using those frameworks</td>
+<td>New-stack cost if the team lacks experience.</td>
+</tr>
+</tbody></table></div>
+<p>React provides direct control over shared client state. Next.js still needs client components for interactive browser behavior. Keep source credentials in Python. <a href="https://react.dev/learn/managing-state" target="_blank" rel="noopener noreferrer">React state</a>, <a href="https://nextjs.org/docs/app/getting-started/server-and-client-components" target="_blank" rel="noopener noreferrer">Next.js boundaries</a></p>
+<p>Reuse Plotly first. A2UI does not require a new chart library. Avoid adopting a grid engine, state framework and chart engine before the first complete workflow requires them.</p>
+<p>Do not build a temporary Streamlit bridge with a planned replacement. If Streamlit is selected, define its supported product scope. If React is selected, build the intended dashboard there.</p>
+<p>Keep the current working interface while the new client reaches acceptance. Once it covers the required workflow, remove the replaced paths. Do not maintain indefinite compatibility layers.</p>
+<h3 id="resolve-the-front-end-uncertainty-with-one-bounded-experiment">Resolve the front-end uncertainty with one bounded experiment</h3>
+<p>Use one dashboard contract, one backend and the same complete saved evidence. Compare thin Streamlit and React interaction surfaces only if scope remains uncertain.</p>
+<p>Test two metrics, two charts, a table and two linked filters. Include save/reopen, a drill action, refresh, an error and a stale response.</p>
+<p>Accept a client only if it preserves evidence bindings, survives repeated interactions and restores saved state. Check keyboard use, focus and narrow layouts. Measure interaction latency on a declared device and dataset.</p>
+<p>This experiment is proposed work. No renderer performance or integration result is claimed in this proposal.</p>
+<h2 id="9-delivery-plan-and-release-gates">9. Delivery plan and release gates</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Working product at the end</th>
+<th>Release gate</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1. Saved dashboard</td>
+<td>One saved dashboard per conversation, built from existing evidence. Metrics, charts, table, save/reopen and HTML report work end to end.</td>
+<td>All values resolve to saved evidence. Restart preserves the view. Presentation edits require no model or source query.</td>
+</tr>
+<tr>
+<td>2. Declared interactions</td>
+<td>Category/date filters and a supported drill path create consistent revisions.</td>
+<td>Metrics, charts and tables reconcile. Samples cannot become inputs. Stale actions and failed updates preserve the last valid view.</td>
+</tr>
+<tr>
+<td>3. Explicit refresh</td>
+<td>Reviewed parameterized query bindings refresh warehouse data through the SQL owner.</td>
+<td>Reviews and limits remain effective. Refresh creates new evidence and a report. Old published evidence stays reproducible.</td>
+</tr>
+<tr>
+<td>4. Distribution, when required</td>
+<td>A2UI delivery and/or a hosted shared product</td>
+<td>Real catalog conformance passes. Hosted delivery also requires identity, artifact authorization and permission-aware data access.</td>
+</tr>
+</tbody></table></div>
+<p>A2UI can be tested during Stage 1. Make it a required renderer only if that test proves a product benefit. Protocol adoption and multiuser hosting are separate decisions.</p>
+<p>For file workspaces, refresh can recompute saved data. New file content still requires explicit import and schema review.</p>
+<p>Defer scheduled refresh, alerts, shared editing and unrestricted layout generation until the core dashboard works. Each later capability needs its own operational and permission rules.</p>
+<p>The largest work items are the action runtime, consistent evidence updates and front-end interaction tests. A protocol adapter does not remove those costs. Estimate calendar time after the thin slice; staffing and deployment requirements are not yet defined.</p>
+<h2 id="10-material-risks-and-controls">10. Material risks and controls</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Required control</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Attractive screen with incorrect business meaning</td>
+<td>Reviewed metrics, visible filter scope and evidence-bound values.</td>
+</tr>
+<tr>
+<td>Inconsistent populations across widgets</td>
+<td>Shared action plan, correct aggregation and atomic revision commit.</td>
+</tr>
+<tr>
+<td>Repeated model calls and query cost on clicks</td>
+<td>Deterministic declared actions, affected-component updates and bounded execution.</td>
+</tr>
+<tr>
+<td>Stale or incomplete data appears current</td>
+<td>Show query time and declared cutoff separately. Preserve unknown completeness.</td>
+</tr>
+<tr>
+<td>Renderer or protocol changes</td>
+<td>Pin tested versions. Keep one small adapter and explicit catalog validation.</td>
+</tr>
+<tr>
+<td>Hosted user receives another user&#39;s artifact</td>
+<td>Enforce server-side authorization on every artifact, export and action.</td>
+</tr>
+</tbody></table></div>
+<p>The current API targets one local user. Conversation/source scoping is not user authorization. Some result and report endpoints use unscoped reads. Hosted sharing therefore requires backend work beyond a front-end replacement. <a href="../../data_analytics_agent/api.py">API implementation</a></p>
+<p>Enforce data access before retrieval and before delivery. Scope caches by user permissions, source, semantics, parameters and evidence version. A dashboard permission must not grant access to all underlying rows.</p>
+<p>Databricks documents a useful caution: a dashboard companion agent can access fields outside the visible charts, depending on its dataset and credentials. Review that boundary in any embedded product. <a href="https://docs.databricks.com/aws/en/dashboards/genie-spaces" target="_blank" rel="noopener noreferrer">Dashboard companion agents</a></p>
+<p>A2UI catalog validation does not authorize actions. Streamlit Components v2 also uses style isolation, not a security sandbox. Ship trusted renderer code and validate all agent output. <a href="https://docs.streamlit.io/develop/api-reference/custom-components/st.components.v2.component" target="_blank" rel="noopener noreferrer">Component security model</a></p>
+<h2 id="11-build-or-embed">11. Build or embed</h2>
+<p>Build the feature when your reviewed file workspaces, OSI semantics and saved analytical evidence are central product assets.</p>
+<p>Prefer an embedded BI product when one platform already owns the organization&#39;s metric definitions, identity and dashboards. Confirm the exact embedded capabilities through its API or SDK.</p>
+<p>Do not assume that features in a vendor&#39;s full application are available in its embedded surface. Do not maintain competing definitions of the same business metric.</p>
+<p>For this repository, the build option has the stronger fit. Existing evidence and review behavior are useful foundations. No selected vendor currently supplies the authoritative product boundary in the inspected application.</p>
+<h2 id="12-decisions-to-make">12. Decisions to make</h2>
+<p>The recommended decision package is:</p>
+<ol>
+<li>Extend the existing analytics product with a dashboard feature and design skill.</li>
+<li>Target React and FastAPI for a persistent GenBI workspace.</li>
+<li>Keep Streamlit if the intended product remains a bounded internal analytics workbench.</li>
+<li>Keep text-to-SQL as the source execution authority.</li>
+<li>Test A2UI with the actual BI catalog before committing the renderer contract.</li>
+<li>Deliver saved dashboards, then interactions, then refresh.</li>
+<li>Treat hosted sharing as an explicit backend and product scope decision.</li>
+</ol>
+<p>The main assumption is that persistent dashboard interaction is the desired direction. If the goal is only richer analytical answers, extend the existing report and Streamlit experience.</p>
+<h2 id="evidence-and-writing-method">Evidence and writing method</h2>
+<p>This proposal uses official documentation checked on 21 October 2026 and direct repository inspection. It distinguishes documented capabilities from engineering recommendations. It makes no claim of vendor accuracy, measured latency or a completed integration.</p>
+<p>The writing follows ASD-STE100 principles: short sentences, direct verbs, consistent terms and limited noun clusters. Technical names remain where needed. This is STE-informed writing, not certified standard compliance. <a href="https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf" target="_blank" rel="noopener noreferrer">Official ASD-STE100 Issue 9</a></p>
+<p>The supporting notes retain additional sources and implementation anchors:</p>
+<ul>
+<li><a href="genbi-protocol-frontend-research.md">Protocol and front-end research</a></li>
+<li><a href="genbi-product-patterns-research.md">Product patterns and build-versus-embed research</a></li>
+<li><a href="genbi-repository-assessment.md">Repository assessment</a></li>
+<li><a href="genbi-delivery-validation.json">Document and diagram validation receipt</a></li>
+</ul>
+<p>No application code was changed. No business data was queried. Existing application tests were inspected where relevant; they were not run for this research task.</p>
+<footer>Prepared for Charlie. Source research and repository inspection completed 21 October 2026. No application implementation is included.</footer></main></div>
+<script>
+const headings=[...document.querySelectorAll('main h2')];
+const links=[...document.querySelectorAll('.nav a')];
+const update=()=>{const max=document.documentElement.scrollHeight-innerHeight;document.querySelector('.reading').style.width=(max>0?scrollY/max*100:0)+'%';let current=headings[0]?.id;for(const h of headings){if(h.getBoundingClientRect().top<160)current=h.id;}for(const a of links)a.classList.toggle('active',a.hash==='#'+current);};
+addEventListener('scroll',update,{passive:true});update();
+</script></body></html>

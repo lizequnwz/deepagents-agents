@@ -1,0 +1,72 @@
+{
+  "research_date": "2026-10-21",
+  "proposal": {
+    "source": {
+      "path": "/Users/charlie/Repos/deepagents-agents/data-analytics-agent/doc/roadmap/genbi-decision-proposal.md",
+      "sha256": "01121c545c083deff87718b1b3de5f68a10274b336ef7c9781248d913f94026f",
+      "bytes": 28808
+    },
+    "html": {
+      "path": "/Users/charlie/Repos/deepagents-agents/data-analytics-agent/doc/roadmap/genbi-decision-proposal.html",
+      "sha256": "894b95a67e2e862bcd5fe60253f52ac0afbe20abfec6bb8d4cba1d5f1cda09cf",
+      "bytes": 43755
+    },
+    "browser_evidence": "passed",
+    "visual_review": "passed at desktop and mobile sizes",
+    "writing_review": "Short direct prose, consistent technical terms; STE-informed, not formal ASD-STE100 compliance",
+    "browser_checks": {
+      "viewports": [
+        {
+          "width": 1440,
+          "height": 1000
+        },
+        {
+          "width": 1920,
+          "height": 1080
+        },
+        {
+          "width": 390,
+          "height": 844
+        }
+      ],
+      "no_horizontal_page_overflow": true,
+      "local_links_resolve": true,
+      "navigation_passed": true,
+      "javascript_errors": [],
+      "print_sidebar_hidden": true
+    },
+    "sentence_length_check": {
+      "paragraphSentences": 228,
+      "within25Words": 228,
+      "shortSentencePercent": 100,
+      "longSentences": [],
+      "method": "Top-level prose paragraphs only. Sentence length supports editing; it does not measure full ASD-STE100 compliance."
+    }
+  },
+  "diagram": {
+    "diagram_type": "architecture",
+    "specification": {
+      "path": "/Users/charlie/Repos/deepagents-agents/data-analytics-agent/doc/roadmap/genbi-architecture.json",
+      "sha256": "256166229f86af28f20bd8d8fc5b114b543838c76eb53381b7f082822d534572",
+      "bytes": 2745
+    },
+    "artifact": {
+      "path": "/Users/charlie/Repos/deepagents-agents/data-analytics-agent/doc/roadmap/genbi-architecture.html",
+      "sha256": "7b571bb861b1c52287061f9fd592c5ccb00336a50227bd3503e533a36cdfe7f9",
+      "bytes": 806403
+    },
+    "validation": "9/9 showcase, 0 errors, 0 warnings",
+    "browser_evidence": "passed",
+    "browser_receipt": "/Users/charlie/Repos/deepagents-agents/data-analytics-agent/doc/roadmap/genbi-architecture.visual-check.json",
+    "visual_review": "passed",
+    "visual_review_scope": "1440x900 light and 2048x1320 dark screenshots",
+    "correction_rounds": 2
+  },
+  "scope": {
+    "application_code_changed": false,
+    "business_data_queried": false,
+    "integrations_executed": false,
+    "application_tests_run": false,
+    "review": "Three independent reviews checked repository fit, protocol/front-end facts, and product/decision clarity. Material corrections were applied."
+  }
+}

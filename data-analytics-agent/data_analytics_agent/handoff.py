@@ -103,8 +103,8 @@ def record_dataset(runs, runtime, payload, label):
 class ReportCompletionMiddleware(AgentMiddleware):
     """End the coordinator after an accepted report without re-authoring findings."""
 
-    def __init__(self, runs):
-        self.runs = runs
+    def __init__(self, runs, dashboards=None):
+        self.runs, self.dashboards = runs, dashboards
 
     @hook_config(can_jump_to=["end"])
     def before_model(self, state, runtime):
@@ -112,6 +112,18 @@ class ReportCompletionMiddleware(AgentMiddleware):
         if self.runs.report_reference(run_id) and self.runs.get(run_id).findings:
             if self.runs.cancel_event(run_id).is_set():
                 raise InterruptedError("Run stopped before completion.")
+            requested = self.runs.storage.get("dashboard_requests", run_id, dict)
+            action = self.dashboards.action_for_run(run_id) if self.dashboards else None
+            if (requested or action) and (
+                not self.dashboards or not self.dashboards.candidate_for_run(run_id)
+            ):
+                return {
+                    "messages": [
+                        HumanMessage(
+                            content="The required saved dashboard is missing. Load dashboard-design and call create_dashboard using the already published evidence. Preserve the existing report; do not rerun analysis."
+                        )
+                    ]
+                }
             return {"jump_to": "end"}
 
     @hook_config(can_jump_to=["end"])

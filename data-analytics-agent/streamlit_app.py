@@ -35,6 +35,7 @@ from data_analytics_agent.ui.uploads import (
     render_workbook_selection,
 )
 from data_analytics_agent.ui.workspace import render_workspace_documents
+from data_analytics_agent.ui.dashboards import render_dashboards
 
 load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -489,6 +490,11 @@ with st.sidebar:
             )
 
 render_page_header(source)
+st.link_button(
+    "Open full workspace",
+    f"{API_BASE_URL}/workspace/?thread={thread_id}",
+    icon=":material/open_in_new:",
+)
 
 pending_file = st.session_state.get("pending_file_conversation")
 if pending_file and pending_file["thread_id"] == thread_id:
@@ -530,6 +536,8 @@ if pending_question:
 render_workspace_documents(
     client, thread_id, is_file=source["backend_type"] == "upload", disabled=bool(active_run_id)
 )
+
+render_dashboards(client, thread_id, conversation, disabled=bool(active_run_id))
 
 
 if st.session_state.get("conversation_notice"):

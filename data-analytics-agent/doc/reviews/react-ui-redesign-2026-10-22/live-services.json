@@ -1,0 +1,15 @@
+{
+  "api": {
+    "status": 200
+  },
+  "streamlit": {
+    "status": 200
+  },
+  "workspace": {
+    "status": 200,
+    "assets": [
+      "index-Di_vRRZm.js",
+      "index-GjzC33Sx.css"
+    ]
+  }
+}

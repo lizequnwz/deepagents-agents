@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import replace
 from functools import partial
 import hashlib
 import io
@@ -15,7 +16,7 @@ import streamlit as st
 from data_analytics_agent.visualization.geocoding import (
     USLocationResolver,
 )
-from data_analytics_agent.visualization.renderer import build_chart
+from data_analytics_agent.visualization.renderer import PRODUCT_CHART_STYLE, build_chart
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.ui.api_client import APIError, AgentAPIClient
 
@@ -1254,6 +1255,7 @@ def _render_result(
                 spec,
                 result["rows"],
                 resolver=_us_location_resolver(),
+                style=replace(PRODUCT_CHART_STYLE, show_title=True),
             )
             st.plotly_chart(
                 rendered.figure,

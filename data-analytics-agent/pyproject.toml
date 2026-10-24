@@ -1,7 +1,7 @@
 [project]
 name = "data-analytics-agent"
-version = "0.7.0"
-description = "Persistent iterative analytics with standalone HTML reporting"
+version = "0.8.0"
+description = "Persistent analytics, interactive dashboards and evidence-backed HTML reports"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

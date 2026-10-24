@@ -52,6 +52,8 @@ from data_analytics_agent.delegation import DelegationMiddleware
 from data_analytics_agent.execution_budget import execution_budget_middleware
 from data_analytics_agent.steering import SteeringMiddleware, request_clarification
 from data_analytics_agent.documents import create_document_tools
+from data_analytics_agent.dashboard.store import DashboardStore
+from data_analytics_agent.dashboard.tools import create_dashboard_tool
 
 
 def _project_backend(project_root: Path) -> CompositeBackend:
@@ -123,6 +125,7 @@ def build_agent(
     analysis_store=None,
     report_store=None,
     conversation_store=None,
+    dashboard_store=None,
     source,
     semantic_catalog,
     backend,
@@ -135,6 +138,7 @@ def build_agent(
     analyses = analysis_store or DataAnalysisStore(result_store.storage)
     reports = report_store or ReportStore(result_store.storage)
     conversations = conversation_store or ConversationStore(result_store.storage)
+    dashboards = dashboard_store or DashboardStore(result_store.storage)
     permissions = [
         FilesystemPermission(
             operations=["read"],
@@ -163,6 +167,14 @@ def build_agent(
         create_inspect_conversation_analysis_tool(analyses, source_id=source.source_id),
         *create_presentation_tools(
             result_store, analyses, runs, conversations, source_id=source.source_id
+        ),
+        create_dashboard_tool(
+            result_store,
+            analyses,
+            runs,
+            reports,
+            dashboards,
+            source_id=source.source_id,
         ),
         create_create_report_tool(
             result_store,
@@ -276,6 +288,12 @@ data, continue analysis, or synthesize. Discover saved datasets, analyses and
 charts when selecting earlier evidence. Investigation notes contain narrative
 context only; application code retains assignment evidence automatically.
 {chart_guidance}
+For dashboard requests or dashboard actions, load dashboard-design before planning
+the required data. Preserve exact dashboard component IDs, declared filter scope,
+and the business population. After publish_findings call create_dashboard using
+the selected evidence, then create_report. Dashboard revisions become visible only
+after their required report succeeds. Layout changes use the application view
+service and need no analytical run. Never query the source from presentation code.
 Publish the selected answer and evidence once, then load report-design and create
 its HTML report. Published analyses/charts are attached to the report automatically;
 use explicit report blocks only to control their placement. Correct a rejected
@@ -290,7 +308,11 @@ CoordinatorResponse without publication or reporting.
         tools=tools,
         system_prompt=prompt,
         memory=["/project/AGENTS.md"],
-        skills=["/project/skills/reporting/", "/project/skills/workflows/"],
+        skills=[
+            "/project/skills/reporting/",
+            "/project/skills/workflows/",
+            "/project/skills/dashboards/",
+        ],
         subagents=subagents,
         backend=_project_backend(settings.project_root),
         permissions=permissions,
@@ -298,7 +320,7 @@ CoordinatorResponse without publication or reporting.
             TodoListMiddleware(),
             DelegationMiddleware(runs, settings.analysis_parallel_workers),
             SteeringMiddleware(runs, "coordinator"),
-            ReportCompletionMiddleware(runs),
+            ReportCompletionMiddleware(runs, dashboards),
             *execution_budget_middleware(
                 runs=runs,
                 coordinator=True,

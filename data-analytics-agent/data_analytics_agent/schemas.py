@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from data_analytics_agent.agents.data_analysis.schemas import (
     DataAnalysisResult,
@@ -14,7 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 22
+API_CONTRACT_VERSION = 23
 
 
 class StrictModel(BaseModel):
@@ -462,6 +462,17 @@ class MessageRequest(StrictModel):
 
 class AnalyticalMessageRequest(MessageRequest):
     previous_report_id: str | None = None
+    dashboard: bool = False
+    dashboard_id: str | None = None
+    dashboard_revision: str | None = None
+
+    @model_validator(mode="after")
+    def dashboard_context_is_complete(self):
+        if bool(self.dashboard_id) != bool(self.dashboard_revision):
+            raise ValueError(
+                "Dashboard context requires its ID and displayed revision."
+            )
+        return self
 
 
 class ClarificationReply(MessageRequest):

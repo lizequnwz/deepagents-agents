@@ -1,0 +1,58 @@
+{
+  "recorded_at": "2026-10-22T09:12:04.808322+00:00",
+  "application_version": "0.8.0",
+  "api_contract": 23,
+  "product_snapshot": {
+    "file_count": 120,
+    "sha256": "1a0ec3a6e3ebbda4493f86ad0956921a6c5a301282370e07626e08ea5659242b"
+  },
+  "frontend_assets": {
+    "index-CCid3ym4.css": "958ffdbb7a94abe1d7bf7077c2e185d4ac1b69b6894bd552ac704a70b0f81e15",
+    "index-CFUfl9rX.js": "ad4720de1204e4000d649153b83523d3b9c0f30513f75beedd525f378ab13018"
+  },
+  "python_regression": {
+    "command": ".venv/bin/python -m pytest",
+    "total": 665,
+    "passed": 659,
+    "skipped": 6,
+    "failures": 0,
+    "errors": 0,
+    "elapsed_seconds": 217.085
+  },
+  "browser_scenarios": {
+    "passed": 22,
+    "failed": 0,
+    "receipt": "browser-receipt.json"
+  },
+  "open_tab_rebuild_regression": {
+    "status": "pass",
+    "receipt": "deployment-receipt.json"
+  },
+  "saved_user_workspace_read_only": {
+    "status": "pass",
+    "receipt": "saved-workspace-receipt.json"
+  },
+  "other_checks": {
+    "typescript_and_production_build": "pass",
+    "ruff_unused_imports_and_names": "pass",
+    "git_diff_check": "pass",
+    "locked_python_environment": "matches without changes"
+  },
+  "model_provider_calls_during_verification": 0,
+  "visual_review": {
+    "status": "pass",
+    "reviewed": [
+      "react-dashboard.png",
+      "react-mobile.png",
+      "react-dark.png",
+      "streamlit-controls.png"
+    ],
+    "native_receipt": "native-visual-check.json",
+    "native_chart_verification": "Functional rendering/filter/refresh/Stop/Resume assertions in browser receipt; retained native viewport screenshot shows controls."
+  },
+  "limits": [
+    "No new live provider or production warehouse study.",
+    "Voice provider and physical microphone quality not evaluated.",
+    "Local single-user product; no hosted authorization, scheduling or A2UI adapter."
+  ]
+}

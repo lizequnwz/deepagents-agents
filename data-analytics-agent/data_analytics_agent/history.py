@@ -81,6 +81,9 @@ async def delete_history(services, thread_ids: set[str]) -> dict:
         if services.checkpointer:
             for key in run_ids:
                 await services.checkpointer.adelete_thread(key)
+        # Dashboard candidates nest scope in their revision; remove the complete
+        # aggregate before the generic scoped-record deletion below.
+        services.dashboards.forget_conversations(thread_ids)
         for path in paths:
             path.unlink(missing_ok=True)
         with storage.connect() as connection:

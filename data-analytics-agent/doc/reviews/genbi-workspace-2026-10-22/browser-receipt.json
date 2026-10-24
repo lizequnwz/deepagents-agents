@@ -1,0 +1,173 @@
+{
+  "tested_at": "2026-10-22T09:07:48.591Z",
+  "base_url": "http://127.0.0.1:8790",
+  "real_api": true,
+  "model_provider_calls": 0,
+  "browser_version": "155.0.8059.85",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "frontend_assets": [
+    "index-CCid3ym4.css",
+    "index-CFUfl9rX.js"
+  ],
+  "scenario_counts": {
+    "total": 22,
+    "passed": 22,
+    "failed": 0
+  },
+  "scenarios": [
+    {
+      "name": "React source selection and ordinary conversation",
+      "status": "pass",
+      "elapsed_ms": 2513
+    },
+    {
+      "name": "React saved evidence, chart and report",
+      "status": "pass",
+      "elapsed_ms": 1131,
+      "shared_report_brand": {
+        "primary": "#368727",
+        "background": "#f9f7f5",
+        "text": "#141414",
+        "font": "\"Fidelity Sans\", \"Source Sans 3\", Arial, sans-serif",
+        "headingFont": "\"Fidelity Slab\", \"Roboto Slab\", Rockwell, Georgia, serif"
+      }
+    },
+    {
+      "name": "React ordinary and saved charts preserve declared interval meaning",
+      "status": "pass",
+      "elapsed_ms": 415,
+      "ordinary_interval_caption_visible": true,
+      "saved_dashboard_interval_caption_visible": true
+    },
+    {
+      "name": "React requested dashboard opens after its report completes",
+      "status": "pass",
+      "elapsed_ms": 1892
+    },
+    {
+      "name": "React required schema review before analysis",
+      "status": "pass",
+      "elapsed_ms": 207
+    },
+    {
+      "name": "React clarification and configured SQL review",
+      "status": "pass",
+      "elapsed_ms": 1130
+    },
+    {
+      "name": "React Python input review and exact edited-code approval",
+      "status": "pass",
+      "elapsed_ms": 1022,
+      "exact_reviewed_code_submitted": true,
+      "no_preselected_approval": true
+    },
+    {
+      "name": "React save dashboard, declare a shared filter and preserve the old view while updating",
+      "status": "pass",
+      "elapsed_ms": 4529
+    },
+    {
+      "name": "React saved view, refresh, idempotency and stale-revision protection",
+      "status": "pass",
+      "elapsed_ms": 4387,
+      "immutable_report_history": true,
+      "duplicate_action_reused_run": true,
+      "stale_revision_status": 409
+    },
+    {
+      "name": "React failed investigation retains the valid dashboard and evidence",
+      "status": "pass",
+      "elapsed_ms": 414
+    },
+    {
+      "name": "React empty filter results and reset preserve explicit evidence",
+      "status": "pass",
+      "elapsed_ms": 8547
+    },
+    {
+      "name": "React narrow layout and keyboard focus",
+      "status": "pass",
+      "elapsed_ms": 376
+    },
+    {
+      "name": "React dark theme and editable voice draft",
+      "status": "pass",
+      "elapsed_ms": 1174,
+      "transcription_provider_stubbed": true,
+      "pcm_wav_verified": true,
+      "draft_not_auto_submitted": true
+    },
+    {
+      "name": "React real CSV and Parquet attachment, explicit review and saved-data analysis",
+      "status": "pass",
+      "elapsed_ms": 841
+    },
+    {
+      "name": "React Excel selection, modal keyboard behavior and explicit table review",
+      "status": "pass",
+      "elapsed_ms": 454
+    },
+    {
+      "name": "React document context and artifact downloads",
+      "status": "pass",
+      "elapsed_ms": 2414
+    },
+    {
+      "name": "React ordinary follow-up carries the displayed dashboard revision",
+      "status": "pass",
+      "elapsed_ms": 773,
+      "current_revision_included": true,
+      "stale_followup_status": 409
+    },
+    {
+      "name": "React prose during a typed dashboard action is a queued follow-up",
+      "status": "pass",
+      "elapsed_ms": 3550,
+      "typed_action_filters_preserved": true,
+      "prose_queued_separately": true
+    },
+    {
+      "name": "React Stop and Resume retain the committed dashboard until completion",
+      "status": "pass",
+      "elapsed_ms": 3944,
+      "same_run_resumed": true,
+      "paused_view_preserved": true
+    },
+    {
+      "name": "React displays every saved category value from the shared dashboard",
+      "status": "pass",
+      "elapsed_ms": 622,
+      "all_shared_values_visible": true,
+      "draft_preserved_until_explicit_change": true
+    },
+    {
+      "name": "React dashboard survives an API process restart",
+      "status": "pass",
+      "elapsed_ms": 3754
+    },
+    {
+      "name": "Streamlit saved evidence and shared dashboard lifecycle",
+      "status": "pass",
+      "elapsed_ms": 24907,
+      "native_dashboard_rendered": true,
+      "explicit_filter_applied": true,
+      "old_view_preserved": true,
+      "refreshed_report_saved": true,
+      "saved_view_reopened": true,
+      "completed_report_saved_as_dashboard": true
+    }
+  ],
+  "browser_errors": [],
+  "console_errors": [],
+  "http_errors": [],
+  "status": "pass"
+}

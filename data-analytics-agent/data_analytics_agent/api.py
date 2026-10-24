@@ -31,6 +31,9 @@ from data_analytics_agent.transcription import (
 from data_analytics_agent.data_sources import DataSource, DataSourceCatalog
 from data_analytics_agent.logging_config import configure_api_logging
 from data_analytics_agent.run_manager import RunManager
+from data_analytics_agent.workspace_api import workspace_router
+from data_analytics_agent.dashboard.store import DashboardStore
+from data_analytics_agent.dashboard_api import dashboard_router
 from data_analytics_agent.approvals import decisions_to_command
 from data_analytics_agent.reporting.schemas import ReportResponse, ReportSpec
 from data_analytics_agent.excel import ExcelSelection, inspect_workbook
@@ -113,6 +116,7 @@ class Services:
     results: ResultStore | None = None
     analyses: DataAnalysisStore | None = None
     reports: ReportStore | None = None
+    dashboards: DashboardStore | None = None
     agent: Any | None = None
     catalog: DataSourceCatalog | None = None
     snowflake_client: Any | None = None
@@ -139,8 +143,10 @@ class Services:
         )
         self.analyses = self.analyses or DataAnalysisStore(self.storage)
         self.reports = self.reports or ReportStore(self.storage)
+        self.dashboards = self.dashboards or DashboardStore(self.storage)
         self.runs.analysis_budget_seconds = self.settings.analysis_budget_seconds
         self.runs.recover()
+        self.dashboards.recover(self.runs)
         for conversation in self.conversations.list():
             if (
                 conversation.active_run_id
@@ -294,6 +300,7 @@ class Services:
                     analysis_store=self.analyses,
                     report_store=self.reports,
                     conversation_store=self.conversations,
+                    dashboard_store=self.dashboards,
                     checkpointer=self.checkpointer,
                     source=source,
                     semantic_catalog=catalog,
@@ -335,6 +342,7 @@ class Services:
                     results=self.results,
                     analyses=self.analyses,
                     reports=self.reports,
+                    dashboards=self.dashboards,
                     python_execution_limits=(self.settings.python_execution_limits()),
                     presentation_budget_seconds=self.settings.presentation_budget_seconds,
                 )
@@ -369,7 +377,7 @@ def create_app(services: Services | None = None) -> FastAPI:
     app = FastAPI(
         lifespan=lifespan,
         title="Data Analytics Agent API",
-        version="0.7.0",
+        version="0.8.0",
     )
     app.state.services = container
     logger.info("api.configured log_file=%s", log_path)
@@ -738,6 +746,26 @@ def create_app(services: Services | None = None) -> FastAPI:
             raise HTTPException(422, "Question cannot be blank.")
         if request.previous_report_id:
             require_current_report(conversation, request.previous_report_id)
+
+        def dashboard_context():
+            if request.dashboard_id is None:
+                return None
+            revision = container.dashboards.get(
+                request.dashboard_id, thread_id, source_id=conversation.source_id
+            )
+            if revision.revision_id != request.dashboard_revision:
+                raise HTTPException(
+                    409,
+                    "The displayed dashboard changed. Reload before asking a follow-up.",
+                )
+            return {
+                "dashboard_id": revision.dashboard_id,
+                "revision_id": revision.revision_id,
+                "original_question": revision.question,
+                "spec": revision.spec.model_dump(mode="json"),
+                "applied_filters": revision.applied_filters,
+            }
+
         manager = container.manager()
         with container._lock:
             ensure_not_deleting(thread_id)
@@ -755,6 +783,7 @@ def create_app(services: Services | None = None) -> FastAPI:
                 container.require_ready_source(conversation.source_id)
             except ValueError as exc:
                 raise HTTPException(409, str(exc)) from exc
+            context = dashboard_context()
             run_id = container.runs.create(
                 thread_id,
                 conversation.source_id,
@@ -762,6 +791,27 @@ def create_app(services: Services | None = None) -> FastAPI:
                 model=container.settings.model,
                 previous_report_id=request.previous_report_id,
             )
+            if context is not None:
+                container.storage.put(
+                    "workspace_run_context",
+                    run_id,
+                    {
+                        "run_id": run_id,
+                        "thread_id": thread_id,
+                        "source_id": conversation.source_id,
+                        "context": context,
+                    },
+                )
+            if request.dashboard:
+                container.storage.put(
+                    "dashboard_requests",
+                    run_id,
+                    {
+                        "run_id": run_id,
+                        "thread_id": thread_id,
+                        "source_id": conversation.source_id,
+                    },
+                )
             container.conversations.begin_run(thread_id, run_id)
         background_tasks.add_task(manager.start, run_id)
         return CreateRunResponse(run_id=run_id, status=RunStatus.QUEUED)
@@ -819,7 +869,12 @@ def create_app(services: Services | None = None) -> FastAPI:
         if not message:
             raise HTTPException(status_code=422, detail="Correction cannot be blank.")
         # The run-store lock serializes acceptance with publication/completion.
-        correction = container.runs.accept_correction(run_id, message)
+        dashboard_action = container.dashboards.action_for_run(run_id)
+        correction = (
+            None
+            if dashboard_action is not None
+            else container.runs.accept_correction(run_id, message)
+        )
         if correction is None:
             follow_up = container.runs.create(
                 run.thread_id, run.source_id, message, model=container.settings.model
@@ -827,6 +882,17 @@ def create_app(services: Services | None = None) -> FastAPI:
             owner = container.conversations.get(run.thread_id).active_run_id or run_id
             container.runs.add_follow_up(owner, follow_up)
             container.conversations.queue_run(run.thread_id, follow_up)
+            if dashboard_action is not None:
+                container.storage.put(
+                    "workspace_run_context",
+                    follow_up,
+                    {
+                        "run_id": follow_up,
+                        "thread_id": run.thread_id,
+                        "source_id": run.source_id,
+                        "dashboard_id": dashboard_action.dashboard_id,
+                    },
+                )
             if container.conversations.get(run.thread_id).active_run_id is None:
                 container.conversations.begin_run(run.thread_id, follow_up)
                 background_tasks.add_task(container.manager().start, follow_up)
@@ -834,7 +900,11 @@ def create_app(services: Services | None = None) -> FastAPI:
                 run_id=follow_up,
                 message_id=follow_up,
                 disposition="follow_up",
-                message="Accepted as a follow-up turn; published findings are preserved.",
+                message=(
+                    "Saved as a follow-up. The current dashboard action keeps its declared filters."
+                    if dashboard_action is not None
+                    else "Accepted as a follow-up turn; published findings are preserved."
+                ),
             )
         # A changed request invalidates the old proposal rather than approving it.
         current = container.runs.get(run_id)
@@ -1211,6 +1281,8 @@ def create_app(services: Services | None = None) -> FastAPI:
             },
         )
 
+    app.include_router(dashboard_router(container))
+    app.include_router(workspace_router(container))
     return app
 
 

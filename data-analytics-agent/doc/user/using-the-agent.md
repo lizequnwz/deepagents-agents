@@ -4,9 +4,57 @@ Select a source, ask a question, and inspect findings while their report is
 prepared. “Show monthly sales” uses descriptive SQL. “Forecast sales and explain
 seasonality” asks Python to explore and evaluate an analytical model.
 
+Open the React workspace at `http://127.0.0.1:8000/workspace/` for the dashboard,
+report, data and conversation in one view. The Streamlit workbench at
+`http://127.0.0.1:8501` uses the same conversations, saved evidence and agents.
+Changes made in either interface are available in the other after reload.
+
 For simple questions, complex reports and follow-up sequences, use the
 [example question guide](deep-dive-examples.md). It includes source selection,
 expected checks and a small synthetic CSV for uploaded-data analysis.
+
+## Create and use a dashboard
+
+In React, describe the question, measures and intended audience in the question
+box, then choose **Create dashboard**. Choose **Send** for an ordinary answer.
+You can also choose **Save dashboard** on a completed answer. These actions use
+the same analyst and its existing SQL and Python specialists. The analyst
+publishes the evidence, prepares the dashboard and saves its HTML report.
+The dashboard opens after successful completion. A dashboard is a saved view
+of named evidence; the displayed numbers are not generated text.
+
+Use **Add filter** to select a category or date column and the panels it controls.
+Only the declared panels change. Select values, then choose **Apply filters**.
+Draft selections do not change the data until you apply them. An empty selection
+resets that filter. If no rows match, the panels show an explicit no-data state.
+
+**Apply filters**, **Refresh data** and a panel's **Investigate** control start
+normal analytical runs. Configured SQL/Python reviews still apply. The previous
+dashboard stays visible while the analyst works. Its replacement becomes current
+only after the evidence and HTML report succeed. A failed action leaves the last
+valid dashboard available. Warehouse refresh obtains new source observations;
+file refresh uses the reviewed saved files. Attach and review a new file version
+when the underlying file has changed.
+
+**Edit view** changes the title, panel order and panel width. **Save view** also
+saves draft filter choices. These changes use saved evidence and need no model
+or source query. Each save creates a revision. If another action changed the
+dashboard, reload before saving an older displayed revision.
+
+The **Report** tab opens the report for the selected dashboard revision. The
+**Data** tab shows saved datasets and download links. The conversation stays
+beside the dashboard on larger screens. On phones, use **Findings** and
+**Conversation** to switch panes; your unsent question stays in place. Ordinary
+follow-up questions include the displayed revision
+and applied filters as context and produce a new answer. Text sent during a
+typed dashboard action is queued as a follow-up; it does not silently change
+that action's declared filters.
+
+In Streamlit, open **Saved dashboards** to select a dashboard, apply its existing
+filters, refresh its data, save its title and draft choices, or download its
+report. **Save latest report as dashboard** creates a view from a completed
+report. **Open full workspace** opens the same conversation in React for panel
+layout and filter definition controls.
 
 ## Dictate a question
 

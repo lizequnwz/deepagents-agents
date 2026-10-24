@@ -1,6 +1,6 @@
 # Current capability status
 
-Updated 18 October 2026. This is the current delivery inventory. Seven analytical
+Updated 22 October 2026. This is the current delivery inventory. Seven analytical
 families, multiple reviewed tables in one file workspace, and cited document
 context are now implemented. The [handoff](../../HANDOFF.md) owns priorities and
 acceptance gates; its earlier broader workspace direction is only partly delivered.
@@ -12,6 +12,9 @@ not implemented. Dated reviews describe earlier versions.
 | Capability | Current behavior and boundary |
 |---|---|
 | Local onboarding | One locked install/start path; upload entry does not require a warehouse; advanced settings documented separately |
+| Shared interfaces | React workspace at `/workspace/` and native Streamlit workbench use the same FastAPI services, conversations, evidence and coordinator with two specialists |
+| React design | Searchable workspaces, explicit Send/Create dashboard actions, responsive findings/conversation panes, keyboard navigation, clear draft filter state and chart/data recovery; Streamlit retained |
+| Saved dashboards | Typed metric/chart/table/text components over published evidence; immutable revisions and reports; explicit category/date filter bindings, governed filter/refresh/drill runs, saved layouts and draft choices; old views survive failed actions |
 | Source grounding | One configured SQLite/Snowflake source or isolated file workspace per conversation; curated warehouse semantics; shared cached lexical discovery/browsing; no warehouse/upload enrichment |
 | Semantic reliability | Batched unresolved role candidates; SQL-only exact physical relationship key pairs; structured actionable join/metric/fan-out validation feedback; specialist-owned coverage |
 | File intake | The chat **+** button accepts CSV, Parquet, explicitly selected `.xlsx` worksheet tables and reference documents; additional file tables receive separate schema confirmation, grain and keys; original hashes, immutable typed snapshots and warnings |
@@ -41,7 +44,9 @@ Native multi-action review now preserves every proposal, exact per-action decisi
 and checkpoint recovery; stale submissions are rejected. Duplicate review forms
 and unused review-type state are removed. The Analyze selector, its population
 filters, explicit source-expansion state and warehouse-refresh route are removed.
-All attachments use the native composer. API contract is **22**, with no migrations
+All attachments use the chat composer. The dashboard feature adds explicit filter
+actions over declared saved panels; it does not restore the removed Analyze selector
+or its source-expansion path. API contract is **23**, with no migrations
 or compatibility readers. Older
 incompatible storage requires a fresh directory; restart both services together.
 
@@ -51,6 +56,17 @@ independent edits. Earlier usability and export checks are retained in the
 [historical record](../reviews/README.md#earlier-implementation-checks).
 
 ## Evidence and limits
+
+The [22 October React design verification](../reviews/react-ui-redesign-2026-10-22.md)
+records the subsequent interface redesign using ui-ux-pro-max, isolated-build
+browser checks and the retained Streamlit workflow. It does not change agents,
+source execution or the dashboard evidence contract.
+
+The [22 October workspace verification](../reviews/genbi-workspace-2026-10-22.md)
+records the shared dashboard feature, React workspace, common visual theme and
+repair for stale chart modules after rebuilds. Final results: **659 passes, six
+optional provider skips, 22 browser journeys and one open-tab rebuild regression**.
+A read-only check also rendered all five charts in the user's saved sample.
 
 The [19 October composer simplification](../reviews/composer-simplification-2026-10-19.md)
 records removal of the Analyze feature and its backend contracts, native attachment

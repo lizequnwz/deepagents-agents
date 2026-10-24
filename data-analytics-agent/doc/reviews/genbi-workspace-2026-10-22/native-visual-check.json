@@ -1,0 +1,15 @@
+{
+  "tested_at": "2026-10-22T09:13:42.776Z",
+  "status": "pass",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "captures": [
+    "Dashboard controls"
+  ],
+  "rerun_finished": true,
+  "full_page": false,
+  "retained_image": "streamlit-controls.png",
+  "review_scope": "Dashboard controls visually reviewed; native chart rendering and actions verified by browser assertions."
+}

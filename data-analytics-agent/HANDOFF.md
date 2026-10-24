@@ -1,9 +1,9 @@
 # Handoff: analytics workspace assistant
 
-Updated 19 October 2026. This is the single active product plan. The user redirected
+Updated 22 October 2026. This is the single active product plan. The user redirected
 implementation toward analytical feature breadth and requested all seven capability
 families, delivered step by step on the existing application. The first complete
-local implementation is now present; it has not been committed or deployed.
+local implementation is now present and tested; it has not been committed or hosted.
 
 Use the [capability inventory](doc/roadmap/implementation-progress.md) for delivered
 behavior, the [implementation outcome](doc/reviews/capability-expansion-2026-10-17.md)
@@ -18,6 +18,20 @@ user's feature-first clarification. Earlier code-backed gaps remain in the
 The [19 October composer simplification](doc/reviews/composer-simplification-2026-10-19.md)
 records the user's subsequent removal of the Analyze feature and consolidation of
 all attachments into the chat **+** button, with contract **22** and local checks.
+
+The subsequent GenBI request adds a shared dashboard feature and React workspace.
+The [accepted proposal](doc/roadmap/genbi-decision-proposal.md) records the decision:
+retain the coordinator and its two specialists, add dashboard composition guidance
+and a typed view contract, and use React alongside Streamlit. A2UI transport remains
+optional. The [implementation record](doc/roadmap/genbi-implementation.md) tracks
+delivery and local verification. This does not restore the removed Analyze feature.
+
+The user's next instruction is to improve the React design and **keep Streamlit
+for now**. The [React design record](doc/reviews/react-ui-redesign-2026-10-22.md)
+documents that increment. React now has workspace search, explicit Send/Create
+dashboard actions, a responsive findings/conversation layout and clearer saved
+dashboard controls. Both interfaces remain available; removing Streamlit is not
+part of this increment.
 
 ## Selected product direction
 
@@ -35,6 +49,9 @@ DuckDB, Arrow/Parquet, existing evidence/report components and fresh-process Pyt
 Do not add an agent per method, a workflow engine, vector service or persistent
 kernel without a demonstrated need. Reviewed metrics remain authoritative; clear
 custom calculations are permitted with explicit formula, population and units.
+React is the full workspace. Streamlit retains native analytical controls and a
+shared Saved dashboards panel. The dashboard is a product feature with a coordinator
+skill, not another autonomous agent or a separate evidence system.
 
 ## Delivered analytical layers
 
@@ -64,7 +81,7 @@ application-selected input, population filters, source-expansion permission and
 warehouse-refresh feature have been removed at the user's request. Saved evidence
 remains available for conversational follow-ups and report revisions.
 
-API/storage contract is **22**; new analysis bundles use format **4** and include
+API/storage contract is **23**; new analysis bundles use format **4** and include
 the exact workflow helper sources used by each Python step. Restart both services
 together with fresh incompatible storage, preserving needed artifacts separately.
 There are no migrations or compatibility readers. Portable script/notebook replay

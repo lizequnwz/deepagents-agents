@@ -53,6 +53,9 @@ def test_launcher_passes_server_arguments_with_default_bash(tmp_path):
     curl = commands / "curl"
     curl.write_text("#!/bin/sh\nexit 1\n")
     curl.chmod(0o755)
+    npm = commands / "npm"
+    npm.write_text("#!/bin/sh\nexit 0\n")
+    npm.chmod(0o755)
     for reload in ["false", "true"]:
         result = subprocess.run(
             ["/bin/bash", str(START_SCRIPT)],

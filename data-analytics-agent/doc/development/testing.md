@@ -33,6 +33,31 @@ are opt-in; a skipped test is not a pass. `RUN_LIVE_SMOKE=1` only builds a confi
 graph—it does not ask a model a question. `RUN_LIVE_EVALUATIONS=1` invokes the model
 on generated fixtures in `tests/test_live_evaluations.py`.
 
+## Browser interaction suite
+
+Build the production React client, then run the local browser journeys:
+
+```sh
+npm --prefix frontend ci
+npm --prefix frontend run build
+node tests/ui/run.mjs
+node tests/ui/deployment.mjs
+```
+
+The runner starts the real FastAPI application and native Streamlit interface on
+isolated ports with temporary application storage. A scripted agent uses the
+normal run manager and saved evidence without provider requests. The checks cover
+file/table review, conversation, code review, dashboard actions, failure recovery,
+downloads, narrow layouts and persistence. See [runner instructions](../../tests/ui/README.md)
+for exact coverage and output options.
+
+The receipt records each scenario and browser errors. Screenshots support visual
+review. These checks establish browser behavior over deterministic evidence; they
+do not establish model accuracy, live warehouse behavior or human usability.
+The deployment runner rebuilds an isolated frontend copy. An already-open tab must
+render its first chart after the previous hashed entry is removed, without another
+script request. Do not rebuild the user's running assets to exercise this check.
+
 `scripts/probe_discovery_local.py` prepares frozen synthetic small/large catalogs
 and compares four separate role lookups with one batch, using three fresh catalog
 instances and warmed samples. It records role candidates, bounded broad/narrow

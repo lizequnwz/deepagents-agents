@@ -1,8 +1,9 @@
 # Persistent Data Analytics Agent
 
-A local, single-user analyst built with Streamlit, FastAPI and Deep Agents.
-Conversations, evidence, Python executions, charts and HTML reports survive
-restarts. Follow-up questions can reuse saved snapshots and derived datasets.
+A local, single-user analyst built with React, Streamlit, FastAPI and Deep Agents.
+One coordinator and its SQL/Python specialists serve both interfaces. Conversations,
+evidence, Python executions, charts, dashboards and HTML reports survive restarts.
+Follow-up questions can reuse saved snapshots and derived datasets.
 
 ## Run
 
@@ -12,20 +13,22 @@ cp .env.example .env
 ./scripts/start.sh
 ```
 
-Open Streamlit at `http://127.0.0.1:8501`. The API runs at
-`http://127.0.0.1:8000`; `/docs` exposes its contract. Restart both processes after
-code changes. The launcher installs the locked dependencies and checks model
-configuration before starting either service. Upload a CSV, Parquet or Excel file and
+Open the React workspace at `http://127.0.0.1:8000/workspace/`. The native Streamlit
+workbench remains available at `http://127.0.0.1:8501`. The API runs at
+`http://127.0.0.1:8000`; `/docs` exposes its contract. Install Node.js/npm and `uv`
+before starting. The launcher installs locked dependencies, builds React and checks
+model configuration before starting the services. Restart both processes after
+Python changes; rebuild React after client changes. Upload a CSV, Parquet or Excel file and
 review its schema, or select a configured warehouse. The included SQLite sources
 use `data_sources.yaml`; see [adding sources](doc/development/adding-data-sources.md)
 to connect your own data.
 
-The current API/storage contract is **22**. Restart both services together and
+The current API contract is **23**. Restart both services together and
 choose fresh `ANALYTICS_STORAGE_DIR` storage for older incompatible history;
 preserve needed artifacts separately. No migrations are provided.
 
 For an existing checkout with older storage, start both services against a new
-directory: `ANALYTICS_STORAGE_DIR=.analytics-v22 ./scripts/start.sh`.
+directory: `ANALYTICS_STORAGE_DIR=.analytics-v23 ./scripts/start.sh`.
 
 Provider alternatives, execution limits, review settings, tracing, and development
 reload are documented in [configuration](doc/development/configuration.md).
@@ -48,12 +51,23 @@ saved-data follow-ups, a sample upload, and run-control checks.
   (default `whisper-1`), including when the analytics model uses Bedrock.
 - Ask follow-ups to refine charts or extend an investigation. Saved results are
   snapshots; ask for fresh/current data to execute source SQL again.
-- Describe filters and follow-up questions in chat. To use updated file data,
-  attach the new version; earlier snapshots remain available.
+- Type your question and choose **Send** for an answer or **Create dashboard**
+  for an interactive view. You can also save a completed report as a dashboard.
+  Reopen saved dashboards from the same workspace and inspect the report, data
+  and conversation together. On phones, switch between Findings and Conversation.
+- Add filters with explicit panel/column bindings. **Apply filters**, **Refresh
+  data** and **Investigate** create normal reviewed analytical runs. The prior
+  dashboard remains visible until its replacement evidence and HTML report succeed.
+  Empty selections reset a filter; empty populations display a no-data state.
+- **Save view** changes title, panel order/width and draft selections without a
+  model or source query. Applied filters remain distinct from draft selections.
+  Stale requests are rejected and repeated action requests resolve to their run.
+- To use updated file data, attach and review the new version; earlier snapshots
+  remain available. Warehouse refresh runs through the SQL specialist.
 - Forecast evaluations save predictions, baseline/candidate MAE and RMSE,
   training/holdout windows and measured interval coverage separately from
   nominal coverage. Their tables and calculations are included in downloads.
-- Use **Edit chart** to change a title, axis label, colors, or compatible chart
+- In the Streamlit workbench, use **Edit chart** to change a title, axis label, colors, or compatible chart
   type directly. Saving creates matching chart/report versions using saved data.
 - Stop preserves committed artifacts. Resume continues interrupted work; after
   restart, unfinished work waits for an explicit Resume. A report failure can
@@ -82,6 +96,7 @@ associations do not establish causes; scenario outputs do not claim probabilitie
 | Component | Owns |
 |---|---|
 | Coordinator | Routing, investigation plan, evidence selection, shared charts, findings and HTML report |
+| Dashboard feature | Scoped saved views, explicit filter bindings, validated actions and immutable dashboard/report revisions |
 | `text-to-sql` | Semantic grounding, source retrieval, descriptive analysis, value discovery and saved-data SQL |
 | `data-analysis` | Iterative exploration, statistical analysis, predictive models, trends, seasonality, forecasting and evaluation |
 
@@ -134,6 +149,7 @@ walks through the artifact workflow without a model call.
 ```bash
 uv run pytest
 uv run ruff check data_analytics_agent streamlit_app.py tests --select F
+node tests/ui/run.mjs
 ```
 
 The deterministic suite tests typed extraction, 100,000-row continuity, iterative
@@ -141,7 +157,15 @@ Python with repair, saved-data SQL, report consistency and retry, lifecycle,
 provider configuration and UI components. Opt-in model evaluations are separate;
 they send the supplied fixture context to the configured provider and must be
 explicitly enabled. They assess correctness and methodology rather than exact SQL.
-The [latest verification record](doc/reviews/checkup-2026-10-18.md)
-records the capability expansion, local checks and portable replay boundaries. The three paired
+The [React design verification](doc/reviews/react-ui-redesign-2026-10-22.md)
+records the latest interface changes and browser checks. The
+[dashboard verification](doc/reviews/genbi-workspace-2026-10-22.md) retains the
+backend regression results, chart-loading repair and shared-theme checks.
+The [18 October checkup](doc/reviews/checkup-2026-10-18.md) retains earlier analytical/replay checks. The three paired
 semantic studies remain pending; verification stays local under the user's current
 instruction.
+
+The browser runner uses the production React build and the real local API with
+isolated saved evidence. It also opens Streamlit. Its scripted agent exercises
+the normal run manager without provider calls. See [browser verification](tests/ui/README.md)
+for setup, covered journeys, screenshots and receipts.

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Proposed GenBI architecture",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "views": [
+      {"id": "interaction", "label": "Dashboard interaction", "focus": ["canvas", "runtime", "coordinator", "spec"], "note": "The runtime validates each action and saves the dashboard state."},
+      {"id": "data", "label": "Data and evidence", "focus": ["coordinator", "sql", "source", "evidence", "analysis"], "note": "Only text-to-SQL can query the source. Analysis uses saved evidence."}
+    ]
+  },
+  "components": [
+    {"id": "canvas", "type": "frontend", "label": "Dashboard canvas", "sublabel": "React + trusted BI components", "pos": [40, 80], "size": [240, 88]},
+    {"id": "runtime", "type": "backend", "label": "Dashboard runtime", "sublabel": "FastAPI actions and validation", "pos": [420, 80], "size": [240, 88]},
+    {"id": "coordinator", "type": "backend", "label": "Existing coordinator", "sublabel": "Dashboard design skill", "pos": [800, 80], "size": [240, 88]},
+    {"id": "spec", "type": "database", "label": "Dashboard revisions", "sublabel": "Spec, filters and active evidence", "pos": [420, 240], "size": [240, 88]},
+    {"id": "sql", "type": "backend", "label": "Text-to-SQL", "sublabel": "Ground, validate and execute", "pos": [800, 240], "size": [240, 88]},
+    {"id": "analysis", "type": "backend", "label": "Data-analysis", "sublabel": "Forecasts and statistical work", "pos": [40, 400], "size": [240, 88]},
+    {"id": "evidence", "type": "database", "label": "Saved evidence", "sublabel": "Datasets, charts and HTML report", "pos": [420, 400], "size": [240, 88]},
+    {"id": "source", "type": "database", "label": "One conversation source", "sublabel": "Warehouse OR reviewed files", "pos": [800, 400], "size": [240, 88]}
+  ],
+  "connections": [
+    {"id": "actions", "from": "canvas", "to": "runtime", "label": "Typed actions", "variant": "emphasis"},
+    {"id": "intent", "from": "runtime", "to": "coordinator", "label": "New analytical intent", "variant": "emphasis"},
+    {"id": "revisions", "from": "runtime", "to": "spec", "label": "Validated revisions", "labelDy": 40},
+    {"id": "assignment", "from": "coordinator", "to": "sql", "label": "Business brief", "variant": "emphasis", "labelDy": 40},
+    {"id": "source-query", "from": "sql", "to": "source", "label": "Authorized queries", "variant": "emphasis", "labelDy": 40},
+    {"id": "saved-output", "from": "sql", "to": "evidence", "label": "Save complete results"},
+    {"id": "bindings", "from": "spec", "to": "evidence", "label": "Exact evidence IDs", "labelDy": 40},
+    {"id": "analysis-inputs", "from": "evidence", "to": "analysis", "label": "Saved inputs"}
+  ]
+}

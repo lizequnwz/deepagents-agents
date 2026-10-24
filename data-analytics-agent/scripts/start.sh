@@ -76,6 +76,10 @@ if ! command -v curl >/dev/null 2>&1; then
   echo "curl is required for local service health checks." >&2
   exit 1
 fi
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Node.js and npm are required to build the React workspace." >&2
+  exit 1
+fi
 echo "Preparing the locked Python environment…"
 uv sync --locked
 
@@ -94,6 +98,10 @@ if port_is_open "${STREAMLIT_HOST}" "${STREAMLIT_PORT}"; then
   echo "Port ${STREAMLIT_PORT} is already in use on ${STREAMLIT_HOST}." >&2
   exit 1
 fi
+
+echo "Building the React workspace…"
+npm --prefix "${PROJECT_ROOT}/frontend" ci --no-audit --no-fund
+npm --prefix "${PROJECT_ROOT}/frontend" run build
 
 API_SERVER_ARGS=(--host "${API_HOST}" --port "${API_PORT}" --no-access-log)
 case "${API_AUTO_RELOAD}" in
@@ -134,7 +142,8 @@ wait_for_service \
 
 echo
 echo "Data Analytics Agent is ready:"
-echo "  App: ${APP_BASE_URL}"
+echo "  Workspace: ${API_BASE_URL}/workspace/"
+echo "  Streamlit workbench: ${APP_BASE_URL}"
 echo "  API: ${API_BASE_URL}"
 echo
 echo "Press Ctrl+C to stop both services."

@@ -1,0 +1,69 @@
+{
+  "status": "pass",
+  "tested_frontend_assets": [
+    "index-Di_vRRZm.js",
+    "index-GjzC33Sx.css"
+  ],
+  "source_sha256": {
+    "frontend/src/App.tsx": "2e6ac14fb3b6346783ba7cd00da54afc0b4b458937e41f490da492a32d0c970e",
+    "frontend/src/DashboardPanel.tsx": "fbd3ef38830082b491e1d332cc698ef83b7e6c709e5d368f704ea12c1752ed23",
+    "frontend/src/Intake.tsx": "2f63deece9ba0a40f39ba9940832bf8d8f19c559fccffdac89f2117352e6896c",
+    "frontend/src/RunReview.tsx": "55bd6c02ed5687d206b0aa4f14ea5b5b43a895b0a3d90b4908b7b0b5ffdb9c76",
+    "frontend/src/VoiceInput.tsx": "20e2b8a1bf4a06c9de1120e5534d222f62b988195921c3dcac27b9db81c4337d",
+    "frontend/src/api.ts": "c674c7a257d63d483590fa9ece0eaa0a076db725c1853a0e820e2f41b3670d44",
+    "frontend/src/components.tsx": "8a5152fb78d194ca84505c012f95324077f18f68e4a08dfbea76e74b3a295b21",
+    "frontend/src/main.tsx": "7dd0ec7c005211dc0191dbe92115cb395ec8f04c2591d2259039a5d7b42fb3c0",
+    "frontend/src/plotly.d.ts": "9163eea3e21536b43b8b07c4c831dab4b976cc8f5bce8736b9823894c27a6072",
+    "frontend/src/styles.css": "6bcf0e2308e7d50b4f377ba61f6b6512aaa8e6d338dd96ff0927c065a3a67805",
+    "frontend/src/types.ts": "59203b80e0014952d2f3fae29fa78082cb6630b2b6ae4b4656f8fd48293f3086",
+    "frontend/src/vite-env.d.ts": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5"
+  },
+  "build": "TypeScript and Vite production build passed in isolated copy.",
+  "browser_scenarios": {
+    "functional": 22,
+    "focused_design": 9
+  },
+  "deployment_regression": "pass",
+  "targeted_python_regression": {
+    "passed": 15,
+    "tests": [
+      "tests/test_workspace_api.py",
+      "tests/test_launcher.py",
+      "tests/test_streamlit_workflow.py"
+    ]
+  },
+  "no_streamlit_product_changes": true,
+  "no_new_packages": true,
+  "verified_at": "2026-10-22T17:19:20.761639+00:00",
+  "scope": "React UI redesign; Streamlit retained. Existing saved agent-run failures are outside this UI change.",
+  "built_asset_sha256": {
+    "frontend/dist/assets/index-Di_vRRZm.js": "3d7af2ab909f727ef8115e36a4c67000925499c9cf9ef602754f3f43700a4b9c",
+    "frontend/dist/assets/index-GjzC33Sx.css": "bc15f85a04c883dd276fe78dc0bec9d2f2d8937d756e359df0e0740f95ae70ee",
+    "frontend/dist/index.html": "f0c8b6e528324679eda2ede6f466a0fa47926c2a7a192b69d31798e24d4422d6"
+  },
+  "live_services": {
+    "api": {
+      "status": 200
+    },
+    "streamlit": {
+      "status": 200
+    },
+    "workspace": {
+      "status": 200,
+      "assets": [
+        "index-Di_vRRZm.js",
+        "index-GjzC33Sx.css"
+      ]
+    }
+  },
+  "saved_workspace_check": {
+    "status": "pass",
+    "workspaces_checked": 2,
+    "charts_rendered": 7,
+    "existing_saved_agent_errors": 1
+  },
+  "static_checks": {
+    "diff_check": "pass",
+    "ui_runner_syntax": "pass"
+  }
+}
