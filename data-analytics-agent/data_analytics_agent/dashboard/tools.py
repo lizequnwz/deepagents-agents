@@ -5,8 +5,9 @@ import json
 from langchain.tools import ToolRuntime, tool
 
 from data_analytics_agent.agents.text_to_sql.tools import _runtime_context
-from data_analytics_agent.dashboard.schemas import DashboardSpec
+from data_analytics_agent.dashboard.schemas import DashboardSpec, MetricComponent
 from data_analytics_agent.dashboard.service import DashboardService
+from data_analytics_agent.reporting.formats import validate_number_format
 
 
 def create_dashboard_tool(results, analyses, runs, reports, dashboards, *, source_id):
@@ -33,6 +34,9 @@ def create_dashboard_tool(results, analyses, runs, reports, dashboards, *, sourc
             if run.findings is None:
                 raise ValueError("Call publish_findings before creating the dashboard.")
             spec = DashboardSpec.model_validate_json(dashboard_json)
+            for component in spec.components:
+                if isinstance(component, MetricComponent):
+                    validate_number_format(component.metric.number_format)
             service.validate_spec(
                 spec,
                 thread_id=context.thread_id,

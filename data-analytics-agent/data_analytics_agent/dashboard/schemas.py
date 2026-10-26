@@ -5,19 +5,24 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from data_analytics_agent.reporting.schemas import ReportMetric
 
 
 class DashboardModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        json_schema_serialization_defaults_required=True,
+    )
 
 
 Identifier = Annotated[
     str, Field(min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
 ]
-FilterValue = str | int | float | bool | None
+FilterValue = Annotated[str, StringConstraints(strip_whitespace=False)] | int | float | bool | None
+ColumnName = Annotated[str, StringConstraints(strip_whitespace=False), Field(min_length=1, max_length=200)]
 
 
 class ComponentBase(DashboardModel):
@@ -50,7 +55,7 @@ class TableComponent(ComponentBase):
     type: Literal["table"] = "table"
     result_id: str = Field(min_length=1)
     title: str = Field(default="Supporting data", min_length=1, max_length=160)
-    columns: list[str] = Field(default_factory=list, max_length=40)
+    columns: list[ColumnName] = Field(default_factory=list, max_length=40)
     row_limit: int = Field(default=10, ge=1, le=10)
     span: Literal[1, 2, 3] = 3
 
@@ -70,7 +75,7 @@ DashboardComponent = Annotated[
 
 class FilterBinding(DashboardModel):
     component_id: Identifier
-    column: str = Field(min_length=1, max_length=200)
+    column: ColumnName
 
 
 class DashboardFilter(DashboardModel):
@@ -134,6 +139,18 @@ class DashboardCandidate(DashboardModel):
     error: str | None = None
 
 
+class ChartSelection(DashboardModel):
+    result_id: str = Field(min_length=1)
+    column: ColumnName
+    values: list[FilterValue] = Field(min_length=1, max_length=100)
+
+
+class ChartSelectionField(DashboardModel):
+    column: str
+    label: str
+    point_key: Literal["x", "y", "label", "name"]
+
+
 class DashboardAction(DashboardModel):
     action: Literal["filter", "refresh", "drill"]
     expected_revision: str = Field(min_length=1)
@@ -141,6 +158,7 @@ class DashboardAction(DashboardModel):
     filter_values: dict[str, list[FilterValue]] = Field(default_factory=dict)
     component_id: str | None = None
     question: str | None = Field(default=None, max_length=4_000)
+    selection: ChartSelection | None = None
 
     @model_validator(mode="after")
     def valid_action_payload(self):
@@ -148,7 +166,9 @@ class DashboardAction(DashboardModel):
             raise ValueError("Only filter actions can change filter values.")
         if self.action == "drill" and (not self.component_id or not self.question):
             raise ValueError("Drill actions require a component and a question.")
-        if self.action != "drill" and (self.component_id or self.question):
+        if self.action != "drill" and (
+            self.component_id or self.question or self.selection
+        ):
             raise ValueError("Only drill actions accept a component and a question.")
         return self
 
@@ -185,6 +205,11 @@ class DashboardActionPlan(DashboardModel):
     affected_component_ids: list[str]
 
 
+class PlotlyFigure(DashboardModel):
+    data: list[dict[str, Any]]
+    layout: dict[str, Any]
+
+
 class ResolvedComponent(DashboardModel):
     id: str
     type: Literal["metric", "chart", "table", "text"]
@@ -192,7 +217,7 @@ class ResolvedComponent(DashboardModel):
     span: int
     value: Any | None = None
     formatted_value: str | None = None
-    figure: dict[str, Any] | None = None
+    figure: PlotlyFigure | None = None
     rows: list[dict[str, Any]] | None = None
     columns: list[str] | None = None
     body: str | None = None
@@ -203,6 +228,7 @@ class ResolvedComponent(DashboardModel):
     truncated: bool = False
     warnings: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    selection_fields: list[ChartSelectionField] = Field(default_factory=list)
 
 
 class ResolvedFilter(DashboardFilter):

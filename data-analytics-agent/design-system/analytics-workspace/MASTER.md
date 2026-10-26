@@ -33,6 +33,35 @@ green/warm-neutral identity remains authoritative across React, Streamlit and re
 
 ## Workspace structure
 
+### Editorial dashboard reading order — 26 October 2026
+
+Use an editorial analytical layout within the existing ivory, ink and green
+palette. Lead with the saved title in restrained serif type. Keep source/version
+metadata in one quiet utility row. Show a short excerpt of the saved description;
+retain a long method statement in an explicit disclosure. Do not generate new
+analysis or headline claims for visual decoration.
+
+Keep the workspace header and view navigation compact. Saved dashboard links open
+with the canvas in focus; the Conversation button restores the conversation at
+any time. Ordinary conversations retain their current flow.
+
+Group consecutive saved metric components into a compact strip. Preserve their
+stored order and width choices. Use the lead chart as the main visual element;
+supporting tables and notes follow in their saved order. Put collapsed evidence
+inspection after the results. An unfiltered dashboard gets one quiet scope row
+and an Add filter action, not an empty filter card.
+
+Metric display changes use an explicit Number format control and save a matching
+dashboard/report revision. Table display may use twelve significant digits for
+noninteger values; disclose display rounding and expose the exact stored value
+by pointer and keyboard. Preserve integer identifiers, filter values and units.
+
+The ui-ux-pro-max search verified Data-Dense Dashboard for BI and Editorial Grid
+for reading hierarchy. Adopt the useful hierarchy and spacing; omit magazine
+effects, animation and decorative content. Use the existing semantic CSS tokens,
+native controls, visible focus and paired dark theme. Review desktop, phone and
+dark screenshots before delivering the build.
+
 - Sidebar: new workspace, search, saved workspaces and local/theme status.
 - Header: source context, clear conversation control and a secondary action menu.
 - Findings area: Findings/Dashboard, Report and Data tabs; saved view selection.

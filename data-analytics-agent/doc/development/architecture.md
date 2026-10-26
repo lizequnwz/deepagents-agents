@@ -159,11 +159,30 @@ start a normal source-bound run. The action brief stays in application context;
 conversation history displays a concise human-readable question. Source execution
 still belongs exclusively to the SQL specialist, with the existing reviews.
 
+The SQL specialist can create a reusable `execute_dashboard_query` definition
+over one complete saved population. Dimensions, named aggregates and filter fields
+compile into parameter-bound DuckDB SQL. The immutable output records exact
+parameters, definition, scope and parent lineage. A typed receipt hash binds these
+choices to the saved dataset. Compatible filter actions reuse those definitions
+without invoking a model or warehouse. SQL review still applies when configured.
+Refresh, new analytical meaning, complex formulas and unsupported definitions use
+the coordinator. A saved-data filter never claims a warehouse refresh.
+
+`RunManager` owns both execution paths. Prepared actions persist their plan,
+review, completed output IDs and report specification. Resume and report retry
+verify cached receipts and reuse completed work. The resulting HTML report names
+the exact filters and snapshots. Export provenance includes the bound parameters
+and calculation definition beside the placeholder SQL.
+
 Each filter declares exact component/column bindings in complete analytical data.
 Applied state and saved draft selections remain separate. Action validation checks
 the full saved population, rejects stale/reused evidence for affected components,
 and checks fresh source lineage for warehouse refresh. New facts require a new
 report. Empty results have explicit empty bindings rather than old numerical values.
+Receipt-based population checks require the entire effective filter map, including
+reset state. Extra hidden filters cannot certify a narrower result. Typed chart
+selections identify the current revision, explicit category field and full saved
+analytical input. The server validates selected values before an investigation.
 
 Title/order/span changes use a deterministic view service. Compare-and-set heads
 reject stale revisions; repeated request IDs reuse their committed result. Failed
@@ -171,6 +190,21 @@ analytical actions retain the prior dashboard. Dashboard finalization and run
 completion share the correction lock. Deleting history removes dashboard state,
 candidates and actions with the conversation. This remains a local single-user
 product; the scoped API is not a hosted identity/authorization system.
+
+`ui_events.py` attaches to existing runs through a scoped GET event stream. Official
+AG-UI types encode public snapshots, safe activity and lifecycle outcomes. It does
+not invoke a graph or publish raw graph state, tool arguments or private reasoning.
+Retained activity IDs support application-owned reconnect. This is not AG-UI's
+standard POST run binding. Reviews and clarification retain their existing command
+endpoints. React replaces active-run polling with this attachment and reads full
+details when findings, reviews or terminal state change.
+
+The server can export a bounded A2UI v0.9.1 evidence surface at the dashboard's
+`/surface` endpoint. It contains references rather than numerical values. The local
+evidence panel reads the canonical dashboard. The maintained browser renderer was
+tested and removed because its current dependency tree requires unpatched Zod 3.
+See the [protocol evaluation](../reviews/genui-protocol-evaluation-2026-10-25.md).
+CopilotKit's runtime is not installed.
 
 ## Chart intervals
 

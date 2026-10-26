@@ -1,6 +1,6 @@
 # Current capability status
 
-Updated 22 October 2026. This is the current delivery inventory. Seven analytical
+Updated 26 October 2026. This is the current delivery inventory. Seven analytical
 families, multiple reviewed tables in one file workspace, and cited document
 context are now implemented. The [handoff](../../HANDOFF.md) owns priorities and
 acceptance gates; its earlier broader workspace direction is only partly delivered.
@@ -13,8 +13,9 @@ not implemented. Dated reviews describe earlier versions.
 |---|---|
 | Local onboarding | One locked install/start path; upload entry does not require a warehouse; advanced settings documented separately |
 | Shared interfaces | React workspace at `/workspace/` and native Streamlit workbench use the same FastAPI services, conversations, evidence and coordinator with two specialists |
-| React design | Searchable workspaces, explicit Send/Create dashboard actions, responsive findings/conversation panes, keyboard navigation, clear draft filter state and chart/data recovery; Streamlit retained |
+| React design | Searchable workspaces, editorial dashboard title/scope, compact metric strips, chart-first canvas, quiet evidence disclosure, responsive findings/conversation panes, keyboard navigation, clear draft filter state and chart/data recovery; Streamlit retained |
 | Saved dashboards | Typed metric/chart/table/text components over published evidence; immutable revisions and reports; explicit category/date filter bindings, governed filter/refresh/drill runs, saved layouts and draft choices; old views survive failed actions |
+| GenUI interactions | SQL-owned reusable saved-data filters with typed receipts and configured review; exact chart selections; multi-select drafts and complete saved-domain search; public AG-UI run attachment/replay; generated dashboard types; bounded A2UI export |
 | Source grounding | One configured SQLite/Snowflake source or isolated file workspace per conversation; curated warehouse semantics; shared cached lexical discovery/browsing; no warehouse/upload enrichment |
 | Semantic reliability | Batched unresolved role candidates; SQL-only exact physical relationship key pairs; structured actionable join/metric/fan-out validation feedback; specialist-owned coverage |
 | File intake | The chat **+** button accepts CSV, Parquet, explicitly selected `.xlsx` worksheet tables and reference documents; additional file tables receive separate schema confirmation, grain and keys; original hashes, immutable typed snapshots and warnings |
@@ -29,7 +30,7 @@ not implemented. Dated reviews describe earlier versions.
 | Scenarios | Explicit assumption grids and caller-supplied formulas with saved input combinations, computed outputs and undefined arithmetic; scenario ranges have no assigned probability coverage |
 | Evidence and reports | Application-owned receipts, explicit final output/dataset selections, scoped findings, shared versioned charts, required agent-composed HTML, numerical bindings and report retry; superseded attempts remain provenance |
 | Comparisons | Same-snapshot current/baseline bindings, deterministic deltas and calculation disclosure; checks for grain, dimensions, periods, units and completeness |
-| Presentation | Direct chart styling and exact report-title revisions over saved evidence; immutable revisions, stale-write protection and failure recovery |
+| Presentation | Direct chart styling, exact report-title revisions and dashboard metric formats over saved evidence; matching immutable report revisions, stale-write protection and failure recovery |
 | Analytical visibility | Visible plans, compact investigation records, bounded independent Python assignments, ordered batch review, exact all-input review and code inspection |
 | Run recovery | Durable conversations/checkpoints, approvals/corrections, Stop/Resume and history deletion; native budget exhaustion blocks analysis and reserves bounded partial-report presentation; blocking source cancellation remains cooperative |
 | Saved evidence | Conversational follow-ups reuse suitable named saved datasets; source/thread isolation, complete-population checks, input lineage, inspection and downloads remain |
@@ -46,7 +47,7 @@ and unused review-type state are removed. The Analyze selector, its population
 filters, explicit source-expansion state and warehouse-refresh route are removed.
 All attachments use the chat composer. The dashboard feature adds explicit filter
 actions over declared saved panels; it does not restore the removed Analyze selector
-or its source-expansion path. API contract is **23**, with no migrations
+or its source-expansion path. API contract is **24**, with no migrations
 or compatibility readers. Older
 incompatible storage requires a fresh directory; restart both services together.
 

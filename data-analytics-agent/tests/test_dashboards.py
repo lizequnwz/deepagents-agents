@@ -167,7 +167,7 @@ def test_saved_dashboard_resolves_values_and_survives_restart(dashboard):
     view = w.service.view(w.revision.dashboard_id, w.thread, source_id="test")
     assert view.components[0].value == 10
     assert view.components[0].formatted_value == "10.00"
-    assert view.components[1].figure["data"]
+    assert view.components[1].figure.data
     assert view.components[1].analysis_result_id == w.dataset.result_id
     assert "Source completeness is unknown." in view.components[1].warnings
     assert view.components[2].row_count == 2
@@ -688,6 +688,33 @@ def test_completion_guard_keeps_candidate_unpublished(dashboard, reason):
         w.dashboards.get(w.revision.dashboard_id, w.thread, source_id="test")
         == w.revision
     )
+
+
+@pytest.mark.parametrize("target", ["dashboard", "report"])
+def test_new_authored_metrics_reject_implicit_excel_formats(dashboard, target):
+    w = dashboard
+    if target == "dashboard":
+        spec = w.spec.model_copy(deep=True)
+        next(
+            c for c in spec.components if isinstance(c, MetricComponent)
+        ).metric.number_format = "0.00"
+        output = create_dashboard_tool(
+            w.results, w.analyses, w.runs, w.reports, w.dashboards, source_id="test"
+        ).func(
+            dashboard_json=spec.model_dump_json(),
+            runtime=w.runtime("bad-dashboard-format"),
+        )
+    else:
+        spec = w.report.spec.model_copy(deep=True)
+        next(b for b in spec.blocks if b.type == "metrics").metrics[
+            0
+        ].number_format = "0.00"
+        output = create_create_report_tool(
+            w.results, w.analyses, w.runs, w.reports, source_id="test"
+        ).func(
+            report_json=spec.model_dump_json(), runtime=w.runtime("bad-report-format")
+        )
+    assert not output["ok"] and "explicit Python numeric format" in output["error"]
 
 
 async def test_report_completion_and_manager_publish_dashboard_without_provider(

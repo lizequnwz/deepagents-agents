@@ -288,7 +288,7 @@ try {
     const before = await json(endpoint);
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Regional sales workspace', exact: true })).toBeVisible();
-    await expect(page.getByLabel('Sales region', { exact: true })).toHaveValue('"North"');
+    await expect(page.getByLabel('Sales region', { exact: true })).toHaveValues(['"North"']);
     await expect(page.getByText('Applied: Sales region: South', { exact: false })).toBeVisible();
     expect(Object.values(before.revision.saved_filter_values)).toEqual([['North']]);
     const refreshed = page.waitForResponse(r => r.url().endsWith(endpoint + '/actions') && r.request().method() === 'POST');
@@ -328,9 +328,10 @@ try {
 
   await scenario('React empty filter results and reset preserve explicit evidence', async () => {
     const endpoint = `/api/conversations/${manifest.thread_id}/dashboards/${savedDashboardId}`;
+    await page.getByLabel('Sales region', { exact: true }).selectOption('');
     await page.getByText('Other value', { exact: true }).click();
     await page.getByLabel('Sales region custom value', { exact: true }).fill('No matching region');
-    await page.getByRole('button', { name: 'Use custom Sales region', exact: true }).click();
+    await page.getByRole('button', { name: 'Add custom Sales region', exact: true }).click();
     const submitted = page.waitForResponse(r => r.url().endsWith(endpoint + '/actions') && r.request().method() === 'POST');
     await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
     const action = await (await submitted).json();
@@ -370,7 +371,7 @@ try {
   await scenario('React dark theme and editable voice draft', async () => {
     await page.getByRole('button', { name: 'Use dark theme', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.getByRole('button', { name: 'Edit view', exact: true })).toHaveCSS('background-color', 'rgb(41, 41, 40)');
+    await expect(page.getByRole('button', { name: 'Edit view', exact: true })).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: path.join(output, 'react-dashboard-dark.png'), fullPage: true });
     await page.getByRole('button', { name: 'Use light theme', exact: true }).click();
     const before = await json(`/api/conversations/${manifest.thread_id}`);
@@ -486,6 +487,7 @@ try {
     const endpoint = `/api/conversations/${manifest.thread_id}/dashboards/${savedDashboardId}`;
     const before = await json(endpoint);
     await page.goto(`${base}/workspace/?thread=${manifest.thread_id}&dashboard=${savedDashboardId}`);
+    await page.getByRole('button', { name: 'Toggle conversation', exact: true }).click();
     await page.getByLabel('Message', { exact: true }).fill('Show monthly sales using the displayed dashboard context.');
     const sent = page.waitForResponse(r => r.url().endsWith('/messages') && r.request().method() === 'POST');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -528,6 +530,7 @@ try {
   await scenario('React Stop and Resume retain the committed dashboard until completion', async () => {
     const endpoint = `/api/conversations/${manifest.thread_id}/dashboards/${savedDashboardId}`;
     await page.goto(`${base}/workspace/?thread=${manifest.thread_id}&dashboard=${savedDashboardId}`);
+    await page.getByRole('button', { name: 'Toggle conversation', exact: true }).click();
     const before = await json(endpoint);
     const refreshing = page.waitForResponse(r => r.url().endsWith(endpoint + '/actions') && r.request().method() === 'POST');
     await page.getByRole('button', { name: 'Refresh data', exact: true }).click();
@@ -558,7 +561,7 @@ try {
     const filterId = before.revision.spec.filters[0].id;
     await json(endpoint + '/view', { method: 'POST', body: JSON.stringify({ expected_revision: before.revision.revision_id, request_id: crypto.randomUUID(), saved_filter_values: { [filterId]: ['North', 'South'] } }) });
     await page.goto(`${base}/workspace/?thread=${manifest.thread_id}&dashboard=${savedDashboardId}`);
-    await expect(page.getByText('Selected values: North, South. Choose a value to replace this selection.', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Sales region', { exact: true })).toHaveValues(['"North"', '"South"']);
     await page.getByRole('button', { name: 'Edit view', exact: true }).click();
     const savedRequest = page.waitForResponse(response => response.url().endsWith(endpoint + '/view') && response.request().method() === 'POST');
     await page.getByRole('button', { name: 'Save view', exact: true }).click();

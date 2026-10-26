@@ -37,6 +37,7 @@ import { Attachment, DocumentViewer, SchemaReview } from "./Intake";
 import DashboardPanel from "./DashboardPanel";
 import { RunReview } from "./RunReview";
 import { VoiceInput } from "./VoiceInput";
+import { observeRun, type PublicRunState } from "./runEvents";
 import type {
   Answer,
   Conversation,
@@ -110,9 +111,10 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sidebar, setSidebar] = useState(false);
-  const [showChat, setShowChat] = useState(true);
+  const [showChat, setShowChat] = useState(() => !initialParam("dashboard"));
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [pollVersion, setPollVersion] = useState(0);
+  const [streamConnection, setStreamConnection] = useState<"connected" | "reconnecting">("connected");
   const [theme, setTheme] = useState(
     () => localStorage.getItem("analytics-theme") ?? "light",
   );
@@ -294,6 +296,7 @@ export default function App() {
   function navigate(thread: string | null, dashboard: string | null = null) {
     setThreadId(thread);
     setDashboardId(dashboard);
+    setShowChat(!dashboard);
     setSidebar(false);
     setError("");
     const params = new URLSearchParams();
@@ -410,14 +413,26 @@ export default function App() {
   useEffect(() => {
     if (!tracking || !threadId) return;
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
+    let requestVersion = 0;
+    let evidenceKey = "";
+    let latestState: PublicRunState | null = null;
+    const streamedActivity = new Map<number, Run["events"][number]>();
+    async function refreshRun() {
+      const version = ++requestVersion;
       try {
-        const next = await api<Run>(`/api/runs/${tracking}`);
-        if (cancelled) return;
+        const loaded = await api<Run>(`/api/runs/${tracking}`);
+        if (cancelled || version !== requestVersion) return;
+        if (loaded.run_id !== tracking || loaded.thread_id !== threadId)
+          throw new Error("The run details belong to another conversation.");
+        // A detail request can finish after a newer event snapshot. Retain the
+        // latest public state and activity rather than moving the UI backward.
+        const next = {
+          ...loaded,
+          ...(latestState ? { status: latestState.status, phase: latestState.phase, report_ready: latestState.report_ready } : {}),
+          events: [...new Map([...streamedActivity.values(), ...loaded.events].map((item) => [item.id, item])).values()].sort((a, b) => a.id - b.id),
+        };
         setRun(next);
-        if (ACTIVE.includes(next.status)) timer = setTimeout(poll, 1000);
-        else {
+        if (!ACTIVE.includes(next.status)) {
           const refreshedDashboards = await refreshThread();
           if (cancelled) return;
           await refreshHistory();
@@ -449,16 +464,39 @@ export default function App() {
           }
         }
       } catch (e) {
-        if (!cancelled) {
-          setError(message(e));
-          timer = setTimeout(poll, 3000);
-        }
+        if (!cancelled && version === requestVersion) setError(message(e));
       }
     }
-    void poll();
+    setStreamConnection("connected");
+    void refreshRun();
+    const detach = observeRun(threadId, tracking, {
+      state: (state) => {
+        if (cancelled) return;
+        latestState = state;
+        setRun((previous) => previous?.run_id === tracking ? {
+          ...previous, status: state.status, phase: state.phase, report_ready: state.report_ready,
+        } : previous);
+        const key = `${state.findings_ready}:${state.answer_ready}:${state.report_ready}:${state.review?.interrupt_id ?? ""}:${state.clarification?.interrupt_id ?? ""}`;
+        if (key !== evidenceKey) {
+          evidenceKey = key;
+          void refreshRun();
+        }
+      },
+      activity: (activity) => {
+        if (cancelled) return;
+        streamedActivity.set(activity.id, activity);
+        setRun((previous) => previous?.run_id === tracking && !previous.events.some((item) => item.id === activity.id)
+          ? { ...previous, events: [...previous.events, activity].sort((a, b) => a.id - b.id) } : previous);
+      },
+      connection: (value) => { if (!cancelled) setStreamConnection(value); },
+      error: (error) => { if (!cancelled) setError(error.message); },
+      closed: () => {
+        if (!cancelled) { setStreamConnection("connected"); void refreshRun(); }
+      },
+    });
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      detach();
     };
   }, [tracking, threadId, dashboardId, pollVersion]);
   useEffect(() => {
@@ -570,6 +608,12 @@ export default function App() {
   const needsReview =
     run?.status === "approval_required" ||
     run?.status === "clarification_required";
+  useEffect(() => {
+    if (needsReview) {
+      setShowChat(true);
+      setMobileView("conversation");
+    }
+  }, [needsReview]);
   const cannotSubmit = busy || !draft.trim() || !!unreviewed || needsReview || awaitingDashboard;
   const events = run?.events ?? currentTurn?.activities ?? [];
   const reportId = dashboard?.revision.report_id ?? answer?.report?.report_id;
@@ -584,12 +628,12 @@ export default function App() {
     "Analytics workspace";
   const visibleTurns = useMemo(() => conversation?.turns ?? [], [conversation]);
 
-  if (health && health.api_contract_version !== 23)
+  if (health && health.api_contract_version !== 24)
     return (
       <main className="welcome">
         <h1>Restart the local services</h1>
         <Notice error>
-          The workspace expects API contract 23. The API reports{" "}
+          The workspace expects API contract 24. The API reports{" "}
           {health.api_contract_version ?? "no contract version"}. Stop the
           services and restart them together before continuing.
         </Notice>
@@ -728,6 +772,7 @@ export default function App() {
                   >
                     <MessageSquare size={18} />
                     <span>Conversation</span>
+                    {needsReview && <span className="review-needed">{run?.status === "approval_required" ? "Review" : "Reply needed"}</span>}
                   </button>
                   <details className="workspace-overflow" onKeyDown={(event) => {
                     if (event.key === "Escape") {
@@ -763,6 +808,9 @@ export default function App() {
                 <X size={16} />
               </button>
             </div>
+          )}
+          {streamConnection === "reconnecting" && active && (
+            <Notice>The live connection was interrupted. Reconnecting to the saved run…</Notice>
           )}
           {!threadId ? (
             <main id="workspace-main" className="welcome">
@@ -955,6 +1003,15 @@ export default function App() {
                           answer={answer}
                           runId={currentTurn?.run_id ?? null}
                           busy={active}
+                          onPresentationSaved={(updated) => {
+                            const editedRun = currentTurn?.run_id;
+                            if (!editedRun || selection.current.threadId !== threadId) return;
+                            setConversation((previous) => previous && ({
+                              ...previous,
+                              turns: previous.turns.map((turn) => turn.run_id === editedRun ? { ...turn, answer: updated } : turn),
+                            }));
+                            setRun((previous) => previous?.run_id === editedRun ? { ...previous, answer: updated } : previous);
+                          }}
                           onSaved={onSaved}
                           onRun={(id) => {
                             if (selection.current.threadId !== threadId) return;

@@ -32,6 +32,7 @@ from data_analytics_agent.data_sources import DataSource, DataSourceCatalog
 from data_analytics_agent.logging_config import configure_api_logging
 from data_analytics_agent.run_manager import RunManager
 from data_analytics_agent.workspace_api import workspace_router
+from data_analytics_agent.ui_events import ui_events_router
 from data_analytics_agent.dashboard.store import DashboardStore
 from data_analytics_agent.dashboard_api import dashboard_router
 from data_analytics_agent.approvals import decisions_to_command
@@ -345,6 +346,7 @@ class Services:
                     dashboards=self.dashboards,
                     python_execution_limits=(self.settings.python_execution_limits()),
                     presentation_budget_seconds=self.settings.presentation_budget_seconds,
+                    require_sql_approval=self.settings.require_sql_approval,
                 )
             return self._manager
 
@@ -1282,6 +1284,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         )
 
     app.include_router(dashboard_router(container))
+    app.include_router(ui_events_router(container))
     app.include_router(workspace_router(container))
     return app
 

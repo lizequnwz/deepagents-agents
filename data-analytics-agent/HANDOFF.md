@@ -1,6 +1,6 @@
 # Handoff: analytics workspace assistant
 
-Updated 22 October 2026. This is the single active product plan. The user redirected
+Updated 26 October 2026. This is the single active product plan. The user redirected
 implementation toward analytical feature breadth and requested all seven capability
 families, delivered step by step on the existing application. The first complete
 local implementation is now present and tested; it has not been committed or hosted.
@@ -32,6 +32,15 @@ documents that increment. React now has workspace search, explicit Send/Create
 dashboard actions, a responsive findings/conversation layout and clearer saved
 dashboard controls. Both interfaces remain available; removing Streamlit is not
 part of this increment.
+
+The next GenUI increment adds SQL-owned saved-data filter definitions, public
+AG-UI run events, typed chart selections, complete saved filter search, generated
+dashboard types, and direct presentation controls. The
+[protocol evaluation](doc/reviews/genui-protocol-evaluation-2026-10-25.md) records
+the A2UI export boundary and the dependency issue that prevents local renderer
+adoption. The user's visual review also calls for a clearer reading order, compact
+metrics, a prominent lead chart, and quiet evidence controls. The
+[delivery plan](doc/roadmap/genui-implementation-2026-10-25.md) tracks this work.
 
 ## Selected product direction
 
@@ -81,7 +90,7 @@ application-selected input, population filters, source-expansion permission and
 warehouse-refresh feature have been removed at the user's request. Saved evidence
 remains available for conversational follow-ups and report revisions.
 
-API/storage contract is **23**; new analysis bundles use format **4** and include
+API/storage contract is **24**; new analysis bundles use format **4** and include
 the exact workflow helper sources used by each Python step. Restart both services
 together with fresh incompatible storage, preserving needed artifacts separately.
 There are no migrations or compatibility readers. Portable script/notebook replay

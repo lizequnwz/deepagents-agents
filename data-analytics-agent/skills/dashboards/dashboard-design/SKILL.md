@@ -21,6 +21,14 @@ a filtered population needs a saved cell for that population. Do not label an
 individual group row as an overall total. Preserve source units and unknown
 completeness. Do not use sampled chart display datasets for calculations.
 
+For repeated filters, ask SQL to use execute_dashboard_query over one complete
+saved population. Its explicit dimensions, named aggregates and filter IDs create
+a reusable calculation. An overall metric requires no dimensions; grouped charts
+and tables use their declared grain. Use this path only when the supported
+aggregate exactly represents the reviewed measure. Ratios, complex formulas,
+joins and new business meaning still require ordinary specialist work. Source
+refresh remains a separate governed retrieval operation.
+
 ## Create the saved dashboard
 
 Create purposeful charts before publication. Select the final result, chart and
@@ -32,6 +40,23 @@ Use stable component IDs, concise titles and a small useful set of components.
 Prefer a metric row, one or two useful charts, and an inspectable evidence table.
 Use text to explain findings and limitations. Do not submit HTML or JavaScript.
 Read the create_dashboard schema and validation feedback for exact fields.
+
+## Design for reading
+
+Use an editorial analytical layout. Give the dashboard a specific business title
+and a short description of its purpose and scope. Start with one to four useful
+metric cards, then a primary chart with span 3. Put supporting charts and tables
+after the main result. Keep interpretation and limitations concise and supported.
+Do not repeat the same methodology in every title, description and text panel.
+Keep exact calculation details in the evidence/report disclosures.
+
+Use readable metric labels and explicit Python number formats. Prefer `,.2f` for
+ordinary decimal measures and `,.0f` for whole counts. Do not use Excel patterns
+such as `0.00`: Python can render them as scientific notation. Use scientific
+notation only when the measure or explicit user choice requires it. Preserve
+declared units and never invent a currency. Give axes clear display labels while
+retaining their exact saved field bindings. Narrative titles must remain supported
+after filters; use descriptive measure/dimension titles where possible.
 
 DashboardSpec contains title, optional description, components and filters.
 Components have id, type and span (1, 2 or 3):

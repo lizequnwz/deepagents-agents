@@ -213,6 +213,12 @@ def create_create_report_tool(
             return json.loads(saved)
         try:
             spec = ReportSpec.model_validate_json(report_json)
+            from data_analytics_agent.reporting.formats import validate_number_format
+
+            for block in spec.blocks:
+                if isinstance(block, ReportMetricsBlock):
+                    for metric in block.metrics:
+                        validate_number_format(metric.number_format)
             previous = run_store.get(context.run_id).previous_report_id
             if previous:
                 spec = spec.model_copy(update={"previous_report_id": previous})

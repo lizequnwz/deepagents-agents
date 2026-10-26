@@ -23,12 +23,12 @@ review its schema, or select a configured warehouse. The included SQLite sources
 use `data_sources.yaml`; see [adding sources](doc/development/adding-data-sources.md)
 to connect your own data.
 
-The current API contract is **23**. Restart both services together and
+The current API contract is **24**. Restart both services together and
 choose fresh `ANALYTICS_STORAGE_DIR` storage for older incompatible history;
 preserve needed artifacts separately. No migrations are provided.
 
 For an existing checkout with older storage, start both services against a new
-directory: `ANALYTICS_STORAGE_DIR=.analytics-v23 ./scripts/start.sh`.
+directory: `ANALYTICS_STORAGE_DIR=.analytics-v24 ./scripts/start.sh`.
 
 Provider alternatives, execution limits, review settings, tracing, and development
 reload are documented in [configuration](doc/development/configuration.md).
@@ -55,8 +55,9 @@ saved-data follow-ups, a sample upload, and run-control checks.
   for an interactive view. You can also save a completed report as a dashboard.
   Reopen saved dashboards from the same workspace and inspect the report, data
   and conversation together. On phones, switch between Findings and Conversation.
-- Add filters with explicit panel/column bindings. **Apply filters**, **Refresh
-  data** and **Investigate** create normal reviewed analytical runs. The prior
+- Add filters with explicit panel/column bindings. **Apply filters** can use a
+  validated SQL definition over complete saved data. **Refresh data** and
+  **Investigate** retain the analytical specialists. All use the existing run and review controls. The prior
   dashboard remains visible until its replacement evidence and HTML report succeed.
   Empty selections reset a filter; empty populations display a no-data state.
 - **Save view** changes title, panel order/width and draft selections without a
@@ -67,8 +68,8 @@ saved-data follow-ups, a sample upload, and run-control checks.
 - Forecast evaluations save predictions, baseline/candidate MAE and RMSE,
   training/holdout windows and measured interval coverage separately from
   nominal coverage. Their tables and calculations are included in downloads.
-- In the Streamlit workbench, use **Edit chart** to change a title, axis label, colors, or compatible chart
-  type directly. Saving creates matching chart/report versions using saved data.
+- Use **Edit chart** on completed findings to change a title, axis label, colors, or compatible chart
+  type directly. React and Streamlit save matching chart/report versions using saved data.
 - Stop preserves committed artifacts. Resume continues interrupted work; after
   restart, unfinished work waits for an explicit Resume. A report failure can
   be retried without rerunning data retrieval or analysis.

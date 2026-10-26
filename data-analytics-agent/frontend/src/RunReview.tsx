@@ -67,6 +67,13 @@ export function RunReview({
                 : "SQL query"}
             </h4>
             <p className="small">{action.description}</p>
+            {action.action_name === "execute_dashboard_query" && (
+              <details className="review-inputs">
+                <summary>Bound filter values</summary>
+                <pre>{JSON.stringify(action.arguments.parameters ?? {}, null, 2)}</pre>
+                <p className="small muted">These values bind to the query parameters. The saved input population stays unchanged.</p>
+              </details>
+            )}
             <p className="small muted">
               {action.source_id && <>Source: {action.source_id} · </>}
               {action.dialect && action.review_type === "sql" && (

@@ -1,0 +1,32 @@
+{
+  "tested_at": "2026-10-26T23:02:14.188Z",
+  "status": "pass",
+  "browser_version": "156.0.8078.48",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "build_a": {
+    "entry": "/workspace/assets/index-C63zSaVv.js",
+    "assets": [
+      "index-BRYGm4l_.css",
+      "index-C63zSaVv.js"
+    ]
+  },
+  "build_b": {
+    "entry": "/workspace/assets/index-Beak_oi4.js",
+    "assets": [
+      "index-BRYGm4l_.css",
+      "index-Beak_oi4.js"
+    ]
+  },
+  "old_hashed_entry_removed": true,
+  "app_open_without_chart_before_rebuild": true,
+  "first_chart_rendered_after_rebuild": true,
+  "new_script_requests_for_first_chart": [],
+  "reload_uses_new_build": true,
+  "model_provider_calls": 0,
+  "page_errors": [],
+  "console_errors": [],
+  "http_errors": []
+}

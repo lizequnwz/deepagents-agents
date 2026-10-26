@@ -1,6 +1,6 @@
 # Reviews and evidence
 
-Updated 22 October 2026. Use the current guides for behavior and the
+Updated 26 October 2026. Use the current guides for behavior and the
 [handoff](../../HANDOFF.md) for next work. Reviews are dated snapshots; they do not
 supersede the [capability status](../roadmap/implementation-progress.md).
 
@@ -8,6 +8,8 @@ supersede the [capability status](../roadmap/implementation-progress.md).
 
 | Date | Record | How to use it |
 |---|---|---|
+| 26 October 2026 | [GenUI delivery and design](genui-delivery-2026-10-26.md) | SQL-owned saved-data actions, AG-UI attachment/replay, typed selections, presentation revisions and bounded A2UI export; 773 local passes, six provider skips, 36 browser scenarios and desktop/phone visual checks |
+| 25 October 2026 | [Protocol and package evaluation](genui-protocol-evaluation-2026-10-25.md) | Primary-source research, maintained A2UI renderer experiment, dependency blocker and CopilotKit runtime decision |
 | 22 October 2026 | [React workspace design](react-ui-redesign-2026-10-22.md) | ui-ux-pro-max redesign; Streamlit retained; 31 browser scenarios, rebuild regression and 15 focused regression passes; seven saved charts render across two workspaces |
 | 22 October 2026 | [GenBI workspace and chart-loading repair](genbi-workspace-2026-10-22.md) | Shared React/Streamlit dashboards, common theme, 659 regression passes, six provider skips, 22 browser scenarios, open-tab rebuild regression and five saved sample charts checked |
 | 19 October 2026 | [Composer simplification](composer-simplification-2026-10-19.md) | Removed Analyze and its backend feature; native chat attachments preserve conversation/question/review; 634 local cases covered including notebook retries, plus 31 focused composer checks |
@@ -35,7 +37,7 @@ none was rerun during consolidation, and no provider skip is counted as a pass.
 | 1 October: business usability | 378 full-suite passes, six provider skips | Native-widget/API checks covered guided workbook selection, full-column review, preserved edits, exact ordered approvals and deferred downloads. No separate browser layout/responsive test or business-user study was performed. |
 | 1 October: exact SQL export files | 27 focused passes | Export/Excel/presentation checks covered exact UTF-8 SQL bytes, hashes, source/saved-query lineage, excluded unrelated queries and fresh-kernel replay. No provider evaluation was run. |
 
-Those increments recorded API contracts 16 and 17. The current contract is 23;
+Those increments recorded API contracts 16 and 17. The current contract is 24;
 older records do not supply current startup instructions. Replay numerical
 tolerances and limits remain in the [testing guide](../development/testing.md#portable-replay).
 

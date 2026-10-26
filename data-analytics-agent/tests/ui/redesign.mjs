@@ -218,6 +218,7 @@ try {
         await panels.getByRole('button', { name: 'Findings', exact: true }).click();
       }
       if (viewport.name === 'landscape') {
+        await page.getByRole('button', { name: 'Toggle conversation', exact: true }).click();
         const focus = await visibleFocus(page.getByLabel('Message', { exact: true }));
         expect(focus.fully_visible && focus.unobscured).toBe(true);
       }

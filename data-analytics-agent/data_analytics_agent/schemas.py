@@ -14,7 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 23
+API_CONTRACT_VERSION = 24
 
 
 class StrictModel(BaseModel):

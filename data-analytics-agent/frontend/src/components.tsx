@@ -14,6 +14,16 @@ import {
 } from "lucide-react";
 import { api, message } from "./api";
 import type { ResultPage, Row } from "./types";
+import {
+  pointSelectionValues,
+  traceSelectionValues,
+} from "./chartInteractions";
+import type { ChartPoint, ChartSelection, ChartSelectionField, SelectionValue } from "./chartInteractions";
+
+interface InteractiveChartElement extends HTMLDivElement {
+  on: (event: string, listener: (event: { points?: ChartPoint[] }) => void) => void;
+  removeListener: (event: string, listener: (event: { points?: ChartPoint[] }) => void) => void;
+}
 
 export function Notice({
   children,
@@ -69,6 +79,13 @@ export function valueText(value: unknown) {
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
+export function tableValueText(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value) || Number.isInteger(value)) return valueText(value);
+  return new Intl.NumberFormat(undefined, {
+    maximumSignificantDigits: 12,
+    notation: value !== 0 && Math.abs(value) < 0.000001 ? "scientific" : "standard",
+  }).format(value);
+}
 export function DataTable({
   rows,
   columns,
@@ -86,6 +103,9 @@ export function DataTable({
   useEffect(() => setSort(null), [rows, columns]);
   const cols = columns?.length ? columns : Object.keys(rows[0] ?? {});
   const preview = rows.slice(0, 10);
+  const displayRounding = preview.some((row) => cols.some((column) =>
+    typeof row[column] === "number" && tableValueText(row[column]) !== valueText(row[column]),
+  ));
   const numericColumns = new Set(
     cols.filter((column) => {
       const values = preview
@@ -174,7 +194,12 @@ export function DataTable({
                     key={column}
                     className={numericColumns.has(column) ? "is-numeric" : undefined}
                   >
-                    {valueText(row[column])}
+                    {tableValueText(row[column]) !== valueText(row[column]) ? (
+                      <span className="exact-value" tabIndex={0} title={`Exact stored value: ${valueText(row[column])}`}
+                        aria-label={`${tableValueText(row[column])}. Exact stored value: ${valueText(row[column])}`}>
+                        {tableValueText(row[column])}
+                      </span>
+                    ) : valueText(row[column])}
                   </td>
                 ))}
               </tr>
@@ -185,6 +210,7 @@ export function DataTable({
           <p className="muted table-empty">No rows match this view.</p>
         )}
       </div>
+      {displayRounding && <p className="table-sort-hint small muted">Display rounding only. Inspect a number for its exact saved value.</p>}
       {rows.length > 1 && (
         <p id={hintId} className="table-sort-hint small muted">
           Column headings sort the shown rows only.
@@ -200,12 +226,18 @@ export function ChartFigure({
   figure,
   title,
   resultId,
+  selectionFields = [],
+  onInvestigate,
+  interactionDisabled = false,
 }: {
   threadId: string;
   chartId?: string;
   figure?: { data: unknown[]; layout: Row };
   title?: string;
   resultId?: string;
+  selectionFields?: ChartSelectionField[];
+  onInvestigate?: (selection: ChartSelection, intent: "explain" | "compare") => void;
+  interactionDisabled?: boolean;
 }) {
   const target = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
@@ -213,17 +245,35 @@ export function ChartFigure({
   const [annotations, setAnnotations] = useState<string[]>([]);
   const [attempt, setAttempt] = useState(0);
   const [showData, setShowData] = useState(false);
+  const [traces, setTraces] = useState<unknown[]>([]);
+  const [selectionColumn, setSelectionColumn] = useState("");
+  const [selectedValues, setSelectedValues] = useState<SelectionValue[]>([]);
+  const [selectionError, setSelectionError] = useState("");
   const descriptionId = useId();
+  const selectionHintId = useId();
+  const field = selectionFields.find((field) => field.column === selectionColumn) ?? selectionFields[0];
+  const selectionContext = useRef({ field, disabled: interactionDisabled });
+  selectionContext.current = { field, disabled: interactionDisabled };
+  const options = field ? traceSelectionValues(field, traces) : [];
+  const visibleOptions = [...new Map([...options, ...selectedValues].map((value) => [JSON.stringify(value), value])).values()];
+  function selectValues(values: SelectionValue[]) {
+    setSelectionError(values.length > 100 ? "Select at most 100 values for an investigation." : "");
+    setSelectedValues(values.length > 100 ? [] : values);
+  }
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
     let observer: ResizeObserver | undefined;
     let themeObserver: MutationObserver | undefined;
     let plotly: PlotlyAPI | undefined;
+    let pointListener: ((event: { points?: ChartPoint[] }) => void) | undefined;
     const element = target.current;
     setError("");
     setLoading(true);
     setAnnotations([]);
+    setTraces([]);
+    setSelectedValues([]);
+    setSelectionError("");
     const data = figure
       ? Promise.resolve(figure)
       : api<{
@@ -270,6 +320,15 @@ export function ChartFigure({
           },
         );
         if (cancelled || !element.isConnected) return;
+        setTraces(data.data);
+        pointListener = (event) => {
+          const { field, disabled } = selectionContext.current;
+          if (cancelled || disabled || !field) return;
+          selectValues(pointSelectionValues(field, event?.points ?? []));
+        };
+        const chart = element as InteractiveChartElement;
+        chart.on("plotly_click", pointListener);
+        chart.on("plotly_selected", pointListener);
         observer = new ResizeObserver(() => {
           if (
             !cancelled &&
@@ -306,6 +365,11 @@ export function ChartFigure({
       controller.abort();
       observer?.disconnect();
       themeObserver?.disconnect();
+      if (element && pointListener) {
+        const chart = element as InteractiveChartElement;
+        chart.removeListener("plotly_click", pointListener);
+        chart.removeListener("plotly_selected", pointListener);
+      }
       if (element && plotly) plotly.purge(element);
     };
   }, [threadId, chartId, figure, attempt]);
@@ -354,6 +418,43 @@ export function ChartFigure({
       {annotations.map((annotation) => (
         <p className="small warning-text" key={annotation}>{annotation}</p>
       ))}
+      {field && resultId && onInvestigate && !loading && !error && (
+        <div className="chart-selection">
+          <p className="small muted" id={selectionHintId}>
+            Select chart marks or use the list. A selection gives context to a new investigation. Applied filters stay the same.
+          </p>
+          {selectionFields.length > 1 && (
+            <label>Selection field
+              <select value={field.column} disabled={interactionDisabled}
+                onChange={(event) => { setSelectionColumn(event.target.value); selectValues([]); }}>
+                {selectionFields.map((field) => <option key={field.column} value={field.column}>{field.label}</option>)}
+              </select>
+            </label>
+          )}
+          {visibleOptions.length > 0 && (
+            <label>Select {field.label} to investigate
+              <select multiple size={Math.min(4, Math.max(2, visibleOptions.length))}
+                aria-label={`Select ${field.label} to investigate`}
+                aria-describedby={selectionHintId} disabled={interactionDisabled}
+                value={selectedValues.map((value) => JSON.stringify(value))}
+                onChange={(event) => selectValues(Array.from(event.target.selectedOptions, (option) => JSON.parse(option.value)))}>
+                {visibleOptions.map((value) => <option key={JSON.stringify(value)} value={JSON.stringify(value)}>{valueText(value)}</option>)}
+              </select>
+            </label>
+          )}
+          <p className="selection-summary small" role="status" aria-live="polite" aria-atomic="true">
+            {selectedValues.length ? `Selected ${field.label}: ${selectedValues.map(valueText).join(", ")}` : `No ${field.label} values selected.`}
+          </p>
+          {selectionError && <Notice error>{selectionError}</Notice>}
+          <div className="button-group">
+            <button type="button" disabled={interactionDisabled || !selectedValues.length}
+              onClick={() => onInvestigate({ result_id: resultId, column: field.column, values: selectedValues }, "explain")}>Explain selection</button>
+            <button type="button" disabled={interactionDisabled || !selectedValues.length}
+              onClick={() => onInvestigate({ result_id: resultId, column: field.column, values: selectedValues }, "compare")}>Compare selection</button>
+            {selectedValues.length > 0 && <button type="button" disabled={interactionDisabled} onClick={() => selectValues([])}>Clear selection</button>}
+          </div>
+        </div>
+      )}
       {resultId && (
         <details
           className="chart-data-access"

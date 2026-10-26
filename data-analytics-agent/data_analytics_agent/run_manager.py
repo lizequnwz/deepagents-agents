@@ -41,6 +41,7 @@ class RunManager:
         catalog_version_resolver=None,
         python_execution_limits=None,
         presentation_budget_seconds=120,
+        require_sql_approval=False,
     ):
         self.conversations, self.runs, self.results = conversations, runs, results
         self.analyses, self.reports = analyses, reports
@@ -53,6 +54,7 @@ class RunManager:
         self.catalog_version_resolver = catalog_version_resolver
         self.python_execution_limits = python_execution_limits
         self.presentation_budget_seconds = presentation_budget_seconds
+        self.require_sql_approval = require_sql_approval
         self.tasks = {}
 
     def _graph(self, source_id):
@@ -60,6 +62,12 @@ class RunManager:
 
     async def start(self, run_id):
         self.runs.mark_started(run_id)
+        if self.runs.storage.get("dashboard_execution_plans", run_id, dict):
+            if self.runs.cancel_event(run_id).is_set():
+                self.runs.pause(run_id)
+                self.conversations.fail_run(self.runs.get(run_id).thread_id, run_id)
+                return
+            return await self._drive_dashboard(run_id)
         run = self.runs.get(run_id)
         conversation = self.conversations.get(run.thread_id)
         messages = []
@@ -167,6 +175,8 @@ class RunManager:
         )
 
     async def resume(self, run_id, command=None):
+        if self.runs.storage.get("dashboard_execution_plans", run_id, dict):
+            return await self._drive_dashboard(run_id, command)
         self.tasks[run_id] = asyncio.current_task()
         try:
             graph = self._graph(self.runs.get(run_id).source_id)
@@ -206,7 +216,10 @@ class RunManager:
         self.runs.cancel_event(run_id).set()
         task = self.tasks.get(run_id)
         if task:
-            task.cancel()
+            # A repeated stop must not interrupt the worker-drain cleanup of
+            # the first cancellation and leave the run stuck in STOPPING.
+            if not task.cancelling():
+                task.cancel()
         else:
             self.runs.pause(run_id)
             run = self.runs.get(run_id)
@@ -266,6 +279,8 @@ class RunManager:
         )
 
     async def retry_report(self, run_id):
+        if self.runs.storage.get("dashboard_execution_plans", run_id, dict):
+            return await self._drive_dashboard(run_id)
         run = self.runs.get(run_id)
         spec = self.runs.report_spec(run_id)
         if not run.findings:
@@ -354,6 +369,34 @@ class RunManager:
                 },
             )
         else:
+            await self._start_follow_up(run_id)
+
+    async def _drive_dashboard(self, run_id, command=None):
+        from data_analytics_agent.dashboard.execution import execute_action
+
+        run = self.runs.get(run_id)
+        if run.status == RunStatus.COMPLETED:
+            return
+        self.tasks[run_id] = asyncio.current_task()
+        self.runs.cancel_event(run_id).clear()
+        self.runs.start_active(run_id)
+        try:
+            await execute_action(self, run_id, command)
+        except (asyncio.CancelledError, InterruptedError):
+            self.runs.cancel_event(run_id).set()
+            while self.runs.workers_active(run_id):
+                await asyncio.sleep(0.05)
+            self.runs.pause(run_id)
+            self.conversations.fail_run(run.thread_id, run_id)
+        except Exception as exc:
+            self.runs.cancel_event(run_id).set()
+            while self.runs.workers_active(run_id):
+                await asyncio.sleep(0.05)
+            self.runs.fail(run_id, str(exc) or type(exc).__name__)
+            self.dashboards.fail_for_run(run_id, str(exc) or type(exc).__name__)
+            self.conversations.fail_run(run.thread_id, run_id)
+        finally:
+            self.tasks.pop(run_id, None)
             await self._start_follow_up(run_id)
 
     async def _start_follow_up(self, run_id):

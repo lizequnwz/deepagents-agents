@@ -1,0 +1,57 @@
+{
+  "tested_at": "2026-10-26T22:40:57.534Z",
+  "scenarios": [
+    {
+      "name": "Evidence inspection opens the saved dataset without an analytical run",
+      "status": "pass",
+      "saved_evidence_action": true,
+      "saved_rows_shown": 4,
+      "analytical_runs_added": 0
+    },
+    {
+      "name": "Multiple draft values persist without source execution",
+      "status": "pass",
+      "multiple_values_restored": true,
+      "numeric_values_keep_type": true,
+      "saved_value_search_keeps_draft": true,
+      "applied_values_unchanged": true,
+      "analytical_runs": 0
+    },
+    {
+      "name": "Chart click and keyboard selection send exact evidence context",
+      "status": "pass",
+      "typed_point_selection": true,
+      "real_pointer_click": true,
+      "keyboard_list": true,
+      "applied_filters_unchanged": true,
+      "stream_connection_interrupted_once": true,
+      "stream_connection_attempts": 2,
+      "analytical_runs_added": 1,
+      "duplicate_turns": 0
+    },
+    {
+      "name": "Completed findings edits commit chart and report without an analytical run",
+      "status": "pass",
+      "chart_and_report_saved": true,
+      "restart_view_retained": true,
+      "analytical_runs_added": 0
+    },
+    {
+      "name": "New controls fit a phone and retain visible labels",
+      "status": "pass",
+      "phone_width": 375,
+      "no_horizontal_overflow": true
+    }
+  ],
+  "page_errors": [],
+  "console_errors": [],
+  "expected_network_errors": [
+    {
+      "url": "http://127.0.0.1:8830/api/conversations/1ec08374-08f2-4c9c-8e98-e5ca95acdfbd/runs/ff197e71-ed78-4a57-b78a-b8424ea39a23/events",
+      "message": "Failed to load resource: net::ERR_CONNECTION_RESET"
+    }
+  ],
+  "real_api": true,
+  "model_provider_calls": 0,
+  "status": "pass"
+}

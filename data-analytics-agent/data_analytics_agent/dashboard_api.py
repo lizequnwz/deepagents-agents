@@ -2,19 +2,29 @@
 
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import Field
 
+from data_analytics_agent.dashboard.presentation import (
+    DashboardPresentationEdit,
+    DashboardPresentationRenderError,
+    edit_dashboard_presentation,
+)
 from data_analytics_agent.dashboard.schemas import (
     DashboardAction,
     DashboardActionRecord,
     DashboardFilter,
     DashboardModel,
     DashboardSpec,
+    DashboardView,
     DashboardViewEdit,
 )
 from data_analytics_agent.dashboard.service import DashboardService
 from data_analytics_agent.dashboard.store import DashboardConflict
+from data_analytics_agent.dashboard.surfaces import (
+    AnalyticalSurface,
+    compile_dashboard_surface,
+)
 from data_analytics_agent.schemas import RunStatus
 
 
@@ -89,10 +99,70 @@ def dashboard_router(services) -> APIRouter:
             except ValueError as exc:
                 raise failure(exc) from exc
 
-    @router.get("/{dashboard_id}")
+    @router.get("/{dashboard_id}", response_model=DashboardView)
     def get_dashboard(thread_id: str, dashboard_id: str):
         item = conversation(thread_id)
         return service.view(dashboard_id, thread_id, source_id=item.source_id)
+
+    @router.get("/{dashboard_id}/surface", response_model=AnalyticalSurface)
+    def dashboard_surface(thread_id: str, dashboard_id: str):
+        item = conversation(thread_id)
+        return compile_dashboard_surface(
+            service.view(dashboard_id, thread_id, source_id=item.source_id)
+        )
+
+    @router.get("/{dashboard_id}/filters/{filter_id}/values")
+    def filter_values(
+        thread_id: str,
+        dashboard_id: str,
+        filter_id: str,
+        expected_revision: str,
+        search: str = Query(default="", max_length=200),
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=100, ge=1, le=100),
+    ):
+        from data_analytics_agent.agents.text_to_sql.dashboard_queries import (
+            filter_domain,
+        )
+
+        item = conversation(thread_id)
+        revision = services.dashboards.get(
+            dashboard_id, thread_id, source_id=item.source_id
+        )
+        if revision.revision_id != expected_revision:
+            raise HTTPException(
+                409, "The dashboard changed. Reload before searching its filters."
+            )
+        filtering = next((f for f in revision.spec.filters if f.id == filter_id), None)
+        if filtering is None or filtering.kind != "category":
+            raise HTTPException(422, "Select a declared category filter.")
+        components = {c.id: c for c in revision.spec.components}
+        evidence = service._evidence(thread_id, item.source_id)
+        populations = {}
+        for binding in filtering.bindings:
+            result = service._component_result(
+                components[binding.component_id], evidence, analytical=True
+            )
+            result = service._filter_population(
+                result, filtering, binding.column, evidence
+            )
+            populations[(result.result_id, binding.column)] = result
+        # One explicit binding is enough for a page. Distinct saved populations
+        # must be searched separately so a mixed domain is never called complete.
+        if len(populations) != 1:
+            raise HTTPException(
+                422,
+                "This filter has several saved populations. Use an exact value or refine its bindings.",
+            )
+        (_, column), result = next(iter(populations.items()))
+        values, more = filter_domain(
+            result, column, search=search, offset=offset, limit=limit
+        )
+        return {
+            "revision_id": revision.revision_id,
+            "values": values,
+            "next_offset": offset + len(values) if more else None,
+        }
 
     @router.get("/{dashboard_id}/revisions")
     def dashboard_revisions(thread_id: str, dashboard_id: str):
@@ -115,6 +185,22 @@ def dashboard_router(services) -> APIRouter:
                     edit=request,
                 )
                 return service.view(dashboard_id, thread_id, source_id=item.source_id)
+            except ValueError as exc:
+                raise failure(exc) from exc
+
+    @router.post("/{dashboard_id}/presentation", response_model=DashboardView)
+    def edit_presentation(
+        thread_id: str, dashboard_id: str, request: DashboardPresentationEdit
+    ):
+        with services._lock:
+            item = conversation(thread_id, idle=True)
+            try:
+                edit_dashboard_presentation(
+                    services, dashboard_id, thread_id, item.source_id, request
+                )
+                return service.view(dashboard_id, thread_id, source_id=item.source_id)
+            except DashboardPresentationRenderError as exc:
+                raise HTTPException(422, str(exc)) from exc
             except ValueError as exc:
                 raise failure(exc) from exc
 
@@ -162,17 +248,26 @@ def dashboard_router(services) -> APIRouter:
                     "action_id": record.action_id,
                 }
             conversation(thread_id, idle=True)
-            readiness = services.settings.readiness_errors(include_sources=False)
-            if readiness and services.agent is None:
-                raise HTTPException(503, " ".join(readiness))
             try:
-                services.require_ready_source(item.source_id)
                 plan = service.action_plan(
                     dashboard_id,
                     thread_id,
                     source_id=item.source_id,
                     action=request,
                 )
+                from data_analytics_agent.dashboard.execution import prepare_action
+
+                revision = services.dashboards.get(
+                    dashboard_id, thread_id, source_id=item.source_id
+                )
+                execution_plan = prepare_action(services, revision, request)
+                if execution_plan is None:
+                    readiness = services.settings.readiness_errors(
+                        include_sources=False
+                    )
+                    if readiness and services.agent is None:
+                        raise HTTPException(503, " ".join(readiness))
+                    services.require_ready_source(item.source_id)
                 record = services.dashboards.begin_action(
                     dashboard_id, thread_id, source_id=item.source_id, action=request
                 )
@@ -202,6 +297,10 @@ def dashboard_router(services) -> APIRouter:
                     },
                 )
                 services.dashboards.attach_action_run(record.action_id, run_id)
+                if execution_plan is not None:
+                    services.storage.put(
+                        "dashboard_execution_plans", run_id, execution_plan
+                    )
                 services.conversations.begin_run(thread_id, run_id)
             except Exception as exc:
                 services.dashboards.fail_action(record.action_id, str(exc))

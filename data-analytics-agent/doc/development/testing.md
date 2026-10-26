@@ -42,6 +42,8 @@ npm --prefix frontend ci
 npm --prefix frontend run build
 node tests/ui/run.mjs
 node tests/ui/deployment.mjs
+node tests/ui/genbi-interactions.mjs
+node tests/ui/editorial.mjs
 ```
 
 The runner starts the real FastAPI application and native Streamlit interface on
@@ -54,6 +56,13 @@ for exact coverage and output options.
 The receipt records each scenario and browser errors. Screenshots support visual
 review. These checks establish browser behavior over deterministic evidence; they
 do not establish model accuracy, live warehouse behavior or human usability.
+The GenBI interaction runner adds exact multi-value drafts, full saved-domain
+search, real chart-mark and keyboard selections, completed chart/report edits,
+evidence inspection, narrow layouts and interrupted-stream recovery. It uses the
+same isolated services and never sends provider requests.
+The editorial runner adds title/chart placement, compact metrics, exact-value
+keyboard access, matching metric/report format revisions, saved width edits,
+review visibility, desktop/dark/phone captures and overflow checks.
 The deployment runner rebuilds an isolated frontend copy. An already-open tab must
 render its first chart after the previous hashed entry is removed, without another
 script request. Do not rebuild the user's running assets to exercise this check.

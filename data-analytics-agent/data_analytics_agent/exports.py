@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import hashlib
-from importlib.metadata import version
 import json
-from pathlib import Path
 import platform
-from zipfile import ZipFile, ZIP_DEFLATED
+from dataclasses import asdict
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from data_analytics_agent import export_replay
 from data_analytics_agent.agents.data_analysis import worker
@@ -96,8 +96,7 @@ def prepare_export(services, run_id, report_id):
 
     selected = list(
         dict.fromkeys(
-            [r.result_id for r in answer.results]
-            + [c.result_id for c in answer.charts]
+            [r.result_id for r in answer.results] + [c.result_id for c in answer.charts]
         )
     )
     for result_id in dict.fromkeys([*selected, *report.input_result_ids]):
@@ -192,6 +191,15 @@ def write_bundle(services, run_id, report_id, target):
             ]
         )
     )
+    from data_analytics_agent.agents.text_to_sql.dashboard_queries import (
+        query_execution,
+    )
+
+    dashboard_queries = {}
+    for dataset in datasets.values():
+        receipt = query_execution(dataset, services.results)
+        if receipt is not None:
+            dashboard_queries[dataset.result_id] = receipt.model_dump(mode="json")
     sql_queries = [
         {
             "result_id": d.result_id,
@@ -203,6 +211,8 @@ def write_bundle(services, run_id, report_id, target):
             "parent_result_ids": d.parent_result_ids,
             "sql_bindings": d.sql_bindings,
             "question": d.originating_question,
+            "parameters": dashboard_queries.get(d.result_id, {}).get("parameters", {}),
+            "dashboard_query": dashboard_queries.get(d.result_id),
         }
         for index, d in enumerate(
             sorted(
@@ -292,6 +302,7 @@ Reusable application analysis procedures are captured per execution in steps/lib
             manifest["datasets"][key] = {
                 **dataset.model_dump(mode="json", exclude={"parquet_path", "preview"}),
                 "path": name,
+                "dashboard_query": dashboard_queries.get(key),
             }
         for doc in documents:
             if _hash(doc.original_path) != doc.sha256:
@@ -364,6 +375,7 @@ Reusable application analysis procedures are captured per execution in steps/lib
 
 def build_notebook(manifest, readme, executions, datasets):
     import base64
+
     import nbformat as nbf
 
     cells = [

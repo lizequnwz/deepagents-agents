@@ -1,0 +1,40 @@
+{
+  "tested_at": "2026-10-26T23:02:22.502Z",
+  "checks": {
+    "desktop": {
+      "title": {
+        "x": 260,
+        "y": 169.28125,
+        "width": 773.34375,
+        "height": 47.03125
+      },
+      "metric": {
+        "x": 261,
+        "y": 388.8125,
+        "width": 1150,
+        "height": 116
+      },
+      "chart": {
+        "x": 260,
+        "y": 525.8125,
+        "width": 1152,
+        "height": 468.390625
+      },
+      "exact_value_tooltip": true,
+      "canvas_focused": true
+    },
+    "metric_format": {
+      "matching_report_revised": true,
+      "source_value_unchanged": true
+    },
+    "explicit_metric_width": true,
+    "phone": {
+      "width": 375,
+      "no_horizontal_overflow": true
+    },
+    "required_review_visible": true
+  },
+  "errors": [],
+  "model_provider_calls": 0,
+  "status": "pass"
+}

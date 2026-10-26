@@ -1,3 +1,12 @@
+import type {
+  DashboardView,
+  DashboardRevision as StoredDashboardRevision,
+  DashboardSpec as StoredDashboardSpec,
+  ResolvedComponent,
+  DashboardFilter as StoredDashboardFilter,
+} from "./generated/dashboard";
+
+
 export type Row = Record<string, unknown>;
 export interface Source {
   source_id: string;
@@ -170,68 +179,8 @@ export interface DocumentRef {
   page_count: number;
   sha256: string;
 }
-export interface DashboardFilter {
-  id: string;
-  label: string;
-  kind: "category" | "date_range";
-  bindings: { component_id: string; column: string }[];
-  description?: string;
-  default_values?: unknown[];
-  options?: unknown[];
-  options_truncated?: boolean;
-}
-export interface DashboardComponent {
-  id: string;
-  type: string;
-  title?: string;
-  label?: string;
-  chart_id?: string;
-  result_id?: string;
-  analysis_result_id?: string;
-  empty_result_id?: string;
-  column?: string;
-  row_index?: number;
-  value?: unknown;
-  formatted_value?: string;
-  body?: string;
-  rows?: Row[];
-  columns?: string[];
-  span?: number;
-  metric?: Row;
-  figure?: { data: unknown[]; layout: Row } | null;
-  warnings?: string[];
-  notes?: string[];
-  row_count?: number;
-}
-export interface DashboardSpec {
-  title: string;
-  description?: string;
-  components: DashboardComponent[];
-  filters: DashboardFilter[];
-}
-export interface DashboardRevision {
-  dashboard_id: string;
-  revision_id: string;
-  version: number;
-  title?: string;
-  thread_id: string;
-  source_id: string;
-  run_id: string;
-  report_id: string;
-  created_at: string;
-  spec: DashboardSpec;
-  applied_filters: Record<string, unknown[]>;
-  saved_filter_values: Record<string, unknown[]>;
-}
-export interface Dashboard {
-  revision: DashboardRevision;
-  components: DashboardComponent[];
-  filters: DashboardFilter[];
-  freshness: {
-    result_id: string;
-    queried_at: string;
-    completeness: string;
-    snapshot_kind: string;
-  }[];
-  pending_action?: { run_id: string; status?: string; error?: string } | null;
-}
+export type DashboardFilter = StoredDashboardFilter;
+export type DashboardComponent = ResolvedComponent;
+export type DashboardSpec = StoredDashboardSpec;
+export type DashboardRevision = StoredDashboardRevision;
+export type Dashboard = DashboardView;

@@ -10,6 +10,7 @@ from data_analytics_agent.agents.text_to_sql.tools import (
     create_query_saved_results_tool,
 )
 from data_analytics_agent.handoff import AssignmentMiddleware
+from data_analytics_agent.agents.text_to_sql.dashboard_queries import create_execute_dashboard_query_tool
 from data_analytics_agent.schemas import SQLAnalysisResponse
 from data_analytics_agent.semantic_context import render_sql_context
 from data_analytics_agent.semantic_tools import (
@@ -61,6 +62,7 @@ def build_text_to_sql_subagent(
         create_query_saved_results_tool(
             result_store, run_store, source_id=source.source_id
         ),
+        create_execute_dashboard_query_tool(result_store, run_store, source_id=source.source_id),
         create_inspect_conversation_result_tool(
             result_store, source_id=source.source_id, run_store=run_store
         ),
@@ -72,7 +74,7 @@ def build_text_to_sql_subagent(
                     name: {"allowed_decisions": ["approve", "edit", "reject"]}
                     for name in (["execute_sql"] if source_tools else [])
                     + ["query_saved_results"]
-                }
+                } | {"execute_dashboard_query": {"allowed_decisions": ["approve", "reject"]}}
             )
         ]
         if require_approval
@@ -154,6 +156,12 @@ exact SQL that executed. On budget exhaustion return saved evidence and explain
 unfinished work. Return business interpretation and material assumptions with
 SQLAnalysisResponse. Application code attaches all saved dataset references; do not copy IDs or SQL into the response. Do not create charts,
 reports, or perform predictive/inferential analysis; data-analysis owns that work.
+For interactive dashboard requests, obtain one complete saved population at the
+required grain, then use execute_dashboard_query for explicit reusable aggregate
+definitions and filter IDs. Use no dimensions for an overall scalar metric; use
+dimensions for grouped charts/tables. Preserve reviewed metric formulas: only
+use the supported aggregates when they express the requested metric exactly.
+Use ordinary SQL for ratios or other calculations outside that contract.
 """,
         "response_format": ToolStrategy(SQLAnalysisResponse),
     }

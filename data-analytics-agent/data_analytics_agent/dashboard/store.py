@@ -333,12 +333,15 @@ class DashboardStore:
         *,
         request_id,
         saved_filter_values=None,
+        report_id=None,
     ):
         request = {
             "spec": spec.model_dump(mode="json"),
             "saved_filter_values": saved_filter_values,
             "expected_revision": previous.revision_id,
         }
+        if report_id is not None:
+            request["report_id"] = report_id
         key = f"{previous.dashboard_id}:{request_id}"
         with self._lock, self.storage.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -367,11 +370,31 @@ class DashboardStore:
                 raise DashboardConflict(
                     "The dashboard changed. Reload before saving the view."
                 )
+            if report_id is not None:
+                report = self._read(connection, "reports", report_id)
+                original_report = self._read(connection, "reports", previous.report_id)
+                if (
+                    not report
+                    or not original_report
+                    or (report["thread_id"], report["source_id"])
+                    != (previous.thread_id, previous.source_id)
+                    or report.get("previous_report_id") != previous.report_id
+                    or set(report["input_result_ids"])
+                    != set(original_report["input_result_ids"])
+                    or set(report["input_analysis_ids"])
+                    != set(original_report["input_analysis_ids"])
+                ):
+                    raise ValueError(
+                        "The presentation report must revise the same scoped saved evidence."
+                    )
             revised = previous.model_copy(
                 update={
                     "revision_id": str(uuid4()),
                     "version": previous.version + 1,
                     "spec": spec,
+                    "report_id": report_id
+                    if report_id is not None
+                    else previous.report_id,
                     "saved_filter_values": saved_filter_values
                     if saved_filter_values is not None
                     else previous.saved_filter_values,

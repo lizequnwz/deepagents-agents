@@ -27,9 +27,14 @@ Use **Add filter** to select a category or date column and the panels it control
 Only the declared panels change. Select values, then choose **Apply filters**.
 Draft selections do not change the data until you apply them. An empty selection
 resets that filter. If no rows match, the panels show an explicit no-data state.
+Category filters accept multiple values. Use **Search saved values** to find
+values in the complete saved population. Search and draft choices do not start an
+analysis. Search across unrelated saved populations requires more specific bindings.
 
 **Apply filters**, **Refresh data** and a panel's **Investigate** control start
-normal analytical runs. Configured SQL/Python reviews still apply. The previous
+governed runs. Established filter calculations over complete saved populations can
+run without a model or warehouse request. Other analytical actions use the existing
+specialists. Configured SQL/Python reviews still apply. The previous
 dashboard stays visible while the analyst works. Its replacement becomes current
 only after the evidence and HTML report succeed. A failed action leaves the last
 valid dashboard available. Warehouse refresh obtains new source observations;
@@ -41,14 +46,27 @@ saves draft filter choices. These changes use saved evidence and need no model
 or source query. Each save creates a revision. If another action changed the
 dashboard, reload before saving an older displayed revision.
 
+Open **Number format** on a metric to choose decimal places. **Save format**
+saves a matching dashboard and report revision. The stored value does not change.
+Tables use readable display rounding for noninteger numbers. Point to a marked
+number or focus it with the keyboard to inspect its exact saved value.
+
 The **Report** tab opens the report for the selected dashboard revision. The
-**Data** tab shows saved datasets and download links. The conversation stays
-beside the dashboard on larger screens. On phones, use **Findings** and
+**Data** tab shows saved datasets and download links. Saved dashboards open with
+the results in focus. Use **Conversation** to open the conversation beside the
+dashboard on larger screens. Required reviews and questions open it automatically.
+On phones, use **Findings** and
 **Conversation** to switch panes; your unsent question stays in place. Ordinary
 follow-up questions include the displayed revision
 and applied filters as context and produce a new answer. Text sent during a
 typed dashboard action is queued as a follow-up; it does not silently change
 that action's declared filters.
+
+Where a chart declares a selectable category, click a mark or use its keyboard
+selection control. Choose **Explain selection** or **Compare selection** to start
+an investigation with the exact saved values and applied scope. A visual selection
+alone does not change totals. **Evidence and saved values** opens bounded previews
+without starting an analytical run.
 
 In Streamlit, open **Saved dashboards** to select a dashboard, apply its existing
 filters, refresh its data, save its title and draft choices, or download its
@@ -241,7 +259,8 @@ stays unknown; a successful calculation check does not certify source joins.
 ## Edit charts and open reports
 
 On a completed result, open **Edit chart** to adjust the title, axis labels,
-colors, or chart type, then choose **Save chart and report**. These controls use
+colors, or chart type. In React, choose **Save chart**; Streamlit uses
+**Save chart and report**. These controls use
 the existing saved data without a model or warehouse call. Unsupported chart
 types explain the constraint. Downsampled charts retain their type; ask for a
 new chart over the complete saved evidence when a different type is needed.

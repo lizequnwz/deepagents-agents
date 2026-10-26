@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import EvidencePanel from "./EvidencePanel";
 import {
   ArrowDown,
   ArrowUp,
@@ -15,6 +16,9 @@ import {
   X,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { ChartEditor } from "./ChartEditor";
+import { FilterValueSearch } from "./FilterValueSearch";
+import { MetricFormatEditor } from "./MetricFormatEditor";
 import { api, post, message } from "./api";
 import {
   ChartFigure,
@@ -41,6 +45,7 @@ interface Props {
   onSaved: (dashboard: Dashboard) => void;
   onRun: (runId: string) => void;
   onReload: () => void;
+  onPresentationSaved?: (answer: Answer) => void;
 }
 const dashboardPath = (thread: string, id: string) =>
   `/api/conversations/${thread}/dashboards/${id}`;
@@ -54,9 +59,11 @@ export default function DashboardPanel({
   onSaved,
   onRun,
   onReload,
+  onPresentationSaved,
 }: Props) {
   const [values, setValues] = useState<Record<string, unknown[]>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [searchedOptions, setSearchedOptions] = useState<Record<string, unknown[]>>({});
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const [saveDialog, setSaveDialog] = useState(false);
@@ -93,6 +100,7 @@ export default function DashboardPanel({
       ),
     );
     setCustomValues({});
+    setSearchedOptions({});
     setTitle(revision?.spec.title ?? answer?.report?.title ?? "");
     setOrder(revision?.spec.components.map((c) => c.id) ?? []);
     setSpans(
@@ -191,6 +199,10 @@ export default function DashboardPanel({
     [next[index], next[target]] = [next[target], next[index]];
     setOrder(next);
   }
+  function filterOptions(filter: Dashboard["filters"][number]) {
+    return [...new Map([...(filter.options ?? []), ...(searchedOptions[filter.id] ?? [])]
+      .map((value) => [JSON.stringify(value), value])).values()];
+  }
   const pending =
     !!dashboard?.pending_action &&
     ["queued", "running"].includes(dashboard.pending_action.status ?? "");
@@ -213,14 +225,131 @@ export default function DashboardPanel({
         .map((id) => components.find((c) => c.id === id))
         .filter((c): c is DashboardComponent => !!c)
     : components;
+  const groups: DashboardComponent[][] = [];
+  for (const component of ordered) {
+    const previous = groups.at(-1);
+    if (!editing && component.type === "metric" && component.span === 1 && previous?.[0].type === "metric" && previous[0].span === 1) previous.push(component);
+    else groups.push([component]);
+  }
+  const description = revision?.spec.description ?? "";
+  const deck = description.length > 220 ? description.slice(0, 220).replace(/\s\S*$/, "") + "…" : description;
+  async function saveMetricFormat(componentId: string, format: string) {
+    if (!revision) return;
+    const started = identity;
+    setWorking(true);
+    setError("");
+    try {
+      const next = await post<Dashboard>(`${dashboardPath(threadId, revision.dashboard_id)}/presentation`, {
+        expected_revision: revision.revision_id, request_id: crypto.randomUUID(),
+        metric_formats: { [componentId]: format },
+      });
+      if (isCurrent(started)) onSaved(next);
+    } catch (error) {
+      if (isCurrent(started)) setError(message(error));
+    } finally {
+      if (isCurrent(started)) setWorking(false);
+    }
+  }
+  function renderComponent(component: DashboardComponent) {
+    const definition = revision?.spec.components.find((item) => item.id === component.id);
+    return (
+      <section
+        className={`dashboard-widget widget-${component.type} span-${editing ? spans[component.id] : (component.span ?? 1)}`}
+        key={component.id}
+      >
+        <div className="widget-heading">
+          <h3>{component.title}</h3>
+          {component.type !== "text" && (
+            <button
+              className="widget-action"
+              aria-label={`Investigate ${component.title || component.id}`}
+              disabled={disabled}
+              onClick={() => {
+                setDrill(component);
+                setDrillQuestion("");
+              }}
+            >
+              <Search size={15} aria-hidden="true" />
+              <span className="widget-action-label">Investigate</span>
+            </button>
+          )}
+        </div>
+        {component.type === "metric" ? (
+          <>
+            <div className="metric-value">
+              {component.formatted_value ?? valueText(component.value)}
+            </div>
+            {definition?.type === "metric" && definition.metric.number_format !== undefined && (
+              <MetricFormatEditor key={`${revision?.revision_id}:${component.id}`} title={component.title}
+                format={definition.metric.number_format} disabled={disabled}
+                onSave={(format) => void saveMetricFormat(component.id, format)} />
+            )}
+            {component.body && (
+              <p className="muted small">{component.body}</p>
+            )}
+          </>
+        ) : component.type === "chart" ? (
+          component.chart_id || component.figure ? (
+            <ChartFigure
+              key={component.chart_id ?? component.result_id ?? component.id}
+              threadId={threadId}
+              chartId={component.chart_id ?? undefined}
+              figure={component.figure ?? undefined}
+              title={component.title}
+              resultId={component.analysis_result_id ?? component.result_id ?? undefined}
+              selectionFields={component.selection_fields}
+              interactionDisabled={disabled}
+              onInvestigate={(selection, intent) => void perform("drill", {
+                component_id: component.id,
+                selection,
+                question: intent === "explain"
+                  ? `Explain the selected ${selection.column} observations within the applied dashboard scope. State supported patterns and limitations.`
+                  : `Compare the selected ${selection.column} values with the other values of that field within the applied dashboard scope. State the comparison population and units.`,
+              })}
+            />
+          ) : (
+            <Empty title="No data for this selection">
+              Adjust the filters to see a chart. The previous chart is
+              preserved in its earlier revision.
+            </Empty>
+          )
+        ) : component.type === "table" ? (
+          <>
+            <DataTable
+              columns={component.columns ?? undefined}
+              rows={component.rows ?? []}
+            />
+            <p className="small muted">
+              Preview: at most 10 rows
+              {component.row_count != null
+                ? ` of ${component.row_count.toLocaleString()}`
+                : ""}
+              .
+            </p>
+          </>
+        ) : (
+          <div className="markdown">
+            <ReactMarkdown>{component.body ?? ""}</ReactMarkdown>
+          </div>
+        )}
+        {component.warnings?.map((warning, i) => (
+          <p className="small warning-text" key={i}>
+            {warning}
+          </p>
+        ))}
+        {component.notes?.map((note, i) => (
+          <p className="small muted" key={`note-${i}`}>{note}</p>
+        ))}
+      </section>
+    );
+  }
   return (
     <div className="dashboard-panel">
       {error && <Notice error>{error}</Notice>}
       {dashboard && revision ? (
         <>
-          <div className="canvas-heading">
+          <div className="canvas-heading dashboard-heading">
             <div>
-              <p className="eyebrow">Saved dashboard</p>
               <h2>{revision.spec.title}</h2>
               <div className="dashboard-meta" aria-label="Dashboard details">
                 <span>
@@ -230,12 +359,11 @@ export default function DashboardPanel({
                 <span>Version {revision.version}</span>
                 <span>
                   <Clock3 size={14} aria-hidden="true" />
-                  Saved {new Date(revision.created_at).toLocaleString()}
+                  Saved {new Date(revision.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                 </span>
               </div>
-              {revision.spec.description && (
-                <p className="muted">{revision.spec.description}</p>
-              )}
+              {description && <p className="dashboard-deck">{deck}</p>}
+              {description.length > 220 && <details className="dashboard-scope"><summary>Scope and method</summary><p>{description}</p></details>}
             </div>
             <div className="button-group">
               <button disabled={disabled} onClick={() => setEditing(!editing)}>
@@ -263,7 +391,7 @@ export default function DashboardPanel({
                 "The update failed. The last valid dashboard is preserved. You can retry."}
             </Notice>
           )}
-          <div className="filter-bar">
+          <div className={`filter-bar ${dashboard.filters.length ? "" : "is-empty"}`}>
             <div className="filter-toolbar-heading">
               <div>
                 <h3><Filter size={16} aria-hidden="true" />Filters</h3>
@@ -284,7 +412,7 @@ export default function DashboardPanel({
             </div>
             <div className="filter-fields">
               {dashboard.filters.length === 0 ? (
-                <span className="small muted">No filters declared.</span>
+                <span className="small muted">All saved observations</span>
               ) : (
                 dashboard.filters.map((filter) => (
                   <div className="filter-field" key={filter.id}>
@@ -335,51 +463,58 @@ export default function DashboardPanel({
                         </button>
                       </fieldset>
                     ) : (
-                      <label>
-                        {filter.label}
+                      <div>
+                        <label htmlFor={`filter-${filter.id}`}>{filter.label}</label>
                         <select
+                          id={`filter-${filter.id}`}
                           aria-label={filter.label}
+                          aria-describedby={`filter-hint-${filter.id}`}
                           disabled={disabled}
-                          value={
-                            values[filter.id]?.length
-                              ? JSON.stringify(values[filter.id][0])
-                              : ""
-                          }
-                          onChange={(e) =>
+                          multiple
+                          size={Math.min(5, Math.max(3, (filter.options?.length ?? 0) + 1))}
+                          value={values[filter.id]?.length
+                            ? values[filter.id].map((value) => JSON.stringify(value))
+                            : [""]}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, (option) => option.value);
                             setValues({
                               ...values,
-                              [filter.id]: e.target.value
-                                ? [JSON.parse(e.target.value)]
-                                : [],
-                            })
-                          }
+                              [filter.id]: selected.includes("") && (values[filter.id]?.length ?? 0) > 0
+                                ? []
+                                : selected.filter(Boolean).map((value) => JSON.parse(value)),
+                            });
+                          }}
                         >
                           <option value="">All values</option>
-                          {values[filter.id]?.length &&
-                          !(filter.options ?? []).some(
-                            (option) =>
-                              JSON.stringify(option) ===
-                              JSON.stringify(values[filter.id][0]),
-                          ) ? (
-                            <option
-                              value={JSON.stringify(values[filter.id][0])}
-                            >
-                              {valueText(values[filter.id][0])} (entered)
-                            </option>
-                          ) : null}
-                          {(filter.options ?? []).map((option, i) => (
+                          {(values[filter.id] ?? [])
+                            .filter((value) => !filterOptions(filter).some((option) => JSON.stringify(option) === JSON.stringify(value)))
+                            .map((value) => (
+                              <option key={`entered-${JSON.stringify(value)}`} value={JSON.stringify(value)}>
+                                {valueText(value)} (entered)
+                              </option>
+                            ))}
+                          {filterOptions(filter).map((option, i) => (
                             <option key={i} value={JSON.stringify(option)}>
                               {valueText(option)}
                             </option>
                           ))}
                         </select>
-                        {(values[filter.id]?.length ?? 0) > 1 && (
-                          <span className="small muted">
-                            Selected values:{" "}
-                            {values[filter.id].map(valueText).join(", ")}. Choose
-                            a value to replace this selection.
-                          </span>
-                        )}
+                        <p id={`filter-hint-${filter.id}`} className="small muted filter-selection-hint">
+                          Select one or more values. Use Ctrl or Command to add a value with a mouse.
+                        </p>
+                        <FilterValueSearch
+                          key={`${revision.revision_id}:${filter.id}`}
+                          threadId={threadId}
+                          dashboardId={revision.dashboard_id}
+                          revisionId={revision.revision_id}
+                          filterId={filter.id}
+                          label={filter.label}
+                          disabled={disabled}
+                          onValues={(found, append) => setSearchedOptions((previous) => ({
+                            ...previous,
+                            [filter.id]: append ? [...(previous[filter.id] ?? []), ...found] : found,
+                          }))}
+                        />
                         <details className="custom-filter">
                           <summary>Other value</summary>
                           <input
@@ -396,23 +531,23 @@ export default function DashboardPanel({
                           />
                           <button
                             type="button"
-                            aria-label={`Use custom ${filter.label}`}
+                            aria-label={`Add custom ${filter.label}`}
                             disabled={disabled || !customValues[filter.id]?.trim()}
                             onClick={() =>
                               setValues({
                                 ...values,
-                                [filter.id]: [customValues[filter.id]],
+                                [filter.id]: [...new Set([...(values[filter.id] ?? []), customValues[filter.id]])],
                               })
                             }
                           >
-                            Use value
+                            Add value
                           </button>
                         </details>
-                      </label>
+                      </div>
                     )}
                     {filter.options_truncated && (
                       <span className="small muted">
-                        More values are available. Enter an exact value under Other value.
+                        More values are available. Search saved values or enter an exact value under Other value.
                       </span>
                     )}
                   </div>
@@ -500,9 +635,7 @@ export default function DashboardPanel({
                   return (
                     <div key={id}>
                       <span>
-                        {component?.title ||
-                          component?.label ||
-                          component?.type}
+                        {component?.title || component?.type}
                       </span>
                       <label className="sr-only" htmlFor={`span-${id}`}>
                         Width for {component?.title || id}
@@ -549,85 +682,11 @@ export default function DashboardPanel({
             </section>
           )}
           <div className="dashboard-grid">
-            {ordered.map((component) => (
-              <section
-                className={`dashboard-widget widget-${component.type} span-${editing ? spans[component.id] : (component.span ?? 1)}`}
-                key={component.id}
-              >
-                <div className="widget-heading">
-                  <h3>{component.title || component.label || ""}</h3>
-                  {component.type !== "text" && (
-                    <button
-                      className="widget-action"
-                      aria-label={`Investigate ${component.title || component.label || component.id}`}
-                      disabled={disabled}
-                      onClick={() => {
-                        setDrill(component);
-                        setDrillQuestion("");
-                      }}
-                    >
-                      <Search size={15} aria-hidden="true" />
-                      <span className="widget-action-label">Investigate</span>
-                    </button>
-                  )}
-                </div>
-                {component.type === "metric" ? (
-                  <>
-                    <div className="metric-value">
-                      {component.formatted_value ?? valueText(component.value)}
-                    </div>
-                    {component.body && (
-                      <p className="muted small">{component.body}</p>
-                    )}
-                  </>
-                ) : component.type === "chart" ? (
-                  component.chart_id || component.figure ? (
-                    <ChartFigure
-                      key={component.chart_id ?? component.result_id ?? component.id}
-                      threadId={threadId}
-                      chartId={component.chart_id}
-                      figure={component.figure ?? undefined}
-                      title={component.title || component.label}
-                      resultId={component.analysis_result_id ?? component.result_id}
-                    />
-                  ) : (
-                    <Empty title="No data for this selection">
-                      Adjust the filters to see a chart. The previous chart is
-                      preserved in its earlier revision.
-                    </Empty>
-                  )
-                ) : component.type === "table" ? (
-                  <>
-                    <DataTable
-                      columns={component.columns}
-                      rows={component.rows ?? []}
-                    />
-                    <p className="small muted">
-                      Preview: at most 10 rows
-                      {component.row_count !== undefined
-                        ? ` of ${component.row_count.toLocaleString()}`
-                        : ""}
-                      .
-                    </p>
-                  </>
-                ) : (
-                  <div className="markdown">
-                    <ReactMarkdown>{component.body ?? ""}</ReactMarkdown>
-                  </div>
-                )}
-                {component.warnings?.map((warning, i) => (
-                  <p className="small warning-text" key={i}>
-                    {warning}
-                  </p>
-                ))}
-                {component.notes?.map((note, i) => (
-                  <p className="small muted" key={`note-${i}`}>
-                    {note}
-                  </p>
-                ))}
-              </section>
-            ))}
+            {groups.map((group) => !editing && group[0].type === "metric" && group[0].span === 1 ? (
+              <div className="metric-strip" key={`metrics-${group[0].id}`}>{group.map(renderComponent)}</div>
+            ) : group.map(renderComponent))}
           </div>
+          <EvidencePanel dashboard={dashboard} />
           <div className="freshness">
             <span>
               Source completeness:{" "}
@@ -679,6 +738,18 @@ export default function DashboardPanel({
                     title={chart.title}
                     resultId={chart.result_id}
                   />
+                  {runId && onPresentationSaved && (
+                    <ChartEditor
+                      key={`${answer.report?.report_id}:${chart.chart_id}`}
+                      chart={chart}
+                      reportId={answer.report!.report_id}
+                      runId={runId}
+                      disabled={busy}
+                      onSaved={(updated) => {
+                        if (isCurrent(identity)) onPresentationSaved(updated);
+                      }}
+                    />
+                  )}
                 </section>
               ))}
             </div>
@@ -756,7 +827,7 @@ export default function DashboardPanel({
           >
             <div className="section-heading">
               <h2 id="drill-title">
-                Investigate {drill.title || drill.label || "this component"}
+                Investigate {drill.title || "this component"}
               </h2>
               <button
                 aria-label="Close investigation"
@@ -901,9 +972,9 @@ function FilterBuilder({
               .filter((c) => c.result_id)
               .map((c) => (
                 <label key={c.id}>
-                  {c.title || c.label || c.type}
+                  {c.title || c.type}
                   <select
-                    aria-label={`Filter column for ${c.title || c.label || c.id}`}
+                    aria-label={`Filter column for ${c.title || c.id}`}
                     value={bindings[c.id] ?? ""}
                     onChange={(e) =>
                       setBindings({ ...bindings, [c.id]: e.target.value })

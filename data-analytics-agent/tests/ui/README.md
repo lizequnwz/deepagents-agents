@@ -11,6 +11,8 @@ npm --prefix frontend ci
 node tests/ui/stage.mjs --output /tmp/analytics-ui-stage
 node tests/ui/run.mjs --frontend-root /tmp/analytics-ui-stage/frontend
 node tests/ui/redesign.mjs --frontend-root /tmp/analytics-ui-stage/frontend
+node tests/ui/genbi-interactions.mjs --frontend-root /tmp/analytics-ui-stage/frontend
+node tests/ui/editorial.mjs --frontend-root /tmp/analytics-ui-stage/frontend
 node tests/ui/deployment.mjs
 ```
 

@@ -1,16 +1,18 @@
 """Exact edited SQL/Python approval translation."""
 
 from typing import Any
+
 from langgraph.types import Command
+
+from data_analytics_agent.agents.data_analysis.runner import PythonExecutionLimits
+from data_analytics_agent.data_sources import DataSource
 from data_analytics_agent.schemas import (
     ApprovalAction,
     ApprovalRequest,
     Decision,
     PythonReviewInput,
 )
-from data_analytics_agent.data_sources import DataSource
 from data_analytics_agent.stores import ResultStore, StoreNotFound
-from data_analytics_agent.agents.data_analysis.runner import PythonExecutionLimits
 
 
 def _translate_decision(action: ApprovalAction, decision: Decision) -> dict:
@@ -112,6 +114,31 @@ def _extract_approval(
             if not isinstance(arguments, dict):
                 raise RuntimeError("The review contains invalid action arguments.")
             query = arguments.get("query")
+            if name == "execute_dashboard_query" and result_store is not None:
+                from data_analytics_agent.agents.text_to_sql.dashboard_queries import (
+                    compile_query,
+                )
+
+                query, parameters = compile_query(
+                    arguments.get("definition"),
+                    arguments.get("filter_values", {}),
+                    result_store,
+                    thread_id,
+                    source.source_id if source else "",
+                )
+                actions.append(
+                    ApprovalAction(
+                        action_name=name,
+                        query=query,
+                        arguments={**arguments, "parameters": parameters},
+                        allowed_decisions=["approve", "reject"],
+                        source_id=source.source_id if source else "",
+                        dialect="duckdb",
+                        timeout_seconds=120,
+                        description="Review the fixed saved-data calculation and its parameter values. Reject it to request a different calculation.",
+                    )
+                )
+                continue
             if name in {"execute_sql", "query_saved_results"} and isinstance(
                 query, str
             ):

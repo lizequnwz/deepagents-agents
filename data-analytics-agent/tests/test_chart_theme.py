@@ -99,7 +99,7 @@ def test_saved_chart_theme_agrees_across_api_dashboard_and_report(
         w.run, thread_id=w.thread, source_id="test"
     )
     dashboard = dashboards.view(revision.dashboard_id, w.thread, source_id="test")
-    dashboard_figure = next(c.figure for c in dashboard.components if c.type == "chart")
+    dashboard_figure = next(c.figure for c in dashboard.components if c.type == "chart").model_dump(mode="json")
     with TestClient(create_app(services)) as client:
         response = client.get(f"/api/conversations/{w.thread}/charts/{chart_id}/figure")
         assert response.status_code == 200, response.text
