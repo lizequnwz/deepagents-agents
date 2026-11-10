@@ -1,13 +1,24 @@
 # Configuration
 
 Start with `.env.example`, add your model credentials, and run
-`./scripts/start.sh`. The launcher runs `uv sync --locked`, checks readiness,
-and starts the API and Streamlit together. `uv` and `curl` must be installed.
+`./scripts/start.sh`. The launcher checks readiness, installs locked Python
+dependencies and starts the API and Streamlit together. Install `uv` and `curl`
+before starting.
 The example file keeps model selection, independent SQL/Python approval, the
 source registry, key time budgets and tracing visible. `REQUIRE_SQL_APPROVAL=false`
 and `REQUIRE_PYTHON_APPROVAL=false` mean automatic execution; set either to `true`
 for manual review. Additional values below are optional overrides; omitting them
 uses application defaults. `MODEL_ID` selects the model for either provider.
+
+## Optional React workspace
+
+`ENABLE_REACT_UI=false` is the default. The launcher skips npm and the React build,
+and FastAPI starts without the workspace asset routes. To add React alongside
+Streamlit, install Node.js with npm, set `ENABLE_REACT_UI=true` in `.env` and restart
+`./scripts/start.sh`. It installs locked frontend dependencies, builds React and
+serves the workspace at `/workspace/`. Streamlit shows **Open full workspace**
+links in this mode. The API and both clients use the same conversations, evidence
+and saved dashboards.
 
 ## Providers
 
@@ -19,10 +30,8 @@ local environment or `.env`, never in the source registry.
 
 ## Advanced environment overrides
 
-The following reference retains the supported defaults. Copy only the settings
-you want to change into `.env`. Approval switches and resource limits remain
-available independently. Feature switches are retained pending the roadmap's
-ablation evaluation.
+The following values are application defaults. Copy the settings you want to
+override into `.env`.
 
 ```dotenv
 DATA_SOURCES_CONFIG=data_sources.yaml
@@ -126,42 +135,19 @@ directory configured before starting a version with breaking schema changes.
 
 ## Voice dictation
 
-The native Streamlit recorder produces 16 kHz WAV audio. On stop, Streamlit sends
-it to `POST /api/transcriptions` as an `audio/wav` body. The API invokes the LangChain `whisper_transcriber` runnable, which uses the
-OpenAI async file-transcription endpoint and returns `{"text": "..."}`. No analytics run
-is created until the user reviews/edits the text and sends the question.
+Both clients send WAV audio to `POST /api/transcriptions`. The API invokes the
+LangChain `whisper_transcriber` runnable, which calls the OpenAI audio
+transcription endpoint and returns text. Sending the reviewed question starts
+the analytics run.
 
 `TRANSCRIPTION_MODEL` defaults to `whisper-1`. The SDK reuses `OPENAI_API_KEY`
 and, when configured, `OPENAI_BASE_URL`; a custom endpoint must support the
 OpenAI audio transcription API. Bedrock chat still requires a separate OpenAI
 key for voice. Missing voice credentials do not disable typed questions.
 
-Microphone access requires localhost or HTTPS and browser permission. Provider
-errors offer an explicit retry; ordinary UI reruns do not repeat a transcription.
-The endpoint accepts at most 24 MiB, with a 60-second provider timeout and no
-implicit provider retries. Audio is held in memory for transcription, not stored
-in conversation history, datasets, or temporary files. Successful dictation resets
-the recording widget; failed recordings remain available for retry until replaced,
-cleared with the native control, or the conversation is changed. Dictation replaces
-the question-box text; it is not a realtime voice conversation.
-
-The runnable supports LangChain `ainvoke`, model binding, and callbacks. It uses
-the existing SDK transport because Whisper is an audio endpoint, not a chat model.
-The community Whisper document loader is not used: it re-encodes WAV to MP3,
-requires additional codecs, and suppresses exhausted provider errors. The runnable
-keeps the native WAV bytes and propagates errors to the HTTP boundary. If LangSmith
-tracing is enabled, its input/output tracing policy also applies to this runnable.
-
-
-## Release storage contract
-
-This release uses API contract **24**. An approval contains `interrupt_id` and an
-ordered `actions` list; each action carries its code, allowed decisions and all
-named Python inputs when applicable. Decision requests contain that current
-`interrupt_id` and one decision for every action. Stale reviews are rejected.
-Obsolete single-action approval fields, unused review-type state and
-`AGENT_DEBUG_DETAILS` are removed. There are no migrations or compatibility paths.
-Use fresh application storage when upgrading records from an older contract;
-preserve needed reports/datasets separately before switching storage directories.
-
-Excel uses the upload byte limit, dataset row/column limits and decoded-workbook byte limit. `.xlsx` imports save their original bytes, worksheet/range choices and formula-cache acceptance. Notebook exports use `nbformat`; `nbclient` and the local Jupyter kernel are verification/development dependencies. The app continues to execute Python locally without a dedicated sandbox or shell agent tool.
+Microphone access requires localhost or HTTPS and browser permission. The endpoint
+accepts at most 24 MiB, with a 60-second provider timeout. Streamlit can retry a
+failed recording. In React, record again to retry. The application holds audio
+in memory for transcription and stores only the submitted question in the
+conversation. LangSmith's input and output tracing policy also applies to the
+transcription runnable when tracing is enabled.

@@ -1,53 +1,12 @@
 # Documentation
 
-Updated 22 October 2026. Start with the task you want to complete.
-
-| I want to… | Read |
-|---|---|
-| Install and run the app | [Quick start](../README.md#run), then [configuration](development/configuration.md) |
-| Ask questions or review an upload | [User guide](user/using-the-agent.md) |
-| Use the React and Streamlit dashboard workflow | [Saved dashboards](user/using-the-agent.md#create-and-use-a-dashboard), [GenBI decision](roadmap/genbi-decision-proposal.md) and [delivery steps](roadmap/genbi-implementation.md) |
-| Try realistic questions | [Examples](user/deep-dive-examples.md) and [sample CSV](user/examples/monthly-index.csv) |
-| Inspect/replay portable work | [Downloadable analysis example](examples/README.md) |
-| Review comparative lessons, current gaps and delivery options | [17 October improvement assessment](reviews/improvement-plan-2026-10-17.md), then [earlier code review](reviews/agent-review-2026-10-03.md) |
-| Understand the selected workspace direction and next work | [Handoff](../HANDOFF.md), the single active product plan |
-| Check delivered capabilities | [Current capability status](roadmap/implementation-progress.md) |
-| Verify the latest release | [22 October React design verification](reviews/react-ui-redesign-2026-10-22.md), [dashboard/backend verification](reviews/genbi-workspace-2026-10-22.md) |
-| Check earlier Excel, usability and export work | [Historical implementation checks](reviews/README.md#earlier-implementation-checks) |
-| Check the latest ablation and review repair | [1 October outcome](reviews/ablation-outcomes-2026-10-01.md) |
-| Understand system boundaries | [Architecture](development/architecture.md) |
-| Connect a source | [Source onboarding](development/adding-data-sources.md) and [semantic modeling](development/semantic-model-best-practices.md) |
-| Run regression or provider evaluations | [Testing](development/testing.md) and [paired evaluation guide](development/ablation-evaluation.md) |
-| Read assessments and their evidence | [Reviews](reviews/README.md) |
-
-## Development guides
-
-- [Architecture](development/architecture.md) — authoritative system boundaries and lifecycle.
-- [Backend development](development/backend-development.md) — source execution, contracts, cancellation and verification.
-- [Configuration](development/configuration.md) — setup, providers, approvals, budgets and reload.
-- [Testing](development/testing.md) — reproducible prompts, independent grading and evidence limits.
-- [Paired evaluations](development/ablation-evaluation.md) — frozen inputs, independent reviews and reproducible comparisons.
-- [Adding sources](development/adding-data-sources.md) — registry and onboarding.
-- [Semantic modeling](development/semantic-model-best-practices.md) — conventions and validation.
-- [Semantic discovery](development/semantic-discovery.md) — implemented retrieval and deferred scale options.
-- [Snowflake backend](development/snowflake-backend.md) — optional adapter and operating boundary.
-- [Diagram index](diagrams/README.md) — source-onboarding visuals and editable sources.
-
-## How to maintain the collection
-
-Current behavior belongs in `user/` and `development/`. The capability inventory
-records delivery. The handoff owns the selected product direction, priorities and
-acceptance gates. The evaluation guide owns operational study instructions.
-The duplicate roadmap and simplification plans were removed. Completed Excel,
-usability and export reviews were consolidated into the review index; their
-delivered behavior remains in current guides.
-
-Dated assessments and receipts belong in `reviews/`. The 3 October cleanup removed
-superseded reviews and redundant screenshots; its record is in the
-[current review](reviews/agent-review-2026-10-03.md#documentation-cleanup).
-Retain useful historical material with its actual evidence; do not read it as
-current implementation guidance.
-Missing historical receipts do not establish passed evaluations and are not listed
-as available documents. Keep generated evidence beside its source, update links
-when moving files, and publish one compact verification record for each delivered
-increment rather than duplicate planning/status documents.
+| Task | Guide |
+| --- | --- |
+| Install or configure the app | [Quick start](../README.md#run) · [Configuration](development/configuration.md) |
+| Use the workspace, dashboards, or exports | [User guide](user/using-the-agent.md) |
+| Try checkable questions and a sample upload | [Example questions](user/deep-dive-examples.md) |
+| Understand application and evidence flow | [Architecture](development/architecture.md) |
+| Add a SQLite or Snowflake source | [Source onboarding](development/adding-data-sources.md) |
+| Author or troubleshoot a semantic catalog | [Modeling](development/semantic-model-best-practices.md) · [Discovery and SQL grounding](development/semantic-discovery.md) |
+| Run local checks or compare a change | [Testing](development/testing.md) · [Paired evaluations](development/ablation-evaluation.md) |
+| Find active priorities and decisions | [Implementation handoff](../HANDOFF.md) |

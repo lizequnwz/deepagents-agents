@@ -3,16 +3,24 @@
 This React client uses the same FastAPI application and saved evidence as the
 Streamlit workbench. It has no warehouse credentials or separate agent runtime.
 
-Build the production client:
+For the local application, install Node.js with npm, set `ENABLE_REACT_UI=true`
+in the project `.env` and restart `./scripts/start.sh`. The launcher installs
+locked frontend dependencies and builds React. FastAPI serves `dist/` at
+`/workspace/` alongside Streamlit, whose **Open full workspace** links appear
+when React is enabled. The default `ENABLE_REACT_UI=false` skips this build and
+the FastAPI workspace asset routes.
+
+To build the production assets manually, run these commands from `frontend/`:
 
 ```bash
 npm ci
 npm run build
 ```
 
-FastAPI serves `dist/` at `/workspace/`. The repository launcher builds this
-client before starting the application. For UI development, run `npm run dev`;
-Vite proxies `/api` and `/health` to `http://127.0.0.1:8000`.
+For UI development, run `npm ci` and `npm run dev` from `frontend/`, then open
+the Vite workspace URL. Vite serves the frontend and proxies `/api` and `/health`
+to the running API at `http://127.0.0.1:8000`. This works with either FastAPI
+workspace asset setting.
 
 The client expects API contract 24. An incompatible service displays a restart
 message instead of allowing mutations.

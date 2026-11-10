@@ -1,8 +1,11 @@
 """The React client uses the existing scoped artifacts and a single API server."""
 
+from dataclasses import replace
+
 from fastapi.testclient import TestClient
 
 from data_analytics_agent.api import Services, create_app
+from data_analytics_agent.config import Settings
 from data_analytics_agent.visualization.tools import create_chart_tool
 from data_analytics_agent.visualization.schemas import ChartRequest
 
@@ -28,7 +31,7 @@ def test_chart_figures_preserve_values_and_reject_other_conversations(
         runtime=w.runtime("workspace-chart"),
     )
     services = Services(
-        settings=test_settings,
+        settings=replace(test_settings, enable_react_ui=False),
         storage=w.storage,
         results=w.results,
         runs=w.runs,
@@ -52,14 +55,28 @@ def test_chart_figures_preserve_values_and_reject_other_conversations(
         )
 
 
-def test_workspace_serves_built_assets_without_exposing_project_files(test_settings):
+def test_workspace_serves_built_assets_only_when_enabled(test_settings, monkeypatch):
     root = test_settings.project_root
     dist = root / "frontend" / "dist"
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text("<h1>Analytics workspace</h1>")
     (dist / "assets" / "app-123.js").write_text("console.log('workspace')")
     (root / "private.txt").write_text("private")
-    with TestClient(create_app(Services(settings=test_settings))) as client:
+
+    monkeypatch.delenv("ENABLE_REACT_UI", raising=False)
+    disabled = replace(test_settings, enable_react_ui=Settings().enable_react_ui)
+    with TestClient(create_app(Services(settings=disabled))) as client:
+        assert client.get("/health").json()["react_ui_enabled"] is False
+        for path in ("/", "/workspace", "/workspace/", "/workspace/assets/app-123.js"):
+            assert client.get(path, follow_redirects=False).status_code == 404
+
+    monkeypatch.setenv("ENABLE_REACT_UI", "true")
+    enabled = replace(test_settings, enable_react_ui=Settings().enable_react_ui)
+    with TestClient(create_app(Services(settings=enabled))) as client:
+        assert client.get("/health").json()["react_ui_enabled"] is True
+        assert (
+            client.get("/", follow_redirects=False).headers["location"] == "/workspace/"
+        )
         assert client.get("/workspace/").text == "<h1>Analytics workspace</h1>"
         assert client.get("/workspace/saved/dashboard").status_code == 200
         asset = client.get("/workspace/assets/app-123.js")

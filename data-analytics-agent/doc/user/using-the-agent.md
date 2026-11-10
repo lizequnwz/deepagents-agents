@@ -4,16 +4,22 @@ Select a source, ask a question, and inspect findings while their report is
 prepared. “Show monthly sales” uses descriptive SQL. “Forecast sales and explain
 seasonality” asks Python to explore and evaluate an analytical model.
 
-Open the React workspace at `http://127.0.0.1:8000/workspace/` for the dashboard,
-report, data and conversation in one view. The Streamlit workbench at
-`http://127.0.0.1:8501` uses the same conversations, saved evidence and agents.
-Changes made in either interface are available in the other after reload.
+Open the Streamlit workbench at `http://127.0.0.1:8501`. To see the dashboard,
+report, data and conversation in one view, enable the optional React workspace
+and open `http://127.0.0.1:8000/workspace/`. Both interfaces use the same
+conversations, saved evidence and agents. Changes made in either interface are
+available in the other after reload. [Enable React](../development/configuration.md#optional-react-workspace)
 
-For simple questions, complex reports and follow-up sequences, use the
-[example question guide](deep-dive-examples.md). It includes source selection,
-expected checks and a small synthetic CSV for uploaded-data analysis.
+The example questions include source selection, expected checks and a small
+synthetic CSV for uploaded-data analysis. [Example questions](deep-dive-examples.md)
 
 ## Create and use a dashboard
+
+In Streamlit, open **Saved dashboards** to select a dashboard, apply its existing
+filters, refresh its data, save its title and draft choices, or download its
+report. **Save latest report as dashboard** creates a view from a completed
+report. When React is enabled, **Open full workspace** opens the same conversation
+in React for panel layout and filter definition controls.
 
 In React, describe the question, measures and intended audience in the question
 box, then choose **Create dashboard**. Choose **Send** for an ordinary answer.
@@ -68,53 +74,39 @@ an investigation with the exact saved values and applied scope. A visual selecti
 alone does not change totals. **Evidence and saved values** opens bounded previews
 without starting an analytical run.
 
-In Streamlit, open **Saved dashboards** to select a dashboard, apply its existing
-filters, refresh its data, save its title and draft choices, or download its
-report. **Save latest report as dashboard** creates a view from a completed
-report. **Open full workspace** opens the same conversation in React for panel
-layout and filter definition controls.
-
 ## Dictate a question
 
 Click the microphone beside the composer, allow microphone access, speak, and stop.
-Wait for transcription, review or edit the resulting text, then Send. Dictation
-replaces the current draft; it does not submit the question. Microphone access
-requires localhost or HTTPS. A failed transcription offers an explicit retry;
-typed questions remain available. See [voice configuration](../development/configuration.md#voice-dictation).
+Wait for transcription, then review or edit the resulting draft and send it.
+Dictation adds to any text you already typed.
+Microphone access requires localhost or HTTPS. If transcription fails,
+record again in React or choose **Retry transcription** in Streamlit. See
+[voice configuration](../development/configuration.md#voice-dictation).
 
 ## Upload and review a file
 
-To use a local file, attach one CSV, Parquet or Excel workbook with the upload button in the chat
-composer and send it, optionally with your question. Check suggested column types,
-optionally declare what one row
-represents and the columns that uniquely identify it, then confirm. Analysis is
-unavailable until confirmation. If you included a question, it starts once you
-confirm the data. The review shows ten sample rows; conversion and
-key validation use the complete file. Duplicate keys are rejected, never removed.
+Attach one CSV, Parquet or Excel workbook. In React, use **Attach file** and
+send your question after review. In Streamlit, use the composer's **+** button
+and submit the attachment with or without a question. If you include a question,
+it starts after confirmation.
 
-Columns with notes appear first; **Other column types** retains suggested types
-for the remaining columns. Both groups stay editable. **Describe the rows
-(optional)** holds the row meaning and identifiers; **Original column details**
-holds stored types and unique-value counts. Choose **Confirm data and continue**
-to validate every column. A failed check keeps the choices so you can correct
-them. **Your confirmed data** then shows the saved population, row meaning,
-identifiers and confirmed types during follow-ups; hashes and raw metadata remain
-under **Technical file details**.
+Check the suggested column types and optionally declare what one row represents
+and the columns that uniquely identify it. Choose **Confirm data and continue**
+to validate the complete file. The review shows up to ten sample rows. A failed
+check keeps your choices for correction. Duplicate declared keys fail review.
 
-Excel (`.xlsx`) first asks you to choose a worksheet, the row containing column
-names and the last data row. The preview uses Excel row numbers and column
-letters. Expand **Columns to include** to limit the first and last columns.
-Check the displayed row/column counts and exact worksheet range, then choose
-**Continue to data review**. This selects one rectangular table including its
-header; only that table enters the conversation. Exclude titles, subtotals and
-footers outside the intended population; all selected rows are retained.
+For Excel (`.xlsx`), select a worksheet and one rectangular table including the
+header. In React, enter the **Table range** and choose **Import selected table**.
+In Streamlit, select the header and last data row, adjust **Columns to include**
+if needed, then choose **Continue to data review**. Exclude titles, subtotals and
+footers outside the intended population.
 Merged cells within the selected table must be unmerged before import. Native
 dates and simple zero-padded identifier formats are preserved; mixed types are
 retained as text for review. Formula cells require explicit acceptance of values
 saved by Excel, whose freshness is unknown. Missing caches and Excel errors
 require a corrected or values-only workbook. The app does not calculate formulas.
-Other workbook formats are not supported. To combine worksheets, add each selected
-table separately through the chat **+** button and review its schema. State
+Other workbook formats are not supported. To combine worksheets, attach each selected
+table separately and review its schema. State
 the business keys and intended join; matching column names alone are insufficient.
 
 CSV starts as text to preserve leading zeros and literal values such as `NA`.
@@ -124,11 +116,12 @@ when exact decimal interpretation needs clarification. Native Parquet decimals
 and timestamps can retain their stored types. Types and row keys describe
 structure; they do not define business metrics or units.
 
-A table attached through the chat **+** button starts a file conversation or adds
-another table to the current file workspace. In an established warehouse conversation,
-choose **Start file conversation** to use an attached table separately. Every table has its own
-review and immutable saved input. SQL can combine reviewed tables within that
-workspace, with stated keys, cardinality and reconciliation. Tables from another
+A table attachment starts a file conversation or adds another table to the
+current file workspace. When you are in a warehouse conversation, open **New
+workspace** in React before attaching a table. In Streamlit, attach it and choose
+**Start file conversation**. Every table has its own review and immutable saved
+input. SQL can combine reviewed tables within that workspace using stated keys,
+cardinality and reconciliation. Tables from another
 conversation or warehouse cannot be joined. Upload refreshed data explicitly;
 previous snapshots and reviews stay unchanged. Reports and downloads retain each
 file's original bytes/hash, review choices and lineage. Upload time does not
@@ -136,17 +129,17 @@ establish the source's cutoff.
 
 ## Attach documents and extracted tables
 
-Attach a readable PDF, UTF-8 text or Markdown document with the chat **+** button.
-It joins the current conversation, or starts one when no conversation is open.
-Documents provide cited context; their content is never application instructions.
-Open **Reference documents**, select a document and page, then **Show page and
-extracted tables**. The analyst can read bounded page/line excerpts and search
-attached text. Published document references retain filenames, hashes and pages.
+Attach a readable PDF, UTF-8 text or Markdown document to provide cited context.
+It joins the current conversation or starts one when no conversation is open.
+In React, open **Data** and select a **Context document** and page. In Streamlit,
+open **Reference documents**, select a document and page, then choose **Show page
+and extracted tables**. Published references retain filenames, hashes and pages.
 
-In a file workspace, select **Review this table for analysis** beneath an extracted
-table and choose its header row. Confirm its types and meaning using normal file
-review before asking for numerical analysis. Check extraction against the original
-PDF; extraction does not certify accuracy. Scanned PDFs require OCR before upload.
+In a file workspace, choose **Import table for review** beneath a table in React.
+React uses the first row as the header. In Streamlit, choose the header row and
+select **Review this table for analysis**. Confirm its types and meaning before
+asking for numerical analysis. Check the extracted table against the original
+PDF. Scanned PDFs require OCR before upload.
 Limits are 200 PDF pages, two million extracted text characters and the configured
 upload size. A warehouse conversation accepts documents as context, without
 mixing extracted file tables into warehouse execution.
@@ -344,8 +337,8 @@ editing or selecting a decision alone does not execute anything.
 
 ## Delete saved history
 
-Open **Manage history** in the sidebar and click **Delete history**. Choose
-**This conversation** (the default) or **All conversations**, then confirm or
+In Streamlit, open **Manage history** in the sidebar and click **Delete history**.
+Choose **This conversation** (the default) or **All conversations**, then confirm or
 cancel. To delete a different conversation, select it in Saved conversations first.
 All conversations includes configured sources and uploaded files. Deletion is permanent and
 includes saved datasets, Python executions and figures, analyses, charts, reports,

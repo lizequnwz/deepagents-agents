@@ -1,20 +1,8 @@
 # Adding data sources
 
-## Purpose and mental model
-
-A data source is a trusted pairing of semantic meaning and executable context:
-
-```text
-source = OSI model + backend profile + target + dialect + limits + UI metadata
-```
-
-Adding another source on an existing backend should require no agent, API, or
-Streamlit code changes.
-
-![Data-source onboarding workflow](../diagrams/data-source-onboarding.svg)
-
-[Open the interactive diagram](../diagrams/data-source-onboarding.html) ·
-[Edit the Archify source](../diagrams/data-source-onboarding.workflow.json)
+A configured source combines an OSI semantic model with a backend profile,
+target, dialect, execution limits, and display metadata. To add a source to an
+existing backend, update the registry and supply its semantic model.
 
 ## Current registry contract
 
@@ -37,7 +25,8 @@ sources:
     backend: local_sqlite
     semantic_model: semantic/source.osi.yaml
     dialect: sqlite
-    target: {}
+    target:
+      path: db/source/source.sqlite
     examples: []
     limits: {}
 ```
@@ -184,37 +173,72 @@ Readiness checks referenced physical columns, including columns inside computed
 expressions, against live metadata. It does not prove business correctness or
 execute every expression; focused tests and curation remain necessary.
 
-## Cloud sources
+## Add a Snowflake source
 
-A cloud source uses the same semantic/source contract but a different backend
-profile. Credentials remain outside the registry. The current Snowflake
-adapter uses the single default `snowlib` context and requires `target: {}`;
-other cloud adapters may define different trusted target fields.
+Install the optional `snowlib` package in the API environment and configure its
+default role, database, and schema. Use a read-only role. Application validation
+adds query checks to the permissions already enforced by Snowflake. Keep
+credentials outside the registry and OSI files.
 
-Do not add a cloud source entry until its backend adapter exists. An unsupported
-backend is intentionally unavailable. See the
-[Snowflake backend guide](snowflake-backend.md).
+```yaml
+version: 1
+default_source: example
 
-## Invariants
+backends:
+  default_snowflake:
+    type: snowflake
 
-- Every selectable source has a valid OSI model.
-- Source IDs are stable identifiers; display names may change.
-- A source declares the same dialect as its backend.
-- A target is trusted server configuration, never user-submitted input.
-- Credentials never appear in registry or OSI files.
-- A conversation is never migrated to a different source.
+sources:
+  example:
+    name: Example warehouse
+    description: Curated Snowflake source
+    backend: default_snowflake
+    dialect: snowflake
+    target: {}
+    semantic_model: semantic/example.osi.yaml
+```
 
-## Common mistakes
+The API creates a shared client when Snowflake sources are configured. Multiple
+semantic sources can share its default context. Each declares its own OSI model
+and an empty `target`; there are no per-source role or schema settings. Readiness
+checks the declared tables through `INFORMATION_SCHEMA.COLUMNS` in the current
+schema. For SQL review and timeout settings, see [configuration](configuration.md#controlling-a-run).
 
-- Placing the OSI file outside `semantic/`.
-- Using semantic field names as physical SQL columns.
-- Registering a database without a matching OSI model.
-- Copying credentials into `options` or `target`.
-- Assuming CSV dictionary files are loaded by the agent.
-- Forgetting to restart the API after configuration changes.
-- Adding `model_sample_rows` larger than 10 or `max_result_rows`.
-- Declaring `snowflake` without the external `snowlib` package and its default
-  least-privilege context.
+## Implement a backend adapter
+
+Implement [`SQLBackend`](../../data_analytics_agent/backends/base.py) and register
+the adapter in the [backend factory](../../data_analytics_agent/backends/factory.py).
+The adapter owns the connection, dialect, exact SQL execution, cancellation, and
+live schema inspection. The configured target comes from the trusted registry.
+Source IDs stay stable when display names change. Conversations stay bound to the
+source selected at creation.
+
+- `dialect` names the SQLGlot dialect and `backend_type` identifies the adapter.
+- `execute_batches(query, *, timeout_seconds, cancel=None)` validates the exact
+  submitted SQL and streams bounded, typed PyArrow `RecordBatch` objects. Preserve
+  decimal and temporal types and execute reviewed SQL exactly as approved.
+- `get_table_schema(table_names)` returns metadata for the requested declared
+  tables in the same context used for execution.
+
+The artifact writer unifies compatible batch schemas, applies row and byte limits,
+and records incomplete extraction. It closes the iterator at the limit. Release
+cursors and connections in `finally` blocks. Raise `SQLExecutionError` for
+expected query rejection, `SQLValidationError` for disallowed SQL, and
+`TimeoutError` on expiry. Query errors should include useful details and omit
+credentials.
+
+Check cancellation between batches and use native interruption when available.
+SQLite uses a progress handler. Snowflake uses its query timeout and checks for
+cancellation between fetches. The UI remains **Stopping** until the worker exits.
+Only the SQL specialist has source access. Saved-data SQL uses DuckDB with
+explicit artifact bindings, and Python and charts consume saved artifacts.
+
+See [backend tests](../../tests/test_backends.py),
+[Snowflake tests](../../tests/test_snowflake_backend.py), and
+[artifact workflow tests](../../tests/test_persistent_analyst.py) for exact
+queries and reviewed edits, decimal and null-first batches, provenance, errors,
+cleanup, cancellation, and extraction limits. Snowflake unit tests use an injected
+client. Live authentication and connector behavior require provider tests.
 
 ## Verification checklist
 

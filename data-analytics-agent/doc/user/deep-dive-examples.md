@@ -1,8 +1,6 @@
 # Example questions: simple answers to complex reports
 
-Historical live-test claims whose receipts are unavailable in this checkout are unverified. Current repeatable checks are recorded in the [extended local verification](../reviews/priority-followup-tests-2026-10-02.md).
-
-Updated 30 September 2026. Copy a question into the app after selecting its data
+Copy a question into the app after selecting its data
 source. Start with the simple questions below; then try an investigation or a
 sequence of follow-ups. Data-backed answers include an HTML report automatically,
 so a simple total does not need a request for a large report or a plan.
@@ -39,8 +37,7 @@ progress, and use the evidence downloads to inspect complete results.
 ## Simple questions
 
 S1–S4 are recorded in the [held-out corpus](../../tests/fixtures/held_out_examples.json).
-S5 exercises checked KPI comparisons. Historical live-trial receipts are absent;
-these prompts are evaluation inputs, not evidence of current live-model accuracy.
+S5 exercises evidence-bound KPI comparisons.
 
 ### S1: Annual revenue
 
@@ -94,12 +91,9 @@ For a first complex report, try **01**, **04** or **09**. For iterative analysis
 run **01 → 02 → 03 → 10** in one conversation. Run **05 → 06** in a separate
 conversation; the other examples each start fresh.
 
-**Current verification:** see the [extended local checks](../reviews/priority-followup-tests-2026-10-02.md). Earlier 26/27 September live-trial receipts are unavailable in this checkout, so their analytical outcomes are unverified here. A forecast refusal can be a valid outcome; a completed report alone is not a correctness guarantee.
-
-For exact reruns, use the [testing guide](../development/testing.md). SQL wording,
-analytical method and report layout may vary across runs. These prompts were not
-rerun as part of this documentation-only refresh; the linked dated trials provide
-the observed live evidence.
+SQL wording, analytical method and report layout may vary across runs. Use the
+[testing guide](../development/testing.md) to rerun the corpus and grade the
+outcomes against the expected checks.
 
 ## 01-revenue: Annual revenue change and reconciliation
 

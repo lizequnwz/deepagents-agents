@@ -47,6 +47,9 @@ def workspace_router(services) -> APIRouter:
             "notes": list(rendered.notes),
         }
 
+    if not services.settings.enable_react_ui:
+        return router
+
     @router.get("/", include_in_schema=False)
     def root():
         return RedirectResponse("/workspace/", status_code=307)
@@ -61,7 +64,7 @@ def workspace_router(services) -> APIRouter:
         index = root / "index.html"
         if not index.is_file():
             return Response(
-                "The workspace has not been built. Run ./scripts/start.sh to build and start the application.",
+                "The React workspace has not been built. Run ./scripts/start.sh with ENABLE_REACT_UI=true.",
                 status_code=503,
                 media_type="text/plain",
             )

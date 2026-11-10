@@ -1,25 +1,8 @@
 # Testing the application
 
-Historical live-test claims whose receipts are unavailable in this checkout are
-unverified. Current review/comparator checks and the early-terminated synthetic
-study are recorded in the [1 October outcome](../reviews/ablation-outcomes-2026-10-01.md).
-The [historical implementation checks](../reviews/README.md#earlier-implementation-checks)
-retain the earlier Excel/export and native-widget/API checks and their limits.
-The [extended priority verification](../reviews/priority-followup-tests-2026-10-02.md)
-records 490 passing local tests, six skipped provider tests, retained defect/repair
-receipts, population and forecast boundaries, browser checks and portable replay.
-The user's current instruction is to keep verification local; no new provider
-trials are authorized.
-
-Use three distinct evidence levels: deterministic regression tests, live model
-runs through the API, and browser interaction checks. None substitutes for the
-others. A successful HTTP response or completed report is not a correctness grade.
-
-The [18 October checkup](../reviews/checkup-2026-10-18.md) adds adversarial numerical,
-source-identity, final-evidence and native budget-recovery checks to the feature
-expansion. The [19 October composer checks](../reviews/composer-simplification-2026-10-19.md)
-cover selector removal, attachment routing, review/question preservation and stable
-composer identity. Earlier counts remain historical.
+Use deterministic regression tests for code behavior, browser checks for user
+interactions, and independently graded live model runs for analytical outcomes.
+Keep verification local unless the user authorizes the provider and fixture data.
 
 ## Local regression suite
 
@@ -136,12 +119,9 @@ need their own exercised paths; do not claim them from a normal successful run.
 
 ## Evidence records
 
-Store compact, dated outcomes and issues under `doc/reviews/`. Keep bulky raw runs,
-Parquet, and HTML in the isolated receipt/workspace directories unless a particular
-artifact is needed to explain a finding. Record model, source hashes, prompt IDs,
-run IDs, settings, elapsed time, grading method, and limitations. Never commit keys.
-See the [latest local verification](../reviews/priority-followup-tests-2026-10-02.md)
-for available local checks and their limitations.
+Keep raw runs, Parquet, and HTML in the isolated receipt or workspace directory.
+Record the model, source hashes, prompt IDs, run IDs, settings, elapsed time,
+grading method, and limitations. Never commit credentials.
 
 ## Reproducible grading and held-out cases
 
@@ -179,45 +159,9 @@ current deterministic checks do not replace provider evaluation.
 
 ## Paired ablations
 
-Use the [paired evaluation guide](ablation-evaluation.md) for the
-predeclared prompt study, frozen synthetic sources, explicit workbook/schema
-fixtures and paired reducer. `scripts/compare_ablation.py` requires independent
-per-case grading bound to exact manifests/receipts, fresh repetitions and
-evidenced boundary checks. It rejects changed inputs/settings and stale or reused
-receipts. Unknown usage/cost and absent reviews cannot satisfy adoption gates.
-Incomplete, failing or unreviewed outcome pairs suppress aggregate performance
-estimates. The first patch was rejected after three live metadata regressions;
-the mixed study ended early. See the
-[1 October outcome and batch-review checks](../reviews/ablation-outcomes-2026-10-01.md).
-Deterministic/scripted checks and operator-reviewed smoke runs are not
-first-attempt live-model quality evidence.
-
-## Semantic priority studies
-
-The [handoff](../../HANDOFF.md#verification-and-acceptance-gates) links separate routing, role-batching
-and join-feedback protocols. Prepare the existing synthetic project locally with
-`scripts/prepare_ablation_fixtures.py --output /tmp/a-fresh-project`; preparation
-does not invoke a provider. Starting the local server also makes no model call.
-Submitting analytical questions uses the configured model and requires separate
-provider/fixture authorization.
-
-The corpus now contains 40 cases, including 20 timed semantic cases and an
-unanswered semantic clarification. Review expected measures, dimensions, filters,
-date roles, relationship routes, grain and clarification outcome. Each complete
-semantic case needs independently evidenced role checks, `snapshot_reviews` for
-every complete SQL snapshot, and `value_bindings` for declared scalar expectations.
-A snapshot review has `status` (pass/fail) and evidence; value bindings name an
-exact result_id, column and optional row_index. Scores cannot come from report
-completion or model narrative alone.
-
-Three fresh repetitions per baseline/candidate must use identical frozen fixtures,
-corpus, provider/settings and dependencies. Keep all shared product changes in both
-variants; review that each semantic variant changes one declared component. The
-comparator grades untimed controls, requires paired baseline-fail/candidate-pass
-evidence for targeted quality scenarios, and rejects new first-attempt or boundary
-regressions. Speed adoption additionally requires at least 15% median improvement
-in independently graded active time to the first correct SQL snapshot. An incomplete
-or unreviewed study stays inconclusive. The comparator never changes production code.
+Use the [paired evaluation guide](ablation-evaluation.md) to freeze inputs,
+grade paired runs independently, and compare a single change against the baseline.
+It also documents the semantic study protocols and retained prompt-study evidence.
 
 ## Portable replay
 

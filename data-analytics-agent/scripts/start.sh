@@ -76,19 +76,28 @@ if ! command -v curl >/dev/null 2>&1; then
   echo "curl is required for local service health checks." >&2
   exit 1
 fi
-if ! command -v npm >/dev/null 2>&1; then
-  echo "Node.js and npm are required to build the React workspace." >&2
-  exit 1
-fi
 echo "Preparing the locked Python environment…"
 uv sync --locked
 
-if ! uv run python -c \
-  'from data_analytics_agent.config import Settings; errors = Settings().readiness_errors(include_sources=False); print("\n".join(f"  - {error}" for error in errors)); raise SystemExit(1 if errors else 0)'
-then
+if ! react_enabled="$(uv run python - <<'PY'
+import sys
+
+from data_analytics_agent.config import Settings
+
+try:
+    settings = Settings()
+except ValueError as error:
+    sys.exit(f"  - {error}")
+errors = settings.readiness_errors(include_sources=False)
+if errors:
+    sys.exit("\n".join(f"  - {error}" for error in errors))
+print("true" if settings.enable_react_ui else "false")
+PY
+)"; then
   echo "Startup checks failed. Resolve the items above and try again." >&2
   exit 1
 fi
+export ENABLE_REACT_UI="${react_enabled}"
 
 if port_is_open "${API_HOST}" "${API_PORT}"; then
   echo "Port ${API_PORT} is already in use on ${API_HOST}." >&2
@@ -99,9 +108,15 @@ if port_is_open "${STREAMLIT_HOST}" "${STREAMLIT_PORT}"; then
   exit 1
 fi
 
-echo "Building the React workspace…"
-npm --prefix "${PROJECT_ROOT}/frontend" ci --no-audit --no-fund
-npm --prefix "${PROJECT_ROOT}/frontend" run build
+if [[ "${ENABLE_REACT_UI}" == true ]]; then
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "Node.js and npm are required to build the React workspace." >&2
+    exit 1
+  fi
+  echo "Building the React workspace…"
+  npm --prefix "${PROJECT_ROOT}/frontend" ci --no-audit --no-fund
+  npm --prefix "${PROJECT_ROOT}/frontend" run build
+fi
 
 API_SERVER_ARGS=(--host "${API_HOST}" --port "${API_PORT}" --no-access-log)
 case "${API_AUTO_RELOAD}" in
@@ -142,7 +157,9 @@ wait_for_service \
 
 echo
 echo "Data Analytics Agent is ready:"
-echo "  Workspace: ${API_BASE_URL}/workspace/"
+if [[ "${ENABLE_REACT_UI}" == true ]]; then
+  echo "  React workspace: ${API_BASE_URL}/workspace/"
+fi
 echo "  Streamlit workbench: ${APP_BASE_URL}"
 echo "  API: ${API_BASE_URL}"
 echo

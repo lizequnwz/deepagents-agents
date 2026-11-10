@@ -103,6 +103,7 @@ sources:
         project_root=fixture_root,
         data_sources_config_path=registry,
         api_base_url="http://127.0.0.1:8765",
+        enable_react_ui=True,
     )
 
 

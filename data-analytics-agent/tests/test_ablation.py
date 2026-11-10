@@ -24,7 +24,8 @@ from scripts.grade_documented_examples import RUBRIC, grade_receipts
 from scripts.prepare_ablation_fixtures import prepare_project
 
 ROOT = Path(__file__).resolve().parents[1]
-STUDY = json.loads((ROOT / "doc/roadmap/prompt-ownership-study.json").read_text())
+ABLATION_FIXTURES = ROOT / "tests/fixtures/ablation"
+STUDY = json.loads((ABLATION_FIXTURES / "prompt-ownership-study.json").read_text())
 
 
 def write(path, payload):
@@ -598,7 +599,7 @@ def test_prompt_candidate_applies_to_current_files_and_compiles(tmp_path):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / path, target)
     subprocess.run(
-        ["git", "apply", str(ROOT / "doc/roadmap/prompt-ownership.patch")],
+        ["git", "apply", str(ABLATION_FIXTURES / "prompt-ownership.patch")],
         cwd=tmp_path,
         check=True,
         capture_output=True,

@@ -1,9 +1,10 @@
 # Persistent Data Analytics Agent
 
-A local, single-user analyst built with React, Streamlit, FastAPI and Deep Agents.
-One coordinator and its SQL/Python specialists serve both interfaces. Conversations,
-evidence, Python executions, charts, dashboards and HTML reports survive restarts.
-Follow-up questions can reuse saved snapshots and derived datasets.
+A local, single-user analyst built with Streamlit, FastAPI and Deep Agents, with
+an optional React workspace. One coordinator and its SQL/Python specialists serve
+both interfaces. Conversations, evidence, Python executions, charts, dashboards
+and HTML reports survive restarts. Follow-up questions can reuse saved snapshots
+and derived datasets.
 
 ## Run
 
@@ -13,15 +14,20 @@ cp .env.example .env
 ./scripts/start.sh
 ```
 
-Open the React workspace at `http://127.0.0.1:8000/workspace/`. The native Streamlit
-workbench remains available at `http://127.0.0.1:8501`. The API runs at
-`http://127.0.0.1:8000`; `/docs` exposes its contract. Install Node.js/npm and `uv`
-before starting. The launcher installs locked dependencies, builds React and checks
-model configuration before starting the services. Restart both processes after
-Python changes; rebuild React after client changes. Upload a CSV, Parquet or Excel file and
-review its schema, or select a configured warehouse. The included SQLite sources
-use `data_sources.yaml`; see [adding sources](doc/development/adding-data-sources.md)
-to connect your own data.
+Open the Streamlit workbench at `http://127.0.0.1:8501`. The API runs at
+`http://127.0.0.1:8000` and exposes its contract at `/docs`. Install `uv` and
+`curl` before starting. The launcher installs locked Python dependencies and
+checks model configuration before starting both services.
+
+React is off by default (`ENABLE_REACT_UI=false`), so the launcher skips npm and
+FastAPI leaves `/workspace/` disabled. To enable React, install Node.js with npm, set
+`ENABLE_REACT_UI=true` in `.env` and restart the launcher. It builds React and adds
+the workspace at `http://127.0.0.1:8000/workspace/` alongside Streamlit. Streamlit's
+**Open full workspace** links appear when React is enabled.
+
+Upload a CSV, Parquet or Excel file and review its schema, or select a configured
+warehouse. The included SQLite sources use `data_sources.yaml`. See
+[adding sources](doc/development/adding-data-sources.md) to connect your own data.
 
 The current API contract is **24**. Restart both services together and
 choose fresh `ANALYTICS_STORAGE_DIR` storage for older incompatible history;
@@ -38,8 +44,9 @@ saved-data follow-ups, a sample upload, and run-control checks.
 ## Workflow
 
 - Select a configured source, or upload CSV, Parquet or a selected Excel table and
-  confirm its column types. Use the chat **+** button for every attachment: more
-  tables in a file conversation, or PDF/text/Markdown context in either source type.
+  confirm its column types. Use **Attach file** in React or the chat **+** button
+  in Streamlit to add tables to a file conversation or PDF/text/Markdown context
+  to either source type.
   Extracted document tables require review before calculation. Reopen from history.
 - **Understanding → Retrieving data → Analyzing → Findings ready → Preparing
   report** describes the current work. Descriptive questions may skip Python.
@@ -51,16 +58,16 @@ saved-data follow-ups, a sample upload, and run-control checks.
   (default `whisper-1`), including when the analytics model uses Bedrock.
 - Ask follow-ups to refine charts or extend an investigation. Saved results are
   snapshots; ask for fresh/current data to execute source SQL again.
-- Type your question and choose **Send** for an answer or **Create dashboard**
-  for an interactive view. You can also save a completed report as a dashboard.
-  Reopen saved dashboards from the same workspace and inspect the report, data
-  and conversation together. On phones, switch between Findings and Conversation.
-- Add filters with explicit panel/column bindings. **Apply filters** can use a
+- In Streamlit, use **Saved dashboards** to save a completed report or reopen a
+  dashboard. In React, choose **Send** for an answer or **Create dashboard** for
+  an interactive view. React puts the report, data and conversation in one
+  workspace, with separate Findings and Conversation panes on phones.
+- In React, add filters with explicit panel/column bindings. **Apply filters** can use a
   validated SQL definition over complete saved data. **Refresh data** and
   **Investigate** retain the analytical specialists. All use the existing run and review controls. The prior
   dashboard remains visible until its replacement evidence and HTML report succeed.
   Empty selections reset a filter; empty populations display a no-data state.
-- **Save view** changes title, panel order/width and draft selections without a
+- In React, **Save view** changes title, panel order/width and draft selections without a
   model or source query. Applied filters remain distinct from draft selections.
   Stale requests are rejected and repeated action requests resolve to their run.
 - To use updated file data, attach and review the new version; earlier snapshots
@@ -140,8 +147,7 @@ reuse saved output during resumption. An execution interrupted before output
 commit may execute again. Use a single API process for this local deployment.
 
 See the [documentation index](doc/README.md), [architecture](doc/development/architecture.md),
-[user workflow](doc/user/using-the-agent.md), and [next implementation handoff](HANDOFF.md). The
-[capability status](doc/roadmap/implementation-progress.md) records delivered behavior.
+[user workflow](doc/user/using-the-agent.md), and [implementation handoff](HANDOFF.md).
 The [tutorial](agent_internals_tutorial.ipynb)
 walks through the artifact workflow without a model call.
 
@@ -150,7 +156,6 @@ walks through the artifact workflow without a model call.
 ```bash
 uv run pytest
 uv run ruff check data_analytics_agent streamlit_app.py tests --select F
-node tests/ui/run.mjs
 ```
 
 The deterministic suite tests typed extraction, 100,000-row continuity, iterative
@@ -158,15 +163,11 @@ Python with repair, saved-data SQL, report consistency and retry, lifecycle,
 provider configuration and UI components. Opt-in model evaluations are separate;
 they send the supplied fixture context to the configured provider and must be
 explicitly enabled. They assess correctness and methodology rather than exact SQL.
-The [React design verification](doc/reviews/react-ui-redesign-2026-10-22.md)
-records the latest interface changes and browser checks. The
-[dashboard verification](doc/reviews/genbi-workspace-2026-10-22.md) retains the
-backend regression results, chart-loading repair and shared-theme checks.
-The [18 October checkup](doc/reviews/checkup-2026-10-18.md) retains earlier analytical/replay checks. The three paired
-semantic studies remain pending; verification stays local under the user's current
-instruction.
+See the [testing guide](doc/development/testing.md) for test setup and evidence
+requirements. Keep verification local unless a provider run is authorized.
 
-The browser runner uses the production React build and the real local API with
-isolated saved evidence. It also opens Streamlit. Its scripted agent exercises
-the normal run manager without provider calls. See [browser verification](tests/ui/README.md)
-for setup, covered journeys, screenshots and receipts.
+The browser runner (`node tests/ui/run.mjs`) uses the production React build and
+the real local API with isolated saved evidence. It also opens Streamlit. Its
+scripted agent exercises the normal run manager without provider calls. See
+[browser verification](tests/ui/README.md) for setup, covered journeys, screenshots
+and receipts.

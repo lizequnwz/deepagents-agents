@@ -2,13 +2,13 @@
 
 ```mermaid
 flowchart TD
-    React[React workspace: conversation, dashboard, report, data] --> API
+    React[Optional React workspace: conversation, dashboard, report, data] --> API
     UI[Streamlit chat and saved conversations] --> API[FastAPI lifecycle and artifact API]
     API --> C[Deep Agents coordinator]
-    UI --> Voice[Native WAV recorder]
+    React --> Voice[WAV recording]
+    UI --> Voice
     Voice --> STT[Transcription API / LangChain Whisper runnable]
     STT --> Draft[Editable question draft]
-    Draft --> UI
     API --> Edit[Validated presentation edits over saved evidence]
     API --> Dash[Dashboard state and typed actions]
     Dash --> C
@@ -21,7 +21,7 @@ flowchart TD
     S --> Duck[DuckDB saved-data queries]
     P --> Py[Fresh Python subprocess per execution]
     Py --> Methods[Reusable analytical procedures]
-    UI --> Intake[Separate table review and document extraction]
+    API --> Intake[Separate table review and document extraction]
     Intake --> D
     Intake --> Docs[Cited document context]
     Docs --> C
@@ -199,12 +199,10 @@ standard POST run binding. Reviews and clarification retain their existing comma
 endpoints. React replaces active-run polling with this attachment and reads full
 details when findings, reviews or terminal state change.
 
-The server can export a bounded A2UI v0.9.1 evidence surface at the dashboard's
-`/surface` endpoint. It contains references rather than numerical values. The local
-evidence panel reads the canonical dashboard. The maintained browser renderer was
-tested and removed because its current dependency tree requires unpatched Zod 3.
-See the [protocol evaluation](../reviews/genui-protocol-evaluation-2026-10-25.md).
-CopilotKit's runtime is not installed.
+The dashboard's `/surface` endpoint exports a bounded A2UI v0.9.1 evidence
+surface with references to saved artifacts. The local evidence panel reads the
+canonical dashboard directly. The A2UI browser renderer remains deferred because
+its evaluated dependency tree requires an unpatched version of Zod 3.
 
 ## Chart intervals
 
@@ -216,11 +214,14 @@ does not migrate old bound specifications that omitted interval meaning.
 
 ## UI lifecycle and deployment constraints
 
-The React workspace is built with Vite and served by the same FastAPI process at
-`/workspace/`. It contains conversations, source selection, reviewed file intake,
+The launcher starts FastAPI and Streamlit in both modes. With `ENABLE_REACT_UI=true`,
+it uses npm and Vite to build the optional React workspace, and FastAPI serves its
+assets at `/workspace/`. The default `ENABLE_REACT_UI=false` skips the frontend build
+and workspace asset routes. Streamlit shows **Open full workspace** links when React
+is enabled. The dashboard, run events, chart and other APIs remain available in both
+modes. React contains conversations, source selection, reviewed file intake,
 clarifications/code reviews, dashboards, reports, data and activity. Its typed
-requests use the same services as Streamlit. There is no separate agent runtime
-or data history per client. Production assets are local; charts reuse Plotly.
+requests use the same agent runtime and data history as Streamlit. Charts reuse Plotly.
 
 Streamlit refreshes active content using a timed fragment, preserving stable
 widget keys. Immutable previews/reports are cached by ID with bounded caches.
@@ -359,9 +360,9 @@ chart discovery tools recover valid scoped references; invalid model selections
 produce correction feedback rather than aborting the run. Scope validation remains
 mandatory. Available artifacts are not automatically selected for publication.
 
-The composer uses native `st.chat_input` attachments as the sole upload entry.
-Tables join the current file workspace; documents join either source type. A table
-attached in an established warehouse conversation offers a separate file conversation.
+Both clients accept uploads through the composer. Tables join the current file
+workspace and documents join either source type. Use a separate file workspace
+when working with uploaded tables alongside a warehouse conversation.
 An optional table question waits in UI session state until schema confirmation,
 then is consumed once. A document question proceeds in the current conversation.
 Reloading does not replay the question. The composer keeps a stable configuration
@@ -383,27 +384,22 @@ not every retrieved diagnostic dataset belongs in the published answer.
 `ChartSpec` adds application-owned `chart_id`, `source_result_id`, and `version`.
 Run state, diagnostics, approval details, execution profiles, and persistence
 records are internal/application contracts, not model-generated final responses.
-The obsolete, unused `ReportBrief` contract has been removed.
 
-API contract **22** exposes all actions in an interrupt as one ordered review,
-including all named Python inputs. The UI submits one decision per action together
-with the current interrupt ID; missing and stale decisions are rejected. Different
-worker interrupts remain separate. One common form replaces the old SQL/Python
-forms, and unused stored review-type state is removed. Saved-evidence comparisons and compact responses
-remain implemented. Both processes must run the same version. There is
-no old-record migration or compatibility reader; use a separate storage directory
-for a new-contract workspace when retaining old history. Existing storage is not
-deleted or modified by this code change.
+The API exposes all actions in an interrupt as one ordered review, including all
+named Python inputs. The UI submits one decision per action with the current
+interrupt ID. Missing and stale decisions are rejected. Different worker
+interrupts remain separate. See [storage configuration](configuration.md#development-startup)
+when upgrading across contract changes.
 
 ## Conversational follow-ups and saved evidence
 
 `AnalyticalMessageRequest` carries the question and optional previous_report_id
 for ordinary report revisions. Correction and clarification remain separate
 requests. Dataset listing, inspection and downloads preserve conversation/source
-isolation. Agents can reuse suitable named saved results or retrieve current
-warehouse data when the question requires it. Filters and business populations are
-specified conversationally. There is no application-level input selector, population
-filter, source-expansion flag or warehouse-refresh endpoint.
+isolation. Ordinary questions describe filters and populations in the conversation.
+Agents can reuse suitable named saved results or retrieve current warehouse data
+when the question requires it. Dashboards expose scoped filter and refresh actions
+through the dashboard API.
 
 Saved SQL retains alias-to-parent bindings as calculation provenance. Reports and
 exports identify final evidence and its supporting lineage. File updates require
@@ -441,13 +437,11 @@ at execution time; bundles replay each step against its exact source snapshot in
 documents are included with original hashes and parsed context. Forecast errors and measured coverage recompute
 from immutable or replayed predictions in both script and notebook. Lineage datasets
 are distinguished from the selected final results.
-See [portable replay checks](testing.md#portable-replay) and the
-[historical record](../reviews/README.md#earlier-implementation-checks) for their
-limits.
+See [portable replay checks](testing.md#portable-replay).
 
 ## Voice input
 
-Native Streamlit recording sends WAV bytes to `POST /api/transcriptions`. The
+Both clients send WAV recordings to `POST /api/transcriptions`. The
 LangChain async runnable in `transcription.py` calls the provider audio endpoint,
 returning only text. The UI inserts that text into the composer for review and
 explicit submission. This path creates no analytics run and does not add audio

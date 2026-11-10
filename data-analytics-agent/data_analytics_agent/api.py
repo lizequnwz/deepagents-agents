@@ -427,6 +427,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             visualization_enabled=(container.settings.enable_data_visualization),
             data_analysis_enabled=(container.settings.enable_data_analysis),
             reporting_enabled=True,
+            react_ui_enabled=container.settings.enable_react_ui,
             errors=errors,
         )
 

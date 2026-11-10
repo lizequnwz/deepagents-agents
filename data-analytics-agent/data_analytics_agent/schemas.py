@@ -533,6 +533,7 @@ class HealthResponse(StrictModel):
     visualization_enabled: bool = False
     data_analysis_enabled: bool = False
     reporting_enabled: bool = False
+    react_ui_enabled: bool = False
     errors: list[str]
 
 

@@ -9,7 +9,7 @@ import streamlit as st
 from data_analytics_agent.ui.api_client import APIError
 
 
-def render_dashboards(client, thread_id, conversation, *, disabled=False):
+def render_dashboards(client, thread_id, conversation, *, react_ui_enabled, disabled=False):
     panel = st.expander(
         "Saved dashboards",
         key=f"dashboards_open_{thread_id}",
@@ -134,10 +134,11 @@ def render_dashboards(client, thread_id, conversation, *, disabled=False):
                         },
                     )
                     st.rerun()
-                st.link_button(
-                    "Open full workspace",
-                    f"{client.base_url}/workspace/?thread={thread_id}&dashboard={selected}",
-                )
+                if react_ui_enabled:
+                    st.link_button(
+                        "Open full workspace",
+                        f"{client.base_url}/workspace/?thread={thread_id}&dashboard={selected}",
+                    )
                 st.link_button(
                     "Download dashboard report",
                     f"{client.base_url}/api/reports/{revision['report_id']}/download",

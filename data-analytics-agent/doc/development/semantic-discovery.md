@@ -181,44 +181,20 @@ research never performs source-value discovery automatically. Uploaded-file
 conversations retain their separate saved-dataset path and do not gain warehouse
 access or curated semantics.
 
-## Validation and further improvements
+## Verification
 
-`tests/test_semantic_grounding.py` covers the review's competing-concept queries,
+[Grounding tests](../../tests/test_semantic_grounding.py) cover competing concepts,
 wide tables, unknown bindings, physical expression expansion, relationship roles,
 bounded browsing, CTEs, multi-hop fan-out, canonical metric checks, and validation
 before execution. A small SQLite population verifies a line-revenue result at the
-requested grain. Existing tests cover large catalogs, source isolation, caching,
-approval replay, and the complete agent/report workflow.
+requested grain.
 
-The [40-case synthetic corpus](../../tests/fixtures/ablation_cases.json) now includes
+The [synthetic evaluation corpus](../../tests/fixtures/ablation_cases.json) includes
 expected measures, dimensions, filters, date roles, routes, output grain and
-clarification outcomes. Twenty complete semantic cases are timed; clarification,
-file, statistical and lifecycle cases remain independently graded controls.
-The fixture builder supplies small inline and 102-dataset competing catalogs.
-All complete SQL snapshots are retained even when the final answer does not select
-them. Independent reviews of every snapshot determine first-attempt correctness,
-repair counts and active time to the first correct snapshot. Discovery, model and
-source time are separate; source lookup time is included and approval waits excluded.
-Incomplete snapshot reviews leave first-correct telemetry unknown.
+clarification outcomes. Review retrieval candidates and executed SQL grounding
+separately. Use complete saved snapshots to check exact values, business roles,
+and grain. See [testing](testing.md) for the local probe and evaluation workflow.
 
-Definition recall and actual query grounding recall remain distinct. Scalar
-expectations recompute from reviewed exact typed-snapshot bindings; semantic roles
-and question grain still need independent review. Three separate
-[study protocols](ablation-evaluation.md#current-semantic-studies) isolate
-routing, role batching and physical keys/repair feedback. Complete paired speed
-studies need at least 15% lower median target time; quality studies must resolve
-their reviewed paired failures without new failures or boundary regressions.
-No new provider study is authorized; the user requested local verification.
-
-The [extended local probe](../reviews/priority-followup-tests-2026-10-02.md#semantic-discovery-observations)
-retains three small/large catalog repetitions. All expected role candidates appear
-with dataset hints; broad date browsing in the competing catalog needs narrowing
-to find the intended monthly field. Batching reduces metadata response size in
-that fixture. Warmed in-process timings and hand-authored SQL verification do not
-grade model-generated SQL or satisfy the paired adoption gates.
-
-Curate missing meanings/synonyms through reviewed catalog edits, following
-[dbt's entity, time-dimension and metric conventions](https://docs.getdbt.com/docs/build/semantic-models).
-No reviewed lexical miss justifies a new index in this release. Hybrid retrieval
-and verified-query retrieval stay deferred; keep a future reviewed question/SQL
-library separate from held-out evaluation questions.
+Curate missing business meanings and synonyms through reviewed catalog edits.
+[dbt's semantic model documentation](https://docs.getdbt.com/docs/build/semantic-models)
+describes entity, time-dimension and metric conventions.

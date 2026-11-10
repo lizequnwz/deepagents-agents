@@ -77,6 +77,9 @@ class Settings:
     api_base_url: str = field(
         default_factory=lambda: os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
     )
+    enable_react_ui: bool = field(
+        default_factory=lambda: _env_bool("ENABLE_REACT_UI", False)
+    )
     sql_timeout_seconds: float = field(
         default_factory=lambda: float(os.getenv("SQL_TIMEOUT_SECONDS", "10"))
     )

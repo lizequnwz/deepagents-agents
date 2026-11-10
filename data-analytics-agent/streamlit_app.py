@@ -341,6 +341,7 @@ except APIError as exc:
     st.stop()
 
 upload_max_bytes = (health or {}).get("upload_max_bytes", 33_554_432)
+react_ui_enabled = (health or {}).get("react_ui_enabled", False)
 
 if st.session_state.get("pending_workbook"):
     render_workbook_selection(client)
@@ -490,11 +491,12 @@ with st.sidebar:
             )
 
 render_page_header(source)
-st.link_button(
-    "Open full workspace",
-    f"{API_BASE_URL}/workspace/?thread={thread_id}",
-    icon=":material/open_in_new:",
-)
+if react_ui_enabled:
+    st.link_button(
+        "Open full workspace",
+        f"{API_BASE_URL}/workspace/?thread={thread_id}",
+        icon=":material/open_in_new:",
+    )
 
 pending_file = st.session_state.get("pending_file_conversation")
 if pending_file and pending_file["thread_id"] == thread_id:
@@ -537,7 +539,13 @@ render_workspace_documents(
     client, thread_id, is_file=source["backend_type"] == "upload", disabled=bool(active_run_id)
 )
 
-render_dashboards(client, thread_id, conversation, disabled=bool(active_run_id))
+render_dashboards(
+    client,
+    thread_id,
+    conversation,
+    react_ui_enabled=react_ui_enabled,
+    disabled=bool(active_run_id),
+)
 
 
 if st.session_state.get("conversation_notice"):
