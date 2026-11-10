@@ -85,22 +85,69 @@ def test_history_confirmation_cancel_delete_and_clear_all(test_settings, monkeyp
         )
         assert not app.exception
         assert not services.conversations.exists(saved)
-        assert len(services.conversations.list()) == 1  # New empty conversation.
+        assert not services.conversations.list()
         another = services.conversations.create("test")
+        app.run(timeout=15)
         next(b for b in app.button if b.label == "Delete history").click().run()
-        next(r for r in app.radio if r.label == "Delete which history?").set_value(
-            "All conversations"
-        ).run()
         assert services.conversations.exists(another)
         next(b for b in app.button if b.label == "Confirm deletion").click().run(
             timeout=15
         )
         assert not app.exception
         assert not services.conversations.exists(another)
-        remaining = services.conversations.list()
-        assert (
-            len(remaining) == 1 and not remaining[0].turns and not remaining[0].run_ids
-        )
+        assert not services.conversations.list()
+
+
+def test_first_question_routes_or_keeps_editable_draft(test_settings, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    select_source = AsyncMock(side_effect=[None, "test_alt"])
+    monkeypatch.setattr("data_analytics_agent.api.select_source", select_source)
+    services = Services(
+        settings=test_settings,
+        agent=Graph([Stream(CoordinatorResponse(answer="Answer")) for _ in range(2)]),
+    )
+    with TestClient(create_app(services)) as api:
+        def request(self, method, path, **kwargs):
+            kwargs.pop("timeout", None)
+            response = api.request(method, path, **kwargs)
+            if response.status_code >= 400:
+                raise APIError(
+                    str(response.json().get("detail")), status_code=response.status_code
+                )
+            return response.json()
+
+        monkeypatch.setattr(AgentAPIClient, "request", request)
+        app = AppTest.from_file(
+            str(Path(__file__).parents[1] / "streamlit_app.py")
+        ).run(timeout=15)
+        assert not app.exception
+        assert not services.conversations.list()
+        assert app.selectbox(key="draft_source").value is None
+        question = "Show activity"
+        app.chat_input[0].set_value(question).run(timeout=15)
+        assert not app.exception
+        assert app.chat_input[0].value == question
+        assert any("Which data source" in item.value for item in app.info)
+        assert not services.conversations.list()
+
+        app.selectbox(key="draft_source").select("test").run(timeout=15)
+        app.chat_input[0].set_value(question).run(timeout=15)
+        assert not app.exception
+        manual, = services.conversations.list()
+        assert manual.source_id == "test"
+        assert services.runs.get(manual.run_ids[0]).question == question
+        select_source.assert_awaited_once()
+
+        next(b for b in app.button if b.label == "New conversation").click().run(timeout=15)
+        assert app.selectbox(key="draft_source").value is None
+        app.chat_input[0].set_value("Show the alternate artist catalog").run(timeout=15)
+        assert not app.exception
+        automatic, previous = services.conversations.list()
+        assert previous.thread_id == manual.thread_id
+        assert automatic.source_id == "test_alt"
+        assert app.query_params["thread_id"] == [automatic.thread_id]
+        assert select_source.await_count == 2
 
 
 def test_one_turn_preserves_activity_identity_through_publication(

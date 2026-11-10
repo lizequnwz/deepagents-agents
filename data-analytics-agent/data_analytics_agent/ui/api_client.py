@@ -162,13 +162,15 @@ class AgentAPIClient:
     def get_conversation_source(self, thread_id: str):
         return self.request("GET", f"/api/conversations/{thread_id}/source")
 
-    def create_conversation(self, source_id: str) -> str:
-        response = self.request(
+    def start_conversation(self, message: str, *, source_id: str | None = None):
+        payload = {"message": message}
+        if source_id is not None:
+            payload["source_id"] = source_id
+        return self.request(
             "POST",
-            "/api/conversations",
-            json={"source_id": source_id},
+            "/api/conversations/start",
+            json=payload,
         )
-        return str(response["thread_id"])
 
     def get_conversation(self, thread_id: str) -> dict[str, Any]:
         return self.request("GET", f"/api/conversations/{thread_id}")

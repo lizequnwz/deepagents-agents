@@ -48,10 +48,12 @@ import type {
   DocumentRef,
   Run,
   Source,
+  StartConversationResult,
   Upload,
 } from "./types";
 
 type Tab = "dashboard" | "report" | "data";
+const API_CONTRACT_VERSION = 25;
 const ACTIVE = [
   "queued",
   "running",
@@ -83,6 +85,10 @@ export default function App() {
   const [history, setHistory] = useState<ConversationSummary[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [source, setSource] = useState("");
+  const [sourcePrompt, setSourcePrompt] = useState<
+    Extract<StartConversationResult, { status: "needs_source" }> | null
+  >(null);
+  const [attaching, setAttaching] = useState(false);
   const [health, setHealth] = useState<{
     status: string;
     model: string;
@@ -121,6 +127,7 @@ export default function App() {
   const chatEnd = useRef<HTMLDivElement>(null);
   const navigation = useRef<HTMLElement>(null);
   const initialViewThread = useRef<string | null>(null);
+  const attachmentDraft = useRef<{ threadId: string; message: string } | null>(null);
   const loadGeneration = useRef(0);
   const newRuns = useRef(new Set<string>());
   const selection = useRef({ threadId, dashboardId });
@@ -143,7 +150,15 @@ export default function App() {
       ? "Reviewed file workspace"
       : conversation?.source_id.startsWith("documents:")
         ? "Document workspace"
-        : (conversation?.source_id ?? "Select your data"));
+        : (conversation?.source_id ?? "New workspace"));
+  const draftSources = sourcePrompt
+    ? sourcePrompt.choices.map(({ source_id, label }) => ({
+        source_id,
+        name: label,
+        ready: true,
+      }))
+    : sources;
+  const hasReadySource = draftSources.some((candidate) => candidate.ready);
   const filteredHistory = useMemo(
     () => history.filter((item) =>
       item.title.toLocaleLowerCase().includes(workspaceSearch.trim().toLocaleLowerCase()),
@@ -270,7 +285,7 @@ export default function App() {
     let ignore = false;
     Promise.all([
       api<typeof health>("/health"),
-      api<{ sources: Source[]; default_source_id: string | null }>(
+      api<{ sources: Source[] }>(
         "/api/data-sources",
       ),
       api<ConversationSummary[]>("/api/conversations"),
@@ -279,11 +294,6 @@ export default function App() {
         if (ignore) return;
         setHealth(health);
         setSources(sources.sources);
-        setSource(
-          sources.default_source_id ??
-            sources.sources.find((s) => s.ready)?.source_id ??
-            "",
-        );
         setHistory(history);
       })
       .catch((e) => {
@@ -294,6 +304,11 @@ export default function App() {
     };
   }, []);
   function navigate(thread: string | null, dashboard: string | null = null) {
+    if (!thread) {
+      setDraft("");
+      setSource("");
+      setSourcePrompt(null);
+    }
     setThreadId(thread);
     setDashboardId(dashboard);
     setShowChat(!dashboard);
@@ -370,7 +385,13 @@ export default function App() {
   useEffect(() => {
     const generation = ++loadGeneration.current;
     initialViewThread.current = null;
-    setDraft("");
+    setDraft(
+      attachmentDraft.current?.threadId === threadId ? attachmentDraft.current.message : "",
+    );
+    attachmentDraft.current = null;
+    setSource("");
+    setSourcePrompt(null);
+    setAttaching(false);
     setAcknowledgement("");
     setConversation(null);
     setRun(null);
@@ -518,32 +539,33 @@ export default function App() {
     });
     window.history.replaceState({}, "", `${location.pathname}?${params}`);
   };
-  async function create() {
-    if (!source) return;
-    const generation = loadGeneration.current;
-    setBusy(true);
-    setError("");
-    try {
-      const result = await post<{ thread_id: string }>("/api/conversations", {
-        source_id: source,
-      });
-      if (generation !== loadGeneration.current) return;
-      navigate(result.thread_id);
-      await refreshHistory();
-    } catch (e) {
-      setError(message(e));
-    } finally {
-      setBusy(false);
-    }
-  }
   async function submit(createDashboard = false) {
-    if (!draft.trim() || !threadId || awaitingDashboard) return;
+    if (!draft.trim() || awaitingDashboard || (!threadId && cannotSubmit)) return;
     const submittingThread = threadId;
+    const generation = loadGeneration.current;
     setBusy(true);
     setError("");
     setAcknowledgement("");
     try {
-      if (active) {
+      if (!threadId) {
+        setSourcePrompt(null);
+        const result = await post<StartConversationResult>(
+          "/api/conversations/start",
+          {
+            message: draft.trim(),
+            ...(source ? { source_id: source } : {}),
+            dashboard: createDashboard,
+          },
+        );
+        if (generation !== loadGeneration.current || selection.current.threadId) return;
+        if (result.status === "needs_source") {
+          setSourcePrompt(result);
+          return;
+        }
+        newRuns.current.add(result.run_id);
+        navigate(result.thread_id);
+        await refreshHistory();
+      } else if (active) {
         const correction = await post<{ message: string }>(
           `/api/runs/${run!.run_id}/corrections`,
           {
@@ -600,7 +622,12 @@ export default function App() {
     if (selection.current.threadId !== threadId) return;
     if (thread === threadId) {
       void refreshThread().catch((e) => setError(message(e)));
-    } else navigate(thread);
+    } else {
+      if (!threadId && draft.trim()) {
+        attachmentDraft.current = { threadId: thread, message: draft };
+      }
+      navigate(thread);
+    }
     void refreshHistory();
     setTab("data");
     setMobileView("canvas");
@@ -614,7 +641,8 @@ export default function App() {
       setMobileView("conversation");
     }
   }, [needsReview]);
-  const cannotSubmit = busy || !draft.trim() || !!unreviewed || needsReview || awaitingDashboard;
+  const cannotSubmit = busy || !draft.trim() || !!unreviewed || needsReview ||
+    awaitingDashboard || (!threadId && (attaching || !hasReadySource));
   const events = run?.events ?? currentTurn?.activities ?? [];
   const reportId = dashboard?.revision.report_id ?? answer?.report?.report_id;
   const displayRunId =
@@ -628,12 +656,12 @@ export default function App() {
     "Analytics workspace";
   const visibleTurns = useMemo(() => conversation?.turns ?? [], [conversation]);
 
-  if (health && health.api_contract_version !== 24)
+  if (health && health.api_contract_version !== API_CONTRACT_VERSION)
     return (
       <main className="welcome">
         <h1>Restart the local services</h1>
         <Notice error>
-          The workspace expects API contract 24. The API reports{" "}
+          The workspace expects API contract {API_CONTRACT_VERSION}. The API reports{" "}
           {health.api_contract_version ?? "no contract version"}. Stop the
           services and restart them together before continuing.
         </Notice>
@@ -663,7 +691,7 @@ export default function App() {
               <X size={19} />
             </button>
           </div>
-          <button className="new-workspace" onClick={() => navigate(null)}>
+          <button className="new-workspace" disabled={!threadId && (busy || attaching)} onClick={() => navigate(null)}>
             <Plus size={18} />
             New workspace
           </button>
@@ -818,51 +846,71 @@ export default function App() {
                 <p className="eyebrow">Questions. Findings. Decisions.</p>
                 <h2>Start with your data.</h2>
                 <p>
-                  Choose a source or review a file. Ask your question, then keep
-                  the findings, dashboards and reports together.
+                  Ask a question or bring your own file. Your findings, dashboards
+                  and reports stay together in the workspace.
                 </p>
               </div>
               <div className="start-options">
                 <section className="start-card">
                   <Database size={24} />
-                  <h3>Connect to your data</h3>
+                  <h3>Ask a question</h3>
                   <p>
-                    Use a configured source and its reviewed business
-                    definitions.
+                    We’ll choose a data source for your question. You can also
+                    select one yourself.
                   </p>
-                  <label>
-                    Source
-                    <select
-                      aria-label="Source"
-                      value={source}
-                      onChange={(e) => setSource(e.target.value)}
-                    >
-                      <option value="">Choose a source</option>
-                      {sources.map((s) => (
-                        <option
-                          key={s.source_id}
-                          value={s.source_id}
-                          disabled={!s.ready}
-                        >
-                          {s.name}
-                          {!s.ready ? " · unavailable" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {sources.find((s) => s.source_id === source)?.description && (
-                    <p className="small muted">
-                      {sources.find((s) => s.source_id === source)?.description}
-                    </p>
-                  )}
-                  <button
-                    className="primary"
-                    disabled={busy || !source}
-                    onClick={() => void create()}
-                  >
-                    {busy ? "Opening…" : "Open workspace"}
-                    <ArrowRight size={16} />
-                  </button>
+                  <form className="start-question" onSubmit={(event) => {
+                    event.preventDefault();
+                    void submit();
+                  }}>
+                    <label>
+                      Source
+                      <select
+                        aria-label="Source"
+                        value={source}
+                        disabled={busy || attaching}
+                        onChange={(event) => setSource(event.target.value)}
+                      >
+                        <option value="">Automatic</option>
+                        {draftSources.map((candidate) => (
+                          <option key={candidate.source_id} value={candidate.source_id} disabled={!candidate.ready}>
+                            {candidate.name}{!candidate.ready ? " · unavailable" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {sourcePrompt && <Notice>{sourcePrompt.prompt}</Notice>}
+                    {!hasReadySource && health && <p className="small muted">No configured source is ready. Attach a file to start.</p>}
+                    <label>
+                      Message
+                      <textarea
+                        aria-label="Message"
+                        placeholder="Ask about your data…"
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        disabled={busy || attaching}
+                        maxLength={20000}
+                        rows={3}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                            event.preventDefault();
+                            void submit();
+                          }
+                        }}
+                      />
+                    </label>
+                    <div className="composer-actions">
+                      <VoiceInput disabled={busy || attaching || !hasReadySource} onDraft={(value) => setDraft((previous) => previous ? previous + " " + value : value)} onError={setError} />
+                      <div className="composer-submit-actions">
+                        <button className="create-dashboard-button" type="button" disabled={cannotSubmit} onClick={() => void submit(true)}>
+                          <LayoutDashboard size={16} aria-hidden="true" /> Create dashboard
+                        </button>
+                        <button className="primary send-button" type="submit" disabled={cannotSubmit}>
+                          <Send size={16} aria-hidden="true" /> {busy ? "Starting…" : "Send"}
+                        </button>
+                      </div>
+                    </div>
+                    {busy && <p className="small muted" role="status">{source ? "Starting your workspace…" : "Choosing a data source…"}</p>}
+                  </form>
                 </section>
                 <section className="start-card">
                   <FileText size={24} />
@@ -877,7 +925,7 @@ export default function App() {
                     <span>Excel</span>
                     <span>PDF / text</span>
                   </div>
-                  <Attachment onComplete={attached} onError={setError} />
+                  <Attachment disabled={busy} onPendingChange={setAttaching} onComplete={attached} onError={setError} />
                   <p className="small muted">
                     One file workspace can contain several explicitly reviewed
                     tables.

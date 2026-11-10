@@ -211,7 +211,9 @@ the adapter in the [backend factory](../../data_analytics_agent/backends/factory
 The adapter owns the connection, dialect, exact SQL execution, cancellation, and
 live schema inspection. The configured target comes from the trusted registry.
 Source IDs stay stable when display names change. Conversations stay bound to the
-source selected at creation.
+source selected at creation. Automatic selection uses the first question and each
+ready source’s name, description, example questions, and logical dataset and metric
+names. Write descriptions and examples that distinguish similar sources.
 
 - `dialect` names the SQLGlot dialect and `backend_type` identifies the adapter.
 - `execute_batches(query, *, timeout_seconds, cancel=None)` validates the exact
@@ -247,6 +249,6 @@ client. Live authentication and connector behavior require provider tests.
 - Registry loads with no Pydantic validation errors.
 - Source summary is ready.
 - Sidebar name, description, examples, backend, and dialect are correct.
-- Selecting the source creates a source-bound conversation.
+- A representative first question selects the source in Automatic mode, and an explicit selection starts the same source-bound workflow.
 - A representative query returns checked results; when SQL review is enabled, it pauses and executes the exact approved query.
 - Result ID, source ID, SQL, and downloaded CSV describe the same execution.

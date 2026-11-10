@@ -53,8 +53,6 @@ def initialize_session_state() -> None:
     st.session_state.setdefault("active_run_id", None)
     st.session_state.setdefault("conversation_notice", None)
     st.session_state.setdefault("review_notice", None)
-    st.session_state.setdefault("source_selector", None)
-    st.session_state.setdefault("current_thread_id", None)
 
 
 def clear_conversation_state() -> None:
@@ -80,6 +78,8 @@ def clear_conversation_state() -> None:
     st.session_state["active_run_id"] = None
     st.session_state["review_notice"] = None
     st.session_state.pop("pending_file_conversation", None)
+    for key in ("draft_source", "draft_question", "draft_error", "source_prompt"):
+        st.session_state.pop(key, None)
 
 
 def open_attachment(submission, *, target_thread_id=None):
@@ -100,72 +100,103 @@ def open_attachment(submission, *, target_thread_id=None):
     st.session_state.setdefault("upload_questions", {})[new_thread] = submission.text
     st.session_state["conversation_notice"] = "Attachment added to this conversation."
     st.query_params["thread_id"] = new_thread
-    st.session_state["current_thread_id"] = None
     st.rerun()
 
 
-def create_conversation(
-    client: AgentAPIClient,
-    source_id: str,
-    *,
-    sync_source_selector: bool = True,
-) -> str:
-    thread_id = client.create_conversation(source_id)
+def new_conversation_draft() -> None:
     clear_conversation_state()
-    st.query_params["thread_id"] = thread_id
-    st.session_state["current_thread_id"] = thread_id
-    if sync_source_selector:
-        st.session_state["source_selector"] = source_id
-    return thread_id
+    st.query_params.pop("thread_id", None)
 
 
-def get_or_create_conversation(
+def load_conversation(
     client: AgentAPIClient,
-    *,
-    default_source_id: str | None,
-    ready_source_ids: set[str],
 ) -> tuple[str | None, dict[str, Any] | None]:
     thread_id = st.query_params.get("thread_id")
     if thread_id:
         try:
             thread_id = str(thread_id)
-            conversation = client.get_conversation(thread_id)
-            if st.session_state.get("current_thread_id") != thread_id:
-                st.session_state["current_thread_id"] = thread_id
-                st.session_state["source_selector"] = conversation["source_id"]
-            elif (
-                st.session_state.get("source_selector")
-                and st.session_state["source_selector"] != conversation["source_id"]
-            ):
-                switched_source = st.session_state["source_selector"]
-                new_thread_id = create_conversation(
-                    client,
-                    switched_source,
-                )
-                st.session_state["conversation_notice"] = (
-                    "The data source changed, so a new conversation was started."
-                )
-                return (
-                    new_thread_id,
-                    client.get_conversation(new_thread_id),
-                )
-            return thread_id, conversation
+            return thread_id, client.get_conversation(thread_id)
         except APIError as exc:
             if exc.status_code != 404:
                 raise
-            st.query_params.pop("thread_id", None)
+            new_conversation_draft()
             st.session_state["conversation_notice"] = (
-                "The previous local conversation is no longer available. "
-                "A new conversation was started."
+                "The previous local conversation is no longer available."
             )
+    return None, None
 
-    selected_source = st.session_state.get("source_selector")
-    if selected_source not in ready_source_ids:
-        selected_source = default_source_id
-    if selected_source is None:
-        return None, None
-    thread_id = create_conversation(client, selected_source)
-    return thread_id, client.get_conversation(thread_id)
+
+def render_conversation_draft(
+    client: AgentAPIClient, data_sources: dict[str, Any], upload_max_bytes: int
+) -> None:
+    render_page_header()
+    if notice := st.session_state.pop("conversation_notice", None):
+        st.toast(notice, icon=":material/info:")
+    for error in data_sources.get("errors", []):
+        st.caption(f"Source configuration: {error}")
+    ready_sources = {
+        item["source_id"]: item["name"]
+        for item in data_sources["sources"]
+        if item["ready"]
+    }
+    if source_prompt := st.session_state.get("source_prompt"):
+        st.info(source_prompt["prompt"])
+        ready_sources = {
+            choice["source_id"]: choice["label"] for choice in source_prompt["choices"]
+        }
+    if ready_sources:
+        selected_source = st.selectbox(
+            "Data source",
+            options=[None, *ready_sources],
+            format_func=lambda source_id: (
+                ready_sources[source_id] if source_id else "Automatic"
+            ),
+            key="draft_source",
+            help="Automatic chooses a data source for your first question.",
+        )
+    else:
+        selected_source = None
+        st.info("Attach a data table or document to start.")
+    if error := st.session_state.get("draft_error"):
+        st.error(error)
+
+    chat_key = "chat_input_draft"
+    if question := st.session_state.pop("draft_question", None):
+        st.session_state[chat_key] = question
+    submission = chat_submission(
+        "Ask a question or attach a file",
+        key=chat_key,
+        max_bytes=upload_max_bytes,
+        client=client,
+    )
+    if not submission:
+        return
+    if submission.files:
+        open_attachment(submission)
+        return
+    question = submission.text.strip()
+    if not question:
+        return
+    if not ready_sources:
+        st.session_state["draft_question"] = question
+        st.rerun()
+    st.session_state.pop("source_prompt", None)
+    st.session_state.pop("draft_error", None)
+    try:
+        status = "Starting your conversation…" if selected_source else "Choosing a data source…"
+        with st.spinner(status):
+            result = client.start_conversation(question, source_id=selected_source)
+    except APIError as exc:
+        st.session_state["draft_question"] = question
+        st.session_state["draft_error"] = str(exc)
+    else:
+        if result["status"] == "needs_source":
+            st.session_state["draft_question"] = question
+            st.session_state["source_prompt"] = result
+        else:
+            clear_conversation_state()
+            st.query_params["thread_id"] = result["thread_id"]
+    st.rerun()
 
 
 def request_history_deletion(target: str) -> None:
@@ -187,12 +218,8 @@ def confirm_history_deletion(client: AgentAPIClient, target: str) -> None:
         st.session_state.pop("history_deletion", None)
         st.session_state.pop("history_deletion_error", None)
         clear_artifact_cache()
-        clear_conversation_state()
-        st.query_params.pop("thread_id", None)
-        st.session_state["current_thread_id"] = None
-        st.session_state["conversation_notice"] = (
-            "History deleted. A new empty conversation is ready."
-        )
+        new_conversation_draft()
+        st.session_state["conversation_notice"] = "History deleted."
     except APIError as exc:
         st.session_state["history_deletion_error"] = str(exc)
 
@@ -348,48 +375,15 @@ if st.session_state.get("pending_workbook"):
     st.stop()
 
 sources_by_id = {source["source_id"]: source for source in data_sources["sources"]}
-ready_source_ids = {
-    source_id for source_id, source in sources_by_id.items() if source["ready"]
-}
-default_source_id = data_sources["default_source_id"]
-if default_source_id not in ready_source_ids:
-    default_source_id = next(iter(ready_source_ids), None)
 
 try:
-    thread_id, conversation = get_or_create_conversation(
-        client,
-        default_source_id=default_source_id,
-        ready_source_ids=ready_source_ids,
-    )
+    thread_id, conversation = load_conversation(client)
 except APIError as exc:
     render_page_header()
     st.error(str(exc), icon=":material/cloud_off:")
     st.stop()
 
-if conversation is None:
-    render_page_header()
-    st.info(
-        "Upload a data table or PDF, text or Markdown document to start. A warehouse connection is optional."
-    )
-    for error in data_sources.get("errors", []):
-        st.caption(f"Source configuration: {error}")
-    for configured in data_sources["sources"]:
-        for error in configured.get("errors", []):
-            st.caption(f"{configured['name']}: {error}")
-    submission = chat_submission(
-        "Ask a question and attach data or a document",
-        key="chat_input_upload",
-        max_bytes=upload_max_bytes,
-        client=client,
-    )
-    if submission:
-        if submission.files:
-            open_attachment(submission)
-        else:
-            st.info("Attach a data table or document to start this conversation.")
-    st.stop()
-
-if conversation["source_id"] not in sources_by_id:
+if conversation and conversation["source_id"] not in sources_by_id:
     try:
         saved_source = client.get_conversation_source(thread_id)
     except APIError as exc:
@@ -409,8 +403,8 @@ if conversation["source_id"] not in sources_by_id:
     sources_by_id[saved_source["source_id"]] = saved_source
     data_sources["sources"].append(saved_source)
 
-source = sources_by_id[conversation["source_id"]]
-active_run_id = conversation.get("active_run_id")
+source = sources_by_id[conversation["source_id"]] if conversation else None
+active_run_id = (conversation or {}).get("active_run_id")
 st.session_state["active_run_id"] = active_run_id
 
 new_conversation, conversation_diagnostics_slot = render_sidebar(
@@ -419,25 +413,17 @@ new_conversation, conversation_diagnostics_slot = render_sidebar(
     health=health,
     health_error=health_error,
     data_sources=data_sources,
-    source_switch_disabled=bool(active_run_id),
-    diagnostics=conversation.get("diagnostics") or {},
+    source=source,
+    diagnostics=(conversation or {}).get("diagnostics") or {},
 )
 if new_conversation:
-    try:
-        # The selector widget already exists on this run. Its value is already
-        # the conversation's source, so do not mutate the widget-backed key.
-        create_conversation(
-            client,
-            conversation["source_id"],
-            sync_source_selector=False,
-        )
-        st.rerun()
-    except APIError as exc:
-        st.sidebar.error(str(exc), icon=":material/error:")
+    new_conversation_draft()
+    st.rerun()
 
 with st.sidebar:
+    saved_conversations = client.list_conversations()
     with st.expander("Saved conversations", expanded=False):
-        for saved in reversed(client.list_conversations()):
+        for saved in reversed(saved_conversations):
             if st.button(
                 saved["title"],
                 key=f"saved_{saved['thread_id']}",
@@ -445,30 +431,33 @@ with st.sidebar:
             ):
                 clear_conversation_state()
                 st.query_params["thread_id"] = saved["thread_id"]
-                st.session_state["current_thread_id"] = None
                 st.rerun()
 
     with st.expander("Manage history", expanded=False):
+        history_target = thread_id or "all"
         st.button(
             "Delete history",
-            key=f"delete_{thread_id}",
-            disabled=bool(active_run_id),
+            key=f"delete_{history_target}",
+            disabled=bool(active_run_id) or not saved_conversations,
             on_click=request_history_deletion,
-            args=(thread_id,),
+            args=(history_target,),
         )
         if active_run_id:
             st.caption("Stop active work before deleting its conversation.")
         pending = st.session_state.get("history_deletion")
-        if pending and pending != thread_id:
+        if pending and pending != history_target:
             st.session_state.pop("history_deletion", None)
             pending = None
         if pending:
-            selected_scope = st.radio(
-                "Delete which history?",
-                ["This conversation", "All conversations"],
-                key="history_deletion_scope",
-            )
-            target = "all" if selected_scope == "All conversations" else pending
+            target = pending
+            if thread_id:
+                selected_scope = st.radio(
+                    "Delete which history?",
+                    ["This conversation", "All conversations"],
+                    key="history_deletion_scope",
+                )
+                if selected_scope == "All conversations":
+                    target = "all"
             scope = (
                 "all saved conversations" if target == "all" else "this conversation"
             )
@@ -489,6 +478,10 @@ with st.sidebar:
                 key="cancel_history_deletion",
                 on_click=cancel_history_deletion,
             )
+
+if conversation is None:
+    render_conversation_draft(client, data_sources, upload_max_bytes)
+    st.stop()
 
 render_page_header(source)
 if react_ui_enabled:

@@ -116,15 +116,48 @@ try {
     await expect(page.getByLabel('Message', { exact: true })).toBeVisible();
   };
 
-  await scenario('React source selection and ordinary conversation', async () => {
+  await scenario('React automatic source selection, clarification and manual override', async () => {
     await page.goto(base + '/workspace/');
+    const source = page.getByLabel('Source', { exact: true });
+    const composer = page.getByLabel('Message', { exact: true });
+    const send = page.getByRole('button', { name: 'Send', exact: true });
+    const starting = () => page.waitForResponse(r => r.url().endsWith('/api/conversations/start') && r.request().method() === 'POST');
+    await expect(source).toHaveValue('');
+    const before = await json('/api/conversations');
+    await composer.fill('Show activity');
+    const clarification = starting();
+    await send.click();
+    expect((await clarification).status()).toBe(200);
+    await expect(page.getByText('Which data source should I use for this question?', { exact: true })).toBeVisible();
+    await expect(composer).toHaveValue('Show activity');
+    expect(await json('/api/conversations')).toEqual(before);
+
+    await source.selectOption('ui_sales');
+    const manualStart = starting();
+    await send.click();
+    const manual = await manualStart;
+    expect(manual.status()).toBe(202);
+    expect(manual.request().postDataJSON()).toMatchObject({ message: 'Show activity', source_id: 'ui_sales' });
+    const manualThread = (await manual.json()).thread_id;
+    await expect.poll(() => new URL(page.url()).searchParams.get('thread')).toBe(manualThread);
+
     await page.getByRole('button', { name: 'New workspace', exact: true }).click();
-    await expect(page.getByLabel('Source', { exact: true })).toBeVisible();
-    await page.getByLabel('Source', { exact: true }).selectOption('ui_sales');
-    await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
-    await page.getByLabel('Message', { exact: true }).fill('Hello');
+    await expect(source).toHaveValue('');
+    await composer.fill('Show monthly sales');
+    const automaticStart = starting();
+    await send.click();
+    const automatic = await automaticStart;
+    expect(automatic.status()).toBe(202);
+    expect(automatic.request().postDataJSON()).not.toHaveProperty('source_id');
+    const { thread_id, source_id, run_id } = await automatic.json();
+    expect(source_id).toBe('ui_sales');
+    expect((await waitRun(run_id)).status).toBe('completed');
+    await expect.poll(() => new URL(page.url()).searchParams.get('thread')).toBe(thread_id);
+    await openThread(thread_id);
+    await composer.fill('Hello');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Hello. The browser test workspace is ready.', { exact: true })).toBeVisible();
+    expect((await json('/api/conversations/' + thread_id)).source_id).toBe(source_id);
     await page.screenshot({ path: path.join(output, 'react-conversation.png'), fullPage: true });
   });
 
@@ -168,10 +201,8 @@ try {
 
   await scenario('React requested dashboard opens after its report completes', async () => {
     await page.getByRole('button', { name: 'New workspace', exact: true }).click();
-    await page.getByLabel('Source', { exact: true }).selectOption('ui_sales');
-    await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
     await page.getByLabel('Message', { exact: true }).fill('Show monthly sales as a dashboard.');
-    const sent = page.waitForResponse(r => r.url().endsWith('/messages') && r.request().method() === 'POST');
+    const sent = page.waitForResponse(r => r.url().endsWith('/api/conversations/start') && r.request().method() === 'POST');
     await page.getByRole('button', { name: 'Create dashboard', exact: true }).click();
     const response = await sent;
     expect(response.request().postDataJSON().dashboard).toBe(true);
@@ -432,6 +463,7 @@ try {
 
   await scenario('React Excel selection, modal keyboard behavior and explicit table review', async () => {
     await page.getByRole('button', { name: 'New workspace', exact: true }).click();
+    await page.getByLabel('Message', { exact: true }).fill('Show the sales in this file.');
     await page.getByLabel('Attach file', { exact: true }).first().setInputFiles(manifest.input_paths.excel);
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'browser-sales.xlsx', exact: true })).toBeVisible();
@@ -454,11 +486,12 @@ try {
     const uploads = await json(`/api/conversations/${excelThread}/uploads`);
     expect(uploads.uploads[0].excel_selection.cell_range).toBe('A1:C5');
     expect(uploads.uploads[0].row_count).toBe(4);
+    await expect(page.getByLabel('Message', { exact: true })).toHaveValue('Show the sales in this file.');
     await page.screenshot({ path: path.join(output, 'react-excel-reviewed.png'), fullPage: true });
     await page.getByLabel('Workspace options', { exact: true }).click();
     await page.getByRole('button', { name: 'Delete workspace', exact: true }).click();
     await page.getByRole('button', { name: 'Delete workspace permanently', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Open workspace', exact: true })).toBeVisible();
+    await expect(page.getByLabel('Source', { exact: true })).toHaveValue('');
     expect((await fetch(base + `/api/conversations/${excelThread}`)).status).toBe(404);
   });
 
@@ -618,6 +651,20 @@ try {
       st.on('response', response => {
         if (response.status() >= 400) httpErrors.push({ url: response.url(), status: response.status() });
       });
+      await st.goto(streamlit + '/');
+      const draft = st.getByPlaceholder('Ask a question or attach a file');
+      await draft.fill('Show activity');
+      await draft.press('Enter');
+      await expect(st.getByText('Which data source should I use for this question?', { exact: true })).toBeVisible();
+      await expect(draft).toHaveValue('Show activity');
+      await st.getByRole('combobox', { name: 'Data source', exact: true }).click();
+      await st.getByRole('option', { name: 'Browser test sales', exact: true }).click();
+      await expect(draft).toHaveValue('Show activity');
+      await draft.press('Enter');
+      await expect.poll(() => new URL(st.url()).searchParams.get('thread_id')).toBeTruthy();
+      const routedThread = new URL(st.url()).searchParams.get('thread_id');
+      expect((await json('/api/conversations/' + routedThread)).source_id).toBe('ui_sales');
+
       await st.goto(`${streamlit}/?thread_id=${manifest.thread_id}`);
       await expect(st.getByText('The saved evidence contains monthly sales by region.', { exact: false }).first()).toBeVisible({ timeout: 20_000 });
       await expect(st.locator('[data-testid="stPlotlyChart"]').first()).toBeVisible();

@@ -64,7 +64,7 @@ try {
   page.on('response', response => { if (response.status() >= 400) httpErrors.push({ url: response.url(), status: response.status() }); });
   page.on('request', request => { if (request.resourceType() === 'script') scripts.push(request.url()); });
   await page.goto(base + '/workspace/');
-  await expect(page.getByRole('button', { name: 'Open workspace', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Source', { exact: true })).toHaveValue('');
   await expect(page.locator('.js-plotly-plot')).toHaveCount(0);
   const scriptsBeforeBuild = scripts.length;
 

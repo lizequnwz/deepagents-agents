@@ -65,7 +65,9 @@ from data_analytics_agent.presentation_edits import (
 )
 from data_analytics_agent.schemas import (
     API_CONTRACT_VERSION,
+    ConversationNeedsSourceResponse,
     ConversationResponse,
+    ConversationSourceChoice,
     CreateConversationRequest,
     CreateConversationResponse,
     CreateRunResponse,
@@ -83,8 +85,11 @@ from data_analytics_agent.schemas import (
     ResultPage,
     RunResponse,
     RunStatus,
+    StartConversationRequest,
+    StartedConversationResponse,
 )
 from data_analytics_agent.semantic import SemanticCatalog, load_semantic_catalog
+from data_analytics_agent.source_routing import SourceRoutingError, select_source
 from data_analytics_agent.stores import (
     ConversationStore,
     ReportStore,
@@ -655,44 +660,112 @@ def create_app(services: Services | None = None) -> FastAPI:
         doc = get_document(container.storage, document_id, thread_id, source_id)
         return FileResponse(doc.original_path, filename=doc.filename)
 
+    def require_configured_source(source_id: str) -> None:
+        if source_id.startswith(("upload:", "documents:")):
+            raise HTTPException(
+                422,
+                "Each upload belongs to its original conversation. Upload a file to start another.",
+            )
+        try:
+            container.require_ready_source(source_id)
+        except StoreNotFound as exc:
+            raise HTTPException(422, f"Unknown data source {source_id!r}.") from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
+
     @app.post(
         "/api/conversations",
         response_model=CreateConversationResponse,
         status_code=status.HTTP_201_CREATED,
     )
     async def create_conversation(
-        request: CreateConversationRequest | None = None,
+        request: CreateConversationRequest,
     ) -> CreateConversationResponse:
-        if (
-            request
-            and request.source_id
-            and request.source_id.startswith(("upload:", "documents:"))
-        ):
-            raise HTTPException(
-                422,
-                "Each upload belongs to its original conversation. Upload a file to start another.",
-            )
-        try:
-            catalog = container.source_catalog()
-            source_id = (
-                request.source_id if request and request.source_id else None
-            ) or catalog.default_source_id
-            container.require_ready_source(source_id)
-        except StoreNotFound as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(
-                    f"Unknown data source {request.source_id if request else None!r}."
-                ),
-            ) from exc
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=str(exc),
-            ) from exc
+        source_id = request.source_id
+        await run_in_threadpool(require_configured_source, source_id)
         return CreateConversationResponse(
             thread_id=container.conversations.create(source_id),
             source_id=source_id,
+        )
+
+    def routing_candidates() -> list[dict[str, Any]]:
+        candidates = []
+        for summary in container.source_summaries():
+            if not summary.ready:
+                continue
+            catalog = container.semantic_catalog_for_source(summary.source_id)
+            candidates.append(
+                {
+                    "source_id": summary.source_id,
+                    "name": summary.name,
+                    "description": summary.description,
+                    "examples": [example.question for example in summary.examples],
+                    "datasets": list(catalog.datasets),
+                    "metrics": list(catalog.metrics),
+                }
+            )
+        return candidates
+
+    @app.post(
+        "/api/conversations/start",
+        response_model=StartedConversationResponse,
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={200: {"model": ConversationNeedsSourceResponse}},
+    )
+    async def start_conversation(
+        request: StartConversationRequest,
+        background_tasks: BackgroundTasks,
+    ) -> StartedConversationResponse | JSONResponse:
+        message = request.message.strip()
+        if not message:
+            raise HTTPException(422, "Question cannot be blank.")
+        require_analysis_ready()
+        source_id = request.source_id
+        if source_id is None:
+            try:
+                candidates = await run_in_threadpool(routing_candidates)
+            except (OSError, ValueError, StoreNotFound) as exc:
+                raise HTTPException(
+                    503, "Data sources are unavailable. You can upload a file."
+                ) from exc
+            if not candidates:
+                raise HTTPException(
+                    503, "No configured data source is ready. You can upload a file."
+                )
+            routing_error = "Automatic source selection is unavailable. Retry or choose a data source."
+            try:
+                source_id = await select_source(container.settings, message, candidates)
+            except SourceRoutingError as exc:
+                raise HTTPException(503, routing_error) from exc
+            if source_id is None:
+                clarification = ConversationNeedsSourceResponse(
+                    prompt="Which data source should I use for this question?",
+                    choices=[
+                        ConversationSourceChoice(
+                            source_id=item["source_id"], label=item["name"]
+                        )
+                        for item in candidates
+                    ],
+                )
+                return JSONResponse(clarification.model_dump(mode="json"))
+            if all(source_id != item["source_id"] for item in candidates):
+                raise HTTPException(503, routing_error)
+
+        await run_in_threadpool(require_configured_source, source_id)
+        with container._lock:
+            thread_id = container.conversations.create(source_id)
+            run_id = enqueue_run(
+                thread_id,
+                source_id,
+                message,
+                background_tasks,
+                dashboard=request.dashboard,
+            )
+        return StartedConversationResponse(
+            thread_id=thread_id, source_id=source_id, run_id=run_id
         )
 
     @app.get(
@@ -709,6 +782,56 @@ def create_app(services: Services | None = None) -> FastAPI:
             }
         )
 
+    def require_analysis_ready() -> None:
+        readiness_errors = container.settings.readiness_errors(include_sources=False)
+        if readiness_errors and container.agent is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=" ".join(readiness_errors),
+            )
+
+    def enqueue_run(
+        thread_id: str,
+        source_id: str,
+        message: str,
+        background_tasks: BackgroundTasks,
+        *,
+        dashboard: bool = False,
+        previous_report_id: str | None = None,
+        dashboard_context: dict[str, Any] | None = None,
+    ) -> str:
+        run_id = container.runs.create(
+            thread_id,
+            source_id,
+            message,
+            model=container.settings.model,
+            previous_report_id=previous_report_id,
+        )
+        if dashboard_context is not None:
+            container.storage.put(
+                "workspace_run_context",
+                run_id,
+                {
+                    "run_id": run_id,
+                    "thread_id": thread_id,
+                    "source_id": source_id,
+                    "context": dashboard_context,
+                },
+            )
+        if dashboard:
+            container.storage.put(
+                "dashboard_requests",
+                run_id,
+                {
+                    "run_id": run_id,
+                    "thread_id": thread_id,
+                    "source_id": source_id,
+                },
+            )
+        container.conversations.begin_run(thread_id, run_id)
+        background_tasks.add_task(container.manager().start, run_id)
+        return run_id
+
     @app.post(
         "/api/conversations/{thread_id}/messages",
         response_model=CreateRunResponse,
@@ -719,12 +842,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         request: AnalyticalMessageRequest,
         background_tasks: BackgroundTasks,
     ) -> CreateRunResponse:
-        readiness_errors = container.settings.readiness_errors(include_sources=False)
-        if readiness_errors and container.agent is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=" ".join(readiness_errors),
-            )
+        require_analysis_ready()
         ensure_not_deleting(thread_id)
         with container._lock:
             if thread_id in container.uploading_conversations:
@@ -769,7 +887,6 @@ def create_app(services: Services | None = None) -> FastAPI:
                 "applied_filters": revision.applied_filters,
             }
 
-        manager = container.manager()
         with container._lock:
             ensure_not_deleting(thread_id)
             if thread_id in container.uploading_conversations:
@@ -786,37 +903,15 @@ def create_app(services: Services | None = None) -> FastAPI:
                 container.require_ready_source(conversation.source_id)
             except ValueError as exc:
                 raise HTTPException(409, str(exc)) from exc
-            context = dashboard_context()
-            run_id = container.runs.create(
+            run_id = enqueue_run(
                 thread_id,
                 conversation.source_id,
                 request.message.strip(),
-                model=container.settings.model,
+                background_tasks,
+                dashboard=request.dashboard,
                 previous_report_id=request.previous_report_id,
+                dashboard_context=dashboard_context(),
             )
-            if context is not None:
-                container.storage.put(
-                    "workspace_run_context",
-                    run_id,
-                    {
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "source_id": conversation.source_id,
-                        "context": context,
-                    },
-                )
-            if request.dashboard:
-                container.storage.put(
-                    "dashboard_requests",
-                    run_id,
-                    {
-                        "run_id": run_id,
-                        "thread_id": thread_id,
-                        "source_id": conversation.source_id,
-                    },
-                )
-            container.conversations.begin_run(thread_id, run_id)
-        background_tasks.add_task(manager.start, run_id)
         return CreateRunResponse(run_id=run_id, status=RunStatus.QUEUED)
 
     def require_current_report(conversation, report_id):

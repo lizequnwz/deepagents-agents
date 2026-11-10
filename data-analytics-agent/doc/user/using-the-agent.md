@@ -1,7 +1,13 @@
 # Using the analyst
 
-Select a source, ask a question, and inspect findings while their report is
-prepared. “Show monthly sales” uses descriptive SQL. “Forecast sales and explain
+Ask a question and inspect findings while their report is prepared. New chats
+start with **Automatic** source selection. The analyst chooses a configured
+source from your first question. If the choice is unclear, your question stays
+editable while you choose a source or add detail. You can also choose the source
+before sending. The selected source is shown in the chat and used for every
+follow-up. Start a new chat to work with a different source.
+
+“Show monthly sales” uses descriptive SQL. “Forecast sales and explain
 seasonality” asks Python to explore and evaluate an analytical model.
 
 Open the Streamlit workbench at `http://127.0.0.1:8501`. To see the dashboard,

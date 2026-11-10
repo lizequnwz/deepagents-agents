@@ -14,7 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 24
+API_CONTRACT_VERSION = 25
 
 
 class StrictModel(BaseModel):
@@ -448,7 +448,7 @@ class ConversationResponse(StrictModel):
 
 
 class CreateConversationRequest(StrictModel):
-    source_id: str | None = None
+    source_id: str = Field(min_length=1)
 
 
 class CreateConversationResponse(StrictModel):
@@ -458,6 +458,27 @@ class CreateConversationResponse(StrictModel):
 
 class MessageRequest(StrictModel):
     message: str = Field(min_length=1, max_length=20_000)
+
+
+class StartConversationRequest(MessageRequest):
+    source_id: str | None = Field(default=None, min_length=1)
+    dashboard: bool = False
+
+
+class StartedConversationResponse(CreateConversationResponse):
+    status: Literal["started"] = "started"
+    run_id: str
+
+
+class ConversationSourceChoice(StrictModel):
+    source_id: str
+    label: str
+
+
+class ConversationNeedsSourceResponse(StrictModel):
+    status: Literal["needs_source"] = "needs_source"
+    prompt: str
+    choices: list[ConversationSourceChoice]
 
 
 class AnalyticalMessageRequest(MessageRequest):

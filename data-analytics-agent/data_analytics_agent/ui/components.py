@@ -812,12 +812,12 @@ def render_page_header(source: dict[str, Any] | None = None) -> None:
 
 def render_sidebar(
     *,
-    thread_id: str,
+    thread_id: str | None,
     app_base_url: str,
     health: dict[str, Any] | None,
     health_error: str | None,
     data_sources: dict[str, Any],
-    source_switch_disabled: bool,
+    source: dict[str, Any] | None,
     diagnostics: dict[str, Any],
 ) -> tuple[bool, Any]:
     """Render app-level metadata and return whether New conversation was used."""
@@ -829,37 +829,14 @@ def render_sidebar(
             "constrained charts, semantic grounding, and durable local "
             "conversation state."
         )
-        ready_sources = [
-            source
-            for source in data_sources["sources"]
-            if source["ready"]
-            or (
-                source["backend_type"] == "upload"
-                and source["source_id"] == st.session_state.get("source_selector")
-            )
-        ]
-        ready_by_id = {source["source_id"]: source for source in ready_sources}
-        st.selectbox(
-            "Data source",
-            options=list(ready_by_id),
-            format_func=lambda source_id: ready_by_id[source_id]["name"],
-            key="source_selector",
-            disabled=source_switch_disabled,
-            help=(
-                "A conversation is permanently bound to one source. Changing "
-                "this selection starts a new conversation."
-            ),
-        )
-        selected_source = ready_by_id[st.session_state["source_selector"]]
-        st.caption(selected_source["description"])
-        st.badge(
-            f"{selected_source['backend_type']} · {selected_source['dialect']}",
-            icon=":material/storage:",
-            color="blue",
-        )
-        if source_switch_disabled:
-            st.caption(
-                "The data source cannot change while a run or SQL review is active."
+        if source is not None:
+            st.caption("Data source")
+            st.text(source["name"])
+            st.caption(source["description"])
+            st.badge(
+                f"{source['backend_type']} · {source['dialect']}",
+                icon=":material/storage:",
+                color="blue",
             )
 
         new_conversation = st.button(
@@ -867,10 +844,6 @@ def render_sidebar(
             icon=":material/add_comment:",
             type="primary",
             width="stretch",
-            disabled=selected_source["backend_type"] == "upload",
-            help="Use Upload a file to start a separate file conversation."
-            if selected_source["backend_type"] == "upload"
-            else None,
         )
 
         if health_error:
@@ -911,11 +884,11 @@ def render_sidebar(
                 icon=":material/warning:",
                 expanded=False,
             ):
-                for source in unavailable:
-                    st.markdown(f"**{source['name']}**")
-                    for error in source.get("errors", []):
+                for unavailable_source in unavailable:
+                    st.markdown(f"**{unavailable_source['name']}**")
+                    for error in unavailable_source.get("errors", []):
                         st.caption(error)
-        source_warnings = selected_source.get("warnings") or []
+        source_warnings = (source or {}).get("warnings") or []
         if source_warnings:
             with st.expander(
                 "Source warnings",
@@ -925,6 +898,8 @@ def render_sidebar(
                 for warning in source_warnings:
                     st.caption(warning)
 
+        if thread_id is None:
+            return new_conversation, None
         st.caption(f"Conversation · `{thread_id[:8]}`")
         # Keep the shell mounted while polling replaces only its contents so
         # an open diagnostics panel does not collapse on every update.

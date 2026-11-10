@@ -25,16 +25,15 @@ FastAPI leaves `/workspace/` disabled. To enable React, install Node.js with npm
 the workspace at `http://127.0.0.1:8000/workspace/` alongside Streamlit. Streamlit's
 **Open full workspace** links appear when React is enabled.
 
-Upload a CSV, Parquet or Excel file and review its schema, or select a configured
-warehouse. The included SQLite sources use `data_sources.yaml`. See
+Ask a question to let the analyst choose a configured source, or choose one
+yourself. You can also upload a CSV, Parquet or Excel file and review its schema.
+The included SQLite sources use `data_sources.yaml`. See
 [adding sources](doc/development/adding-data-sources.md) to connect your own data.
 
-The current API contract is **24**. Restart both services together and
-choose fresh `ANALYTICS_STORAGE_DIR` storage for older incompatible history;
-preserve needed artifacts separately. No migrations are provided.
-
-For an existing checkout with older storage, start both services against a new
-directory: `ANALYTICS_STORAGE_DIR=.analytics-v24 ./scripts/start.sh`.
+The current API contract is **25**. Restart both services together after upgrading.
+The change from contract 24 keeps the same saved history format. For older
+incompatible history, use a fresh `ANALYTICS_STORAGE_DIR` and preserve needed
+artifacts separately.
 
 Provider alternatives, execution limits, review settings, tracing, and development
 reload are documented in [configuration](doc/development/configuration.md).
@@ -43,8 +42,9 @@ saved-data follow-ups, a sample upload, and run-control checks.
 
 ## Workflow
 
-- Select a configured source, or upload CSV, Parquet or a selected Excel table and
-  confirm its column types. Use **Attach file** in React or the chat **+** button
+- With **Automatic**, the first question selects the source for the conversation.
+  If the choice is unclear, pick a source or edit the question. Follow-ups stay
+  on the selected source. Use **Attach file** in React or the chat **+** button
   in Streamlit to add tables to a file conversation or PDF/text/Markdown context
   to either source type.
   Extracted document tables require review before calculation. Reopen from history.

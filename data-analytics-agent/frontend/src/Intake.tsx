@@ -23,11 +23,13 @@ interface Sheet {
 export function Attachment({
   threadId,
   disabled = false,
+  onPendingChange,
   onComplete,
   onError,
 }: {
   threadId?: string;
   disabled?: boolean;
+  onPendingChange?: (pending: boolean) => void;
   onComplete: (threadId: string) => void;
   onError: (error: string) => void;
 }) {
@@ -39,6 +41,9 @@ export function Attachment({
   const [sheet, setSheet] = useState("");
   const [range, setRange] = useState("");
   const [cached, setCached] = useState(false);
+  useEffect(() => {
+    onPendingChange?.(busy || workbook !== null);
+  }, [busy, workbook, onPendingChange]);
   async function stage(
     file: File,
     selection?: {

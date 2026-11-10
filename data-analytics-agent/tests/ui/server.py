@@ -650,12 +650,17 @@ def main():
     os.environ["LANGCHAIN_TRACING_V2"] = "false"
     os.environ["REQUIRE_SQL_APPROVAL"] = "false"
     os.environ["REQUIRE_PYTHON_APPROVAL"] = "false"
-    from data_analytics_agent.api import create_app
+    from data_analytics_agent import api
     import uvicorn
 
     services, manifest = seed_services(args.storage, args.frontend_root)
     from langchain_core.runnables import RunnableLambda
     from data_analytics_agent import transcription
+
+    async def fixture_select_source(_settings, question, candidates):
+        if question == "Show activity":
+            return None
+        return next(item["source_id"] for item in candidates if item["source_id"] == "ui_sales")
 
     async def fixture_transcription(content: bytes, *, model: str):
         del model
@@ -672,6 +677,7 @@ def main():
         return "Show monthly sales for the North region."
 
     transcription.whisper_transcriber = RunnableLambda(fixture_transcription)
+    api.select_source = fixture_select_source
     print(
         json.dumps(
             {"fixture_manifest": str(args.storage / "ui-manifest.json"), **manifest}
@@ -679,7 +685,7 @@ def main():
         flush=True,
     )
     uvicorn.run(
-        create_app(services), host="127.0.0.1", port=args.port, access_log=False
+        api.create_app(services), host="127.0.0.1", port=args.port, access_log=False
     )
 
 

@@ -682,9 +682,16 @@ pre, code, .code-editor {
   width: 100%;
   margin-top: 4px;
 }
-.start-card > .primary {
+.start-question {
   width: 100%;
-  margin-top: auto;
+  display: grid;
+  gap: 12px;
+}
+.start-question textarea {
+  resize: vertical;
+}
+.start-question .composer-actions {
+  margin-top: 0;
 }
 .start-card .attachment-button {
   width: 100%;
