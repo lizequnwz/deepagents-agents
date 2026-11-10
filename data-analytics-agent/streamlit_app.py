@@ -165,12 +165,22 @@ def render_draft_sources(ready_sources: dict[str, Any]) -> None:
 
 
 def render_conversation_draft(
-    client: AgentAPIClient, data_sources: dict[str, Any], upload_max_bytes: int
+    client: AgentAPIClient,
+    data_sources: dict[str, Any],
+    upload_max_bytes: int,
+    *,
+    react_ui_enabled: bool,
 ) -> None:
     render_page_header(
         subtitle="Ask a data question and Automatic will look for a matching source. "
         "You can choose one yourself or attach a file."
     )
+    if react_ui_enabled:
+        st.link_button(
+            "Open workspace",
+            f"{client.base_url}/workspace/",
+            icon=":material/open_in_new:",
+        )
     if notice := st.session_state.pop("conversation_notice", None):
         st.toast(notice, icon=":material/info:")
     for error in data_sources.get("errors", []):
@@ -527,7 +537,9 @@ with st.sidebar:
             )
 
 if conversation is None:
-    render_conversation_draft(client, data_sources, upload_max_bytes)
+    render_conversation_draft(
+        client, data_sources, upload_max_bytes, react_ui_enabled=react_ui_enabled
+    )
     st.stop()
 
 render_page_header(source)
