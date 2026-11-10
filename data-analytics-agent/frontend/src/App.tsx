@@ -53,7 +53,7 @@ import type {
 } from "./types";
 
 type Tab = "dashboard" | "report" | "data";
-const API_CONTRACT_VERSION = 25;
+const API_CONTRACT_VERSION = 26;
 const ACTIVE = [
   "queued",
   "running",
@@ -85,9 +85,10 @@ export default function App() {
   const [history, setHistory] = useState<ConversationSummary[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [source, setSource] = useState("");
-  const [sourcePrompt, setSourcePrompt] = useState<
-    Extract<StartConversationResult, { status: "needs_source" }> | null
-  >(null);
+  const [sourceReply, setSourceReply] = useState<{
+    question: string;
+    result: Extract<StartConversationResult, { status: "needs_source" }>;
+  } | null>(null);
   const [attaching, setAttaching] = useState(false);
   const [health, setHealth] = useState<{
     status: string;
@@ -125,6 +126,7 @@ export default function App() {
     () => localStorage.getItem("analytics-theme") ?? "light",
   );
   const chatEnd = useRef<HTMLDivElement>(null);
+  const firstQuestionInput = useRef<HTMLTextAreaElement>(null);
   const navigation = useRef<HTMLElement>(null);
   const initialViewThread = useRef<string | null>(null);
   const attachmentDraft = useRef<{ threadId: string; message: string } | null>(null);
@@ -151,14 +153,20 @@ export default function App() {
       : conversation?.source_id.startsWith("documents:")
         ? "Document workspace"
         : (conversation?.source_id ?? "New workspace"));
-  const draftSources = sourcePrompt
-    ? sourcePrompt.choices.map(({ source_id, label }) => ({
-        source_id,
-        name: label,
-        ready: true,
-      }))
+  const draftSources = sourceReply
+    ? sourceReply.result.choices.map(({ source_id, label }) => {
+        const details = sources.find((candidate) => candidate.source_id === source_id);
+        return {
+          source_id,
+          name: label,
+          ready: true,
+          description: details?.description,
+          examples: details?.examples ?? [],
+        };
+      })
     : sources;
-  const hasReadySource = draftSources.some((candidate) => candidate.ready);
+  const readyDraftSources = draftSources.filter((candidate) => candidate.ready);
+  const isSourceGuidance = sourceReply?.result.reason === "guidance";
   const filteredHistory = useMemo(
     () => history.filter((item) =>
       item.title.toLocaleLowerCase().includes(workspaceSearch.trim().toLocaleLowerCase()),
@@ -307,7 +315,7 @@ export default function App() {
     if (!thread) {
       setDraft("");
       setSource("");
-      setSourcePrompt(null);
+      setSourceReply(null);
     }
     setThreadId(thread);
     setDashboardId(dashboard);
@@ -390,7 +398,7 @@ export default function App() {
     );
     attachmentDraft.current = null;
     setSource("");
-    setSourcePrompt(null);
+    setSourceReply(null);
     setAttaching(false);
     setAcknowledgement("");
     setConversation(null);
@@ -539,8 +547,14 @@ export default function App() {
     });
     window.history.replaceState({}, "", `${location.pathname}?${params}`);
   };
+  function useDraftSource(sourceId: string, example?: string) {
+    setSource(sourceId);
+    if (example !== undefined) setDraft(example);
+    firstQuestionInput.current?.focus();
+  }
   async function submit(createDashboard = false) {
     if (!draft.trim() || awaitingDashboard || (!threadId && cannotSubmit)) return;
+    const question = draft.trim();
     const submittingThread = threadId;
     const generation = loadGeneration.current;
     setBusy(true);
@@ -548,18 +562,21 @@ export default function App() {
     setAcknowledgement("");
     try {
       if (!threadId) {
-        setSourcePrompt(null);
         const result = await post<StartConversationResult>(
           "/api/conversations/start",
           {
-            message: draft.trim(),
+            message: question,
             ...(source ? { source_id: source } : {}),
             dashboard: createDashboard,
           },
         );
         if (generation !== loadGeneration.current || selection.current.threadId) return;
         if (result.status === "needs_source") {
-          setSourcePrompt(result);
+          setSourceReply({ question, result });
+          if (result.reason === "guidance") {
+            setDraft("");
+            setSource("");
+          }
           return;
         }
         newRuns.current.add(result.run_id);
@@ -642,7 +659,7 @@ export default function App() {
     }
   }, [needsReview]);
   const cannotSubmit = busy || !draft.trim() || !!unreviewed || needsReview ||
-    awaitingDashboard || (!threadId && (attaching || !hasReadySource));
+    awaitingDashboard || (!threadId && (attaching || !health));
   const events = run?.events ?? currentTurn?.activities ?? [];
   const reportId = dashboard?.revision.report_id ?? answer?.report?.report_id;
   const displayRunId =
@@ -843,48 +860,49 @@ export default function App() {
           {!threadId ? (
             <main id="workspace-main" className="welcome">
               <div className="welcome-intro">
-                <p className="eyebrow">Questions. Findings. Decisions.</p>
-                <h2>Start with your data.</h2>
-                <p>
-                  Ask a question or bring your own file. Your findings, dashboards
-                  and reports stay together in the workspace.
-                </p>
+                <h2>Start with your data</h2>
+                <p>Ask a question, explore the available sources, or attach a file.</p>
               </div>
               <div className="start-options">
                 <section className="start-card">
-                  <Database size={24} />
                   <h3>Ask a question</h3>
-                  <p>
-                    We’ll choose a data source for your question. You can also
-                    select one yourself.
-                  </p>
-                  <form className="start-question" onSubmit={(event) => {
-                    event.preventDefault();
-                    void submit();
-                  }}>
-                    <label>
-                      Source
-                      <select
-                        aria-label="Source"
-                        value={source}
-                        disabled={busy || attaching}
-                        onChange={(event) => setSource(event.target.value)}
-                      >
-                        <option value="">Automatic</option>
-                        {draftSources.map((candidate) => (
-                          <option key={candidate.source_id} value={candidate.source_id} disabled={!candidate.ready}>
-                            {candidate.name}{!candidate.ready ? " · unavailable" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {sourcePrompt && <Notice>{sourcePrompt.prompt}</Notice>}
-                    {!hasReadySource && health && <p className="small muted">No configured source is ready. Attach a file to start.</p>}
+                  <form
+                    className="start-question"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void submit();
+                    }}
+                  >
+                    {sourceReply && (isSourceGuidance ? (
+                      <article className="chat-turn draft-source-reply" aria-label="Source guidance">
+                        <div className="user-message">{sourceReply.question}</div>
+                        <div className="assistant-message" role="status">
+                          <div className="assistant-label">
+                            <BarChart3 size={14} aria-hidden="true" />
+                            Analytics
+                          </div>
+                          <p>{sourceReply.result.prompt}</p>
+                          {readyDraftSources.length > 0 && (
+                            <a className="source-reply-link" href="#available-sources-title">
+                              See source descriptions and examples
+                            </a>
+                          )}
+                        </div>
+                      </article>
+                    ) : !source && (
+                      <Notice>
+                        {sourceReply.result.prompt}
+                        <a className="source-reply-link" href="#available-sources-title">
+                          See source options
+                        </a>
+                      </Notice>
+                    ))}
                     <label>
                       Message
                       <textarea
+                        ref={firstQuestionInput}
                         aria-label="Message"
-                        placeholder="Ask about your data…"
+                        placeholder="Ask a question or ask what data is available…"
                         value={draft}
                         onChange={(event) => setDraft(event.target.value)}
                         disabled={busy || attaching}
@@ -898,10 +916,32 @@ export default function App() {
                         }}
                       />
                     </label>
+                    <div>
+                      <label htmlFor="first-question-source">Source</label>
+                      <select
+                        id="first-question-source"
+                        aria-describedby="first-question-source-hint"
+                        value={source}
+                        disabled={busy || attaching}
+                        onChange={(event) => setSource(event.target.value)}
+                      >
+                        <option value="">Automatic</option>
+                        {draftSources.map((candidate) => (
+                          <option key={candidate.source_id} value={candidate.source_id} disabled={!candidate.ready}>
+                            {candidate.name}{!candidate.ready ? " · unavailable" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="small muted first-question-source-hint" id="first-question-source-hint">
+                        {readyDraftSources.length > 0
+                          ? "Automatic chooses a source when you send."
+                          : "Ask about sources or attach a file."}
+                      </p>
+                    </div>
                     <div className="composer-actions">
-                      <VoiceInput disabled={busy || attaching || !hasReadySource} onDraft={(value) => setDraft((previous) => previous ? previous + " " + value : value)} onError={setError} />
+                      <VoiceInput disabled={busy || attaching} onDraft={(value) => setDraft((previous) => previous ? previous + " " + value : value)} onError={setError} />
                       <div className="composer-submit-actions">
-                        <button className="create-dashboard-button" type="button" disabled={cannotSubmit} onClick={() => void submit(true)}>
+                        <button className="create-dashboard-button" type="button" disabled={cannotSubmit || readyDraftSources.length === 0} onClick={() => void submit(true)}>
                           <LayoutDashboard size={16} aria-hidden="true" /> Create dashboard
                         </button>
                         <button className="primary send-button" type="submit" disabled={cannotSubmit}>
@@ -912,25 +952,64 @@ export default function App() {
                     {busy && <p className="small muted" role="status">{source ? "Starting your workspace…" : "Choosing a data source…"}</p>}
                   </form>
                 </section>
-                <section className="start-card">
-                  <FileText size={24} />
-                  <h3>Bring your own files</h3>
-                  <p>
-                    Import a table, or attach documents for cited context.
-                    Review table types before analysis.
-                  </p>
-                  <div className="file-formats">
-                    <span>CSV</span>
-                    <span>Parquet</span>
-                    <span>Excel</span>
-                    <span>PDF / text</span>
-                  </div>
-                  <Attachment disabled={busy} onPendingChange={setAttaching} onComplete={attached} onError={setError} />
-                  <p className="small muted">
-                    One file workspace can contain several explicitly reviewed
-                    tables.
-                  </p>
-                </section>
+                <div className="start-side">
+                  <section className="start-card" aria-labelledby="available-sources-title">
+                    <h3 id="available-sources-title" tabIndex={-1}>Available data sources</h3>
+                    {readyDraftSources.length > 0 ? (
+                      <>
+                        <p>Choose a source for your draft, or use an example to get started.</p>
+                        <ul className="draft-source-list">
+                          {readyDraftSources.map((candidate) => (
+                            <li key={candidate.source_id}>
+                              <div className="draft-source-title">
+                                <h4>{candidate.name}</h4>
+                                <button
+                                  type="button"
+                                  aria-label={`Use ${candidate.name}`}
+                                  aria-pressed={source === candidate.source_id}
+                                  disabled={busy || attaching}
+                                  onClick={() => useDraftSource(candidate.source_id)}
+                                >
+                                  {source === candidate.source_id ? "Selected" : "Use source"}
+                                </button>
+                              </div>
+                              {candidate.description && <p>{candidate.description}</p>}
+                              {candidate.examples.slice(0, 2).map((example) => (
+                                <button
+                                  className="example-question"
+                                  key={example.label}
+                                  type="button"
+                                  disabled={busy || attaching}
+                                  onClick={() => useDraftSource(candidate.source_id, example.question)}
+                                >
+                                  {example.question}
+                                  <ArrowRight size={14} aria-hidden="true" />
+                                </button>
+                              ))}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : (
+                      <p>{health ? "No configured source is ready. You can attach a file to get started." : "Loading configured sources…"}</p>
+                    )}
+                  </section>
+                  <section className="start-card">
+                    <FileText size={24} aria-hidden="true" />
+                    <h3>Bring your own files</h3>
+                    <p>
+                      Import a table, or attach documents for cited context.
+                      Review table types before analysis.
+                    </p>
+                    <div className="file-formats">
+                      <span>CSV</span>
+                      <span>Parquet</span>
+                      <span>Excel</span>
+                      <span>PDF / text</span>
+                    </div>
+                    <Attachment disabled={busy} onPendingChange={setAttaching} onComplete={attached} onError={setError} />
+                  </section>
+                </div>
               </div>
               {health && health.errors.length > 0 && (
                 <Notice>{health.errors.join(" ")}</Notice>

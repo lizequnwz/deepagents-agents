@@ -22,7 +22,7 @@ the Vite workspace URL. Vite serves the frontend and proxies `/api` and `/health
 to the running API at `http://127.0.0.1:8000`. This works with either FastAPI
 workspace asset setting.
 
-The client expects API contract 25. An incompatible service displays a restart
+The client expects API contract 26. An incompatible service displays a restart
 message instead of allowing mutations.
 
 ## Browser tests

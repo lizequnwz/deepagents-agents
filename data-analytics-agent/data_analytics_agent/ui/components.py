@@ -796,7 +796,9 @@ def _us_location_resolver() -> USLocationResolver:
     return USLocationResolver()
 
 
-def render_page_header(source: dict[str, Any] | None = None) -> None:
+def render_page_header(
+    source: dict[str, Any] | None = None, *, subtitle: str | None = None
+) -> None:
     st.caption(":material/query_stats: CONVERSATIONAL ANALYTICS")
     source_name = source["name"] if source else "your data"
     source_anchor = f"ask-questions-about-{source['source_id']}" if source else False
@@ -805,7 +807,8 @@ def render_page_header(source: dict[str, Any] | None = None) -> None:
         anchor=source_anchor,
     )
     st.caption(
-        "Saved evidence supports iterative analysis. SQL and analytical Python are reviewed "
+        subtitle
+        or "Saved evidence supports iterative analysis. SQL and analytical Python are reviewed "
         "when review is enabled."
     )
 

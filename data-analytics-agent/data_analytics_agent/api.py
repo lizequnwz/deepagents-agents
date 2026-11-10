@@ -89,7 +89,11 @@ from data_analytics_agent.schemas import (
     StartedConversationResponse,
 )
 from data_analytics_agent.semantic import SemanticCatalog, load_semantic_catalog
-from data_analytics_agent.source_routing import SourceRoutingError, select_source
+from data_analytics_agent.source_routing import (
+    SourceRoutingError,
+    is_source_guidance,
+    select_source,
+)
 from data_analytics_agent.stores import (
     ConversationStore,
     ReportStore,
@@ -709,6 +713,27 @@ def create_app(services: Services | None = None) -> FastAPI:
             )
         return candidates
 
+    def source_choice_response(
+        candidates: list[dict[str, Any]], *, guidance: bool
+    ) -> JSONResponse:
+        if not candidates:
+            prompt = "No configured source is ready. Attach a data table or document to get started."
+        elif guidance:
+            prompt = "The right source depends on what you want to find out. Browse the available sources or try an example question."
+        else:
+            prompt = "I couldn’t identify a single source for this question. Choose a source to continue, or edit your question with more detail."
+        response = ConversationNeedsSourceResponse(
+            reason="guidance" if guidance else "ambiguous",
+            prompt=prompt,
+            choices=[
+                ConversationSourceChoice(
+                    source_id=item["source_id"], label=item["name"]
+                )
+                for item in candidates
+            ],
+        )
+        return JSONResponse(response.model_dump(mode="json"))
+
     @app.post(
         "/api/conversations/start",
         response_model=StartedConversationResponse,
@@ -722,15 +747,21 @@ def create_app(services: Services | None = None) -> FastAPI:
         message = request.message.strip()
         if not message:
             raise HTTPException(422, "Question cannot be blank.")
-        require_analysis_ready()
         source_id = request.source_id
+        guidance = source_id is None and is_source_guidance(message)
+        if not guidance:
+            require_analysis_ready()
         if source_id is None:
             try:
                 candidates = await run_in_threadpool(routing_candidates)
             except (OSError, ValueError, StoreNotFound) as exc:
-                raise HTTPException(
-                    503, "Data sources are unavailable. You can upload a file."
-                ) from exc
+                if not guidance:
+                    raise HTTPException(
+                        503, "Data sources are unavailable. You can upload a file."
+                    ) from exc
+                candidates = []
+            if guidance:
+                return source_choice_response(candidates, guidance=True)
             if not candidates:
                 raise HTTPException(
                     503, "No configured data source is ready. You can upload a file."
@@ -741,16 +772,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             except SourceRoutingError as exc:
                 raise HTTPException(503, routing_error) from exc
             if source_id is None:
-                clarification = ConversationNeedsSourceResponse(
-                    prompt="Which data source should I use for this question?",
-                    choices=[
-                        ConversationSourceChoice(
-                            source_id=item["source_id"], label=item["name"]
-                        )
-                        for item in candidates
-                    ],
-                )
-                return JSONResponse(clarification.model_dump(mode="json"))
+                return source_choice_response(candidates, guidance=False)
             if all(source_id != item["source_id"] for item in candidates):
                 raise HTTPException(503, routing_error)
 

@@ -30,8 +30,8 @@ yourself. You can also upload a CSV, Parquet or Excel file and review its schema
 The included SQLite sources use `data_sources.yaml`. See
 [adding sources](doc/development/adding-data-sources.md) to connect your own data.
 
-The current API contract is **25**. Restart both services together after upgrading.
-The change from contract 24 keeps the same saved history format. For older
+The current API contract is **26**. Restart both services together after upgrading.
+The changes since contract 24 keep the same saved history format. For older
 incompatible history, use a fresh `ANALYTICS_STORAGE_DIR` and preserve needed
 artifacts separately.
 

@@ -7,6 +7,10 @@ editable while you choose a source or add detail. You can also choose the source
 before sending. The selected source is shown in the chat and used for every
 follow-up. Start a new chat to work with a different source.
 
+New chats show available sources, what they cover, and examples you can edit
+before sending. You can also ask “What data sources and questions can I ask?”
+to see the guide in the chat.
+
 “Show monthly sales” uses descriptive SQL. “Forecast sales and explain
 seasonality” asks Python to explore and evaluate an analytical model.
 

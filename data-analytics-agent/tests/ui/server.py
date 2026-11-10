@@ -95,7 +95,9 @@ sources:
     dialect: sqlite
     target:
       path: {json.dumps(str(database))}
-    examples: []
+    examples:
+      - label: Monthly sales
+        question: Show monthly sales by region.
 """,
         encoding="utf-8",
     )

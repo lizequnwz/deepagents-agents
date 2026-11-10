@@ -171,6 +171,7 @@ def test_ambiguous_start_preserves_question_for_manual_selection(
         assert start.status_code == 200, start.text
         result = start.json()
         assert result["status"] == "needs_source"
+        assert result["reason"] == "ambiguous"
         assert result["prompt"]
         assert {choice["source_id"] for choice in result["choices"]} == {
             "test",
@@ -187,6 +188,72 @@ def test_ambiguous_start_preserves_question_for_manual_selection(
         run = client.get(f"/api/runs/{manual.json()['run_id']}").json()
         assert (run["source_id"], run["question"]) == ("test_alt", question)
         invoke.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What data sources and questions I can ask?",
+        "Which data source should I use for this question?",
+        "List the available data sources and example questions.",
+    ],
+)
+def test_source_guidance_works_without_a_model(
+    test_settings, routing_model, monkeypatch, question
+):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _, invoke = routing_model
+    services = api.Services(settings=replace(test_settings, model_provider="openai"))
+
+    with TestClient(api.create_app(services)) as client:
+        reply = client.post("/api/conversations/start", json={"message": question})
+
+    assert reply.status_code == 200, reply.text
+    result = reply.json()
+    assert result["status"] == "needs_source"
+    assert result["reason"] == "guidance"
+    assert "example question" in result["prompt"]
+    assert result["choices"] == [
+        {"source_id": "test", "label": "Test source"},
+        {"source_id": "test_alt", "label": "Alternate test source"},
+    ]
+    assert not services.conversations.list()
+    assert not services.storage.load("runs", dict)
+    invoke.assert_not_awaited()
+
+
+def test_source_guidance_offers_upload_when_no_source_is_ready(
+    test_settings, routing_model
+):
+    _, invoke = routing_model
+    catalog = test_settings.load_catalog()
+    sources = {
+        source_id: replace(source, target={"path": "db/missing.sqlite"})
+        for source_id, source in catalog.sources.items()
+    }
+    services = api.Services(
+        settings=test_settings, catalog=replace(catalog, sources=sources)
+    )
+
+    with TestClient(api.create_app(services)) as client:
+        reply = client.post(
+            "/api/conversations/start", json={"message": "Which sources are available?"}
+        )
+
+    assert reply.status_code == 200, reply.text
+    result = reply.json()
+    assert result["reason"] == "guidance"
+    assert "Attach a data table" in result["prompt"]
+    assert result["choices"] == []
+    assert not services.conversations.list()
+    assert not services.storage.load("runs", dict)
+    invoke.assert_not_awaited()
+
+
+def test_source_guidance_does_not_match_analytical_question():
+    assert not source_routing.is_source_guidance(
+        "Which data source had the highest revenue last year?"
+    )
 
 
 @pytest.mark.parametrize("all_unready", [False, True])

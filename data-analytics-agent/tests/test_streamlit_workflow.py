@@ -99,13 +99,20 @@ def test_history_confirmation_cancel_delete_and_clear_all(test_settings, monkeyp
 
 
 def test_first_question_routes_or_keeps_editable_draft(test_settings, monkeypatch):
+    from dataclasses import replace
     from unittest.mock import AsyncMock
+
+    from data_analytics_agent.data_sources import ExampleQuestion
 
     select_source = AsyncMock(side_effect=[None, "test_alt"])
     monkeypatch.setattr("data_analytics_agent.api.select_source", select_source)
+    example = ExampleQuestion("Count artists", "How many artists are in the catalog?")
+    catalog = test_settings.load_catalog()
+    sources = {**catalog.sources, "test": replace(catalog.sources["test"], examples=(example,))}
     services = Services(
         settings=test_settings,
         agent=Graph([Stream(CoordinatorResponse(answer="Answer")) for _ in range(2)]),
+        catalog=replace(catalog, sources=sources),
     )
     with TestClient(create_app(services)) as api:
         def request(self, method, path, **kwargs):
@@ -123,15 +130,29 @@ def test_first_question_routes_or_keeps_editable_draft(test_settings, monkeypatc
         ).run(timeout=15)
         assert not app.exception
         assert not services.conversations.list()
-        assert app.selectbox(key="draft_source").value is None
+        assert app.selectbox(key="draft_source").value == ""
+        guidance = "What data sources and questions I can ask?"
+        app.chat_input[0].set_value(guidance).run(timeout=15)
+        assert not app.exception
+        assert any("The right source depends" in item.value for item in app.markdown)
+        assert any("Available data sources" in item.value for item in app.markdown)
+        assert not app.chat_input[0].value
+        next(b for b in app.button if b.label == example.question).click().run(timeout=15)
+        assert app.chat_input[0].value == example.question
+        assert app.selectbox(key="draft_source").value == "test"
+        select_source.assert_not_awaited()
+        assert not services.conversations.list()
+
+        app.selectbox(key="draft_source").select("").run(timeout=15)
         question = "Show activity"
         app.chat_input[0].set_value(question).run(timeout=15)
         assert not app.exception
         assert app.chat_input[0].value == question
-        assert any("Which data source" in item.value for item in app.info)
+        assert any("identify a single source" in item.value for item in app.markdown)
         assert not services.conversations.list()
 
-        app.selectbox(key="draft_source").select("test").run(timeout=15)
+        next(b for b in app.button if b.label == "Use Test source").click().run(timeout=15)
+        assert app.selectbox(key="draft_source").value == "test"
         app.chat_input[0].set_value(question).run(timeout=15)
         assert not app.exception
         manual, = services.conversations.list()
@@ -140,7 +161,7 @@ def test_first_question_routes_or_keeps_editable_draft(test_settings, monkeypatc
         select_source.assert_awaited_once()
 
         next(b for b in app.button if b.label == "New conversation").click().run(timeout=15)
-        assert app.selectbox(key="draft_source").value is None
+        assert app.selectbox(key="draft_source").value == ""
         app.chat_input[0].set_value("Show the alternate artist catalog").run(timeout=15)
         assert not app.exception
         automatic, previous = services.conversations.list()

@@ -19,7 +19,12 @@ export interface Source {
 }
 export type StartConversationResult =
   | { status: "started"; thread_id: string; source_id: string; run_id: string }
-  | { status: "needs_source"; prompt: string; choices: { source_id: string; label: string }[] };
+  | {
+      status: "needs_source";
+      reason: "guidance" | "ambiguous";
+      prompt: string;
+      choices: { source_id: string; label: string }[];
+    };
 
 export interface ConversationSummary {
   thread_id: string;

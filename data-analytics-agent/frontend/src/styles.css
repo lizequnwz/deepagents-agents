@@ -632,9 +632,6 @@ pre, code, .code-editor {
   max-width: 640px;
   margin-bottom: 36px;
 }
-.welcome-intro .eyebrow {
-  color: var(--accent);
-}
 .welcome-intro h2 {
   max-width: 620px;
   margin-bottom: 16px;
@@ -651,8 +648,13 @@ pre, code, .code-editor {
 }
 .start-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  align-items: start;
   gap: 24px;
+}
+.start-side {
+  display: grid;
+  gap: 20px;
 }
 .start-card {
   display: flex;
@@ -685,18 +687,82 @@ pre, code, .code-editor {
 .start-question {
   width: 100%;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
-.start-question textarea {
-  resize: vertical;
+.start-question label {
+  margin: 0;
+}
+.start-question select {
+  margin-top: 8px;
+}
+.first-question-source-hint {
+  margin: 6px 0 0;
 }
 .start-question .composer-actions {
   margin-top: 0;
 }
+.draft-source-reply {
+  margin: 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.draft-source-reply .assistant-message p {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+.source-reply-link {
+  display: block;
+  margin-top: 6px;
+}
+#available-sources-title {
+  scroll-margin-top: calc(var(--header-height) + 20px);
+}
+.draft-source-list {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.draft-source-list li + li {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.draft-source-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.draft-source-title h4 {
+  margin: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.draft-source-title button {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+.draft-source-title button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.draft-source-list li > p {
+  margin: 4px 0 8px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.draft-source-list .example-question {
+  min-height: 44px;
+  margin: 6px 0 0;
+}
 .start-card .attachment-button {
   width: 100%;
   margin-top: auto;
-  margin-bottom: 16px;
 }
 .file-formats {
   display: flex;

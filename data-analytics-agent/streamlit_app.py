@@ -126,37 +126,86 @@ def load_conversation(
     return None, None
 
 
+def choose_draft_source(source_id: str, question: str | None = None) -> None:
+    st.session_state["draft_source"] = source_id
+    if question is not None:
+        st.session_state["draft_question"] = question
+        st.session_state.pop("draft_error", None)
+
+
+def render_draft_sources(ready_sources: dict[str, Any]) -> None:
+    if not ready_sources:
+        return
+    st.markdown("**Available data sources**")
+    if any(source["examples"] for source in ready_sources.values()):
+        st.caption("Choose an example to fill the message box, then edit or send it.")
+    with st.container(horizontal=True):
+        for source_id, source in ready_sources.items():
+            with st.container(border=True, width=340, gap="small"):
+                st.markdown(f"**{source['name']}**")
+                st.caption(source["description"])
+                with st.container(horizontal=True):
+                    for index, example in enumerate(source["examples"]):
+                        st.button(
+                            example["question"],
+                            key=f"draft_example_{source_id}_{index}",
+                            on_click=choose_draft_source,
+                            args=(source_id, example["question"]),
+                        )
+                if st.session_state.get("draft_source") == source_id:
+                    st.caption(":material/check: Selected for your next message")
+                else:
+                    st.button(
+                        f"Use {source['name']}",
+                        key=f"draft_use_{source_id}",
+                        type="tertiary",
+                        on_click=choose_draft_source,
+                        args=(source_id,),
+                    )
+
+
 def render_conversation_draft(
     client: AgentAPIClient, data_sources: dict[str, Any], upload_max_bytes: int
 ) -> None:
-    render_page_header()
+    render_page_header(
+        subtitle="Ask a data question and Automatic will look for a matching source. "
+        "You can choose one yourself or attach a file."
+    )
     if notice := st.session_state.pop("conversation_notice", None):
         st.toast(notice, icon=":material/info:")
     for error in data_sources.get("errors", []):
         st.caption(f"Source configuration: {error}")
     ready_sources = {
-        item["source_id"]: item["name"]
-        for item in data_sources["sources"]
-        if item["ready"]
+        item["source_id"]: item for item in data_sources["sources"] if item["ready"]
     }
     if source_prompt := st.session_state.get("source_prompt"):
-        st.info(source_prompt["prompt"])
+        choices = {choice["source_id"] for choice in source_prompt["choices"]}
         ready_sources = {
-            choice["source_id"]: choice["label"] for choice in source_prompt["choices"]
+            source_id: source
+            for source_id, source in ready_sources.items()
+            if source_id in choices
         }
+        with st.chat_message("user"):
+            st.markdown(prose_markdown(source_prompt["question"]))
+        with st.chat_message("assistant"):
+            st.markdown(source_prompt["prompt"])
+            render_draft_sources(ready_sources)
+    elif ready_sources:
+        render_draft_sources(ready_sources)
+    else:
+        st.info("No configured data sources are ready. Use + in the message box to attach a file.")
+
+    selected_source = ""
     if ready_sources:
         selected_source = st.selectbox(
             "Data source",
-            options=[None, *ready_sources],
+            options=["", *ready_sources],
             format_func=lambda source_id: (
-                ready_sources[source_id] if source_id else "Automatic"
+                ready_sources[source_id]["name"] if source_id else "Automatic"
             ),
             key="draft_source",
-            help="Automatic chooses a data source for your first question.",
+            width=340,
         )
-    else:
-        selected_source = None
-        st.info("Attach a data table or document to start.")
     if error := st.session_state.get("draft_error"):
         st.error(error)
 
@@ -177,22 +226,20 @@ def render_conversation_draft(
     question = submission.text.strip()
     if not question:
         return
-    if not ready_sources:
-        st.session_state["draft_question"] = question
-        st.rerun()
     st.session_state.pop("source_prompt", None)
     st.session_state.pop("draft_error", None)
     try:
-        status = "Starting your conversation…" if selected_source else "Choosing a data source…"
+        status = "Starting your conversation…" if selected_source else "Checking available data sources…"
         with st.spinner(status):
-            result = client.start_conversation(question, source_id=selected_source)
+            result = client.start_conversation(question, source_id=selected_source or None)
     except APIError as exc:
         st.session_state["draft_question"] = question
         st.session_state["draft_error"] = str(exc)
     else:
         if result["status"] == "needs_source":
-            st.session_state["draft_question"] = question
-            st.session_state["source_prompt"] = result
+            st.session_state["source_prompt"] = {**result, "question": question}
+            if result["reason"] == "ambiguous":
+                st.session_state["draft_question"] = question
         else:
             clear_conversation_state()
             st.query_params["thread_id"] = result["thread_id"]

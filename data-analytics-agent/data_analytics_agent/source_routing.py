@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -13,6 +14,27 @@ from data_analytics_agent.schemas import StrictModel
 
 
 _ROUTING_TIMEOUT_SECONDS = 12
+_SOURCE_GUIDANCE = re.compile(
+    r"""
+    (?:
+        (?:what|which)\s+(?:data\s+)?sources?
+        (?:\s+(?:
+            (?:are\s+)?(?:available|configured|connected)
+            |(?:can|could|should)\s+(?:i|we)\s+(?:use|choose|pick|select)
+                (?:\s+for\s+(?:this|my|our)\s+question)?
+            |(?:do|can)\s+(?:i|we|you)\s+have
+        ))?
+        (?:\s+and\s+(?:what\s+)?(?:example\s+)?questions
+            \s+(?:(?:can|could)\s+(?:i|we)|(?:i|we)\s+can)\s+ask)?
+        |(?:what|which)\s+(?:(?:kinds?|types?)\s+of\s+)?questions
+            \s+(?:(?:can|could)\s+(?:i|we)|(?:i|we)\s+can)\s+ask
+        |(?:show(?:\s+me)?|list|browse)\s+(?:the\s+)?(?:available\s+)?(?:data\s+)?sources
+            (?:\s+and\s+(?:example\s+)?questions)?
+        |how\s+(?:do|should|can)\s+(?:i|we)\s+(?:choose|pick|select)\s+(?:a|the)\s+(?:data\s+)?source
+    )
+    """,
+    re.VERBOSE,
+)
 _SYSTEM_PROMPT = """Select one ready data source for the user's first question.
 Use the supplied source IDs, business descriptions, examples, and logical catalog
 names to determine which source covers the requested subject and measures.
@@ -37,6 +59,12 @@ class _SourceSelection(StrictModel):
     """The exact ID of one matching source, or null when selection needs the user."""
 
     source_id: str | None
+
+
+def is_source_guidance(message: str) -> bool:
+    """Recognize standalone source help before choosing a warehouse."""
+    question = message.strip().rstrip("?!. ").casefold()
+    return _SOURCE_GUIDANCE.fullmatch(question) is not None
 
 
 async def select_source(

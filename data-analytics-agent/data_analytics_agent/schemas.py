@@ -14,7 +14,7 @@ from data_analytics_agent.agents.data_analysis.schemas import (
 from data_analytics_agent.visualization.schemas import ChartSpec
 from data_analytics_agent.reporting.schemas import ReportReference
 
-API_CONTRACT_VERSION = 25
+API_CONTRACT_VERSION = 26
 
 
 class StrictModel(BaseModel):
@@ -477,6 +477,7 @@ class ConversationSourceChoice(StrictModel):
 
 class ConversationNeedsSourceResponse(StrictModel):
     status: Literal["needs_source"] = "needs_source"
+    reason: Literal["guidance", "ambiguous"]
     prompt: str
     choices: list[ConversationSourceChoice]
 
